@@ -326,7 +326,7 @@ Custom providers handle multimodal content the same way whether the media comes 
 
 For standard evals, provide the media value through `tests[].vars`, `defaultTest.vars`, a dataset column, or a dynamic variable:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - '{{image}} {{question}}'
 

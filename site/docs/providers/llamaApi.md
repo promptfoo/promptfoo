@@ -108,8 +108,7 @@ tests:
 
 Llama 4 models can process images alongside text:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
 

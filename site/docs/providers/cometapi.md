@@ -142,8 +142,7 @@ tests:
 
 **Vision Model Configuration:**
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: cometapi:chat:gpt-4o
     config:

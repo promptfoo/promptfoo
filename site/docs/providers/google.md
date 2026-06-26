@@ -134,12 +134,11 @@ promptfoo eval
 
 ### 2. Comparing Models
 
-Compare different Gemini and Gemma models:
+Compare different Gemini models:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
   - google:gemini-3.5-flash
@@ -409,13 +408,11 @@ Google's Veo models enable AI-powered video generation from text prompts. Use th
 
 #### Available Models
 
-| Model                                   | Description                                | Duration Support |
-| --------------------------------------- | ------------------------------------------ | ---------------- |
-| `google:video:veo-3.1-generate-preview` | Veo 3.1 model with video extension support | 4, 6, 8 seconds  |
-| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                         | 4, 6, 8 seconds  |
-| `google:video:veo-3-generate`           | Veo 3.0 standard model                     | 4, 6, 8 seconds  |
-| `google:video:veo-3-fast`               | Veo 3.0 fast model                         | 4, 6, 8 seconds  |
-| `google:video:veo-2-generate`           | Veo 2.0 model                              | 5, 6, 8 seconds  |
+| Model                                        | Description        |
+| -------------------------------------------- | ------------------ |
+| `google:video:veo-3.1-generate-preview`      | Veo 3.1 model      |
+| `google:video:veo-3.1-fast-generate-preview` | Fast Veo 3.1 model |
+| `google:video:veo-3.1-lite-generate-preview` | Lite Veo 3.1 model |
 
 #### Basic Usage
 
@@ -427,7 +424,7 @@ providers:
       # Uses GOOGLE_API_KEY / GEMINI_API_KEY by default
       aspectRatio: '16:9' # or '9:16'
       resolution: '720p' # or '1080p'
-      durationSeconds: 6 # 4, 6, or 8 for Veo 3.x; 5, 6, or 8 for Veo 2
+      durationSeconds: 6 # 4, 6, or 8 seconds
 
 prompts:
   - 'Generate a video of {{subject}}'
@@ -447,7 +444,7 @@ tests:
 | ------------------ | ------ | ----------------------------------------------------------------------------------------------------------- |
 | `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                              |
 | `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                               |
-| `durationSeconds`  | number | Video duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2                                                      |
+| `durationSeconds`  | number | Video duration: 4, 6, or 8 seconds                                                                          |
 | `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                       |
 | `negativePrompt`   | string | Concepts to avoid in the generated video                                                                    |
 | `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)                                              |
@@ -460,8 +457,7 @@ tests:
 
 Generate videos from a starting image:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
@@ -481,8 +477,7 @@ tests:
 
 Generate video that transitions between two images:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
@@ -498,8 +493,7 @@ prompts:
 
 Extend a previously generated Veo video using its operation ID:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: vertex:video:veo-3.1-generate-preview
     config:
@@ -637,8 +631,7 @@ For multimodal inputs (images and video), the provider supports:
 
 When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts: |
   {{imageFile}}
   Caption this image.

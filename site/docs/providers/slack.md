@@ -222,7 +222,10 @@ providers:
       timeout: 600000 # 10 minutes
 
 prompts:
-  - file://prompts/technical-review.txt
+  - |
+    Review the following code for correctness, security, and maintainability:
+
+    {{code}}
 
 tests:
   - vars:

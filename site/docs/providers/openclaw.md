@@ -284,16 +284,20 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - '{{text}}'
+  - 'Promptfoo routes this through OpenClaw.'
 
 providers:
-  - id: openclaw:embedding:main
-    config:
-      backend_model: openai/text-embedding-3-small
+  - echo
 
 tests:
-  - vars:
-      text: Promptfoo routes this through OpenClaw.
+  - assert:
+      - type: similar
+        value: 'Promptfoo routes this through OpenClaw.'
+        threshold: 0.9
+        provider:
+          id: openclaw:embedding:main
+          config:
+            backend_model: openai/text-embedding-3-small
 ```
 
 ### Backend Model Override

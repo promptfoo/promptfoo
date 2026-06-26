@@ -43,7 +43,9 @@ providers:
       maxTurns: 10
 ```
 
-For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model (`gpt-5.4-mini`), and that upstream default can change over time.
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with
+`config.model`. The SDK's fallback model can change between releases, so do not treat an
+implicit default as a stable eval input.
 
 ## Configuration Options
 

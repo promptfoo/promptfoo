@@ -48,60 +48,32 @@ xAI periodically retires older model slugs and keeps them working by redirecting
 
 ### Grok 4.1 Fast Models
 
-- `xai:grok-4-1-fast-reasoning` - Frontier model optimized for agentic tool calling with reasoning (2M context)
-- `xai:grok-4-1-fast-non-reasoning` - Fast variant for instant responses without reasoning (2M context)
-- `xai:grok-4-1-fast` - Alias for grok-4-1-fast-reasoning
-- `xai:grok-4-1-fast-reasoning-latest` - Alias for grok-4-1-fast-reasoning
-- `xai:grok-4-1-fast-non-reasoning-latest` - Alias for grok-4-1-fast-non-reasoning
+These slugs are retired compatibility aliases that redirect to `grok-4.3`. Use
+`xai:grok-4.3` in new configurations.
 
 ### Grok Code Fast Models
 
-- `xai:grok-code-fast-1` - Speedy and economical reasoning model optimized for agentic coding (256K context)
-- `xai:grok-code-fast` - Alias for grok-code-fast-1
-- `xai:grok-code-fast-1-0825` - Specific version of the code-fast model (256K context)
+These slugs are retired compatibility aliases that redirect to `grok-4.3`. Use
+`xai:grok-4.3` in new configurations.
 
 ### Grok-4 Fast Models
 
-- `xai:grok-4-fast-reasoning` - Fast reasoning model with 2M context window
-- `xai:grok-4-fast-non-reasoning` - Fast non-reasoning model for instant responses (2M context)
-- `xai:grok-4-fast` - Alias for grok-4-fast-reasoning
-- `xai:grok-4-fast-reasoning-latest` - Alias for grok-4-fast-reasoning
-- `xai:grok-4-fast-non-reasoning-latest` - Alias for grok-4-fast-non-reasoning
+These slugs are retired compatibility aliases that redirect to `grok-4.3`. Use
+`xai:grok-4.3` in new configurations.
 
 ### Grok-4 Models
 
-- `xai:grok-4-0709` - Flagship reasoning model (256K context)
-- `xai:grok-4` - Alias for latest Grok-4 model
-- `xai:grok-4-latest` - Alias for latest Grok-4 model
+These slugs are retired compatibility aliases that redirect to `grok-4.3`. Use
+`xai:grok-4.3` in new configurations.
 
 ### Grok-3 Models
 
-- `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
-- `xai:grok-3-fast-beta` - Fastest flagship model (131K context)
-- `xai:grok-3-mini-beta` - Smaller model for basic tasks, supports reasoning effort (32K context)
-- `xai:grok-3-mini-fast-beta` - Faster mini model, supports reasoning effort (32K context)
-- `xai:grok-3` - Alias for grok-3-beta
-- `xai:grok-3-latest` - Alias for grok-3-beta
-- `xai:grok-3-fast` - Alias for grok-3-fast-beta
-- `xai:grok-3-fast-latest` - Alias for grok-3-fast-beta
-- `xai:grok-3-mini` - Alias for grok-3-mini-beta
-- `xai:grok-3-mini-latest` - Alias for grok-3-mini-beta
-- `xai:grok-3-mini-fast` - Alias for grok-3-mini-fast-beta
-- `xai:grok-3-mini-fast-latest` - Alias for grok-3-mini-fast-beta
+These slugs are retired compatibility aliases. Use a model from xAI's current catalog.
 
 ### Grok-2 and previous Models
 
-- `xai:grok-2-latest` - Latest Grok-2 model (131K context)
-- `xai:grok-2-vision-latest` - Latest Grok-2 vision model (32K context)
-- `xai:grok-2-vision-1212`
-- `xai:grok-2-1212`
-- `xai:grok-beta` - Beta version (131K context)
-- `xai:grok-vision-beta` - Vision beta version (8K context)
-
-You can also use specific versioned models:
-
-- `xai:grok-2-1212`
-- `xai:grok-2-vision-1212`
+These models are retired. Use a model from xAI's current catalog rather than relying on an
+older redirect.
 
 ## Configuration
 
@@ -124,15 +96,9 @@ Multiple Grok models support reasoning capabilities:
 
 **Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
 
-**Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
-
-- Function calling and tool usage
-- Web search via `search_parameters`
-- Fast inference with built-in reasoning
-
 ### Grok 4.3 Specific Behavior
 
-Grok 4.3 is the best starting point for general text workflows:
+Grok 4.3 is a current starting point for general text workflows:
 
 - **Responses API recommended**: Use `xai:responses:grok-4.3` for server-side tools, multi-turn state, and newer xAI capabilities
 - **Configurable reasoning**: `reasoning_effort` defaults to xAI's `low` mode; set `none`, `medium`, or `high` when the workload calls for it
@@ -147,93 +113,25 @@ providers:
       max_completion_tokens: 4096
 ```
 
-**Grok-3 Models**: The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
-
-- `reasoning_effort: "low"` - Minimal thinking time, using fewer tokens for quick responses
-- `reasoning_effort: "high"` - Maximum thinking time, leveraging more tokens for complex problems
-
-:::info
-
-For Grok-3, reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
-
-:::
-
 ### Grok 4.1 Fast Specific Behavior
 
-Grok 4.1 Fast is xAI's frontier model specifically optimized for agentic tool calling:
-
-- **Two variants**: `grok-4-1-fast-reasoning` for maximum intelligence, `grok-4-1-fast-non-reasoning` for instant responses
-- **Massive context window**: 2,000,000 tokens for handling complex multi-turn agent interactions
-- **Optimized for tool calling**: Trained specifically for high-performance agentic tool calling via RL in simulated environments
-- **Low latency and cost**: $0.20/1M input tokens, $0.50/1M output tokens with fast inference
-- **Unsupported parameters**: Same restrictions as Grok-4 (no presence_penalty, frequency_penalty, stop, reasoning_effort)
-
-```yaml
-providers:
-  - id: xai:grok-4-1-fast-reasoning
-    config:
-      temperature: 0.7
-      max_completion_tokens: 4096
-```
+Grok 4.1 Fast is retired. Existing slugs redirect to Grok 4.3; migrate the model ID so the
+configuration states what it will actually run.
 
 ### Grok-4 Fast Specific Behavior
 
-Grok-4 Fast models offer the same capabilities as Grok-4 but with faster inference and lower cost:
-
-- **Two variants**: `grok-4-fast-reasoning` for reasoning tasks, `grok-4-fast-non-reasoning` for instant responses
-- **2M context window**: Same large context as Grok 4.1 Fast
-- **Same parameter restrictions as Grok-4**: No presence_penalty, frequency_penalty, stop, or reasoning_effort
-
-```yaml
-providers:
-  - id: xai:grok-4-fast-reasoning
-    config:
-      temperature: 0.7
-      max_completion_tokens: 4096
-```
+Grok-4 Fast is retired. Existing slugs redirect to Grok 4.3; migrate the model ID so the
+configuration states what it will actually run.
 
 ### Grok-4 Specific Behavior
 
-Grok-4 introduces changes compared to previous Grok models:
-
-- **Always uses reasoning**: Grok-4 is a reasoning model that always operates at maximum reasoning capacity
-- **No `reasoning_effort` parameter**: Unlike Grok-3 mini models, Grok-4 does not support the `reasoning_effort` parameter
-- **Unsupported parameters**: The following parameters are not supported and will be automatically filtered out:
-  - `presencePenalty` / `presence_penalty`
-  - `frequencyPenalty` / `frequency_penalty`
-  - `stop`
-- **Larger context window**: 256,000 tokens compared to 131,072 for Grok-3 models
-- **Uses `max_completion_tokens`**: As a reasoning model, Grok-4 uses `max_completion_tokens` instead of `max_tokens`
-
-```yaml
-providers:
-  - id: xai:grok-4
-    config:
-      temperature: 0.7
-      max_completion_tokens: 4096
-```
+Grok-4 is retired. Existing slugs redirect to Grok 4.3; migrate the model ID so the
+configuration states what it will actually run.
 
 ### Grok Code Fast Specific Behavior
 
-The Grok Code Fast models are optimized for agentic coding workflows and offer several key features:
-
-- **Built for Speed**: Designed to be highly responsive for agentic coding tools where multiple tool calls are common
-- **Economical Pricing**: At $0.20/1M input tokens and $1.50/1M output tokens, more affordable than flagship models
-- **Reasoning Capabilities**: Built-in reasoning for code analysis, debugging, and problem-solving
-- **Tool Integration**: Excellent support for function calling, tool usage, and web search
-- **Coding Expertise**: Particularly adept at TypeScript, Python, Java, Rust, C++, and Go
-
-```yaml
-providers:
-  - id: xai:grok-code-fast-1
-    # or use the alias:
-    # - id: xai:grok-code-fast
-    config:
-      temperature: 0.1 # Lower temperature often preferred for coding tasks
-      max_completion_tokens: 4096
-      search_parameters:
-        mode: auto # Enable web search for coding assistance
-```
+Grok Code Fast is retired. Existing slugs redirect to Grok 4.3; migrate the model ID so the
+configuration states what it will actually run.
 
 ### Region Support
 
@@ -399,11 +297,6 @@ The Responses API works with Grok models, including:
 - `grok-4.20-reasoning`
 - `grok-4.20-non-reasoning`
 - `grok-4.20-multi-agent`
-- `grok-4-1-fast-reasoning` (recommended for agentic workflows)
-- `grok-4-1-fast-non-reasoning`
-- `grok-4-fast-reasoning`
-- `grok-4-fast-non-reasoning`
-- `grok-4`
 
 #### Migration from Live Search
 
@@ -413,7 +306,7 @@ If you're using Live Search via `search_parameters`, migrate to the Responses AP
 
 ```yaml
 providers:
-  - id: xai:grok-4-1-fast-reasoning
+  - id: xai:grok-4.3
     config:
       search_parameters:
         mode: auto
@@ -447,7 +340,7 @@ xAI supports standard OpenAI-compatible function calling for client-side tool ex
 
 ```yaml
 providers:
-  - id: xai:grok-4-1-fast-reasoning
+  - id: xai:grok-4.3
     config:
       tools:
         - type: function
@@ -470,7 +363,7 @@ xAI supports structured outputs via JSON schema:
 
 ```yaml
 providers:
-  - id: xai:grok-4
+  - id: xai:grok-4.3
     config:
       response_format:
         type: json_schema
@@ -516,13 +409,12 @@ For models with vision capabilities, you can include images in your prompts usin
 
 Then reference it in your promptfoo config:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.yaml
 
 providers:
-  - id: xai:grok-2-vision-latest
+  - id: xai:grok-4.3
 
 tests:
   - vars:

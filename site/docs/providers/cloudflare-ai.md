@@ -103,39 +103,14 @@ Here are some of the models available on Cloudflare Workers AI:
 
 ### State-of-the-Art Models (2025)
 
-**OpenAI Models:**
-
-- `@cf/openai/gpt-oss-120b` - OpenAI's production, general purpose, high reasoning model
-- `@cf/openai/gpt-oss-20b` - OpenAI's lower latency model for specialized use-cases
-
-**Advanced Multimodal Models:**
-
-- `@cf/meta/llama-4-scout-17b-16e-instruct` - Meta's Llama 4 Scout with native multimodal capabilities and mixture-of-experts architecture
-- `@cf/meta/llama-3.3-70b-instruct-fp8-fast` - Llama 3.3 70B optimized for speed with fp8 quantization
-- `@cf/meta/llama-3.2-11b-vision-instruct` - Optimized for visual recognition and image reasoning
-
-**Enhanced Reasoning & Problem Solving:**
-
-- `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Advanced reasoning model distilled from DeepSeek R1
-- `@cf/qwen/qwq-32b` - Medium-sized reasoning model competitive with o1-mini
-
-**Code Generation:**
-
-- `@cf/qwen/qwen2.5-coder-32b-instruct` - Open-source code model
-
-**Advanced Language Models:**
-
-- `@cf/mistralai/mistral-small-3.1-24b-instruct` - MistralAI's model with enhanced vision understanding and 128K context
-- `@cf/google/gemma-3-12b-it` - Gemma model with 128K context and multilingual support
-- `@hf/nousresearch/hermes-2-pro-mistral-7b` - Function calling and JSON mode support
-
-**High-Quality Embeddings:**
-
-- `@cf/google/embeddinggemma-300m` - Google's embedding model trained on 100+ languages
+This legacy heading is retained so existing inbound links keep working. Do not treat a dated
+documentation list as Cloudflare's current catalog; verify each exact model ID in the official
+catalog before using it.
 
 :::tip
 
-Cloudflare is constantly adding new models. See their [official model catalog](https://developers.cloudflare.com/workers-ai/models/) for the complete list of available models.
+See Cloudflare's [official model catalog](https://developers.cloudflare.com/workers-ai/models/)
+for current model IDs and capabilities.
 
 :::
 

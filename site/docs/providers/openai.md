@@ -896,6 +896,14 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models in
 - `sora-2` - OpenAI's video generation model ($0.10/second)
 - `sora-2-pro` - Higher quality video generation ($0.30/second)
 
+:::warning Scheduled deprecation
+
+OpenAI has announced that Sora 2, Sora 2 Pro, and the Videos API will shut down on
+September 24, 2026. Keep existing evals only while that API remains available and plan to
+migrate before the shutdown date.
+
+:::
+
 ### Basic Usage
 
 ```yaml
@@ -947,8 +955,7 @@ tests:
 
 Generate videos starting from a source image using `input_reference`:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -965,8 +972,7 @@ The `input_reference` accepts either a `file://` path or base64-encoded image da
 
 Remix an existing Sora video with a new prompt using `remix_video_id`:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -1110,8 +1116,7 @@ export async function getTools() {
 
 :::
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.txt
 providers:
@@ -1232,8 +1237,7 @@ They can also include functions that dynamically reference vars:
 
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.txt
 providers:
@@ -1354,7 +1358,7 @@ Promptfoo supports the `response_format` parameter, which allows you to specify 
 
 #### Prompt config example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -1442,8 +1446,7 @@ npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 
 You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - 'Answer this question: {{question}}'
 
@@ -1502,8 +1505,7 @@ Set functions, code interpreter, and files for retrieval as necessary.
 
 Then, include the assistant in your config:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
@@ -1529,8 +1531,7 @@ The following properties can be overwritten in provider config:
 
 Here's an example of a more detailed config:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
@@ -1659,8 +1660,7 @@ You can include audio files in your prompts using the following format:
 
 With a corresponding configuration:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - id: file://audio-input.json
     label: Audio Input
@@ -1714,8 +1714,7 @@ OpenAI provides dedicated transcription models for converting speech to text. Th
 
 To use transcription models, specify the provider format `openai:transcription:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://sample-audio.mp3
 
@@ -1760,8 +1759,7 @@ Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
 
 The diarization model identifies different speakers in the audio:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://interview.mp3
 
@@ -1962,7 +1960,8 @@ The Realtime API supports multi-turn conversations with persistent context. For 
 
 ## Responses API
 
-OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1, o3, and o4 series.
+OpenAI's Responses API supports text and image inputs, function calling, and conversation state.
+It can be used with compatible GPT and reasoning models.
 
 ### Supported Responses Models
 
@@ -1988,11 +1987,11 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
 - `gpt-5.2-codex` - GPT-5.2 coding variant
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($15/$120 per 1M tokens)
-- `o1` - Powerful reasoning model
+- `o1` - Reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
-- `o1-pro` - Enhanced reasoning model with more compute
-- `o3-pro` - Highest-tier reasoning model
-- `o3` - OpenAI's most powerful reasoning model
+- `o1-pro` - Higher-compute reasoning model
+- `o3-pro` - Reasoning model
+- `o3` - Reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
@@ -2206,7 +2205,7 @@ Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specializ
 
 Available models:
 
-- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
+- `o3-deep-research` - Deep research model ($10/1M input, $40/1M output)
 - `o3-deep-research-2025-06-26` - Snapshot version
 - `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
 - `o4-mini-deep-research-2025-06-26` - Snapshot version

@@ -39,7 +39,7 @@ Here's a complete example showing how to use the Sequence Provider to create a m
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - openai:chat:gpt-4
+  - openai:chat:gpt-5-mini
 
 prompts:
   - 'artificial intelligence'

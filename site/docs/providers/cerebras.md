@@ -1,6 +1,6 @@
 ---
 sidebar_label: Cerebras
-description: Configure Cerebras' Llama 4 Scout and Llama 3 models through their OpenAI-compatible API for enterprise-grade inference with advanced MoE architecture support
+description: Configure Cerebras models through its OpenAI-compatible inference API
 ---
 
 # Cerebras
@@ -21,7 +21,7 @@ Or in your config:
 
 ```yaml
 providers:
-  - id: cerebras:llama3.1-8b
+  - id: cerebras:gpt-oss-120b
     config:
       apiKey: your_api_key_here
 ```
@@ -34,12 +34,9 @@ The Cerebras provider uses a simple format:
 
 ## Available Models
 
-The Cerebras Inference API officially supports these models:
-
-- `llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model with 16 expert MoE
-- `llama3.1-8b` - Llama 3.1 8B model
-- `llama-3.3-70b` - Llama 3.3 70B model
-- `deepSeek-r1-distill-llama-70B` (private preview)
+The Cerebras model catalog changes as models are added and retired. For example,
+`gpt-oss-120b` and `llama-4-scout-17b-16e-instruct` are available at the time of writing.
+Use the `/models` endpoint as the source of truth before pinning a model in a long-lived config:
 
 To get the current list of available models, use the `/models` endpoint:
 
@@ -121,11 +118,11 @@ description: Cerebras model evaluation
 prompts:
   - You are an expert in {{topic}}. Explain {{question}} in simple terms.
 providers:
-  - id: cerebras:llama3.1-8b
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:llama-3.3-70b
+  - id: cerebras:llama-4-scout-17b-16e-instruct
     config:
       temperature: 0.7
       max_completion_tokens: 1024

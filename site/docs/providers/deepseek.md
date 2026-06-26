@@ -1,6 +1,6 @@
 ---
 sidebar_label: DeepSeek
-description: Configure DeepSeek's OpenAI-compatible API with V4 chat and reasoning models, 1M context windows, and prompt caching for cost-effective LLM testing
+description: Configure DeepSeek's OpenAI-compatible API with V4 chat and reasoning models, 1M context windows, and prompt caching
 ---
 
 # DeepSeek
@@ -18,15 +18,23 @@ Basic configuration example:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-chat
+  - id: deepseek:deepseek-v4-flash
     config:
       temperature: 0.7
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
+      passthrough:
+        thinking:
+          type: disabled
 
-  - id: deepseek:deepseek-reasoner # Legacy alias for V4 Flash thinking mode
+  - id: deepseek:deepseek-v4-pro
     config:
       max_tokens: 8000
+      showThinking: true
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
 ```
 
 ### Configuration Options
@@ -36,7 +44,8 @@ providers:
 - `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
+- `showThinking` - Control whether returned reasoning content is included in the output (default: `true`)
+- `passthrough` - Send DeepSeek-specific request fields such as `thinking` and `reasoning_effort`
 
 ## Available Models
 
@@ -87,10 +96,14 @@ Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-v4-pro
     config:
       max_tokens: 8000
-      showThinking: true # Include reasoning content in output (default)
+      showThinking: true # Include reasoning content in promptfoo's output (default)
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
   - id: openai:o1
 
 prompts:
@@ -103,15 +116,18 @@ tests:
 
 ### Controlling Reasoning Output
 
-The legacy `deepseek-reasoner` alias uses V4 Flash thinking mode and includes detailed
-reasoning steps in its output. You can control whether this reasoning content is shown
-using the `showThinking` parameter:
+DeepSeek V4 models support both thinking and non-thinking modes. Pass the API's `thinking`
+field through and use `showThinking` to control whether promptfoo includes returned reasoning
+content in its output:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-v4-pro
     config:
       showThinking: false # Hide reasoning content from output
+      passthrough:
+        thinking:
+          type: enabled
 ```
 
 When `showThinking` is set to `true` (default), the output includes both reasoning and the final answer in a standardized format:
@@ -123,8 +139,6 @@ Thinking: <reasoning content>
 ```
 
 When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
-
-See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 
 ## API Details
 

@@ -1583,7 +1583,8 @@ prompts:
 tests:
   - vars: {}
     assert:
-      - type: is-video
+      - type: javascript
+        value: context.providerResponse?.video?.format === 'mp4'
 ```
 
 ### Environment Variables

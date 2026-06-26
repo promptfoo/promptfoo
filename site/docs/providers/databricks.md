@@ -1,6 +1,6 @@
 ---
 sidebar_label: Databricks
-description: Configure Databricks Foundation Model APIs with Llama-3, Claude, and custom endpoints for unified access to hosted and external LLMs through OpenAI-compatible interface
+description: Configure Databricks Foundation Model APIs with hosted and custom endpoints through an OpenAI-compatible interface
 ---
 
 # Databricks Foundation Model APIs
@@ -42,12 +42,14 @@ providers:
       workspaceUrl: https://your-workspace.cloud.databricks.com
 ```
 
-Available pay-per-token models include:
+The pay-per-token catalog changes over time. Current examples include:
 
 - `databricks-meta-llama-3-3-70b-instruct` - Meta's Llama model
-- `databricks-claude-3-7-sonnet` - Anthropic Claude with reasoning capabilities
+- `databricks-claude-sonnet-4-6` - Anthropic Claude model with text and image input
 - `databricks-gte-large-en` - Text embeddings model
-- `databricks-dbrx-instruct` - Databricks' own foundation model
+
+Check the [Databricks Foundation Model APIs catalog](https://docs.databricks.com/aws/en/machine-learning/model-serving/foundation-model-overview)
+before pinning an endpoint name in a long-lived config.
 
 ### Provisioned Throughput Endpoints
 
@@ -89,7 +91,7 @@ The Databricks provider extends the [OpenAI configuration options](/docs/provide
 
 ```yaml
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4-6
     config:
       isPayPerToken: true
       workspaceUrl: https://your-workspace.cloud.databricks.com
@@ -130,7 +132,7 @@ prompts:
   - file://vision-prompt.json
 
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4-6
     config:
       isPayPerToken: true
 

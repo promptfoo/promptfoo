@@ -1,10 +1,12 @@
 ---
-description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
+description: Route promptfoo requests through a self-hosted Helicone AI Gateway
 ---
 
 # Helicone AI Gateway
 
-[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted AI gateway that provides a unified OpenAI-compatible interface for 100+ LLM providers. The Helicone provider in promptfoo allows you to route requests through a locally running Helicone AI Gateway instance.
+[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted
+OpenAI-compatible gateway. The Helicone provider in promptfoo routes requests through a locally
+running gateway instance.
 
 ## Benefits
 
@@ -46,7 +48,7 @@ To route requests through your local Helicone AI Gateway:
 ```yaml
 providers:
   - helicone:openai/gpt-5-mini
-  - helicone:anthropic/claude-3-5-sonnet
+  - helicone:anthropic/claude-sonnet-4-5-20250929
   - helicone:groq/llama-3.1-8b-instant
 ```
 
@@ -98,17 +100,9 @@ Examples:
 
 ### Supported Models
 
-The Helicone AI Gateway supports 100+ models from various providers. Some popular examples:
-
-| Provider  | Example Models                                                    |
-| --------- | ----------------------------------------------------------------- |
-| OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`, `openai/o1-preview`         |
-| Anthropic | `anthropic/claude-3-5-sonnet`, `anthropic/claude-3-haiku`         |
-| Groq      | `groq/llama-3.1-8b-instant`, `groq/llama-3.1-70b-versatile`       |
-| Meta      | `meta-llama/Llama-3-8b-chat-hf`, `meta-llama/Llama-3-70b-chat-hf` |
-| Google    | `google/gemma-7b-it`, `google/gemma-2b-it`                        |
-
-For a complete list, see the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway).
+Model IDs are forwarded to the configured upstream provider. Check both the
+[Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway) and the upstream
+provider's current catalog before pinning an ID.
 
 ### Configuration Parameters
 
@@ -162,11 +156,11 @@ providers:
       properties:
         model_family: 'gpt-4'
 
-  - id: helicone:anthropic/claude-3-5-sonnet-20241022
+  - id: helicone:anthropic/claude-sonnet-4-5-20250929
     config:
       tags: ['anthropic', 'claude']
       properties:
-        model_family: 'claude-3'
+        model_family: 'claude-sonnet'
 
 prompts:
   - 'Write a creative story about {{topic}}'
@@ -205,7 +199,7 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: helicone:openai/gpt-3.5-turbo
+  - id: helicone:openai/gpt-5-mini
     config:
       cache: true
       properties:
@@ -218,9 +212,6 @@ prompts:
 tests:
   - vars:
       text: 'Large text content to summarize...'
-    assert:
-      - type: latency
-        threshold: 2000 # Should be faster due to caching
 ```
 
 ## Features

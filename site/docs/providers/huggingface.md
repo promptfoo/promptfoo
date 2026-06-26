@@ -208,8 +208,7 @@ Once the endpoint is created, take the `Endpoint URL` shown on the page:
 
 Then set up your promptfoo config like this:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 description: 'HF private inference endpoint'
 
 prompts:
