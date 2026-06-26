@@ -30,9 +30,9 @@ import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
-import { isDeferredMinimumAgenticSeed } from './redteam/shared/agenticSeed';
 import {
   getTargetPromptCharLimits,
+  isDeferredMinimumAgenticSeed,
   throwIfTargetPromptViolatesCharLimits,
 } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';

@@ -217,7 +217,7 @@ export abstract class RedteamPluginBase {
           },
           {
             isMultiInput: Boolean(this.config.inputs && Object.keys(this.config.inputs).length > 0),
-            useCliStateFallback: false,
+            useCliStateFallback: true,
           },
         );
         if (violation) {

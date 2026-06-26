@@ -1,5 +1,8 @@
 import cliState from '../../cliState';
 import { MULTI_INPUT_VAR } from '../constants';
+import { isDeferredMinimumAgenticSeed } from './agenticSeed';
+
+export { isDeferredMinimumAgenticSeed };
 
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
 export const MIN_CHARS_PER_MESSAGE_MODIFIER_KEY = 'minCharsPerMessage';
