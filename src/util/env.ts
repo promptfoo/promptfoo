@@ -15,7 +15,7 @@ export function setExplicitCliEnvPath(envPath: string | string[] | undefined): v
 
 export function restoreProcessEnv(snapshot: NodeJS.ProcessEnv): void {
   for (const key of Object.keys(process.env)) {
-    if (!Object.hasOwn(snapshot, key)) {
+    if (!Object.prototype.hasOwnProperty.call(snapshot, key)) {
       Reflect.deleteProperty(process.env, key);
     }
   }
