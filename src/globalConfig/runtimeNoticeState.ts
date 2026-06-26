@@ -5,7 +5,7 @@ import path from 'path';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
 const RUNTIME_NOTICE_DIRECTORY = 'notices';
-const RUNTIME_NOTICE_LOCK_STALE_MS = 30_000;
+const RUNTIME_NOTICE_LOCK_LEASE_MS = 30_000;
 
 function getRuntimeNoticeStatePath(noticeId: string, createDirectory: boolean): string {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(noticeId)) {
@@ -42,43 +42,23 @@ export function writeRuntimeNoticeLastShownAt(noticeId: string, lastShownAt: str
 }
 
 /**
- * Run a synchronous state transition while holding an exclusive per-notice lock. A concurrent
- * caller returns undefined instead of duplicating the transition. Locks left by terminated
- * processes are reclaimed after a short timeout.
+ * Run a synchronous state transition while holding an exclusive per-notice lease. A concurrent
+ * caller returns undefined instead of duplicating the transition. The time-scoped filename means
+ * an abandoned lease stops contending after a bounded interval without unlinking another process's
+ * newly acquired lock.
  */
 export function withRuntimeNoticeStateLock<T>(noticeId: string, callback: () => T): T | undefined {
-  const lockPath = `${getRuntimeNoticeStatePath(noticeId, true)}.lock`;
-  let lockDescriptor: number | undefined;
+  const leaseGeneration = Math.floor(Date.now() / RUNTIME_NOTICE_LOCK_LEASE_MS);
+  const lockPath = `${getRuntimeNoticeStatePath(noticeId, true)}.lock.${leaseGeneration}`;
+  let lockDescriptor: number;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      lockDescriptor = fs.openSync(lockPath, 'wx', 0o600);
-      break;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'EEXIST') {
-        throw error;
-      }
-
-      try {
-        const lockAgeMs = Date.now() - fs.statSync(lockPath).mtimeMs;
-        if (
-          lockAgeMs >= -RUNTIME_NOTICE_LOCK_STALE_MS &&
-          lockAgeMs <= RUNTIME_NOTICE_LOCK_STALE_MS
-        ) {
-          return undefined;
-        }
-        fs.rmSync(lockPath);
-      } catch (lockError) {
-        if ((lockError as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw lockError;
-        }
-      }
+  try {
+    lockDescriptor = fs.openSync(lockPath, 'wx', 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      return undefined;
     }
-  }
-
-  if (lockDescriptor === undefined) {
-    return undefined;
+    throw error;
   }
 
   try {

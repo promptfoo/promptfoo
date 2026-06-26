@@ -265,10 +265,10 @@ describe('UpdateBanner', () => {
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
         updateAvailable: true,
-        updateBlockedByRuntime: false,
+        updateBlockedByRuntime: true,
         latestVersion: '2.0.0',
         currentVersion: '1.9.0',
-        commandType: 'container',
+        commandType: 'npm',
         runtimeNotice: {
           id: 'node20-removal-2026-07-30',
           kind: 'runtime_deprecation',
@@ -281,8 +281,9 @@ describe('UpdateBanner', () => {
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
         },
         updateCommands: {
-          primary: null,
+          primary: '',
           alternative: null,
+          isCustomContainer: true,
         },
       },
       loading: false,
@@ -294,7 +295,7 @@ describe('UpdateBanner', () => {
     renderWithProviders(<UpdateBanner />);
 
     expect(
-      screen.getByText(/Rebuild this custom Promptfoo image with Node.js 24 LTS/i),
+      screen.getByText(/Update this custom image's Node.js base to 24 LTS/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Pull the latest Promptfoo Docker image/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
@@ -449,8 +450,8 @@ describe('UpdateBanner', () => {
     expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toBeInTheDocument();
   });
 
-  it('should preserve custom-container rebuild guidance after the cutoff', () => {
-    mockUseVersionCheck.mockReturnValue({
+  it('should show actionable custom-container updates before cutoff and block them after', () => {
+    const versionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
         updateBlockedByRuntime: false,
@@ -459,23 +460,36 @@ describe('UpdateBanner', () => {
         runtimeNotice: null,
         runtimePolicy: { supportEndDate: '2026-07-30' },
         updateCommands: {
-          primary: null,
+          primary: '',
           alternative: null,
+          isCustomContainer: true,
         },
-        commandType: 'container',
+        commandType: 'npm',
       },
       loading: false,
       error: null,
       dismissed: false,
       dismiss: vi.fn(),
-      runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
-    });
+      runtimePolicyUpdatedAt: Date.parse('2026-07-29T23:59:59.999Z'),
+    };
+    mockUseVersionCheck.mockReturnValue(versionCheckResult);
 
-    renderWithProviders(<UpdateBanner />);
+    const { rerender } = renderWithProviders(<UpdateBanner />);
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
-    expect(screen.getByText(/Rebuild and redeploy the container to update/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Update the Promptfoo source, dependency, or parent image/i),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
+
+    mockUseVersionCheck.mockReturnValue({
+      ...versionCheckResult,
+      versionInfo: { ...versionCheckResult.versionInfo!, updateBlockedByRuntime: true },
+      runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
+    });
+    rerender(<UpdateBanner />);
+
+    expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
   });
 
   it('should still show a Docker update after runtime support ends', () => {

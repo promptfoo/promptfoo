@@ -82,13 +82,25 @@ describe('getUpdateCommands', () => {
     });
     expect(
       getUpdateCommands({ isContainer: true, isOfficialDockerImage: false, isNpx: false }),
-    ).toEqual({ primary: null, alternative: null, commandType: 'container' });
+    ).toEqual({
+      primary: '',
+      alternative: null,
+      commandType: 'npm',
+      isCustomContainer: true,
+    });
     expect(
       getUpdateCommands({ isContainer: false, isOfficialDockerImage: false, isNpx: true }),
     ).toEqual({
       primary: 'npx promptfoo@latest',
       alternative: 'npm install -g promptfoo@latest',
       commandType: 'npx',
+    });
+    expect(
+      getUpdateCommands({ isContainer: false, isOfficialDockerImage: false, isNpx: false }),
+    ).toEqual({
+      primary: 'npm install -g promptfoo@latest',
+      alternative: 'npx promptfoo@latest',
+      commandType: 'npm',
     });
   });
 });
@@ -281,7 +293,7 @@ describe('checkForUpdates', () => {
     expect(loggerInfoSpy).not.toHaveBeenCalled();
   });
 
-  it('should preserve custom-container rebuild guidance before and after the cutoff', async () => {
+  it('should require a source update before rebuilding a custom container', async () => {
     const restoreContainer = mockProcessEnv({
       PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
       PROMPTFOO_RUNNING_IN_DOCKER: 'true',
@@ -309,17 +321,41 @@ describe('checkForUpdates', () => {
       restoreContainer();
     }
 
-    expect(loggerInfoSpy).toHaveBeenCalledTimes(2);
-    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('Rebuild the container image with Node.js 24 LTS'),
-    );
-    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('Rebuild the container image with Node.js 24 LTS'),
+    expect(loggerInfoSpy).toHaveBeenCalledOnce();
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Update the Promptfoo source, dependency, or parent image'),
     );
     expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('npx promptfoo'));
     expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('ghcr.io/promptfoo'));
+    expect(loggerWarnSpy).toHaveBeenCalledOnce();
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('and use Node.js 22.22.0 or newer (24 LTS recommended)'),
+    );
+  });
+
+  it('should let cadence suppress duplicate custom-container cutoff guidance', async () => {
+    const restoreContainer = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    try {
+      expect(
+        await checkForUpdates({
+          currentNodeVersion: 'v20.20.2',
+          now: new Date('2026-07-30T00:00:00.000Z'),
+          suppressRuntimeBlockedWarning: true,
+        }),
+      ).toBe(true);
+    } finally {
+      restoreContainer();
+    }
+
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
     expect(loggerWarnSpy).not.toHaveBeenCalled();
   });
 

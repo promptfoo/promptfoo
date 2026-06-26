@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { type RuntimeCompatibilityNotice, useVersionCheck } from '@app/hooks/useVersionCheck';
+import {
+  type RuntimeCompatibilityNotice,
+  useVersionCheck,
+  type VersionInfo,
+} from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
 import { hasRuntimeSupportEnded, parseUtcMidnight } from '@app/utils/runtimeCompatibility';
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
@@ -41,8 +45,8 @@ function RuntimeUpgradeMessage({
   if (commandType === 'container') {
     return (
       <>
-        Rebuild this custom Promptfoo image with Node.js {notice.recommendedVersion}, then redeploy
-        the container.
+        Update this custom image&apos;s Node.js base to {notice.recommendedVersion}, then rebuild
+        and redeploy the container.
       </>
     );
   }
@@ -94,9 +98,17 @@ function ContainerUpdateMessage({ commandType }: { commandType: string | null | 
   }
   return (
     <span className="text-sm text-muted-foreground">
-      Rebuild and redeploy the container to update.
+      Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the
+      container.
     </span>
   );
+}
+
+function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefined {
+  if (versionInfo?.updateCommands?.isCustomContainer) {
+    return 'container';
+  }
+  return versionInfo?.commandType;
 }
 
 export default function UpdateBanner() {
@@ -117,6 +129,7 @@ export default function UpdateBanner() {
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const recordedRuntimeNoticeRef = useRef<string | null>(null);
   const runtimeNotice = versionInfo?.runtimeNotice ?? null;
+  const updateMode = getUpdateMode(versionInfo);
   const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
@@ -127,9 +140,7 @@ export default function UpdateBanner() {
     : false;
   const updateBlockedByRuntime =
     !!versionInfo?.updateBlockedByRuntime ||
-    (runtimeSupportEnded &&
-      versionInfo?.commandType !== 'container' &&
-      versionInfo?.commandType !== 'docker');
+    (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
   const shouldShowRuntimeNotice = !!activeRuntimeNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
@@ -300,10 +311,7 @@ export default function UpdateBanner() {
               {formatRemovalDate(activeRuntimeNotice.removalDate)}
             </span>
             <span className="text-sm text-muted-foreground dark:text-amber-200">
-              <RuntimeUpgradeMessage
-                notice={activeRuntimeNotice}
-                commandType={versionInfo.commandType}
-              />
+              <RuntimeUpgradeMessage notice={activeRuntimeNotice} commandType={updateMode} />
             </span>
           </div>
         ) : (
@@ -314,7 +322,7 @@ export default function UpdateBanner() {
             <span className="text-sm text-muted-foreground">
               (current: v{versionInfo.currentVersion})
             </span>
-            <ContainerUpdateMessage commandType={versionInfo.commandType} />
+            <ContainerUpdateMessage commandType={updateMode} />
           </div>
         )}
       </div>

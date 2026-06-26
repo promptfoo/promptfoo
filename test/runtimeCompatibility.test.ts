@@ -54,7 +54,7 @@ describe('runtime compatibility policy', () => {
     );
   });
 
-  it('keeps Docker image updates available after the host runtime cutoff', () => {
+  it('keeps only official Docker image updates available after the host runtime cutoff', () => {
     const cutoff = new Date('2026-07-30T00:00:00.000Z');
 
     expect(isUpdateBlockedByRuntime('docker', 'v20.20.2', cutoff)).toBe(false);

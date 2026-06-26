@@ -165,6 +165,27 @@ jobs:
             exit 1
           fi
 
+          echo "Checking container update markers and API guidance:"
+          running_marker=$(docker exec promptfoo-container printenv PROMPTFOO_RUNNING_IN_DOCKER)
+          official_marker=$(docker exec promptfoo-container printenv PROMPTFOO_OFFICIAL_DOCKER_IMAGE)
+          expected_official=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
+          test "$running_marker" = "1"
+          test "$official_marker" = "$expected_official"
+
+          version_response=$(curl -fsS http://localhost:3000/api/version)
+          if [ "$expected_official" = "1" ]; then
+            echo "$version_response" | jq -e '
+              .commandType == "docker" and
+              .updateCommands.primary == "docker pull ghcr.io/promptfoo/promptfoo:latest"
+            '
+          else
+            echo "$version_response" | jq -e '
+              .commandType == "npm" and
+              .updateCommands.primary == "" and
+              .updateCommands.isCustomContainer == true
+            '
+          fi
+
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:

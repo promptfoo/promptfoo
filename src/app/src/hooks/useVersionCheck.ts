@@ -33,10 +33,11 @@ export interface VersionInfo {
   selfHosted?: boolean;
   isNpx?: boolean;
   updateCommands?: {
-    primary: string | null;
+    primary: string;
     alternative: string | null;
+    isCustomContainer?: boolean;
   };
-  commandType?: 'container' | 'docker' | 'npx' | 'npm';
+  commandType?: 'docker' | 'npx' | 'npm';
 }
 
 interface UseVersionCheckResult {

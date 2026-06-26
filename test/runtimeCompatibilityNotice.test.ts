@@ -187,7 +187,7 @@ describe('runtime compatibility CLI notice', () => {
     ).toBe(true);
 
     const message = vi.mocked(console.warn).mock.calls[0][0] as string;
-    expect(message).toContain('Rebuild this custom Promptfoo image with Node.js 24 LTS');
+    expect(message).toContain("Update this custom image's Node.js base to 24 LTS");
     expect(message).not.toContain('docker pull');
     expect(message).not.toContain('npx promptfoo');
   });

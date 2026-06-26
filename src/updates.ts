@@ -68,23 +68,25 @@ export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Pro
       if (options.suppressRuntimeBlockedWarning) {
         return true;
       }
+      const blockedUpdateInstruction = updateCommands.isCustomContainer
+        ? `Update the Promptfoo source, dependency, or parent image and use Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION} recommended), then rebuild and redeploy the container.`
+        : `Upgrade to Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION} recommended), then update promptfoo.`;
       logger.warn(
         `\n${border}
 ${chalk.yellow('⚠️')} A newer version of promptfoo is available, but Node.js 20 support ended ${NODE_20_SUPPORT_END_DATE_LABEL}.
 
-Upgrade to Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION} recommended), then update promptfoo.
+${blockedUpdateInstruction}
 Upgrade guide: ${NODE_RUNTIME_UPGRADE_GUIDE_URL}
 ${border}\n`,
       );
       return true;
     }
 
-    const updateInstruction =
-      updateCommands.commandType === 'container'
-        ? `Rebuild the container image with Node.js ${NODE_RECOMMENDED_VERSION}, then redeploy it.`
-        : `Please run ${chalk.green(updateCommands.primary!)}${
-            updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
-          } to update.`;
+    const updateInstruction = updateCommands.isCustomContainer
+      ? 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.'
+      : `Please run ${chalk.green(updateCommands.primary)}${
+          updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
+        } to update.`;
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(

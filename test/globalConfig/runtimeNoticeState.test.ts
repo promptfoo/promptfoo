@@ -19,6 +19,7 @@ describe('runtime notice state', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     setConfigDirectoryPath(undefined);
     fs.rmSync(configDirectory, { recursive: true, force: true });
   });
@@ -88,29 +89,52 @@ describe('runtime notice state', () => {
     expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 
-  it('reclaims a stale notice lock left by a terminated process', () => {
+  it('expires an abandoned lease without unlinking an active prior generation', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
     const noticeId = 'node20-removal-2026-07-30';
-    const noticeDirectory = path.join(configDirectory, 'notices');
-    const lockPath = path.join(noticeDirectory, `${noticeId}.last-shown.lock`);
-    fs.mkdirSync(noticeDirectory, { recursive: true });
-    fs.writeFileSync(lockPath, '123\n');
-    const staleTime = new Date(Date.now() - 60_000);
-    fs.utimesSync(lockPath, staleTime, staleTime);
+    let priorLeasePath = '';
+    let priorLeaseInode = 0;
+    let nextLeaseResult: string | undefined;
 
-    expect(withRuntimeNoticeStateLock(noticeId, () => 'claimed')).toBe('claimed');
-    expect(fs.existsSync(lockPath)).toBe(false);
+    expect(
+      withRuntimeNoticeStateLock(noticeId, () => {
+        const noticeDirectory = path.join(configDirectory, 'notices');
+        priorLeasePath = path.join(
+          noticeDirectory,
+          fs.readdirSync(noticeDirectory).find((entry) => entry.includes('.lock.'))!,
+        );
+        priorLeaseInode = fs.statSync(priorLeasePath).ino;
+        vi.setSystemTime(new Date('2026-06-22T12:00:30.001Z'));
+
+        nextLeaseResult = withRuntimeNoticeStateLock(noticeId, () => {
+          expect(fs.statSync(priorLeasePath).ino).toBe(priorLeaseInode);
+          expect(
+            fs.readdirSync(noticeDirectory).filter((entry) => entry.includes('.lock.')),
+          ).toHaveLength(2);
+          return 'claimed';
+        });
+        expect(fs.statSync(priorLeasePath).ino).toBe(priorLeaseInode);
+        return 'original';
+      }),
+    ).toBe('original');
+
+    expect(nextLeaseResult).toBe('claimed');
+    expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 
-  it('reclaims an implausibly future-dated lock after a clock rollback', () => {
+  it('uses a distinct lease generation after a clock rollback', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-22T12:01:00.000Z'));
     const noticeId = 'node20-removal-2026-07-30';
-    const noticeDirectory = path.join(configDirectory, 'notices');
-    const lockPath = path.join(noticeDirectory, `${noticeId}.last-shown.lock`);
-    fs.mkdirSync(noticeDirectory, { recursive: true });
-    fs.writeFileSync(lockPath, '123\n');
-    const futureTime = new Date(Date.now() + 60_000);
-    fs.utimesSync(lockPath, futureTime, futureTime);
+    let rollbackResult: string | undefined;
 
-    expect(withRuntimeNoticeStateLock(noticeId, () => 'claimed')).toBe('claimed');
-    expect(fs.existsSync(lockPath)).toBe(false);
+    withRuntimeNoticeStateLock(noticeId, () => {
+      vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+      rollbackResult = withRuntimeNoticeStateLock(noticeId, () => 'claimed');
+    });
+
+    expect(rollbackResult).toBe('claimed');
+    expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 });

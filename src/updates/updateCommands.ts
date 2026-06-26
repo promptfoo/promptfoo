@@ -9,9 +9,10 @@ export interface UpdateCommandOptions {
 }
 
 export interface UpdateCommandResult {
-  primary: string | null;
+  primary: string;
   alternative: string | null;
-  commandType: 'container' | 'docker' | 'npx' | 'npm';
+  commandType: 'docker' | 'npx' | 'npm';
+  isCustomContainer?: boolean;
 }
 
 export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandResult {
@@ -28,9 +29,12 @@ export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandR
 
   if (isContainer) {
     return {
-      primary: null,
+      // Keep the existing public response fields backward-compatible. New clients use the
+      // additive marker, while older Web UIs already hide empty commands.
+      primary: '',
       alternative: null,
-      commandType: 'container',
+      commandType: 'npm',
+      isCustomContainer: true,
     };
   }
 

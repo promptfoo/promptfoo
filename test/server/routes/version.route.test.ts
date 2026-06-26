@@ -114,7 +114,7 @@ describe('Version Route', () => {
     expect(response.body.updateCommands).toHaveProperty('commandType');
     expect(response.body.updateCommands).not.toHaveProperty('global');
     expect(response.body.updateCommands).not.toHaveProperty('npx');
-    expect(['container', 'docker', 'npx', 'npm']).toContain(response.body.commandType);
+    expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
   });
 
   it('should not classify generic self-hosted mode as Docker', async () => {
@@ -170,9 +170,10 @@ describe('Version Route', () => {
     });
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
     mockedGetUpdateCommands.mockReturnValue({
-      primary: null,
+      primary: '',
       alternative: null,
-      commandType: 'container',
+      commandType: 'npm',
+      isCustomContainer: true,
     });
 
     try {
@@ -180,8 +181,13 @@ describe('Version Route', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({
-        commandType: 'container',
-        updateCommands: { primary: null, alternative: null, commandType: 'container' },
+        commandType: 'npm',
+        updateCommands: {
+          primary: '',
+          alternative: null,
+          commandType: 'npm',
+          isCustomContainer: true,
+        },
       });
       expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
         isContainer: true,
@@ -211,6 +217,21 @@ describe('Version Route', () => {
       process.versions.node.startsWith('20.'),
     );
     expect(packageResponse.body.updateAvailable).toBe(!process.versions.node.startsWith('20.'));
+
+    mockedGetUpdateCommands.mockReturnValue({
+      primary: '',
+      alternative: null,
+      commandType: 'npm',
+      isCustomContainer: true,
+    });
+    const customContainerResponse = await request(app).get('/api/version');
+    expect(customContainerResponse.status).toBe(200);
+    expect(customContainerResponse.body.updateBlockedByRuntime).toBe(
+      process.versions.node.startsWith('20.'),
+    );
+    expect(customContainerResponse.body.updateAvailable).toBe(
+      !process.versions.node.startsWith('20.'),
+    );
 
     mockedGetUpdateCommands.mockReturnValue({
       primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
