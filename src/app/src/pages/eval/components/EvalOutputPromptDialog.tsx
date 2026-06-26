@@ -160,6 +160,8 @@ interface EvalOutputPromptDialogProps {
   onResetFilters?: () => void;
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  /** Changes when the backing eval row is refreshed, including after late trace imports. */
+  traceRefreshToken?: unknown;
   cloudConfig?: CloudConfigData | null;
   readOnly?: boolean;
 }
@@ -182,6 +184,7 @@ export default function EvalOutputPromptDialog({
   onResetFilters,
   onReplay,
   fetchTraces,
+  traceRefreshToken,
   cloudConfig,
   readOnly = false,
 }: EvalOutputPromptDialogProps) {
@@ -207,8 +210,10 @@ export default function EvalOutputPromptDialog({
     setActiveTab('prompt-output'); // Reset to first tab when dialog opens
   }, [prompt]);
 
-  // Fetch traces once when evaluationId changes
+  // Fetch traces when the eval changes or a scoped eval refresh delivers late trace data.
   useEffect(() => {
+    // The token is intentionally value-agnostic; its identity change is the refresh signal.
+    void traceRefreshToken;
     let isActive = true;
     const controller = new AbortController();
 
@@ -236,7 +241,7 @@ export default function EvalOutputPromptDialog({
       isActive = false;
       controller.abort();
     };
-  }, [evaluationId, fetchTraces]);
+  }, [evaluationId, fetchTraces, traceRefreshToken]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);

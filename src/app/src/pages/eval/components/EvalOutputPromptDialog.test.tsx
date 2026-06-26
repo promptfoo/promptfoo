@@ -1134,6 +1134,36 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
   });
 
+  it('refetches traces when the backing eval row refreshes', async () => {
+    const fetchTraces = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          traceId: 'late-trace',
+          testCaseId: 'test-case-id',
+          spans: [{ spanId: 'late-span', name: 'late span' }],
+        },
+      ]);
+    const initialToken = {};
+    const { rerender } = renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        fetchTraces={fetchTraces}
+        traceRefreshToken={initialToken}
+      />,
+    );
+    await waitFor(() => expect(fetchTraces).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+
+    rerender(
+      <EvalOutputPromptDialog {...defaultProps} fetchTraces={fetchTraces} traceRefreshToken={{}} />,
+    );
+
+    await waitFor(() => expect(fetchTraces).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+  });
+
   it('should hide Traces tab when fetchTraces is not provided', () => {
     const propsWithoutFetchTraces = {
       ...defaultProps,

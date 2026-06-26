@@ -575,23 +575,23 @@ evalRouter.post('/:id/traces', async (req: Request, res: Response): Promise<void
   }
 
   const { id } = paramsResult.data;
-  const eval_ = await Eval.findById(id);
-  if (!eval_) {
-    res.status(404).json({ error: 'Eval not found' });
-    return;
-  }
-
-  const traces = bodyResult.data;
-  const seenTraceIds = new Set<string>();
-  for (const trace of traces) {
-    if (seenTraceIds.has(trace.traceId)) {
-      res.status(400).json({ error: 'Duplicate trace ID in request' });
+  try {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
       return;
     }
-    seenTraceIds.add(trace.traceId);
-  }
 
-  try {
+    const traces = bodyResult.data;
+    const seenTraceIds = new Set<string>();
+    for (const trace of traces) {
+      if (seenTraceIds.has(trace.traceId)) {
+        res.status(400).json({ error: 'Duplicate trace ID in request' });
+        return;
+      }
+      seenTraceIds.add(trace.traceId);
+    }
+
     if (!(await eval_.appendTraces(traces))) {
       res.status(409).json({ error: 'Trace ID already exists' });
       return;

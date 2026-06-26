@@ -11,7 +11,7 @@ export interface RemoteBlobUploadTarget {
 }
 
 export interface RemoteBlobUploadContext {
-  evalId?: string;
+  evalId: string;
   testIdx?: number;
   promptIdx?: number;
   location?: string;
@@ -51,10 +51,10 @@ export function shouldAttemptRemoteBlobUpload(): boolean {
   return buildRemoteUploadTarget() !== null;
 }
 
-export async function uploadBlobToRemoteTarget(
+async function uploadBlobToRemoteTarget(
   buffer: Buffer,
   mimeType: string,
-  context: RemoteBlobUploadContext | undefined,
+  context: RemoteBlobUploadContext,
   target: RemoteBlobUploadTarget,
 ): Promise<BlobStoreResult | null> {
   try {
@@ -104,12 +104,13 @@ export async function uploadBlobToRemoteTarget(
 export async function uploadBlobRemote(
   buffer: Buffer,
   mimeType: string,
-  context?: RemoteBlobUploadContext,
+  context: RemoteBlobUploadContext,
+  target?: RemoteBlobUploadTarget,
 ): Promise<BlobStoreResult | null> {
-  const target = buildRemoteUploadTarget();
-  if (!target) {
+  const uploadTarget = target ?? buildRemoteUploadTarget();
+  if (!uploadTarget) {
     return null;
   }
 
-  return uploadBlobToRemoteTarget(buffer, mimeType, context, target);
+  return uploadBlobToRemoteTarget(buffer, mimeType, context, uploadTarget);
 }

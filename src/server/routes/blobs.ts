@@ -1,6 +1,12 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { BLOB_MAX_SIZE, getBlobByHash, getBlobUrl, storeBlob } from '../../blobs';
+import {
+  BLOB_MAX_BASE64_SIZE,
+  BLOB_MAX_SIZE,
+  getBlobByHash,
+  getBlobUrl,
+  storeBlob,
+} from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { sanitizeBlobMimeType } from '../../blobs/mimeTypes';
 import { getDb } from '../../database';
@@ -16,11 +22,6 @@ import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
-
-// Strict MIME type validation to prevent header injection attacks
-// Only allow: type/subtype where both are alphanumeric with dash/underscore/plus
-// Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
-const SAFE_MIME_TYPE_REGEX = /^[a-z]+\/[a-z0-9_+-]+$/i;
 
 function decodeBase64(value: string): Buffer | null {
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
@@ -42,6 +43,11 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  if (typeof req.body?.data === 'string' && req.body.data.length > BLOB_MAX_BASE64_SIZE) {
+    res.status(413).json({ error: 'Blob exceeds maximum size' });
+    return;
+  }
+
   const bodyResult = BlobsSchemas.Upload.Request.safeParse(req.body);
   if (!bodyResult.success) {
     replyValidationError(res, bodyResult.error);
@@ -59,13 +65,7 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { context } = bodyResult.data;
-  const evalId = context?.evalId;
-  if (!evalId) {
-    // Uploads must be associated with an eval. Without a reference row the returned URI is
-    // unretrievable (GET requires a reference and 403s), leaving an orphaned blob asset.
-    res.status(400).json({ error: 'context.evalId is required' });
-    return;
-  }
+  const { evalId } = context;
 
   // Blobs are served back from this server's own origin, so a client-supplied MIME like
   // text/html or image/svg+xml would be a stored-XSS vector. Persist only a media allowlist;
@@ -540,7 +540,11 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   let blob: Awaited<ReturnType<typeof getBlobByHash>>;
   try {
-    const presigned = await getBlobUrl(hash);
+    // Do not redirect legacy active-content metadata to a provider URL whose response headers
+    // this server cannot sanitize. Stream it through the inert MIME boundary below instead.
+    const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
+    const presigned =
+      assetMimeType === asset.mimeType.trim().toLowerCase() ? await getBlobUrl(hash) : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;
@@ -559,13 +563,8 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   // Validate MIME type before setting header to prevent injection attacks
-  const mimeType = blob.metadata.mimeType || asset.mimeType;
-  if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
-    res.setHeader('Content-Type', mimeType);
-  } else {
-    logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
-    res.setHeader('Content-Type', 'application/octet-stream');
-  }
+  const mimeType = sanitizeBlobMimeType(blob.metadata.mimeType || asset.mimeType);
+  res.setHeader('Content-Type', mimeType);
   // Defense in depth: never let the browser MIME-sniff stored bytes into active content.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());

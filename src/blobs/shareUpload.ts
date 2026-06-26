@@ -1,19 +1,11 @@
 import logger from '../logger';
 import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from './blobRefs';
 import { getShareAuthorizedBlob } from './index';
-import {
-  type RemoteBlobUploadTarget,
-  uploadBlobRemote,
-  uploadBlobToRemoteTarget,
-} from './remoteUpload';
+import { type RemoteBlobUploadTarget, uploadBlobRemote } from './remoteUpload';
 
-export type RemoteBlobUploadCache = Map<string, Promise<boolean>>;
-export type ShareBlobUploader = (
-  buffer: Buffer,
-  mimeType: string,
-  context?: Parameters<typeof uploadBlobRemote>[2],
-) => ReturnType<typeof uploadBlobRemote>;
-
+export class RemoteBlobUploadCache extends Map<string, Promise<boolean>> {
+  readonly resultContexts = new Map<string, ShareBlobUploadContext[]>();
+}
 interface ShareBlobUploadContext {
   localEvalId: string;
   remoteEvalId: string;
@@ -21,18 +13,29 @@ interface ShareBlobUploadContext {
   testIdx?: number;
 }
 
-export function createShareBlobUploader(target: RemoteBlobUploadTarget): ShareBlobUploader {
-  return (buffer, mimeType, context) => uploadBlobToRemoteTarget(buffer, mimeType, context, target);
+export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
+  return new RemoteBlobUploadCache();
 }
 
-export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
-  return new Map();
+// Key uploads by result-row coordinates, not just by hash: the remote records the
+// (promptIdx, testIdx) of each upload, so a blob referenced from multiple rows must
+// upload once per row to preserve each row's provenance. Re-uploading the same bytes
+// per row is intentional — the remote dedupes storage by content. Use `?? null` (not
+// `||`) so a falsy index 0 (the first row of every eval) stays distinct from a
+// coordinate-less reference.
+function getUploadCacheKey(hash: string, context: ShareBlobUploadContext): string {
+  return JSON.stringify({
+    hash,
+    remoteEvalId: context.remoteEvalId,
+    promptIdx: context.promptIdx ?? null,
+    testIdx: context.testIdx ?? null,
+  });
 }
 
 async function uploadAuthorizedBlob(
   hash: string,
   context: ShareBlobUploadContext,
-  uploader: ShareBlobUploader,
+  target?: RemoteBlobUploadTarget,
 ): Promise<boolean> {
   try {
     const blob = await getShareAuthorizedBlob(hash, context.localEvalId);
@@ -40,13 +43,16 @@ async function uploadAuthorizedBlob(
       return false;
     }
 
-    const result = await uploader(blob.data, blob.metadata.mimeType, {
+    const remoteContext = {
       evalId: context.remoteEvalId,
       promptIdx: context.promptIdx,
       testIdx: context.testIdx,
       location: 'share',
       kind: blob.metadata.mimeType.split('/', 1)[0],
-    });
+    };
+    const result = target
+      ? await uploadBlobRemote(blob.data, blob.metadata.mimeType, remoteContext, target)
+      : await uploadBlobRemote(blob.data, blob.metadata.mimeType, remoteContext);
 
     if (!result) {
       logger.warn('[Share] Failed to upload referenced blob; shared media may be unavailable', {
@@ -73,14 +79,16 @@ function uploadBlobForShare(
   hash: string,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
-  uploader: ShareBlobUploader,
+  target?: RemoteBlobUploadTarget,
 ): Promise<boolean> {
-  let pending = cache.get(hash);
+  const cacheKey = getUploadCacheKey(hash, context);
+  let pending = cache.get(cacheKey);
   if (!pending) {
     // Cache the whole authorize-and-upload flow synchronously so concurrent and
-    // repeated references to the same hash share one authorization check and one upload.
-    pending = uploadAuthorizedBlob(hash, context, uploader);
-    cache.set(hash, pending);
+    // repeated references that share a cache key (same blob, same row coordinates)
+    // reuse one authorization check and one upload without collapsing row provenance.
+    pending = uploadAuthorizedBlob(hash, context, target);
+    cache.set(cacheKey, pending);
   }
   return pending;
 }
@@ -89,13 +97,61 @@ export async function uploadBlobRefsForShare(
   value: unknown,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
-  uploader: ShareBlobUploader = uploadBlobRemote,
+  target?: RemoteBlobUploadTarget,
 ): Promise<void> {
   const hashes = collectBlobHashes(value, {
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  await Promise.all(
-    Array.from(hashes, (hash) => uploadBlobForShare(hash, cache, context, uploader)),
-  );
+  for (const hash of hashes) {
+    await uploadBlobForShare(hash, cache, context, target);
+  }
+}
+
+export function recordResultBlobRefsForShare(
+  value: unknown,
+  cache: RemoteBlobUploadCache,
+  context: ShareBlobUploadContext,
+): void {
+  const hashes = collectBlobHashes(value, {
+    maxDepth: BLOB_SCAN_MAX_DEPTH,
+    maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
+  });
+  for (const hash of hashes) {
+    const contexts = cache.resultContexts.get(hash) ?? [];
+    const key = getUploadCacheKey(hash, context);
+    if (!contexts.some((candidate) => getUploadCacheKey(hash, candidate) === key)) {
+      contexts.push(context);
+      cache.resultContexts.set(hash, contexts);
+    }
+  }
+}
+
+export async function uploadRecordedResultBlobRefsForShare(
+  cache: RemoteBlobUploadCache,
+  target?: RemoteBlobUploadTarget,
+): Promise<void> {
+  for (const [hash, contexts] of cache.resultContexts) {
+    for (const context of contexts) {
+      await uploadBlobForShare(hash, cache, context, target);
+    }
+  }
+}
+
+export async function uploadTraceBlobRefsForShare(
+  value: unknown,
+  cache: RemoteBlobUploadCache,
+  context: ShareBlobUploadContext,
+  target?: RemoteBlobUploadTarget,
+): Promise<void> {
+  const hashes = collectBlobHashes(value, {
+    maxDepth: BLOB_SCAN_MAX_DEPTH,
+    maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
+  });
+  for (const hash of hashes) {
+    const contexts = cache.resultContexts.get(hash);
+    for (const uploadContext of contexts?.length ? contexts : [context]) {
+      await uploadBlobForShare(hash, cache, uploadContext, target);
+    }
+  }
 }

@@ -187,6 +187,81 @@ describe('eval routes', () => {
       });
     });
 
+    it('accepts legacy empty trace strings that existing storage permits', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const legacyTrace = trace(randomUUID().replaceAll('-', ''));
+      legacyTrace.testCaseId = '';
+      legacyTrace.spans[0].spanId = '';
+      legacyTrace.spans[0].name = '';
+
+      const response = await api.post(`/api/eval/${eval_.id}/traces`).send([legacyTrace]);
+
+      expect(response.status).toBe(204);
+      await expect(getTraceStore().getTrace(legacyTrace.traceId)).resolves.toMatchObject({
+        testCaseId: '',
+        spans: [{ spanId: '', name: '' }],
+      });
+    });
+
+    it('rejects oversized trace batches before persisting any rows', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traces = Array.from({ length: 1_001 }, (_, index) => trace(`bounded-trace-${index}`));
+
+      const response = await api.post(`/api/eval/${eval_.id}/traces`).send(traces);
+
+      expect(response.status).toBe(400);
+      await expect(getTraceStore().getTracesByEvaluation(eval_.id)).resolves.toEqual([]);
+    });
+
+    it('rejects an oversized span batch before persisting its trace', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const oversizedTrace = trace(randomUUID().replaceAll('-', ''));
+      oversizedTrace.spans = Array.from({ length: 10_001 }, (_, index) => ({
+        ...oversizedTrace.spans[0],
+        spanId: `span-${index}`,
+      }));
+
+      const response = await api.post(`/api/eval/${eval_.id}/traces`).send([oversizedTrace]);
+
+      expect(response.status).toBe(400);
+      await expect(getTraceStore().getTrace(oversizedTrace.traceId)).resolves.toBeNull();
+    });
+
+    it('persists large valid span sets in SQLite-safe batches', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const largeTrace = trace(randomUUID().replaceAll('-', ''));
+      largeTrace.spans = Array.from({ length: 7_000 }, (_, index) => ({
+        ...largeTrace.spans[0],
+        spanId: `span-${index}`,
+      }));
+
+      const response = await api.post(`/api/eval/${eval_.id}/traces`).send([largeTrace]);
+
+      expect(response.status).toBe(204);
+      const stored = await getTraceStore().getTrace(largeTrace.traceId, {
+        sanitizeAttributes: false,
+      });
+      expect(stored?.spans).toHaveLength(7_000);
+    });
+
+    it('returns a generic JSON error when eval lookup fails', async () => {
+      const internalDetail = 'sqlite path=/home/alice/.promptfoo token=TOP_SECRET';
+      vi.spyOn(Eval, 'findById').mockRejectedValueOnce(new Error(internalDetail));
+
+      const response = await api
+        .post('/api/eval/lookup-failure/traces')
+        .send([trace(randomUUID().replaceAll('-', ''))]);
+
+      expect(response.status).toBe(500);
+      expect(response.type).toBe('application/json');
+      expect(response.body).toEqual({ error: 'Failed to add traces to eval' });
+      expect(response.text).not.toContain(internalDetail);
+    });
+
     it('recovers missing spans when a prior attempt created only the trace', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

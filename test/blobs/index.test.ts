@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  getBlobByHash,
   getShareAuthorizedBlob,
   isBlobAllowedForShare,
   recordBlobReference,
   resetBlobStorageProvider,
   setBlobStorageProvider,
+  storeBlob,
 } from '../../src/blobs';
 import { getDb } from '../../src/database';
 import { blobAssetsTable, blobReferencesTable, evalsTable } from '../../src/database/tables';
@@ -242,5 +244,125 @@ describe('recordBlobReference provenance upgrades', () => {
       promptIdx: 0,
       testIdx: 0,
     });
+  });
+
+  it('does not combine partial coordinates from different result rows', async () => {
+    await recordBlobReference(hash, {
+      evalId,
+      kind: 'image',
+      promptIdx: 1,
+    });
+    await recordBlobReference(hash, {
+      evalId,
+      promptIdx: 9,
+      testIdx: 8,
+    });
+
+    const rows = await getReferenceRows();
+    expect(rows[0]).toMatchObject({ promptIdx: 1, testIdx: null });
+  });
+
+  it('completes a partial coordinate tuple only from the same result row', async () => {
+    await recordBlobReference(hash, {
+      evalId,
+      kind: 'image',
+      promptIdx: 1,
+    });
+    await recordBlobReference(hash, {
+      evalId,
+      promptIdx: 1,
+      testIdx: 8,
+    });
+
+    const rows = await getReferenceRows();
+    expect(rows[0]).toMatchObject({ promptIdx: 1, testIdx: 8 });
+  });
+});
+
+describe('storeBlob failure and MIME boundaries', () => {
+  const evalId = `eval-${randomUUID()}`;
+  const hash = '6'.repeat(64);
+  let deleteCalls: string[];
+
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(async () => {
+    deleteCalls = [];
+    const db = await getDb();
+    await db.insert(evalsTable).values({ id: evalId, config: {}, results: {} });
+  });
+
+  afterEach(async () => {
+    resetBlobStorageProvider();
+    const db = await getDb();
+    await db.delete(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId));
+    await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
+    await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
+  });
+
+  function setStoreProvider(deduplicated: boolean, mimeType = 'image/png') {
+    setBlobStorageProvider({
+      providerId: 'test-stub',
+      store: async () => ({
+        deduplicated,
+        ref: {
+          hash,
+          mimeType,
+          provider: 'test-stub',
+          sizeBytes: 5,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      }),
+      getByHash: async () => ({
+        data: Buffer.from('bytes'),
+        metadata: {
+          createdAt: '2026-06-08T00:00:00.000Z',
+          key: hash,
+          mimeType,
+          provider: 'test-stub',
+          sizeBytes: 5,
+        },
+      }),
+      exists: async () => true,
+      deleteByHash: async (deletedHash) => {
+        deleteCalls.push(deletedHash);
+      },
+      getUrl: async () => null,
+    });
+  }
+
+  it('does not delete pre-existing bytes when a deduplicated reference insert fails', async () => {
+    setStoreProvider(true);
+
+    await expect(
+      storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
+    ).rejects.toThrow();
+    expect(deleteCalls).toEqual([]);
+  });
+
+  it('rolls back newly created bytes when reference persistence fails', async () => {
+    setStoreProvider(false);
+
+    await expect(
+      storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
+    ).rejects.toThrow();
+    expect(deleteCalls).toEqual([hash]);
+  });
+
+  it('downgrades unsafe provider metadata on deduplication and reads', async () => {
+    setStoreProvider(true, 'image/svg+xml');
+
+    const result = await storeBlob(Buffer.from('bytes'), 'application/octet-stream', { evalId });
+    expect(result.ref.mimeType).toBe('application/octet-stream');
+    await expect(getBlobByHash(hash)).resolves.toMatchObject({
+      metadata: { mimeType: 'application/octet-stream' },
+    });
+
+    const db = await getDb();
+    await expect(
+      db.select().from(blobAssetsTable).where(eq(blobAssetsTable.hash, hash)).get(),
+    ).resolves.toMatchObject({ mimeType: 'application/octet-stream' });
   });
 });

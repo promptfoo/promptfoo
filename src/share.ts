@@ -7,15 +7,17 @@ import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
 import {
   createRemoteBlobUploadCache,
-  createShareBlobUploader,
-  type ShareBlobUploader,
-  uploadBlobRefsForShare,
+  recordResultBlobRefsForShare,
+  uploadRecordedResultBlobRefsForShare,
+  uploadTraceBlobRefsForShare as uploadTraceBlobRefs,
 } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { persistTraceMetadata } from './models/evalResult';
+import { MAX_TRACES_PER_APPEND_REQUEST } from './types/api/eval';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -265,7 +267,7 @@ async function sendJsonChunk<T>(
         responseBody: responseBody.length > 500 ? `${responseBody.slice(0, 500)}...` : responseBody,
       };
 
-      logger.debug(`Chunk send failed: ${JSON.stringify(debugInfo, null, 2)}`);
+      logger.debug('Chunk send failed', debugInfo);
 
       if (response.status === 413) {
         return {
@@ -412,7 +414,7 @@ async function sendChunkWithRetry<T>(
     return firstSent + secondSent;
   }
 
-  // For unknown errors, throw to trigger rollback
+  // Bubble unknown errors so each caller can apply its own rollback or best-effort policy.
   throw result.originalError ?? new Error('Unknown error sending chunk');
 }
 
@@ -450,6 +452,7 @@ function getRemoteTraceId(traceIds: TraceIdMap, localTraceId: string): string {
 function remapResultTraceLinkage(
   chunk: EvalResult[],
   traceIds: TraceIdMap | null,
+  localEvalId: string,
   remoteEvalId: string,
 ): EvalResult[] {
   if (!traceIds) {
@@ -460,24 +463,100 @@ function remapResultTraceLinkage(
     if (!result.traceId) {
       return result;
     }
+    const localTraceId = result.traceId;
+    const remoteTraceId = getRemoteTraceId(traceIds, localTraceId);
+    const remapMetadata = (metadata: Record<string, unknown> | undefined) =>
+      remapKnownLinkage(
+        metadata,
+        ['evaluationId'],
+        ['traceId'],
+        localEvalId,
+        remoteEvalId,
+        localTraceId,
+        remoteTraceId,
+      );
     return {
       ...result,
-      traceId: getRemoteTraceId(traceIds, result.traceId),
+      traceId: remoteTraceId,
       evaluationId: remoteEvalId,
+      metadata: persistTraceMetadata(remapMetadata(result.metadata), remoteTraceId, remoteEvalId),
+      ...(result.testCase && {
+        testCase: {
+          ...result.testCase,
+          metadata: remapMetadata(result.testCase.metadata),
+        },
+      }),
+      ...(result.response?.metadata && {
+        response: {
+          ...result.response,
+          metadata: remapMetadata(result.response.metadata),
+        },
+      }),
     } as EvalResult;
   });
+}
+
+function remapKnownLinkage(
+  value: Record<string, unknown> | undefined,
+  evalKeys: string[],
+  traceKeys: string[],
+  localEvalId: string,
+  remoteEvalId: string,
+  localTraceId: string,
+  remoteTraceId: string,
+): Record<string, unknown> | undefined {
+  if (!value) {
+    return value;
+  }
+  const remapped = { ...value };
+  for (const key of evalKeys) {
+    if (remapped[key] === localEvalId) {
+      remapped[key] = remoteEvalId;
+    }
+  }
+  for (const key of traceKeys) {
+    if (remapped[key] === localTraceId) {
+      remapped[key] = remoteTraceId;
+    }
+  }
+  return remapped;
 }
 
 function remapTracesForShare(
   traces: EvalTraces,
   traceIds: TraceIdMap,
+  localEvalId: string,
   remoteEvalId: string,
 ): EvalTraces {
-  return traces.map((trace) => ({
-    ...trace,
-    traceId: getRemoteTraceId(traceIds, trace.traceId),
-    evaluationId: remoteEvalId,
-  }));
+  return traces.map((trace) => {
+    const remoteTraceId = getRemoteTraceId(traceIds, trace.traceId);
+    return {
+      ...trace,
+      traceId: remoteTraceId,
+      evaluationId: remoteEvalId,
+      metadata: remapKnownLinkage(
+        trace.metadata,
+        ['evaluationId'],
+        ['traceId'],
+        localEvalId,
+        remoteEvalId,
+        trace.traceId,
+        remoteTraceId,
+      ),
+      spans: trace.spans.map((span) => ({
+        ...span,
+        attributes: remapKnownLinkage(
+          span.attributes,
+          ['evaluation.id', 'promptfoo.eval.id'],
+          ['promptfoo.trace_id'],
+          localEvalId,
+          remoteEvalId,
+          trace.traceId,
+          remoteTraceId,
+        ),
+      })),
+    };
+  });
 }
 
 async function prepareChunkForShare(
@@ -487,29 +566,22 @@ async function prepareChunkForShare(
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
   traceIds: TraceIdMap | null,
-  blobUploader?: ShareBlobUploader,
 ): Promise<EvalResult[]> {
-  const remappedChunk = remapResultTraceLinkage(chunk, traceIds, remoteEvalId);
+  const remappedChunk = remapResultTraceLinkage(chunk, traceIds, localEvalId, remoteEvalId);
   const chunkToSend = inlineCache
     ? await inlineBlobRefsForShare(remappedChunk, inlineCache, localEvalId)
     : remappedChunk;
 
   if (remoteBlobUploadCache) {
-    await Promise.all(
-      remappedChunk.map((result) =>
-        uploadBlobRefsForShare(
-          result,
-          remoteBlobUploadCache,
-          {
-            localEvalId,
-            remoteEvalId,
-            promptIdx: result.promptIdx,
-            testIdx: result.testIdx,
-          },
-          blobUploader,
-        ),
-      ),
-    );
+    for (const result of remappedChunk) {
+      const context = {
+        localEvalId,
+        remoteEvalId,
+        promptIdx: result.promptIdx,
+        testIdx: result.testIdx,
+      };
+      recordResultBlobRefsForShare(result, remoteBlobUploadCache, context);
+    }
   }
 
   return chunkToSend;
@@ -534,32 +606,30 @@ async function uploadTraceBlobRefsForShare(
   remoteBlobUploadCache: RemoteBlobUploadCache | null,
   localEvalId: string,
   remoteEvalId: string,
-  blobUploader?: ShareBlobUploader,
+  blobUploadTarget?: Parameters<typeof uploadTraceBlobRefs>[3],
 ): Promise<void> {
   if (!remoteBlobUploadCache) {
     return;
   }
 
-  await Promise.all(
-    traces.map((trace) => {
-      const promptIdx =
-        typeof trace.metadata?.promptIdx === 'number' ? trace.metadata.promptIdx : undefined;
-      const testIdx =
-        typeof trace.metadata?.testIdx === 'number' ? trace.metadata.testIdx : undefined;
+  for (const trace of traces) {
+    const promptIdx =
+      typeof trace.metadata?.promptIdx === 'number' ? trace.metadata.promptIdx : undefined;
+    const testIdx =
+      typeof trace.metadata?.testIdx === 'number' ? trace.metadata.testIdx : undefined;
 
-      return uploadBlobRefsForShare(
-        trace,
-        remoteBlobUploadCache,
-        {
-          localEvalId,
-          remoteEvalId,
-          promptIdx,
-          testIdx,
-        },
-        blobUploader,
-      );
-    }),
-  );
+    await uploadTraceBlobRefs(
+      trace,
+      remoteBlobUploadCache,
+      {
+        localEvalId,
+        remoteEvalId,
+        promptIdx,
+        testIdx,
+      },
+      blobUploadTarget,
+    );
+  }
 }
 
 async function sendTraceChunksForShare(
@@ -567,49 +637,57 @@ async function sendTraceChunksForShare(
   url: string,
   evalId: string,
   headers: Record<string, string>,
-): Promise<void> {
+): Promise<EvalTraces> {
   if (traces.length === 0) {
-    return;
+    return [];
   }
 
-  const tracesPerChunk = Math.max(
-    1,
-    Math.floor(TARGET_SHARE_CHUNK_SIZE / findLargestItemSize(traces)),
+  const tracesPerChunk = Math.min(
+    MAX_TRACES_PER_APPEND_REQUEST,
+    Math.max(1, Math.floor(TARGET_SHARE_CHUNK_SIZE / findLargestItemSize(traces))),
   );
   const chunkConfig: AdaptiveChunkConfig = {
     minResultsPerChunk: 1,
     maxResultsPerChunk: tracesPerChunk,
   };
   const targetUrl = `${url}/${evalId}/traces`;
+  const acceptedTraces: EvalTraces = [];
 
-  try {
-    for (let offset = 0; offset < traces.length; offset += tracesPerChunk) {
+  for (let offset = 0; offset < traces.length; offset += tracesPerChunk) {
+    const chunk = traces.slice(offset, offset + tracesPerChunk);
+    let acceptedCount = 0;
+    try {
       await sendChunkWithRetry(
-        traces.slice(offset, offset + tracesPerChunk),
+        chunk,
         (chunk) => sendJsonChunk(chunk, targetUrl, evalId, headers, 'trace'),
         'trace',
         chunkConfig,
-        () => {},
+        (sentCount) => {
+          acceptedTraces.push(...chunk.slice(acceptedCount, acceptedCount + sentCount));
+          acceptedCount += sentCount;
+        },
       );
-    }
-  } catch (error) {
-    // The remote eval being missing is fatal: let it roll back the whole share.
-    if (error instanceof ShareEvalNotFoundError) {
-      throw error;
-    }
-    // Everything else (old server without the route, a rejected/oversized/malformed trace, or a
-    // transient trace-endpoint error) is non-fatal: the eval and results already uploaded fine, so
-    // keep the share and warn rather than discarding it for best-effort trace data.
-    if (error instanceof UnsupportedShareEndpointError) {
-      logger.warn(
-        'The self-hosted server does not support trace sharing. The eval was shared without traces; upgrade the server to transfer trace data.',
-      );
-    } else {
-      logger.warn(
-        `Failed to upload trace data; the eval was shared without traces. ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch (error) {
+      // The remote eval being missing is fatal: let it roll back the whole share.
+      if (error instanceof ShareEvalNotFoundError) {
+        throw error;
+      }
+      if (error instanceof UnsupportedShareEndpointError) {
+        logger.warn(
+          'The self-hosted server does not support the remaining trace data. Upgrade the server to transfer all traces.',
+          { acceptedTraceCount: acceptedTraces.length },
+        );
+        return acceptedTraces;
+      }
+      // Trace transfer is best-effort. Keep trying later chunks, but never interpolate an
+      // untrusted remote response body into normal-level logs.
+      logger.warn('Failed to upload a trace chunk; later trace chunks will still be attempted.', {
+        chunkOffset: offset,
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
     }
   }
+  return acceptedTraces;
 }
 
 async function warnForFailedBlobUploads(
@@ -623,7 +701,8 @@ async function warnForFailedBlobUploads(
   const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
   if (failedUploads > 0) {
     logger.warn(
-      `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
+      'Some referenced media blobs were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.',
+      { failedUploads, totalUploads: remoteBlobUploadCache.size },
     );
   }
 }
@@ -634,7 +713,6 @@ interface ResultChunkShareOptions {
   inlineCache: BlobInlineCache | null;
   remoteBlobUploadCache: RemoteBlobUploadCache | null;
   traceIds: TraceIdMap | null;
-  blobUploader?: ShareBlobUploader;
   sendResultChunk: (chunk: EvalResult[]) => Promise<ChunkSendResult>;
   chunkConfig: AdaptiveChunkConfig;
   onProgress: (sentCount: number) => void;
@@ -650,7 +728,6 @@ async function sendResultChunksForShare(
     inlineCache,
     remoteBlobUploadCache,
     traceIds,
-    blobUploader,
     sendResultChunk,
     chunkConfig,
     onProgress,
@@ -674,7 +751,6 @@ async function sendResultChunksForShare(
       inlineCache,
       remoteBlobUploadCache,
       traceIds,
-      blobUploader,
     );
     await sendChunkWithRetry(chunkToSend, sendResultChunk, 'result', chunkConfig, onProgress);
     currentChunk = [];
@@ -744,13 +820,6 @@ async function sendChunkedResults(
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  const blobUploader: ShareBlobUploader | undefined = isCloudEnabled
-    ? undefined
-    : createShareBlobUploader({
-        url: new URL('../blobs', `${url}/`).toString(),
-        headers,
-      });
-
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
@@ -770,6 +839,12 @@ async function sendChunkedResults(
 
   let evalId: string | undefined;
   try {
+    const blobUploadTarget = isCloudEnabled
+      ? undefined
+      : {
+          url: new URL('../blobs', `${url}/`).toString(),
+          headers,
+        };
     const traces = await evalRecord.getTraces();
     const traceIds: TraceIdMap | null = isCloudEnabled ? null : new Map();
 
@@ -797,42 +872,50 @@ async function sendChunkedResults(
       resultsPerChunk,
       remoteEvalId,
       inlineCache,
-      // Result blobs that are inlined into the payload never also need an out-of-band upload;
-      // only trace-referenced blobs (which keep raw URIs) are uploaded separately below. This
-      // also covers the cloud + PROMPTFOO_SHARE_INLINE_BLOBS override, where result blobs would
-      // otherwise be both inlined into the chunk and re-uploaded to cloud blob storage.
-      remoteBlobUploadCache: inlineCache ? null : remoteBlobUploadCache,
+      // Inline result refs are recorded without an upload. If a trace later uses the same raw
+      // blob URI, the out-of-band transfer reuses these stronger result-row coordinates.
+      remoteBlobUploadCache,
       traceIds,
-      blobUploader,
       sendResultChunk,
       chunkConfig,
       onProgress,
     });
 
-    // Upload trace-only blob refs after results so a blob referenced in both places keeps
-    // the richer prompt/test coordinates recorded by the result upload.
-    await uploadTraceBlobRefsForShare(
-      traces,
-      remoteBlobUploadCache,
-      evalRecord.id,
-      remoteEvalId,
-      blobUploader,
-    );
-
+    let tracesWithRemoteReferences = traces;
     if (traceIds) {
-      await sendTraceChunksForShare(
-        remapTracesForShare(traces, traceIds, remoteEvalId),
+      tracesWithRemoteReferences = await sendTraceChunksForShare(
+        remapTracesForShare(traces, traceIds, evalRecord.id, remoteEvalId),
         url,
         remoteEvalId,
         headers,
       );
     }
 
+    try {
+      // Defer every out-of-band blob write until after the last fatal result/trace operation. A
+      // rollback can therefore never strand newly uploaded bytes. Result rows are uploaded first
+      // so shared result/trace hashes retain the stronger prompt/test provenance.
+      if (remoteBlobUploadCache && !inlineCache) {
+        await uploadRecordedResultBlobRefsForShare(remoteBlobUploadCache, blobUploadTarget);
+      }
+      await uploadTraceBlobRefsForShare(
+        tracesWithRemoteReferences,
+        remoteBlobUploadCache,
+        evalRecord.id,
+        remoteEvalId,
+        blobUploadTarget,
+      );
+      await warnForFailedBlobUploads(remoteBlobUploadCache);
+    } catch (error) {
+      // Blob transfer is best-effort and is deliberately outside the rollback boundary.
+      logger.warn('Failed to finish shared media transfer; the eval was retained.', {
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
+    }
+
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
-
-    await warnForFailedBlobUploads(remoteBlobUploadCache);
 
     return evalId;
   } catch (e) {

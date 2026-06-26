@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { BLOB_MAX_BASE64_SIZE } from '../../src/blobs';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
@@ -123,9 +124,33 @@ describe('server OpenAPI generation', () => {
     expect(addEvalTracesOperation?.responses['409']).toEqual(
       expect.objectContaining({ description: 'Trace ID already belongs to another evaluation' }),
     );
+    const addTracesRequestSchema = addEvalTracesOperation?.requestBody?.content?.[
+      'application/json'
+    ]?.schema as any;
+    expect(addTracesRequestSchema?.maxItems).toBe(1_000);
+    expect(addTracesRequestSchema?.items?.properties?.spans?.maxItems).toBe(10_000);
+    expect(addTracesRequestSchema?.items?.properties?.testCaseId?.minLength).toBeUndefined();
     expect(
-      uploadBlobOperation?.requestBody?.content?.['application/json']?.schema?.required,
-    ).toEqual(expect.arrayContaining(['data', 'mimeType']));
+      addTracesRequestSchema?.items?.properties?.spans?.items?.properties?.name?.minLength,
+    ).toBeUndefined();
+    const uploadBlobRequestSchema = uploadBlobOperation?.requestBody?.content?.['application/json']
+      ?.schema as any;
+    const uploadBlobResponseSchema = uploadBlobOperation?.responses['200']?.content?.[
+      'application/json'
+    ]?.schema as any;
+    expect(uploadBlobRequestSchema?.required).toEqual(
+      expect.arrayContaining(['data', 'mimeType', 'context']),
+    );
+    expect(uploadBlobRequestSchema?.properties?.context?.required).toContain('evalId');
+    expect(uploadBlobRequestSchema?.properties?.data?.maxLength).toBe(BLOB_MAX_BASE64_SIZE);
+    expect(
+      new RegExp(uploadBlobRequestSchema?.properties?.mimeType?.pattern).test('IMAGE/PNG'),
+    ).toBe(true);
+    expect(
+      new RegExp(uploadBlobResponseSchema?.properties?.ref?.properties?.hash?.pattern).test(
+        'A'.repeat(64),
+      ),
+    ).toBe(true);
     expect(uploadBlobOperation?.responses['413']).toEqual(
       expect.objectContaining({ description: 'Blob exceeds maximum size' }),
     );
@@ -169,7 +194,7 @@ describe('server OpenAPI generation', () => {
     expect(
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
-    ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
+    ).toEqual(expect.objectContaining({ pattern: '^[A-Fa-f0-9]{64}$', type: 'string' }));
   });
 
   it('emits representative inline DTO schemas', () => {

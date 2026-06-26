@@ -6,7 +6,17 @@ import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
 vi.mock('../../../src/blobs/extractor');
-vi.mock('../../../src/blobs');
+vi.mock('../../../src/blobs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/blobs')>();
+  return {
+    ...actual,
+    // Keep route limit coverage cheap while the OpenAPI test pins the production maximum.
+    BLOB_MAX_BASE64_SIZE: 64,
+    getBlobByHash: vi.fn(),
+    getBlobUrl: vi.fn(),
+    storeBlob: vi.fn(),
+  };
+});
 vi.mock('../../../src/database');
 
 // Import after mocking
@@ -58,6 +68,10 @@ describe('Blobs Routes', () => {
     beforeEach(() => {
       vi.resetAllMocks();
       mockedIsBlobStorageEnabled.mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
     });
 
     it('stores a validated blob for an existing eval', async () => {
@@ -159,7 +173,22 @@ describe('Blobs Routes', () => {
       });
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'context.evalId is required' });
+      expect(response.body.details.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: ['context'] })]),
+      );
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized encoded payload before decoding or storage', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: 'A'.repeat(65),
+        mimeType: 'image/png',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(413);
+      expect(response.body).toEqual({ error: 'Blob exceeds maximum size' });
+      expect(mockedGetDb).not.toHaveBeenCalled();
       expect(mockedStoreBlob).not.toHaveBeenCalled();
     });
 
@@ -195,6 +224,7 @@ describe('Blobs Routes', () => {
       const response = await api.post('/api/blobs').send({
         data: 'QR==',
         mimeType: 'image/png',
+        context: { evalId },
       });
 
       expect(response.status).toBe(400);
@@ -206,6 +236,7 @@ describe('Blobs Routes', () => {
       const response = await api.post('/api/blobs').send({
         data: '==',
         mimeType: 'image/png',
+        context: { evalId },
       });
 
       expect(response.status).toBe(400);
@@ -217,6 +248,7 @@ describe('Blobs Routes', () => {
       const response = await api.post('/api/blobs').send({
         data: 'not=valid=base64',
         mimeType: 'image/png',
+        context: { evalId },
       });
 
       expect(response.status).toBe(400);
@@ -407,6 +439,21 @@ describe('Blobs Routes', () => {
       expect(response.header['content-type']).toBe('application/octet-stream');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
+    });
+
+    it('should not redirect legacy active content around the MIME boundary', async () => {
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'image/svg+xml', sizeBytes: 2048, provider: 's3' },
+        { evalId: 'eval-svg' },
+      );
+      mockedGetBlobUrl.mockResolvedValue('https://storage.example/unsafe-svg');
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/svg+xml', 2048));
+
+      const response = await api.get(`/api/blobs/${validHash}`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('application/octet-stream');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
     });
 
     it('should use blob metadata MIME type when available', async () => {

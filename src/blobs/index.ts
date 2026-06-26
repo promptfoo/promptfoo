@@ -5,10 +5,11 @@ import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
+import { sanitizeBlobMimeType } from './mimeTypes';
 
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
 
-export { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
+export { BLOB_MAX_BASE64_SIZE, BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
 export {
   type BlobRef,
   type BlobStorageProvider,
@@ -53,6 +54,11 @@ export async function storeBlob(
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
   const result = await provider.store(data, mimeType);
+  const safeMimeType = sanitizeBlobMimeType(result.ref.mimeType);
+  const normalizedResult: BlobStoreResult = {
+    ...result,
+    ref: { ...result.ref, mimeType: safeMimeType },
+  };
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = await getDb();
@@ -61,12 +67,15 @@ export async function storeBlob(
       await tx
         .insert(blobAssetsTable)
         .values({
-          hash: result.ref.hash,
-          sizeBytes: result.ref.sizeBytes,
-          mimeType: result.ref.mimeType,
-          provider: result.ref.provider,
+          hash: normalizedResult.ref.hash,
+          sizeBytes: normalizedResult.ref.sizeBytes,
+          mimeType: normalizedResult.ref.mimeType,
+          provider: normalizedResult.ref.provider,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: blobAssetsTable.hash,
+          set: { mimeType: normalizedResult.ref.mimeType },
+        })
         .run();
 
       if (refContext?.evalId) {
@@ -74,7 +83,7 @@ export async function storeBlob(
           .insert(blobReferencesTable)
           .values({
             id: randomUUID(),
-            blobHash: result.ref.hash,
+            blobHash: normalizedResult.ref.hash,
             evalId: refContext.evalId,
             testIdx: refContext.testIdx,
             promptIdx: refContext.promptIdx,
@@ -86,24 +95,33 @@ export async function storeBlob(
       }
     });
   } catch (error) {
-    // Roll back filesystem write if DB persistence fails
-    try {
-      await provider.deleteByHash(result.ref.hash);
-    } catch (cleanupError) {
-      logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
-        error: cleanupError,
-        hash: result.ref.hash,
-      });
+    // A deduplicated object predates this transaction and may still be referenced elsewhere.
+    if (!result.deduplicated) {
+      try {
+        await provider.deleteByHash(result.ref.hash);
+      } catch (cleanupError) {
+        logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
+          error: cleanupError,
+          hash: result.ref.hash,
+        });
+      }
     }
     throw error;
   }
 
-  return result;
+  return normalizedResult;
 }
 
 export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
-  return provider.getByHash(hash);
+  const blob = await provider.getByHash(hash);
+  return {
+    ...blob,
+    metadata: {
+      ...blob.metadata,
+      mimeType: sanitizeBlobMimeType(blob.metadata.mimeType),
+    },
+  };
 }
 
 export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
@@ -192,6 +210,14 @@ export async function recordBlobReference(
     .get();
 
   if (existing) {
+    const incomingCoordinates =
+      refContext.promptIdx !== undefined && refContext.testIdx !== undefined
+        ? { promptIdx: refContext.promptIdx, testIdx: refContext.testIdx }
+        : null;
+    const existingCoordinatesAreCompatible =
+      incomingCoordinates !== null &&
+      (existing.promptIdx == null || existing.promptIdx === incomingCoordinates.promptIdx) &&
+      (existing.testIdx == null || existing.testIdx === incomingCoordinates.testIdx);
     const strongerReference: {
       kind?: string;
       location?: string;
@@ -201,10 +227,10 @@ export async function recordBlobReference(
       ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
       ...(refContext.location === 'import' &&
         existing.location !== 'import' && { location: 'import' }),
-      ...(refContext.promptIdx !== undefined &&
-        existing.promptIdx == null && { promptIdx: refContext.promptIdx }),
-      ...(refContext.testIdx !== undefined &&
-        existing.testIdx == null && { testIdx: refContext.testIdx }),
+      ...(existingCoordinatesAreCompatible &&
+        existing.promptIdx == null && { promptIdx: incomingCoordinates.promptIdx }),
+      ...(existingCoordinatesAreCompatible &&
+        existing.testIdx == null && { testIdx: incomingCoordinates.testIdx }),
     };
     if (Object.keys(strongerReference).length > 0) {
       await db

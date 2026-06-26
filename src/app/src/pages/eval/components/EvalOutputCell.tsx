@@ -1229,6 +1229,7 @@ function renderOutputActions({
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
               fetchTraces={fetchTraces}
+              traceRefreshToken={output}
               cloudConfig={cloudConfig}
             />
           )}

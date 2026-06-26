@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShareAuthorizedBlob } from '../../src/blobs';
 import { uploadBlobRemote } from '../../src/blobs/remoteUpload';
-import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../../src/blobs/shareUpload';
+import {
+  createRemoteBlobUploadCache,
+  recordResultBlobRefsForShare,
+  uploadBlobRefsForShare,
+  uploadRecordedResultBlobRefsForShare,
+  uploadTraceBlobRefsForShare,
+} from '../../src/blobs/shareUpload';
 import logger from '../../src/logger';
 
 import type { StoredBlob } from '../../src/blobs';
@@ -47,7 +53,7 @@ describe('share-time blob upload', () => {
     });
   });
 
-  it('uploads each referenced blob only once across chunks', async () => {
+  it('uploads the same blob once for each distinct result coordinate tuple', async () => {
     const hash = 'a'.repeat(64);
     const cache = createRemoteBlobUploadCache();
 
@@ -66,15 +72,64 @@ describe('share-time blob upload', () => {
       testIdx: 3,
     });
 
-    expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
-    expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval-123');
-    expect(uploadBlobRemote).toHaveBeenCalledOnce();
-    expect(uploadBlobRemote).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
+    expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(1, Buffer.from('image-bytes'), 'image/png', {
       evalId: 'remote-eval-123',
       kind: 'image',
       location: 'share',
       promptIdx: 2,
       testIdx: 1,
+    });
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(2, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-123',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 4,
+      testIdx: 3,
+    });
+  });
+
+  it('plans result provenance without reading bytes until final upload', async () => {
+    const hash = '7'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+    const context = {
+      localEvalId: 'local-eval-plan',
+      remoteEvalId: 'remote-eval-plan',
+      promptIdx: 1,
+      testIdx: 2,
+    };
+
+    recordResultBlobRefsForShare(`promptfoo://blob/${hash}`, cache, context);
+    expect(getShareAuthorizedBlob).not.toHaveBeenCalled();
+    expect(uploadBlobRemote).not.toHaveBeenCalled();
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval-plan');
+    expect(uploadBlobRemote).toHaveBeenCalledOnce();
+  });
+
+  it('uses recorded result provenance for a blob later referenced by a trace', async () => {
+    const hash = '8'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+    recordResultBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-result',
+      remoteEvalId: 'remote-eval-result',
+      promptIdx: 4,
+      testIdx: 3,
+    });
+
+    await uploadTraceBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-result',
+      remoteEvalId: 'remote-eval-result',
+    });
+
+    expect(uploadBlobRemote).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-result',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 4,
+      testIdx: 3,
     });
   });
 
@@ -168,6 +223,38 @@ describe('share-time blob upload', () => {
     expect(uploadBlobRemote).toHaveBeenCalledOnce();
   });
 
+  it('bounds unique blob preparation to one upload at a time', async () => {
+    const firstHash = '1'.repeat(64);
+    const secondHash = '2'.repeat(64);
+    let activeUploads = 0;
+    let maxActiveUploads = 0;
+    vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+      activeUploads += 1;
+      maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      activeUploads -= 1;
+      return {
+        deduplicated: false,
+        ref: {
+          hash: firstHash,
+          mimeType: 'image/png',
+          provider: 'cloud',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${firstHash}`,
+        },
+      };
+    });
+
+    await uploadBlobRefsForShare(
+      [`promptfoo://blob/${firstHash}`, `promptfoo://blob/${secondHash}`],
+      createRemoteBlobUploadCache(),
+      { localEvalId: 'local-eval-bounded', remoteEvalId: 'remote-eval-bounded' },
+    );
+
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    expect(maxActiveUploads).toBe(1);
+  });
+
   it('skips the blob without failing the share when the authorization check errors', async () => {
     const hash = '9'.repeat(64);
     vi.mocked(getShareAuthorizedBlob).mockRejectedValue(new Error('db locked'));
@@ -189,32 +276,32 @@ describe('share-time blob upload', () => {
     );
   });
 
-  it('uses a target-specific uploader after authorizing the local blob', async () => {
+  it('uses an explicit remote target after authorizing the local blob', async () => {
     const hash = '7'.repeat(64);
-    const uploader = vi.fn().mockResolvedValue({
-      deduplicated: false,
-      ref: {
-        hash,
-        mimeType: 'image/png',
-        provider: 'filesystem',
-        sizeBytes: 11,
-        uri: `promptfoo://blob/${hash}`,
-      },
-    });
+    const target = {
+      url: 'https://self-hosted.example/api/blobs',
+      headers: { 'X-Share-Token': 'token' },
+    };
 
     await uploadBlobRefsForShare(
       `promptfoo://blob/${hash}`,
       createRemoteBlobUploadCache(),
       { localEvalId: 'local-eval', remoteEvalId: 'remote-eval' },
-      uploader,
+      target,
     );
 
     expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval');
-    expect(uploader).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'remote-eval',
-      kind: 'image',
-      location: 'share',
-    });
-    expect(uploadBlobRemote).not.toHaveBeenCalled();
+    expect(uploadBlobRemote).toHaveBeenCalledWith(
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval',
+        kind: 'image',
+        location: 'share',
+        promptIdx: undefined,
+        testIdx: undefined,
+      },
+      target,
+    );
   });
 });

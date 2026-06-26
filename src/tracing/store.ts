@@ -73,6 +73,9 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.cache_creation_input_tokens',
 ]);
 
+// Stay comfortably below SQLite/libSQL's bind-parameter limits (8 columns per span record).
+const SPAN_INSERT_BATCH_SIZE = 500;
+
 function isSensitiveAttributeKey(key: string): boolean {
   const lowerKey = key.toLowerCase();
   if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
@@ -335,10 +338,16 @@ export class TraceStore {
         });
 
         if (spansToAdd.length > 0) {
-          await tx
-            .insert(spansTable)
-            .values(spansToAdd.map((span) => buildSpanRecord(trace.traceId, span)))
-            .run();
+          for (let offset = 0; offset < spansToAdd.length; offset += SPAN_INSERT_BATCH_SIZE) {
+            await tx
+              .insert(spansTable)
+              .values(
+                spansToAdd
+                  .slice(offset, offset + SPAN_INSERT_BATCH_SIZE)
+                  .map((span) => buildSpanRecord(trace.traceId, span)),
+              )
+              .run();
+          }
         }
       }
 

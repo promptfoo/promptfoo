@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  shouldAttemptRemoteBlobUpload,
-  uploadBlobRemote,
-  uploadBlobToRemoteTarget,
-} from '../../src/blobs/remoteUpload';
+import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from '../../src/blobs/remoteUpload';
 import { getEnvBool } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -102,7 +98,7 @@ describe('remote blob upload', () => {
   it('posts blobs to an explicit self-hosted target without Cloud configuration', async () => {
     vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
 
-    await uploadBlobToRemoteTarget(
+    await uploadBlobRemote(
       Buffer.from('trace-image'),
       'image/png',
       {

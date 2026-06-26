@@ -1,23 +1,25 @@
 import { z } from 'zod';
 
+// Mirrors the 50 MiB runtime blob limit without introducing a contracts -> runtime dependency.
+const BLOB_MAX_BASE64_SIZE = 69_905_068;
+
 // Shared regex for SHA-256 blob hashes
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
-const MIME_TYPE_REGEX = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i;
+// Keep these flag-free: OpenAPI patterns do not support JavaScript regex flags.
+const BLOB_HASH_REGEX = /^[A-Fa-f0-9]{64}$/;
+const MIME_TYPE_REGEX = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
 
 // POST /api/blobs
 
 export const UploadBlobRequestSchema = z.object({
-  data: z.string().min(1),
+  data: z.string().min(1).max(BLOB_MAX_BASE64_SIZE),
   mimeType: z.string().max(255).regex(MIME_TYPE_REGEX, 'Invalid MIME type'),
-  context: z
-    .object({
-      evalId: z.string().min(1).max(128).optional(),
-      testIdx: z.number().int().nonnegative().optional(),
-      promptIdx: z.number().int().nonnegative().optional(),
-      location: z.string().max(512).optional(),
-      kind: z.string().max(64).optional(),
-    })
-    .optional(),
+  context: z.object({
+    evalId: z.string().min(1).max(128),
+    testIdx: z.number().int().nonnegative().optional(),
+    promptIdx: z.number().int().nonnegative().optional(),
+    location: z.string().max(512).optional(),
+    kind: z.string().max(64).optional(),
+  }),
 });
 
 export const UploadBlobResponseSchema = z.object({
