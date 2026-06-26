@@ -1043,6 +1043,29 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['an array', ['first {{prompt}}', 'second {{prompt}}']],
+    ['a string', '{{prompt}}'],
+  ])('should ignore legacy provider config.inputs when it is %s', async (_label, inputs) => {
+    mockProvider.config = { inputs };
+
+    await doGenerateRedteam({
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    });
+
+    expect(synthesize).toHaveBeenCalledWith(expect.objectContaining({ inputs: undefined }));
+    expect(getStrategyCompatibilityError).toHaveBeenCalledWith(
+      expect.any(Array),
+      undefined,
+      expect.any(Object),
+    );
+  });
+
   it('should preflight incompatible raw targets before provider construction', async () => {
     vi.mocked(getStrategyCompatibilityError).mockImplementation((_strategies, inputs) =>
       inputs && typeof inputs === 'object' && Object.keys(inputs).length > 0

@@ -18,7 +18,7 @@ import {
 } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds } from '../../providers/index';
+import { getConfiguredProviderInputs, getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
@@ -683,11 +683,13 @@ async function doGenerateRedteamInternal(
   }
 
   // Read inputs from the first target/provider
-  const targetInputs = testSuite.providers[0]?.inputs ?? testSuite.providers[0]?.config?.inputs;
+  const targetInputs = testSuite.providers[0]
+    ? getConfiguredProviderInputs(testSuite.providers[0])
+    : undefined;
 
   const compatibilityError = testSuite.providers
     .map((provider) =>
-      getStrategyCompatibilityError(strategyObjs, provider.inputs ?? provider.config?.inputs, {
+      getStrategyCompatibilityError(strategyObjs, getConfiguredProviderInputs(provider), {
         plugins,
       }),
     )

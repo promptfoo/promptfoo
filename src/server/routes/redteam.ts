@@ -61,13 +61,14 @@ async function getLiveConfigCompatibilityError(
       : Array.isArray(redteam?.strategies)
         ? redteam.strategies
         : [];
-  const plugins = Array.isArray(commandLineOptions?.plugins)
-    ? commandLineOptions.plugins
-    : Array.isArray(resolvedConfig.plugins)
-      ? resolvedConfig.plugins
-      : Array.isArray(redteam?.plugins)
-        ? redteam.plugins
-        : undefined;
+  const plugins =
+    Array.isArray(commandLineOptions?.plugins) && commandLineOptions.plugins.length > 0
+      ? commandLineOptions.plugins
+      : Array.isArray(resolvedConfig.plugins)
+        ? resolvedConfig.plugins
+        : Array.isArray(redteam?.plugins)
+          ? redteam.plugins
+          : undefined;
   const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
   if (strategyConfigError) {
     return strategyConfigError;

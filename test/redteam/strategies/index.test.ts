@@ -1,4 +1,6 @@
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
@@ -290,6 +292,35 @@ describe('getStrategyCompatibilityError', () => {
     },
   ])('accounts for plugin applicability with $label', ({ strategies, plugins, expected }) => {
     expect(getStrategyCompatibilityError(strategies, inputs, { plugins })).toBe(expected);
+  });
+
+  it('accounts for plugin-level multi-input configuration', () => {
+    expect(
+      getStrategyCompatibilityError(['posterior'], undefined, {
+        plugins: [
+          {
+            id: 'policy',
+            config: { inputs: { context: 'Reference context', question: 'User question' } },
+          },
+        ],
+      }),
+    ).toBe('Posterior strategy does not support multi-input targets');
+  });
+
+  it('resolves file-backed sequence-only intents for compatibility checks', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-posterior-intents-'));
+    const intentPath = path.join(tempDir, 'intents.json');
+    fs.writeFileSync(intentPath, JSON.stringify([['first turn', 'second turn']]));
+
+    try {
+      expect(
+        getStrategyCompatibilityError(['posterior'], inputs, {
+          plugins: [{ id: 'intent', config: { intent: `file://${intentPath}` } }],
+        }),
+      ).toBeUndefined();
+    } finally {
+      fs.rmSync(tempDir, { force: true, recursive: true });
+    }
   });
 
   it('normalizes generated plugin IDs before applying strategy targets', () => {

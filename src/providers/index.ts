@@ -355,7 +355,7 @@ export function resolveProviderConfigs(
   return results;
 }
 
-function getConfiguredProviderInputs(
+export function getConfiguredProviderInputs(
   options: Pick<ProviderOptions, 'inputs' | 'config'>,
 ): ProviderOptions['inputs'] {
   const inputs = options.inputs ?? options.config?.inputs;

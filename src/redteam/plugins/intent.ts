@@ -18,6 +18,32 @@ import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:intent';
 
+export function resolveIntentPluginForCompatibility(plugin: unknown): unknown {
+  if (!plugin || typeof plugin !== 'object' || Array.isArray(plugin)) {
+    return plugin;
+  }
+
+  const { config, id } = plugin as { config?: unknown; id?: unknown };
+  if (
+    (id !== 'intent' && id !== PLUGIN_ID) ||
+    !config ||
+    typeof config !== 'object' ||
+    Array.isArray(config)
+  ) {
+    return plugin;
+  }
+
+  const intent = (config as { intent?: unknown }).intent;
+  if (typeof intent !== 'string' || !intent.startsWith('file://')) {
+    return plugin;
+  }
+
+  return {
+    ...plugin,
+    config: { ...config, intent: maybeLoadFromExternalFile(intent) },
+  };
+}
+
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
