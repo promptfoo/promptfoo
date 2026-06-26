@@ -206,7 +206,7 @@ describe('runEval', () => {
     expect(results[0].vars).toEqual({ keep: 'yes' });
     expect(results[0].gradingResult?.pass).toBe(true);
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('omitted'), {
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('removed'), {
       collidingReservedVars: ['__evalId'],
     });
   });

@@ -1468,8 +1468,8 @@ async function runEvalInternal({
     collidingReservedVars.forEach((name) => warnedReservedRuntimeVars?.add(name));
     logger.warn(
       'Vars collide with reserved promptfoo runtime vars. Runtime values override them when ' +
-        'set, and reserved vars are omitted before assertions and grading. Rename the supplied ' +
-        'vars to avoid the conflict.',
+        'set, and reserved values may be removed from evaluator vars before downstream use. ' +
+        'Rename the supplied vars to avoid the conflict.',
       { collidingReservedVars },
     );
   }

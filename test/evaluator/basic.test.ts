@@ -3,7 +3,7 @@ import './setup';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -13,6 +13,10 @@ import { mockApiProvider, mockReasoningApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator basic flows', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('evaluate with vars', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -74,31 +78,27 @@ describeEvaluator('evaluator basic flows', () => {
 
   it('warns only once per reserved runtime var across evaluation steps', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    try {
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('{{__evalStepId}} one'), toPrompt('{{__evalStepId}} two')],
-        tests: [
-          {
-            vars: { __evalStepId: 'spoofed-step-id' },
-          },
-        ],
-      };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{__evalStepId}} one'), toPrompt('{{__evalStepId}} two')],
+      tests: [
+        {
+          vars: { __evalStepId: 'spoofed-step-id' },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-      await evaluate(testSuite, evalRecord, { repeat: 2 });
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
 
-      const collisionWarnings = warnSpy.mock.calls.filter(([message]) =>
-        String(message).includes('reserved promptfoo runtime vars'),
-      );
-      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
-      expect(collisionWarnings).toHaveLength(1);
-      expect(collisionWarnings[0][1]).toEqual({
-        collidingReservedVars: ['__evalStepId'],
-      });
-    } finally {
-      warnSpy.mockRestore();
-    }
+    const collisionWarnings = warnSpy.mock.calls.filter(([message]) =>
+      String(message).includes('reserved promptfoo runtime vars'),
+    );
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(collisionWarnings).toHaveLength(1);
+    expect(collisionWarnings[0][1]).toEqual({
+      collidingReservedVars: ['__evalStepId'],
+    });
   });
 
   it('evaluate with vars - no escaping', async () => {
