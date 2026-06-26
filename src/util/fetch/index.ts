@@ -213,10 +213,7 @@ export async function fetchWithProxy(
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
+        if (finalOptions.headers && new Headers(finalOptions.headers).has('authorization')) {
           logger.warn(
             'Both URL credentials and Authorization header present - URL credentials will be ignored',
           );

@@ -346,6 +346,27 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should prefer a Headers Authorization value over URL credentials', async () => {
+    const url = 'https://username:password@example.com/api';
+
+    await fetchWithProxy(url, {
+      headers: new Headers({ Authorization: 'Bearer token123' }),
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
   it('should handle empty username or password in URL', async () => {
     const url = 'https://:password@example.com/api';
     await fetchWithProxy(url);

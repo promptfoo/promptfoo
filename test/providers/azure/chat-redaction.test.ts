@@ -225,11 +225,11 @@ describe('Azure chat redaction integration', () => {
           completion_tokens: 1,
         };
         if (mode === 'untrusted-total-token') {
-          usage.total_tokens = 'total-usage-body-secret-sentinel';
+          usage.total_tokens = 0.5;
         } else if (mode === 'untrusted-prompt-token') {
-          usage.prompt_tokens = 'prompt-usage-body-secret-sentinel';
+          usage.prompt_tokens = Number.MAX_SAFE_INTEGER + 1;
         } else if (mode === 'untrusted-completion-token') {
-          usage.completion_tokens = 'completion-usage-body-secret-sentinel';
+          usage.completion_tokens = -1;
         } else if (mode === 'untrusted-completion-details') {
           usage.completion_tokens_details = {
             audio_tokens: 'completion-audio-usage-body-secret-sentinel',
