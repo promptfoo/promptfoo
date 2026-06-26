@@ -310,6 +310,21 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should preserve existing description from JSONL rows', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"description":"Custom Desc","vars":{"x":"y"}}
+{"vars":{"a":"b"}}
+{"description":"","vars":{"c":"d"}}`,
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result[0].description).toBe('Custom Desc');
+    // Missing and empty-string descriptions both fall back to the row label,
+    // matching the JSON/YAML/CSV parsers' `||` behavior.
+    expect(result[1].description).toBe('Row #2');
+    expect(result[2].description).toBe('Row #3');
+  });
+
   it('should read YAML file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
       - var1: value1

@@ -107,6 +107,8 @@ You can also use specific versioned models:
 
 The provider supports all [OpenAI provider](/docs/providers/openai) configuration options plus Grok-specific options. Example usage:
 
+Promptfoo uses xAI's model-specific cache-read rate by default. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates).
+
 ```yaml
 providers:
   - id: xai:grok-4.3
@@ -384,6 +386,10 @@ tests:
 | `include`              | array   | Additional response data to return                         |
 | `reasoning`            | object  | Reasoning configuration for Grok 4.3 or multi-agent models |
 | `response_format`      | object  | JSON schema for structured output                          |
+| `cost`                 | number  | Per-token input and output cost override                   |
+| `inputCost`            | number  | Per-token input cost override                              |
+| `outputCost`           | number  | Per-token output cost override                             |
+| `cacheReadCost`        | number  | Per-token cached-input cost override                       |
 
 #### Supported Models
 

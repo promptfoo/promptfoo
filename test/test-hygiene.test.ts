@@ -133,6 +133,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
     reason: 'Host-side unreadable-file sandbox coverage depends on Unix permissions',
   },
+  {
+    file: 'examples/integrationLangchain.test.ts',
+    kind: 'skip',
+    linePattern: /const itPy = PYTHON_PATH \? it : it\.skip;/,
+    reason: 'LangChain example subprocess coverage requires an available Python interpreter',
+  },
 ];
 
 const legacyHoistedPersistentMockFiles = new Set<string>();
@@ -240,7 +246,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/config/load.test.ts',
   'util/jsonExport.test.ts',
   'util/jsonlOutput.test.ts',
-  'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
   'node/testProvider.test.ts',
