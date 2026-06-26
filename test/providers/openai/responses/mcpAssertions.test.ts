@@ -3,6 +3,7 @@
 import './setup';
 
 import { describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../../src/assertions/index';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
@@ -63,14 +64,12 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
       // The output should contain MCP Tool Result
       expect(result.output).toContain('MCP Tool Result (ask_question)');
 
-      // Test the enhanced assertion
-      const { handleIsValidOpenAiToolsCall } = await import('../../../../src/assertions/openai');
-      const assertionResult = await handleIsValidOpenAiToolsCall({
+      const assertionResult = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },
-        output: result.output,
         provider,
         test: { vars: {} },
-      } as any);
+        providerResponse: result,
+      });
 
       expect(assertionResult.pass).toBe(true);
       expect(assertionResult.reason).toContain('MCP tool call succeeded for ask_question');
@@ -123,14 +122,12 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
       // The output should contain MCP Tool Error
       expect(result.output).toContain('MCP Tool Error (ask_question)');
 
-      // Test the enhanced assertion
-      const { handleIsValidOpenAiToolsCall } = await import('../../../../src/assertions/openai');
-      const assertionResult = await handleIsValidOpenAiToolsCall({
+      const assertionResult = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },
-        output: result.output,
         provider,
         test: { vars: {} },
-      } as any);
+        providerResponse: result,
+      });
 
       expect(assertionResult.pass).toBe(false);
       expect(assertionResult.reason).toContain(

@@ -142,9 +142,7 @@ describe('Google assertions', () => {
 
       expect(() => {
         validateFunctionCall(functionOutput, mockProvider.config.tools, {});
-      }).toThrow(
-        'Call to "getCurrentTemperature":\n{"name":"getCurrentTemperature","args":"{}"}\ndoes not match schema:\n{"name":"getCurrentTemperature","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"},"unit":{"type":"STRING","enum":["Celsius","Fahrenheit"]}},"required":["location","unit"]}}',
-      );
+      }).toThrow("must have required property 'location'");
     });
 
     it('should load functions from external file', () => {
@@ -642,6 +640,65 @@ describe('Google assertions', () => {
         score: 1,
         reason: 'Assertion passed',
       });
+    });
+
+    it.each([
+      [
+        'optional parameters',
+        {
+          type: 'OBJECT',
+          properties: { label: { type: 'STRING' } },
+        },
+        true,
+        false,
+      ],
+      [
+        'required parameters',
+        {
+          type: 'OBJECT',
+          properties: { label: { type: 'STRING' } },
+          required: ['label'],
+        },
+        false,
+        true,
+      ],
+      ['malformed parameters', { type: 'TYPE_UNSPECIFIED' }, false, false],
+      ['null parameters', null, false, false],
+    ] as const)('validates empty arguments against %s through the dispatcher', async (_name, parameters, positivePass, inversePass) => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args: '{}', name: 'lookup' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [{ name: 'lookup', parameters: parameters as never }],
+            },
+          ],
+        },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+      if (_name === 'malformed parameters') {
+        expect(positive.reason).toContain("Tool schema doesn't compile with ajv");
+        expect(inverse.reason).toContain("Tool schema doesn't compile with ajv");
+      } else if (_name === 'null parameters') {
+        expect(positive.reason).toContain('Invalid function schema configured in provider');
+        expect(inverse.reason).toContain('Invalid function schema configured in provider');
+      }
     });
 
     it('should not invert a Google tool schema compilation error', async () => {

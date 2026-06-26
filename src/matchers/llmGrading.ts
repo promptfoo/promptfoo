@@ -404,7 +404,9 @@ export async function matchesClosedQa(
     );
   }
 
-  invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
+  if (typeof resp.output !== 'string') {
+    return graderFail('model-graded-closedqa produced malformed response', resp.tokenUsage);
+  }
   try {
     const pass = resp.output.trimEnd().endsWith('Y');
     let reason;

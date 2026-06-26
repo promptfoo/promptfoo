@@ -77,7 +77,12 @@ describe('contracts leaf surface', () => {
 
       const setupError = new FunctionToolCallValidationSetupError('schema unavailable');
       expect(isFunctionToolCallValidationSetupError(setupError)).toBe(true);
-      expect(isFunctionToolCallValidationSetupError({ code: setupError.code })).toBe(true);
+      expect(
+        isFunctionToolCallValidationSetupError(
+          Object.assign(new Error('schema unavailable'), { code: setupError.code }),
+        ),
+      ).toBe(true);
+      expect(isFunctionToolCallValidationSetupError({ code: setupError.code })).toBe(false);
       expect(isFunctionToolCallValidationSetupError(new Error('invalid output'))).toBe(false);
     });
   });

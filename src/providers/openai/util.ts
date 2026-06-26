@@ -773,7 +773,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 export interface OpenAiFunction {
   name: string;
   description?: string;
-  parameters: {
+  parameters?: {
     type: 'object';
     properties: Record<string, any>;
     required?: string[];
@@ -797,6 +797,7 @@ export function validateFunctionCall(
   if (
     typeof functionCall !== 'object' ||
     typeof functionCall.name !== 'string' ||
+    functionCall.name.trim().length === 0 ||
     typeof functionCall.arguments !== 'string'
   ) {
     throw new Error(
@@ -818,33 +819,42 @@ export function validateFunctionCall(
       'No function schemas configured in provider, but output contains a function call',
     );
   }
-  const functionDefinitions = interpolatedFunctions.filter(
-    (fn): fn is OpenAiFunction =>
-      typeof fn === 'object' && fn !== null && typeof fn.name === 'string',
-  );
-  if (functionDefinitions.length === 0) {
+  const isUsableFunctionDefinition = (fn: unknown): fn is OpenAiFunction =>
+    typeof fn === 'object' &&
+    fn !== null &&
+    'name' in fn &&
+    typeof fn.name === 'string' &&
+    fn.name.trim().length > 0;
+  if (!interpolatedFunctions.every(isUsableFunctionDefinition)) {
     throw new FunctionToolCallValidationSetupError(
-      'No function schemas configured in provider, but output contains a function call',
+      'Invalid function schema configured in provider: every function definition must have a non-empty name',
     );
   }
-  const functionDefinition = functionDefinitions.find(
-    (fn) => typeof fn === 'object' && fn !== null && fn.name === functionName,
-  );
+
+  const validators = new Map<string, ReturnType<typeof ajv.compile>>();
+  for (const functionDefinition of interpolatedFunctions) {
+    const functionSchema = functionDefinition.parameters ?? { type: 'object', properties: {} };
+    if (
+      typeof functionSchema !== 'object' ||
+      functionSchema === null ||
+      Array.isArray(functionSchema)
+    ) {
+      throw new FunctionToolCallValidationSetupError(
+        `Function "${functionDefinition.name}" does not have a usable parameters schema`,
+      );
+    }
+    try {
+      validators.set(functionDefinition.name, ajv.compile(functionSchema));
+    } catch (error) {
+      throw new FunctionToolCallValidationSetupError((error as Error).message);
+    }
+  }
+
+  const functionDefinition = interpolatedFunctions.find((fn) => fn.name === functionName);
   if (!functionDefinition) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
-  const functionSchema = functionDefinition.parameters;
-  if (!functionSchema || typeof functionSchema !== 'object') {
-    throw new FunctionToolCallValidationSetupError(
-      `Function "${functionName}" does not have a usable parameters schema`,
-    );
-  }
-  let validate;
-  try {
-    validate = ajv.compile(functionSchema);
-  } catch (error) {
-    throw new FunctionToolCallValidationSetupError((error as Error).message);
-  }
+  const validate = validators.get(functionDefinition.name)!;
   if (!validate(functionArgs)) {
     throw new Error(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,

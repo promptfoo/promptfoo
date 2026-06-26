@@ -186,7 +186,11 @@ export function isFunctionToolCallValidationSetupError(
     (typeof error === 'object' &&
       error !== null &&
       'code' in error &&
-      error.code === FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE)
+      error.code === FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE &&
+      'name' in error &&
+      typeof error.name === 'string' &&
+      'message' in error &&
+      typeof error.message === 'string')
   );
 }
 

@@ -464,6 +464,24 @@ return {
     });
   });
 
+  describe('negated built-in trace assertions through the dispatcher', () => {
+    it.each([
+      ['not-trace-span-count', { pattern: '*', min: 2, max: 2 }],
+      ['not-trace-span-duration', { pattern: '*', max: 500 }],
+      ['not-trace-error-spans', { pattern: '*', max_count: 0 }],
+    ] as const)('dispatches %s with inverse semantics', async (type, value) => {
+      const result = await runAssertion({
+        assertion: { type, value },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: mockTraceData.traceId,
+        traceData: mockTraceData,
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+  });
+
   describe('trace store error handling', () => {
     it('should handle trace store errors gracefully', async () => {
       mockTraceStore.getTrace.mockRejectedValue(new Error('Database error'));

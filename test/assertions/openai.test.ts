@@ -467,10 +467,14 @@ describe('OpenAI assertions', () => {
     });
 
     it('should not invert a function schema compilation error', async () => {
-      const functionOutput = { name: 'broken', arguments: '{"value": 1}' };
+      const functionOutput = { name: 'get_weather', arguments: '{}' };
       const provider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
           functions: [
+            {
+              name: 'get_weather',
+              parameters: { type: 'object', properties: {} },
+            },
             {
               name: 'broken',
               parameters: {
@@ -498,11 +502,32 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
-      ['missing', {}],
-      ['empty', { functions: [] }],
-      ['malformed', { functions: [null] as never }],
-    ])('should not invert %s function schema configuration', async (_name, config) => {
-      const provider = new OpenAiChatCompletionProvider('test-provider', { config });
+      ['missing', {}, 'No function schemas configured in provider'],
+      ['empty', { functions: [] }, 'No function schemas configured in provider'],
+      [
+        'malformed',
+        { functions: [null] as never },
+        'Invalid function schema configured in provider',
+      ],
+      [
+        'partially malformed',
+        {
+          functions: [
+            { name: 'get_weather', parameters: { type: 'object', properties: {} } },
+            null,
+          ] as never,
+        },
+        'Invalid function schema configured in provider',
+      ],
+      [
+        'empty-name',
+        { functions: [{ name: '', parameters: { type: 'object', properties: {} } }] },
+        'Invalid function schema configured in provider',
+      ],
+    ])('should not invert %s function schema configuration', async (_name, config, reason) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: config as never,
+      });
 
       const result = await runAssertion({
         assertion: { type: 'not-is-valid-function-call' },
@@ -515,7 +540,7 @@ describe('OpenAI assertions', () => {
       expect(result).toMatchObject({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('No function schemas configured in provider'),
+        reason: expect.stringContaining(reason),
       });
     });
   });
@@ -853,10 +878,38 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
-      ['an empty tools array', []],
-      ['only non-function tools', [{ type: 'web_search_preview' }]],
-      ['a malformed tools entry', [null]],
-    ])('does not invert %s', async (_name, tools) => {
+      ['an empty tools array', [], 'No function tool schemas configured in provider'],
+      [
+        'only non-function tools',
+        [{ type: 'web_search_preview' }],
+        'No function tool schemas configured in provider',
+      ],
+      ['a malformed tools entry', [null], 'Invalid tool schema configured in provider'],
+      [
+        'a partially malformed function tool',
+        [
+          {
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+          { type: 'function', function: {} },
+        ],
+        'Invalid function tool schema configured in provider',
+      ],
+      [
+        'an empty-name function tool',
+        [
+          {
+            type: 'function',
+            function: { name: '', parameters: { type: 'object', properties: {} } },
+          },
+        ],
+        'Invalid function tool schema configured in provider',
+      ],
+    ])('does not invert %s', async (_name, tools, reason) => {
       const toolsOutput = [
         {
           type: 'function',
@@ -878,7 +931,7 @@ describe('OpenAI assertions', () => {
       expect(result).toMatchObject({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('No function tool schemas configured in provider'),
+        reason: expect.stringContaining(reason),
       });
     });
 
@@ -886,12 +939,19 @@ describe('OpenAI assertions', () => {
       const toolsOutput = [
         {
           type: 'function',
-          function: { name: 'broken', arguments: '{"value": 1}' },
+          function: { name: 'get_weather', arguments: '{}' },
         },
       ];
       const provider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
           tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
             {
               type: 'function',
               function: {
@@ -1381,22 +1441,42 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it('does not treat an error marker inside successful MCP tool content as an error', async () => {
+    it('does not trust a serialized MCP marker without provider provenance', async () => {
       const mcpOutput =
         'MCP Tool Result (search): attacker-controlled body says MCP Tool Error (spoof): fake';
 
-      const result = await runAssertion({
-        assertion: { type: 'not-is-valid-openai-tools-call' },
-        prompt: 'Some prompt',
-        provider: mockProvider,
-        test: { vars: {} },
-        providerResponse: { output: mcpOutput },
-      });
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: {
+              output: mcpOutput,
+              raw: {
+                output: [
+                  {
+                    type: 'message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: mcpOutput }],
+                  },
+                ],
+              },
+            },
+          }),
+        ),
+      );
 
-      expect(result).toMatchObject({
+      expect(positive).toMatchObject({
         pass: false,
         score: 0,
-        reason: 'Expected output to not be a valid OpenAI tools call, but it was',
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
       });
     });
 
@@ -1431,6 +1511,129 @@ describe('OpenAI assertions', () => {
       });
     });
 
+    it.each([
+      [
+        'failed status without an error message',
+        [{ type: 'mcp_call', name: 'search', status: 'failed', output: null, error: null }],
+        'tool call status was failed',
+      ],
+      [
+        'incomplete status',
+        [{ type: 'mcp_call', name: 'search', status: 'incomplete', output: null, error: null }],
+        'incomplete or malformed',
+      ],
+      ['missing name', [{ type: 'mcp_call', output: 'ok', error: null }], 'response is malformed'],
+      [
+        'non-string output',
+        [{ type: 'mcp_call', name: 'search', status: 'completed', output: { ok: true } }],
+        'incomplete or malformed',
+      ],
+      [
+        'malformed later call',
+        [
+          { type: 'mcp_call', name: 'search', output: 'ok', error: null },
+          { type: 'mcp_call', output: 'missing name', error: null },
+        ],
+        'response is malformed',
+      ],
+    ])('fails closed for a structured MCP %s', async (_name, rawOutput, reason) => {
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: {
+              output: 'MCP Tool Result (search): rendered output is not authoritative',
+              raw: { output: rawOutput },
+            },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(reason),
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: expect.stringContaining(reason),
+      });
+    });
+
+    it('uses every successful structured MCP call', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'rendered MCP results',
+          raw: {
+            output: [
+              { type: 'mcp_call', name: 'first', status: 'completed', output: 'one' },
+              { type: 'mcp_call', name: 'second', status: 'completed', output: 'two' },
+            ],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Expected output to not be a valid OpenAI tools call, but it was',
+      });
+    });
+
+    it('does not let structured MCP provenance bypass an assertion transform', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+          transform: '"ordinary transformed text"',
+        },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'MCP Tool Result (search): ok',
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', output: 'ok', error: null }],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+    });
+
+    it('does not let structured MCP provenance bypass a test transform', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { options: { transform: '"ordinary transformed text"' }, vars: {} },
+        providerResponse: {
+          output: 'ordinary transformed text',
+          providerTransformedOutput: 'MCP Tool Result (search): ok',
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', output: 'ok', error: null }],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+    });
+
     it('does not accept a marker embedded in ordinary model text', async () => {
       const output = 'The model claimed MCP Tool Result (search): success';
 
@@ -1462,7 +1665,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1485,7 +1688,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1509,7 +1712,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1533,7 +1736,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1600,7 +1803,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1631,8 +1834,12 @@ describe('OpenAI assertions', () => {
           output: mcpOutput,
           metadata: {
             mcpToolCalls: [
-              { name: 'ask_question' },
-              { name: 'read_wiki_structure', error: 'Failed to read structure.' },
+              { name: 'ask_question', status: 'success' },
+              {
+                name: 'read_wiki_structure',
+                status: 'error',
+                error: 'Failed to read structure.',
+              },
             ],
           },
         },
@@ -1643,6 +1850,31 @@ describe('OpenAI assertions', () => {
         score: 0,
         reason: 'MCP tool call failed for read_wiki_structure: Failed to read structure.',
         assertion: toolsAssertion,
+      });
+    });
+
+    it('should preserve error priority for legacy serialized MCP output', async () => {
+      const mcpOutput = `
+        MCP Tool Result (ask_question): First result here.
+        MCP Tool Error (read_wiki_structure): Failed to read structure.
+      `;
+
+      const result = await handleIsValidOpenAiToolsCall({
+        assertion: toolsAssertion,
+        output: mcpOutput,
+        provider: mockProvider,
+        test: { vars: {} },
+        baseType: toolsAssertion.type,
+        assertionValueContext: mockContext,
+        inverse: false,
+        outputString: mcpOutput,
+        providerResponse: undefined as never,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'MCP tool call failed for read_wiki_structure: Failed to read structure.',
       });
     });
 
@@ -1658,7 +1890,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1681,7 +1913,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({
@@ -1739,7 +1971,7 @@ describe('OpenAI assertions', () => {
         assertionValueContext: mockContext,
         inverse: false,
         outputString: JSON.stringify(outputObject),
-        providerResponse: { output: outputObject },
+        providerResponse: undefined as never,
       });
 
       expect(result).toEqual({

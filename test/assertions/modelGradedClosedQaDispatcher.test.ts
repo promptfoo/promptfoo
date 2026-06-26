@@ -41,6 +41,14 @@ describe('not-model-graded-closedqa dispatcher integration', () => {
     ['missing output', {}, 'No output'],
     ['malformed verdict', { output: 'MAYBE' }, 'Model grader produced a malformed response'],
     [
+      'object output',
+      { output: { verdict: 'N' } },
+      'model-graded-closedqa produced malformed response',
+    ],
+    ['array output', { output: ['N'] }, 'model-graded-closedqa produced malformed response'],
+    ['numeric output', { output: 7 }, 'model-graded-closedqa produced malformed response'],
+    ['boolean output', { output: true }, 'model-graded-closedqa produced malformed response'],
+    [
       'grader refusal ending in N',
       { output: 'I cannot grade this request N', isRefusal: true },
       'Model grader refused to provide a verdict',

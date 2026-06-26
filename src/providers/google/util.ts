@@ -847,10 +847,24 @@ export function normalizeTools(tools: Tool[]): Tool[] {
           'Invalid function schema configured in provider: functionDeclarations must be an array',
         );
       }
-      normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => ({
-        ...fd,
-        parameters: fd.parameters ? (sanitizeSchemaForGemini(fd.parameters) as Schema) : undefined,
-      }));
+      normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => {
+        if (
+          fd.parameters !== undefined &&
+          (typeof fd.parameters !== 'object' ||
+            fd.parameters === null ||
+            Array.isArray(fd.parameters))
+        ) {
+          throw new Error(
+            `Invalid function schema configured in provider: parameters for "${fd.name}" must be an object`,
+          );
+        }
+        return {
+          ...fd,
+          parameters: fd.parameters
+            ? (sanitizeSchemaForGemini(fd.parameters) as Schema)
+            : undefined,
+        };
+      });
     }
 
     return normalizedTool;
@@ -1292,10 +1306,10 @@ export function validateFunctionCall(
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
-    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
-      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
+    if (functionSchema.parameters !== undefined) {
       let validate;
       try {
+        const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
         validate = ajv.compile(parameterSchema as AnySchema);
       } catch (err) {
         throw new FunctionToolCallValidationSetupError(
@@ -1307,7 +1321,7 @@ export function validateFunctionCall(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
         );
       }
-    } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
+    } else if (Object.keys(functionArgs).length !== 0) {
       throw new Error(
         `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
       );

@@ -31,7 +31,7 @@ The assertion passes if the response ends with 'Y' and fails if it ends with 'N'
 
 ### Negation
 
-Use `not-model-graded-closedqa` when the output must not meet the criterion. A `Y` verdict becomes a failing score of 0, while an `N` verdict becomes a passing score of 1. Grader transport, empty-output, and malformed-response failures are not inverted because they do not provide a verdict.
+Use `not-model-graded-closedqa` when the output must not meet the criterion. A `Y` verdict becomes a failing score of 0, while an `N` verdict becomes a passing score of 1. Grader transport, refusal, empty-output, and malformed-response failures are not inverted because they do not provide a verdict.
 
 ### Example Configuration
 
