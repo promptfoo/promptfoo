@@ -613,7 +613,7 @@ function addLanguageToPluginMetadata(
  */
 function containsAgenticStrategy(strategy: string | { id?: string; config?: any }): boolean {
   const id = typeof strategy === 'string' ? strategy : strategy.id;
-  if (AGENTIC_STRATEGIES_SET.has(id as any)) {
+  if (isDeferredMinimumAgenticSeed({ strategyId: id })) {
     return true;
   }
   const steps = typeof strategy === 'string' ? undefined : strategy.config?.steps;
