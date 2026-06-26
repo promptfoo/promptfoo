@@ -169,35 +169,6 @@ describe('util', () => {
           {
             name: 'emptyFunction',
           },
-          {
-            name: 'invalidSchemaFunction',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                param1: { type: 'STRING' },
-                param2: { type: 'STRING', enum: ['test'] },
-              },
-            },
-          },
-          {
-            name: 'propertyOrderingFunction',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                param1: { type: 'STRING' },
-              },
-              propertyOrdering: ['param1', 'param2'],
-            },
-          },
-          {
-            name: 'uncompilableFunction',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                param1: { type: 'TYPE_UNSPECIFIED' },
-              },
-            },
-          },
         ],
       },
     ];
@@ -305,7 +276,20 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+      const functions: Tool[] = [
+        {
+          functionDeclarations: [
+            {
+              name: 'uncompilableFunction',
+              parameters: {
+                type: 'OBJECT',
+                properties: { param1: { type: 'TYPE_UNSPECIFIED' } },
+              },
+            },
+          ],
+        },
+      ];
+      expect(() => validateFunctionCall(output, functions)).toThrow(
         /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
       );
     });
@@ -319,7 +303,21 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+      const functions: Tool[] = [
+        {
+          functionDeclarations: [
+            {
+              name: 'propertyOrderingFunction',
+              parameters: {
+                type: 'OBJECT',
+                properties: { param1: { type: 'STRING' } },
+                propertyOrdering: ['param1', 'param2'],
+              },
+            },
+          ],
+        },
+      ];
+      expect(() => validateFunctionCall(output, functions)).toThrow(
         /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
       );
     });

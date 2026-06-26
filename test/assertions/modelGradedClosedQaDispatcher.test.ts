@@ -29,6 +29,10 @@ describe('not-model-graded-closedqa dispatcher integration', () => {
   it.each([
     ['Y verdict', { output: 'Y' }, false, 0],
     ['N verdict', { output: 'N' }, true, 1],
+    ['reasoned Y verdict', { output: 'Reasoning\nY' }, false, 0],
+    ['reasoned N verdict', { output: 'Reasoning\nN' }, true, 1],
+    ['compact N verdict', { output: 'Reasoning N' }, true, 1],
+    ['repeated Y verdict', { output: 'Reasoning Y Y' }, false, 0],
   ] as const)('inverts the production %s score boundary', async (_name, response, pass, score) => {
     const result = await runInverseClosedQa(response);
 
@@ -40,6 +44,18 @@ describe('not-model-graded-closedqa dispatcher integration', () => {
     ['provider error', { error: 'grader unavailable' }, 'grader unavailable'],
     ['missing output', {}, 'No output'],
     ['malformed verdict', { output: 'MAYBE' }, 'Model grader produced a malformed response'],
+    ['word ending in Y', { output: 'HAPPY' }, 'Model grader produced a malformed response'],
+    ['word ending in N', { output: 'BEGIN' }, 'Model grader produced a malformed response'],
+    [
+      'prose ending in a Y-suffix word',
+      { output: 'The answer seems HAPPY' },
+      'Model grader produced a malformed response',
+    ],
+    [
+      'prose ending in an N-suffix word',
+      { output: 'I would BEGIN' },
+      'Model grader produced a malformed response',
+    ],
     [
       'object output',
       { output: { verdict: 'N' } },

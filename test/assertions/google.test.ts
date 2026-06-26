@@ -400,6 +400,50 @@ describe('Google assertions', () => {
       });
     });
 
+    it('does not invert an unused malformed function declaration', async () => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args: '{}', name: 'valid' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            { functionDeclarations: [{ name: 'valid' }] },
+            {
+              functionDeclarations: [
+                {
+                  name: 'broken',
+                  parameters: { type: 'TYPE_UNSPECIFIED' as never },
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining("Tool schema doesn't compile with ajv"),
+      });
+      expect(inverse).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining("Tool schema doesn't compile with ajv"),
+      });
+    });
+
     it('should fail for an invalid function call with incorrect arguments', async () => {
       const output = [
         {
@@ -699,6 +743,35 @@ describe('Google assertions', () => {
         expect(positive.reason).toContain('Invalid function schema configured in provider');
         expect(inverse.reason).toContain('Invalid function schema configured in provider');
       }
+    });
+
+    it.each([
+      ['empty object', '{}', true, false],
+      ['array', '[]', false, true],
+      ['number', '0', false, true],
+      ['boolean', 'false', false, true],
+    ] as const)('validates %s arguments for a parameterless function', async (_name, args, positivePass, inversePass) => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args, name: 'noop' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: { tools: [{ functionDeclarations: [{ name: 'noop' }] }] },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
     });
 
     it('should not invert a Google tool schema compilation error', async () => {

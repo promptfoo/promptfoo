@@ -833,7 +833,19 @@ export function validateFunctionCall(
 
   const validators = new Map<string, ReturnType<typeof ajv.compile>>();
   for (const functionDefinition of interpolatedFunctions) {
-    const functionSchema = functionDefinition.parameters ?? { type: 'object', properties: {} };
+    if (validators.has(functionDefinition.name)) {
+      throw new FunctionToolCallValidationSetupError(
+        `Duplicate function schema configured for "${functionDefinition.name}"`,
+      );
+    }
+    const functionSchema =
+      functionDefinition.parameters === undefined
+        ? {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+          }
+        : functionDefinition.parameters;
     if (
       typeof functionSchema !== 'object' ||
       functionSchema === null ||

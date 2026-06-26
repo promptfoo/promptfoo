@@ -543,6 +543,66 @@ describe('OpenAI assertions', () => {
         reason: expect.stringContaining(reason),
       });
     });
+
+    it.each([
+      ['empty arguments', '{}', true, false],
+      ['unexpected arguments', '{"unexpected":true}', false, true],
+    ] as const)('validates a parameterless function with %s', async (_name, argumentsJson, positivePass, inversePass) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { functions: [{ name: 'noop' }] },
+      });
+      const providerResponse = {
+        output: { name: 'noop', arguments: argumentsJson },
+      };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider,
+            providerResponse,
+            test: {} as AtomicTestCase,
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+    });
+
+    it.each([
+      ['null parameters', [{ name: 'noop', parameters: null as never }], 'usable parameters'],
+      ['duplicate names', [{ name: 'noop' }, { name: 'noop' }], 'Duplicate function schema'],
+    ])('does not invert %s', async (_name, functions, reason) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { functions },
+      });
+      const providerResponse = { output: { name: 'noop', arguments: '{}' } };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider,
+            providerResponse,
+            test: {} as AtomicTestCase,
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(reason),
+      });
+      expect(inverse).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(reason),
+      });
+    });
   });
 
   describe('is-valid-openai-tools-call assertion', () => {
@@ -979,6 +1039,106 @@ describe('OpenAI assertions', () => {
         score: 0,
         reason: expect.stringContaining('schema is invalid'),
       });
+    });
+
+    it.each([
+      ['empty arguments', '{}', true, false],
+      ['unexpected arguments', '{"unexpected":true}', false, true],
+    ] as const)('validates a parameterless tool with %s', async (_name, argumentsJson, positivePass, inversePass) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [{ type: 'function', function: { name: 'noop' } }],
+        },
+      });
+      const providerResponse = {
+        output: [{ type: 'function', function: { name: 'noop', arguments: argumentsJson } }],
+      };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider,
+            providerResponse,
+            test: { vars: {} },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+    });
+
+    it.each([
+      [
+        'null parameters',
+        [{ type: 'function', function: { name: 'noop', parameters: null as never } }],
+        'usable parameters',
+      ],
+      [
+        'duplicate names',
+        [
+          { type: 'function', function: { name: 'noop' } },
+          { type: 'function', function: { name: 'noop' } },
+        ],
+        'Duplicate function schema',
+      ],
+    ])('does not invert %s tool configuration', async (_name, tools, reason) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { tools: tools as never },
+      });
+      const providerResponse = {
+        output: [{ type: 'function', function: { name: 'noop', arguments: '{}' } }],
+      };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider,
+            providerResponse,
+            test: { vars: {} },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(reason),
+      });
+      expect(inverse).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(reason),
+      });
+    });
+
+    it('does not invert a tool file loading failure', async () => {
+      mocks.mockMaybeLoadToolsFromExternalFile.mockRejectedValue(new Error('unable to load tools'));
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { tools: 'file://missing-tools.json' as never },
+      });
+      const providerResponse = {
+        output: [{ type: 'function', function: { name: 'noop', arguments: '{}' } }],
+      };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider,
+            providerResponse,
+            test: { vars: {} },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: false, score: 0, reason: 'unable to load tools' });
+      expect(inverse).toMatchObject({ pass: false, score: 0, reason: 'unable to load tools' });
     });
 
     it('should load tools from external file', async () => {
@@ -1631,6 +1791,71 @@ describe('OpenAI assertions', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+    });
+
+    it('does not let structured MCP provenance bypass a changed provider transform', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {},
+      });
+      (provider as ApiProvider).transform = '"ordinary transformed text"';
+      const result = await runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'ordinary transformed text',
+          providerTransformChanged: true,
+          providerTransformedOutput: 'ordinary transformed text',
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+    });
+
+    it.each([
+      'assertion',
+      'test',
+      'provider',
+    ] as const)('retains structured MCP provenance after an identity %s transform', async (transformLevel) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {},
+        ...(transformLevel === 'provider' ? { transform: 'output' } : {}),
+      });
+      const output = 'MCP Tool Result (search): ok';
+      const result = await runAssertion({
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+          ...(transformLevel === 'assertion' ? { transform: 'output' } : {}),
+        },
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          ...(transformLevel === 'test' ? { options: { transform: 'output' } } : {}),
+          vars: {},
+        },
+        providerResponse: {
+          output,
+          providerTransformChanged: transformLevel === 'provider' ? false : undefined,
+          providerTransformedOutput: output,
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'MCP tool call succeeded for search',
       });
     });
 

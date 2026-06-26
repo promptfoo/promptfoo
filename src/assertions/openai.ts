@@ -227,6 +227,25 @@ function getFunctionToolDefinitions(
   return { ok: true, definitions };
 }
 
+function wasMcpOutputTransformed({
+  assertion,
+  output,
+  provider,
+  providerResponse,
+  test,
+}: Pick<AssertionParams, 'assertion' | 'output' | 'provider' | 'providerResponse' | 'test'>) {
+  const assertionChangedOutput =
+    Boolean(assertion.transform) && output !== providerResponse?.output;
+  const hasTestTransform = Boolean(test.options?.transform || test.options?.postprocess);
+  const testChangedOutput =
+    hasTestTransform &&
+    (providerResponse?.providerTransformedOutput === undefined ||
+      providerResponse.output !== providerResponse.providerTransformedOutput);
+  const providerChangedOutput =
+    Boolean(provider?.transform) && providerResponse?.providerTransformChanged !== false;
+  return assertionChangedOutput || testChangedOutput || providerChangedOutput;
+}
+
 export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   inverse,
@@ -247,12 +266,13 @@ export const handleIsValidOpenAiToolsCall = async ({
 
   // Prefer machine-readable MCP outcomes. Rendered tool content is untrusted and
   // may itself contain strings that look like result or error markers.
-  const outputWasTransformed = Boolean(
-    assertion.transform ||
-      test.options?.transform ||
-      test.options?.postprocess ||
-      provider?.transform,
-  );
+  const outputWasTransformed = wasMcpOutputTransformed({
+    assertion,
+    output,
+    provider,
+    providerResponse,
+    test,
+  });
   const structuredMcpResult =
     hasTraditionalToolCalls || outputWasTransformed
       ? undefined
@@ -310,9 +330,18 @@ export const handleIsValidOpenAiToolsCall = async ({
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
   if (tools) {
-    const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
-    if (loadedTools !== undefined) {
-      tools = loadedTools;
+    try {
+      const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
+      if (loadedTools !== undefined) {
+        tools = loadedTools;
+      }
+    } catch (error) {
+      return {
+        pass: false,
+        score: 0,
+        reason: (error as Error).message,
+        assertion,
+      };
     }
   }
 

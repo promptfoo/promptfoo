@@ -1226,16 +1226,17 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
-    evalId,
-    prompt,
-    promptIdx,
-    provider,
-    response,
-    test,
-    testIdx,
-    vars,
-  });
+  const { processedResponse, providerTransformChanged, providerTransformedOutput } =
+    await transformRunEvalResponse({
+      evalId,
+      prompt,
+      promptIdx,
+      provider,
+      response,
+      test,
+      testIdx,
+      vars,
+    });
   const traceId = getTraceId(traceContext);
   if (traceId && hasTraceAwareAssertions(test.assert)) {
     await flushOtel();
@@ -1243,6 +1244,7 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
+    providerTransformChanged,
     providerTransformedOutput,
   };
 
@@ -1307,6 +1309,7 @@ async function transformRunEvalResponse({
   vars: Vars;
 }): Promise<{
   processedResponse: ProviderResponse;
+  providerTransformChanged: boolean;
   providerTransformedOutput: ProviderResponse['output'];
 }> {
   const processedResponse = { ...response };
@@ -1317,6 +1320,9 @@ async function transformRunEvalResponse({
     });
   }
   const providerTransformedOutput = processedResponse.output;
+  const providerTransformChanged = Boolean(
+    provider.transform && !isDeepStrictEqual(response.output, providerTransformedOutput),
+  );
 
   const testTransform = test.options?.transform || test.options?.postprocess;
   if (testTransform) {
@@ -1336,6 +1342,7 @@ async function transformRunEvalResponse({
 
   return {
     processedResponse: blobbedResponse || processedResponse,
+    providerTransformChanged,
     providerTransformedOutput,
   };
 }

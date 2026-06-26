@@ -90,6 +90,8 @@ export interface ProviderResponse {
    * it operates on provider-normalized output, independent of test transforms.
    */
   providerTransformedOutput?: string | any;
+  /** Whether the provider-level transform changed the output. */
+  providerTransformChanged?: boolean;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   /**

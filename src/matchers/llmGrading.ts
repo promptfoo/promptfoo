@@ -408,11 +408,12 @@ export async function matchesClosedQa(
     return graderFail('model-graded-closedqa produced malformed response', resp.tokenUsage);
   }
   try {
-    const pass = resp.output.trimEnd().endsWith('Y');
+    const verdict = resp.output.trimEnd().match(/(?:^|\s)([YN])$/)?.[1];
+    const pass = verdict === 'Y';
     let reason;
     if (pass) {
       reason = `The submission meets the criterion:\n${resp.output}`;
-    } else if (resp.output.trimEnd().endsWith('N')) {
+    } else if (verdict === 'N') {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
       return graderFail(

@@ -1216,6 +1216,33 @@ export function parseStringObject(input: string | any) {
   return input;
 }
 
+function compileFunctionDeclarationValidators(functionDeclarations: FunctionDeclaration[]) {
+  const validators = new Map<FunctionDeclaration, ReturnType<typeof ajv.compile>>();
+  for (const functionDeclaration of functionDeclarations) {
+    if (functionDeclaration.parameters === undefined) {
+      continue;
+    }
+    if (
+      typeof functionDeclaration.parameters !== 'object' ||
+      functionDeclaration.parameters === null ||
+      Array.isArray(functionDeclaration.parameters)
+    ) {
+      throw new FunctionToolCallValidationSetupError(
+        `Invalid function schema configured in provider for "${functionDeclaration.name}"`,
+      );
+    }
+    try {
+      const parameterSchema = normalizeSchemaTypes(functionDeclaration.parameters);
+      validators.set(functionDeclaration, ajv.compile(parameterSchema as AnySchema));
+    } catch (err) {
+      throw new FunctionToolCallValidationSetupError(
+        `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
+      );
+    }
+  }
+  return validators;
+}
+
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
@@ -1298,6 +1325,8 @@ export function validateFunctionCall(
     );
   }
 
+  const validators = compileFunctionDeclarationValidators(functionDeclarations);
+
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
@@ -1306,16 +1335,13 @@ export function validateFunctionCall(
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
+    if (typeof functionArgs !== 'object' || functionArgs === null || Array.isArray(functionArgs)) {
+      throw new Error(
+        `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
+      );
+    }
     if (functionSchema.parameters !== undefined) {
-      let validate;
-      try {
-        const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
-        validate = ajv.compile(parameterSchema as AnySchema);
-      } catch (err) {
-        throw new FunctionToolCallValidationSetupError(
-          `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
-        );
-      }
+      const validate = validators.get(functionSchema)!;
       if (!validate(functionArgs)) {
         throw new Error(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
