@@ -692,6 +692,29 @@ describe('evaluateOptions behavior', () => {
       );
     });
 
+    it('should use configured command-line test filters as eval defaults', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-configured-test-filters.yaml', {
+        commandLineOptions: {
+          filterFirstN: 1,
+          filterMetadata: 'tier=gold',
+          filterPattern: 'keep',
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: [
+          { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 0 } },
+          { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 1 } },
+          { description: 'keep gold first', metadata: { tier: 'gold' }, vars: { id: 2 } },
+          { description: 'keep gold second', metadata: { tier: 'gold' }, vars: { id: 3 } },
+        ],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.vars?.id)).toEqual([2]);
+    });
+
     it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-evaluate-options-filter-range.yaml', {
         evaluateOptions: {

@@ -179,8 +179,7 @@ describe('optimize command', () => {
       expect.any(Object),
     );
     const filteredSuite = vi.mocked(optimizePromptTestSuite).mock.calls[0][1];
-    expect(filteredSuite.tests).toHaveLength(2);
-    expect(filteredSuite.tests?.every((test) => Number(test.vars?.id) < 4)).toBe(true);
+    expect(filteredSuite.tests?.map((test) => test.vars?.id)).toEqual([0, 1]);
     expect(concurrencySpy).toHaveBeenCalledWith(1, expect.any(Function));
   });
 
@@ -191,10 +190,10 @@ describe('optimize command', () => {
         providers: [],
         prompts: [{ raw: 'Prompt', label: 'Prompt' }],
         tests: [
-          { description: 'keep first', metadata: { tier: 'gold' }, vars: { id: 0 } },
-          { description: 'keep second', metadata: { tier: 'gold' }, vars: { id: 1 } },
-          { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 2 } },
-          { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 3 } },
+          { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 0 } },
+          { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 1 } },
+          { description: 'keep gold first', metadata: { tier: 'gold' }, vars: { id: 2 } },
+          { description: 'keep gold second', metadata: { tier: 'gold' }, vars: { id: 3 } },
         ],
       },
       basePath: '',
@@ -210,7 +209,7 @@ describe('optimize command', () => {
     expect(optimizePromptTestSuite).toHaveBeenCalledWith(
       {},
       expect.objectContaining({
-        tests: [expect.objectContaining({ vars: { id: 0 } })],
+        tests: [expect.objectContaining({ vars: { id: 2 } })],
       }),
       expect.any(Object),
     );

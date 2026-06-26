@@ -129,6 +129,23 @@ describe('filterTests', () => {
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
     });
 
+    it('should filter on inherited metadata while preserving test overrides', async () => {
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        defaultTest: { metadata: { env: 'dev', type: 'unit' } },
+        tests: [
+          { vars: { id: 'inherited' } },
+          { metadata: { type: 'integration' }, vars: { id: 'type-override' } },
+          { metadata: { env: 'prod' }, vars: { id: 'env-override' } },
+        ],
+      };
+
+      const result = await filterTests(testSuite, { metadata: ['type=unit', 'env=dev'] });
+
+      expect(result.map((test) => test.vars?.id)).toEqual(['inherited']);
+    });
+
     describe('multiple metadata filters', () => {
       const multiMetadataTestSuite: TestSuite = {
         prompts: [],

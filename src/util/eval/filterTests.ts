@@ -187,15 +187,20 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     );
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
+    const defaultMetadata =
+      testSuite.defaultTest && typeof testSuite.defaultTest !== 'string'
+        ? testSuite.defaultTest.metadata
+        : undefined;
     metadataFilter = (test) => {
-      if (!test.metadata) {
+      const metadata = { ...defaultMetadata, ...test.metadata };
+      if (Object.keys(metadata).length === 0) {
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
       }
 
       // ALL conditions must match (AND logic)
       for (const { key, value } of parsedFilters) {
-        const testValue = test.metadata[key];
+        const testValue = metadata[key];
         let matches = false;
 
         if (Array.isArray(testValue)) {
@@ -208,7 +213,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
         if (!matches) {
           logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
+            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(metadata)}`,
           );
           return false;
         }

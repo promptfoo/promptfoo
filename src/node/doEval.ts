@@ -601,14 +601,20 @@ export async function doEval(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const filterErrorsOnly = cmdObj.filterErrorsOnly ?? commandLineOptions?.filterErrorsOnly;
+    const filterFailing = cmdObj.filterFailing ?? commandLineOptions?.filterFailing;
+    const filterFailingOnly = cmdObj.filterFailingOnly ?? commandLineOptions?.filterFailingOnly;
+    const filterFirstN = cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN;
+    const filterMetadata = cmdObj.filterMetadata ?? commandLineOptions?.filterMetadata;
+    const filterPattern = cmdObj.filterPattern ?? commandLineOptions?.filterPattern;
     const hasActiveTestFilter =
       filterRange !== undefined ||
-      cmdObj.filterFailing !== undefined ||
-      cmdObj.filterFailingOnly !== undefined ||
-      cmdObj.filterErrorsOnly !== undefined ||
-      cmdObj.filterFirstN !== undefined ||
-      cmdObj.filterMetadata !== undefined ||
-      cmdObj.filterPattern !== undefined ||
+      filterFailing !== undefined ||
+      filterFailingOnly !== undefined ||
+      filterErrorsOnly !== undefined ||
+      filterFirstN !== undefined ||
+      filterMetadata !== undefined ||
+      filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
@@ -621,12 +627,12 @@ export async function doEval(
         testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
-        failing: cmdObj.filterFailing,
-        failingOnly: cmdObj.filterFailingOnly,
-        errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
-        metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
+        failing: filterFailing,
+        failingOnly: filterFailingOnly,
+        errorsOnly: filterErrorsOnly,
+        firstN: filterFirstN,
+        metadata: filterMetadata,
+        pattern: filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
         sampleSeed: filterSampleSeed,

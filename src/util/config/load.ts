@@ -927,6 +927,17 @@ export async function resolveConfigs(
     config.tests || [],
     cmdObj.tests ? undefined : basePath,
   );
+  const defaultTest: TestCase = {
+    metadata: config.metadata,
+    options: {
+      prefix: cmdObj.promptPrefix,
+      suffix: cmdObj.promptSuffix,
+      provider: cmdObj.grader,
+      // rubricPrompt
+      ...(processedDefaultTest?.options || {}),
+    },
+    ...(processedDefaultTest || {}),
+  };
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
@@ -959,13 +970,17 @@ export async function resolveConfigs(
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
+          defaultTest,
           providers: parsedProviders,
           prompts: parsedPrompts,
         },
         {
-          firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
-          failing: cmdObj.filterFailing,
+          errorsOnly: cmdObj.filterErrorsOnly ?? commandLineOptions?.filterErrorsOnly,
+          failing: cmdObj.filterFailing ?? commandLineOptions?.filterFailing,
+          failingOnly: cmdObj.filterFailingOnly ?? commandLineOptions?.filterFailingOnly,
+          firstN: cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN,
+          metadata: cmdObj.filterMetadata ?? commandLineOptions?.filterMetadata,
+          pattern: cmdObj.filterPattern ?? commandLineOptions?.filterPattern,
           sample: filterSample,
           sampleSeed:
             filterSampleSeed === undefined
@@ -991,18 +1006,6 @@ export async function resolveConfigs(
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
     failConfigResolution(message);
   }
-
-  const defaultTest: TestCase = {
-    metadata: config.metadata,
-    options: {
-      prefix: cmdObj.promptPrefix,
-      suffix: cmdObj.promptSuffix,
-      provider: cmdObj.grader,
-      // rubricPrompt
-      ...(processedDefaultTest?.options || {}),
-    },
-    ...(processedDefaultTest || {}),
-  };
 
   const testSuite: TestSuite = {
     description: config.description,

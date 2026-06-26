@@ -1040,5 +1040,21 @@ describe('PythonProvider', () => {
       await provider.shutdown();
       expect((provider as any).isInitialized).toBe(false);
     });
+
+    it('should reinitialize after shutdown', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+
+      await provider.initialize();
+      await provider.shutdown();
+      await provider.initialize();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(2);
+      expect((provider as any).pool).not.toBeNull();
+      expect((provider as any).isInitialized).toBe(true);
+
+      await provider.shutdown();
+    });
   });
 });

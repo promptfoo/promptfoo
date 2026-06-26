@@ -427,6 +427,7 @@ export class PythonProvider implements ApiProvider {
       await this.pool.shutdown();
       this.pool = null;
     }
+    this.initializationPromise = null;
     providerRegistry.unregister(this);
     this.isInitialized = false;
   }

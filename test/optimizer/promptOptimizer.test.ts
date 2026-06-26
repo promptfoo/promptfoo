@@ -539,8 +539,7 @@ describe('prompt optimizer', () => {
   });
 
   it('forces concurrency to 1 for internal evals when a delay is configured', async () => {
-    // delay is set but maxConcurrency is not; the optimizer must still apply the
-    // `eval` command rule that pins concurrency to 1 so the delay rate-limits.
+    // A positive delay must override configured concurrency so it rate-limits.
     const internalEvalOptions = await collectInternalEvalOptions({
       evaluateOptions: {
         delay: 25,

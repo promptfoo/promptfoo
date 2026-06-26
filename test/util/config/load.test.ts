@@ -1692,6 +1692,40 @@ describe('resolveConfigs', () => {
     expect(firstPositions?.[0]).not.toEqual(firstPositions?.[1]);
   });
 
+  it('should apply configured filters to scenario tests', async () => {
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{id}}'],
+      providers: ['echo'],
+      commandLineOptions: {
+        filterFirstN: 1,
+        filterMetadata: 'tier=gold',
+        filterPattern: 'keep',
+      },
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 0 } },
+            { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 1 } },
+            { description: 'keep gold first', metadata: { tier: 'gold' }, vars: { id: 2 } },
+            { description: 'keep gold second', metadata: { tier: 'gold' }, vars: { id: 3 } },
+          ],
+        },
+      ],
+    };
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{id}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const resolved = await resolveConfigs({}, defaultConfig);
+
+    expect(resolved.testSuite.scenarios?.[0].tests.map((test) => test.vars?.id)).toEqual([2]);
+  });
+
   it('should derive distinct scenario sampling streams at the maximum safe seed', async () => {
     const defaultConfig: Partial<UnifiedConfig> = {
       prompts: ['Hello {{position}}'],
