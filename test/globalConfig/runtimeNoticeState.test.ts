@@ -89,6 +89,21 @@ describe('runtime notice state', () => {
     expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 
+  it('does not treat lock creation errors as ordinary contention', () => {
+    const lockError = Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    const openSpy = vi.spyOn(fs, 'openSync').mockImplementation(() => {
+      throw lockError;
+    });
+
+    try {
+      expect(() => withRuntimeNoticeStateLock('node20-removal-2026-07-30', () => true)).toThrow(
+        lockError,
+      );
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
   it('keeps a transition exclusive across a lease generation boundary', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-06-22T12:00:29.999Z'));

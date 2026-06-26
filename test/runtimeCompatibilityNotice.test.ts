@@ -93,6 +93,16 @@ describe('runtime compatibility CLI notice', () => {
     expect(writeRuntimeNoticeLastShownAt).not.toHaveBeenCalled();
   });
 
+  it('fails open when the reminder lock cannot be created', () => {
+    vi.mocked(withRuntimeNoticeStateLock).mockImplementation(() => {
+      throw Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    });
+
+    expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2' })).toBe(true);
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(writeRuntimeNoticeLastShownAt).not.toHaveBeenCalled();
+  });
+
   it('fails open for malformed and future persisted timestamps', () => {
     const now = new Date('2026-06-22T12:00:00.000Z');
     vi.mocked(readRuntimeNoticeLastShownAt)
