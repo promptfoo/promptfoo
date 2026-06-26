@@ -116,6 +116,11 @@ describe('GLEU score calculation', () => {
     expect(calculateGleuScore('a b', ['a . b'])).toBeCloseTo(1 / 3);
   });
 
+  it('keeps tokenless and mixed-period inputs distinct in both directions', () => {
+    expect(calculateGleuScore('...', ['a . b'])).toBe(0);
+    expect(calculateGleuScore('a . b', ['...'])).toBe(0);
+  });
+
   it('should handle multiple references with varying lengths', () => {
     const references = ['The small cat sat.', 'A cat was sitting.', 'The cat is on the mat.'];
     const candidate = 'The small cat sat.';
