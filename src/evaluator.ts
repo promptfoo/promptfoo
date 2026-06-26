@@ -1,10 +1,12 @@
+import * as fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
@@ -18,6 +20,14 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import {
+  getScenarioSourceContext,
+  getScenarioTestSourceContext,
+  type ScenarioSourceContext,
+  setScenarioSourceContext,
+  setScenarioTestSourceContext,
+  transferScenarioSourceContext,
+} from './evaluator/scenarioContext';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -67,18 +77,19 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { type ApiProvider, isApiProvider } from './types/providers';
+import {
+  type ApiProvider,
+  isApiProvider,
+  isProviderOptions,
+  type ProviderTypeMap,
+} from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
-import {
-  getScenarioSourceContext,
-  loadFunction,
-  parseFileUrl,
-  transferScenarioSourceContext,
-} from './util/functions/loadFunction';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
+  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
@@ -140,12 +151,39 @@ export class PromptSuggestionsRejectedError extends Error {
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const PROMPTS_FLUSH_INTERVAL_MS = 1000;
-const GLOB_OPTIONS = { windowsPathsNoEscape: process.platform === 'win32' };
+const VAR_FILE_GLOB_OPTIONS = {
+  magicalBraces: true,
+  nodir: true,
+  windowsPathsNoEscape: process.platform === 'win32',
+} as const;
 const scenarioTargetOverrideTests = new WeakSet<AtomicTestCase>();
-const scenarioTestSourceEnvs = new WeakMap<AtomicTestCase, EnvOverrides | undefined>();
+const scenarioTargetOverrideContexts = new WeakMap<AtomicTestCase, ScenarioSourceContext>();
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
+
+function resolveLiteralVarPathOrGlob(pattern: string): string[] {
+  if (fs.statSync(pattern, { throwIfNoEntry: false })?.isFile()) {
+    return [pattern];
+  }
+  const { root } = path.parse(pattern);
+  const parts = pattern.slice(root.length).split(path.sep).filter(Boolean);
+  let literalPrefix = root;
+  let consumedParts = 0;
+  for (const part of parts) {
+    const candidate = path.join(literalPrefix, part);
+    if (!fs.statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) {
+      break;
+    }
+    literalPrefix = candidate;
+    consumedParts++;
+  }
+  const globPattern =
+    consumedParts > 0 && hasMagic(pattern, VAR_FILE_GLOB_OPTIONS)
+      ? path.join(escapeGlob(literalPrefix, VAR_FILE_GLOB_OPTIONS), ...parts.slice(consumedParts))
+      : pattern;
+  return globSync(globPattern, VAR_FILE_GLOB_OPTIONS);
+}
 
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
@@ -1746,10 +1784,15 @@ export function generateVarCombinations(
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
       const basePath = cliState.basePath || '';
-      const filePaths =
-        globSync(filePath, { ...GLOB_OPTIONS, cwd: basePath || process.cwd() }) || [];
+      const resolvedFilePath = path.isAbsolute(filePath)
+        ? filePath
+        : path.resolve(basePath || process.cwd(), filePath);
+      const filePaths = resolveLiteralVarPathOrGlob(resolvedFilePath);
 
-      values = filePaths.map((path: string) => `file://${path}`);
+      values = filePaths.map(
+        (matchedPath) =>
+          `file://${path.isAbsolute(filePath) ? matchedPath : path.relative(basePath || process.cwd(), matchedPath)}`,
+      );
       if (values.length === 0) {
         throw new Error(
           `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
@@ -2166,6 +2209,178 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
   return promptIndexMap;
 }
 
+function withScenarioProviderContext<T>(
+  provider: T,
+  sourceContext: ScenarioSourceContext,
+  preserveConfiguredReference: boolean,
+  seen = new WeakMap<object, unknown>(),
+): T {
+  if (!provider || isApiProvider(provider)) {
+    return provider;
+  }
+  if (typeof provider === 'string') {
+    return (
+      preserveConfiguredReference
+        ? provider
+        : {
+            id: provider,
+            ...(sourceContext.basePath ? { config: { basePath: sourceContext.basePath } } : {}),
+            env: sourceContext.envOverrides,
+          }
+    ) as T;
+  }
+  if (isProviderOptions(provider)) {
+    return {
+      ...provider,
+      ...(sourceContext.basePath || provider.config
+        ? {
+            config: {
+              ...(sourceContext.basePath ? { basePath: sourceContext.basePath } : {}),
+              ...provider.config,
+            },
+          }
+        : {}),
+      env: { ...sourceContext.envOverrides, ...provider.env },
+    } as T;
+  }
+  if (isProviderTypeMap(provider)) {
+    const cached = seen.get(provider);
+    if (cached !== undefined) {
+      return cached as T;
+    }
+    const resolved: ProviderTypeMap = { ...provider };
+    seen.set(provider, resolved);
+    for (const key of ['text', 'embedding', 'classification', 'moderation'] as const) {
+      if (provider[key]) {
+        resolved[key] = withScenarioProviderContext(
+          provider[key],
+          sourceContext,
+          preserveConfiguredReference,
+          seen,
+        );
+      }
+    }
+    return resolved as T;
+  }
+  if (typeof provider === 'object' && !Array.isArray(provider)) {
+    const cached = seen.get(provider);
+    if (cached !== undefined) {
+      return cached as T;
+    }
+    const resolved: Record<string, unknown> = {};
+    seen.set(provider, resolved);
+    for (const [key, value] of Object.entries(provider as Record<string, unknown>)) {
+      Object.defineProperty(resolved, key, {
+        value: withScenarioProviderContext(value, sourceContext, preserveConfiguredReference, seen),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return resolved as T;
+  }
+  return provider;
+}
+
+function withScenarioAssertionContexts(
+  assertions: AssertionOrSet[] | undefined,
+  sourceContext: ScenarioSourceContext,
+  preserveConfiguredReference: boolean,
+  seen = new WeakMap<object, unknown>(),
+): AssertionOrSet[] | undefined {
+  if (!assertions) {
+    return undefined;
+  }
+  const cachedAssertions = seen.get(assertions);
+  if (cachedAssertions !== undefined) {
+    return cachedAssertions as AssertionOrSet[];
+  }
+  const resolvedAssertions: AssertionOrSet[] = [];
+  seen.set(assertions, resolvedAssertions);
+  let changed = false;
+  for (const assertion of assertions) {
+    const cachedAssertion = seen.get(assertion);
+    if (cachedAssertion !== undefined) {
+      resolvedAssertions.push(cachedAssertion as AssertionOrSet);
+      changed ||= cachedAssertion !== assertion;
+      continue;
+    }
+    const provisional = { ...assertion } as AssertionOrSet;
+    seen.set(assertion, provisional);
+    if (assertion.type === 'assert-set') {
+      const nestedAssertions = withScenarioAssertionContexts(
+        assertion.assert,
+        sourceContext,
+        preserveConfiguredReference,
+        seen,
+      ) as Assertion[];
+      if (nestedAssertions === assertion.assert) {
+        seen.set(assertion, assertion);
+        resolvedAssertions.push(assertion);
+      } else {
+        (provisional as Extract<AssertionOrSet, { type: 'assert-set' }>).assert = nestedAssertions;
+        resolvedAssertions.push(provisional);
+        changed = true;
+      }
+      continue;
+    }
+    const resolvedProvider = withScenarioProviderContext(
+      assertion.provider,
+      sourceContext,
+      preserveConfiguredReference,
+    );
+    if (resolvedProvider === assertion.provider) {
+      seen.set(assertion, assertion);
+      resolvedAssertions.push(assertion);
+    } else {
+      (provisional as Assertion).provider = resolvedProvider;
+      resolvedAssertions.push(provisional);
+      changed = true;
+    }
+  }
+  if (!changed) {
+    seen.set(assertions, assertions);
+    return assertions;
+  }
+  return resolvedAssertions;
+}
+
+function withScenarioGradingContexts<T extends AtomicTestCase>(
+  testCase: T,
+  sourceContext: ScenarioSourceContext,
+  testSuite: TestSuite,
+): T {
+  const preserveConfiguredReference =
+    sourceContext.envOverrides === testSuite.env && sourceContext.basePath === cliState.basePath;
+  const optionsProvider = testCase.options?.provider
+    ? withScenarioProviderContext(
+        testCase.options.provider,
+        sourceContext,
+        preserveConfiguredReference,
+      )
+    : undefined;
+  const assertions = withScenarioAssertionContexts(
+    testCase.assert,
+    sourceContext,
+    preserveConfiguredReference,
+  );
+  if (optionsProvider === testCase.options?.provider && assertions === testCase.assert) {
+    return testCase;
+  }
+  return {
+    ...testCase,
+    ...(testCase.options
+      ? {
+          options: {
+            ...testCase.options,
+            ...(optionsProvider ? { provider: optionsProvider } : {}),
+          },
+        }
+      : {}),
+    ...(assertions ? { assert: assertions as Assertion[] } : {}),
+  };
+}
+
 function resolveAssertionProviderReferences(
   assertion: AssertionOrSet,
   providerMap: Record<string, ApiProvider>,
@@ -2211,8 +2426,8 @@ function resolveRuntimeGradingProviderReferences(
   }
 }
 
-function getRuntimeGradingProviderEnv(testCase: AtomicTestCase, testSuite: TestSuite) {
-  return scenarioTestSourceEnvs.get(testCase) ?? testSuite.env;
+function getRuntimeGradingProviderEnv(_testCase: AtomicTestCase, testSuite: TestSuite) {
+  return testSuite.env;
 }
 
 export function __resolveRuntimeGradingProviderReferencesForTests(
@@ -2233,7 +2448,7 @@ function loadProviderModule() {
 
 async function resolveRuntimeTargetProviderReference(
   provider: AtomicTestCase['provider'],
-  env?: EnvOverrides,
+  sourceContext?: ScenarioSourceContext,
 ): Promise<AtomicTestCase['provider']> {
   if (!provider || isApiProvider(provider)) {
     return provider;
@@ -2244,14 +2459,14 @@ async function resolveRuntimeTargetProviderReference(
   // creates its own provider instead of inheriting options from a suite provider
   // that happens to use the same ID.
   return resolveProvider(provider, Object.create(null), {
-    env,
-    basePath: cliState.basePath,
+    env: sourceContext?.envOverrides,
+    basePath: sourceContext?.basePath ?? cliState.basePath ?? process.cwd(),
   });
 }
 
 async function resolveScenarioProviderRows<T extends { provider?: AtomicTestCase['provider'] }>(
   rows: T[],
-  env?: EnvOverrides,
+  fallbackContext?: ScenarioSourceContext,
 ): Promise<T[]> {
   let changed = false;
   const resolvedRows = [];
@@ -2260,36 +2475,68 @@ async function resolveScenarioProviderRows<T extends { provider?: AtomicTestCase
       resolvedRows.push(row);
       continue;
     }
-    const provider = await resolveRuntimeTargetProviderReference(row.provider, env);
+    const provider = await resolveRuntimeTargetProviderReference(
+      row.provider,
+      getScenarioTestSourceContext(row) ?? fallbackContext,
+    );
     changed ||= provider !== row.provider;
     resolvedRows.push(provider === row.provider ? row : { ...row, provider });
   }
   return changed ? resolvedRows : rows;
 }
 
+function hasEligibleProviderPrompt(test: AtomicTestCase, testSuite: TestSuite): boolean {
+  return testSuite.providers.some(
+    (provider) =>
+      isProviderAllowed(provider, test.providers) &&
+      testSuite.prompts.some((prompt) =>
+        shouldRunPromptForTest(prompt, getProviderIdentifier(provider), test, testSuite),
+      ),
+  );
+}
+
 async function resolveScenarioTargetProvidersForTests(
   tests: AtomicTestCase[],
   testSuite: TestSuite,
+  ownedProviders?: Set<ApiProvider>,
 ): Promise<AtomicTestCase[]> {
   let changed = false;
   const resolvedTests: AtomicTestCase[] = [];
+  const cache = new Map<unknown, Map<ScenarioSourceContext, AtomicTestCase['provider']>>();
   for (const test of tests) {
     if (!scenarioTargetOverrideTests.has(test) || !test.provider || isApiProvider(test.provider)) {
       resolvedTests.push(test);
       continue;
     }
-    const provider = await resolveRuntimeTargetProviderReference(
-      test.provider,
-      scenarioTestSourceEnvs.get(test) ?? testSuite.env,
-    );
+    if (!hasEligibleProviderPrompt(test, testSuite)) {
+      resolvedTests.push(test);
+      continue;
+    }
+    const context = scenarioTargetOverrideContexts.get(test) ?? {
+      basePath: cliState.basePath ?? process.cwd(),
+      envOverrides: testSuite.env,
+    };
+    const contextCache = cache.get(test.provider);
+    const wasCached = contextCache?.has(context) ?? false;
+    const provider = wasCached
+      ? contextCache?.get(context)
+      : await resolveRuntimeTargetProviderReference(test.provider, context);
+    if (!wasCached) {
+      const providerCache = contextCache ?? new Map();
+      providerCache.set(context, provider);
+      cache.set(test.provider, providerCache);
+      if (provider && isApiProvider(provider) && !isApiProvider(test.provider)) {
+        ownedProviders?.add(provider);
+      }
+    }
     if (provider === test.provider) {
       resolvedTests.push(test);
       continue;
     }
     const resolvedTest = { ...test, provider };
     scenarioTargetOverrideTests.add(resolvedTest);
-    if (scenarioTestSourceEnvs.has(test)) {
-      scenarioTestSourceEnvs.set(resolvedTest, scenarioTestSourceEnvs.get(test));
+    if (context) {
+      scenarioTargetOverrideContexts.set(resolvedTest, context);
     }
     resolvedTests.push(resolvedTest);
     changed = true;
@@ -2305,10 +2552,13 @@ async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Pr
   let scenariosChanged = false;
   const resolvedScenarios = [];
   for (const scenario of testSuite.scenarios) {
-    const sourceEnv = getScenarioSourceContext(scenario)?.envOverrides ?? testSuite.env;
-    const resolvedConfig = await resolveScenarioProviderRows(scenario.config, sourceEnv);
+    const sourceContext = getScenarioSourceContext(scenario) ?? {
+      basePath: cliState.basePath ?? process.cwd(),
+      envOverrides: testSuite.env,
+    };
+    const resolvedConfig = await resolveScenarioProviderRows(scenario.config, sourceContext);
     const resolvedTests = scenario.tests
-      ? await resolveScenarioProviderRows(scenario.tests, sourceEnv)
+      ? await resolveScenarioProviderRows(scenario.tests, sourceContext)
       : scenario.tests;
     if (resolvedConfig !== scenario.config || resolvedTests !== scenario.tests) {
       scenariosChanged = true;
@@ -2345,15 +2595,70 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   telemetry.record('feature_used', { feature: 'scenarios' });
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
-    const sourceEnv = getScenarioSourceContext(scenario)?.envOverrides;
+    const sourceContext = getScenarioSourceContext(scenario) ?? {
+      basePath: cliState.basePath ?? process.cwd(),
+      envOverrides: testSuite.env,
+    };
     for (const data of scenario.config) {
       for (const test of scenario.tests || [{}]) {
-        tests.push(mergeScenarioTest(testSuite, data, test, scenarioIndex, sourceEnv));
+        tests.push(mergeScenarioTest(testSuite, data, test, scenarioIndex, sourceContext));
       }
       scenarioIndex++;
     }
   }
   return tests;
+}
+
+function captureScenarioSourceContexts(scenarios: TestSuite['scenarios']) {
+  return scenarios?.map((scenario) => ({
+    value: scenario,
+    context: getScenarioSourceContext(scenario),
+    config: scenario.config.map((row) => ({
+      value: row,
+      context: getScenarioTestSourceContext(row),
+    })),
+    tests:
+      scenario.tests?.map((test) => ({
+        value: test,
+        context: getScenarioTestSourceContext(test),
+      })) ?? [],
+  }));
+}
+
+function restoreCapturedScenarioSourceContexts(
+  scenarios: TestSuite['scenarios'],
+  captured: ReturnType<typeof captureScenarioSourceContexts>,
+): void {
+  scenarios?.forEach((scenario, scenarioIndex) => {
+    const sourceContexts =
+      captured?.find(
+        (candidate) => candidate.value === scenario || isDeepStrictEqual(candidate.value, scenario),
+      ) ?? captured?.[scenarioIndex];
+    if (!sourceContexts) {
+      return;
+    }
+    if (sourceContexts.context && !getScenarioSourceContext(scenario)) {
+      setScenarioSourceContext(scenario, sourceContexts.context);
+    }
+    scenario.config.forEach((row, rowIndex) => {
+      const sourceEntry =
+        sourceContexts.config.find(
+          (candidate) => candidate.value === row || isDeepStrictEqual(candidate.value, row),
+        ) ?? sourceContexts.config[rowIndex];
+      if (sourceEntry?.context && !getScenarioTestSourceContext(row)) {
+        setScenarioTestSourceContext(row, sourceEntry.context);
+      }
+    });
+    scenario.tests?.forEach((test, testIndex) => {
+      const sourceEntry =
+        sourceContexts.tests.find(
+          (candidate) => candidate.value === test || isDeepStrictEqual(candidate.value, test),
+        ) ?? sourceContexts.tests[testIndex];
+      if (sourceEntry?.context && !getScenarioTestSourceContext(test)) {
+        setScenarioTestSourceContext(test, sourceEntry.context);
+      }
+    });
+  });
 }
 
 /** Test-only: materialize configured tests without executing providers. */
@@ -2373,7 +2678,7 @@ function mergeScenarioTest(
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   test: NonNullable<TestSuite['scenarios']>[number]['tests'][number],
   scenarioIndex: number,
-  sourceEnv?: EnvOverrides,
+  scenarioSourceContext: ScenarioSourceContext,
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
   // Expansion happens in config loading (resolveConfigs / createRuntimeTestSuite);
@@ -2382,37 +2687,52 @@ function mergeScenarioTest(
     !(data && typeof data === 'object' && ('$values' in data || '$expand' in data)),
     'Unexpanded scenario config $values reference reached the evaluator',
   );
-  const scenarioData = data;
+  const dataSourceContext = getScenarioTestSourceContext(data) ?? scenarioSourceContext;
+  const testSourceContext = getScenarioTestSourceContext(test) ?? scenarioSourceContext;
+  const scenarioData = withScenarioGradingContexts(
+    data as AtomicTestCase,
+    dataSourceContext,
+    testSuite,
+  );
+  const scenarioTest = withScenarioGradingContexts(
+    test as AtomicTestCase,
+    testSourceContext,
+    testSuite,
+  );
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),
     ...scenarioData.metadata,
-    ...test.metadata,
+    ...scenarioTest.metadata,
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
   const mergedTest = {
     ...(defaultTest || {}),
     ...scenarioData,
-    ...test,
+    ...scenarioTest,
     vars: {
       ...(defaultTest?.vars || {}),
       ...scenarioData.vars,
-      ...test.vars,
+      ...scenarioTest.vars,
     },
     options: {
       ...(defaultTest?.options || {}),
       ...scenarioData.options,
-      ...test.options,
+      ...scenarioTest.options,
     },
-    assert: [...(scenarioData.assert || []), ...(test.assert || [])],
+    assert: [...(scenarioData.assert || []), ...(scenarioTest.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
 
-  if (scenarioData.provider || test.provider) {
+  const targetSourceContext =
+    Object.prototype.hasOwnProperty.call(scenarioTest, 'provider') && scenarioTest.provider
+      ? testSourceContext
+      : Object.prototype.hasOwnProperty.call(scenarioData, 'provider') && scenarioData.provider
+        ? dataSourceContext
+        : undefined;
+  if (targetSourceContext) {
     scenarioTargetOverrideTests.add(mergedTest);
-  }
-  if (sourceEnv !== undefined) {
-    scenarioTestSourceEnvs.set(mergedTest, sourceEnv);
+    scenarioTargetOverrideContexts.set(mergedTest, targetSourceContext);
   }
 
   return mergedTest;
@@ -3360,6 +3680,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  ownedScenarioProviders = new Set<ApiProvider>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -4791,10 +5112,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithMaxScoreAssertion = new Set<number>();
 
     ensureDefaultTestForExtensions(testSuite);
+    const scenarioSourceContexts = captureScenarioSourceContexts(testSuite.scenarios);
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
     });
     testSuite = beforeAllOut.suite;
+    restoreCapturedScenarioSourceContexts(testSuite.scenarios, scenarioSourceContexts);
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
@@ -4802,7 +5125,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
-    tests = await resolveScenarioTargetProvidersForTests(tests, testSuite);
+    tests = await resolveScenarioTargetProvidersForTests(
+      tests,
+      testSuite,
+      this.ownedScenarioProviders,
+    );
 
     prompts.push(...buildCompletedPrompts(testSuite, this.store, tests));
     const promptIndexMap = buildPromptIndexMap(prompts);
@@ -5042,6 +5369,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       );
 
       let cleanupError: unknown;
+      let deferredScenarioCleanupError: unknown;
       try {
         // Flush and shutdown OTEL SDK
         if (otelInitialized) {
@@ -5056,6 +5384,29 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
+
+        // Scenario providers are evaluator-owned and are not part of testSuite.providers.
+        const scenarioCleanupResults = await Promise.allSettled(
+          Array.from(this.ownedScenarioProviders, async (provider) => provider.cleanup?.()),
+        );
+        this.ownedScenarioProviders.clear();
+        const scenarioCleanupErrors = scenarioCleanupResults.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        if (scenarioCleanupErrors.length > 0) {
+          logger.error('[Evaluator] Error cleaning up scenario providers', {
+            errors: scenarioCleanupErrors,
+          });
+          if (evaluationError === undefined) {
+            deferredScenarioCleanupError =
+              scenarioCleanupErrors.length === 1
+                ? scenarioCleanupErrors[0]
+                : new AggregateError(
+                    scenarioCleanupErrors,
+                    'Multiple scenario providers failed to clean up',
+                  );
+          }
+        }
 
         // Clean up Python worker pools to prevent resource leaks
         await providerRegistry.shutdownAll();
@@ -5087,6 +5438,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;
+
+        if (deferredScenarioCleanupError !== undefined) {
+          throw deferredScenarioCleanupError;
+        }
       } catch (error) {
         cleanupError = error;
         throw error;

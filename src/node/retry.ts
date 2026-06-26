@@ -9,7 +9,8 @@ import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
-import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
+import { ConfigResolutionError } from '../util/config/errors';
+import { resolveConfigs } from '../util/config/load';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,

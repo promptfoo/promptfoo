@@ -1,29 +1,32 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { escape as escapeGlob, globSync, hasMagic } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import { z } from 'zod';
 import logger from '../../logger';
 import { isScenarioConfigValuesRef, TestCaseSchema } from '../../types/index';
 import {
-  getNunjucksEngineForFilePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
   renderEnvOnlyInStringForFilePath,
 } from '../file';
 import { isJavascriptFile } from '../fileExtensions';
+import { isProviderTypeMap } from '../gradingProvider';
+import { escapeExistingDirectoryPrefix, GLOB_OPTIONS } from '../pathUtils';
+import { ConfigResolutionError } from './errors';
 import {
   getScenarioConfigSourceContext,
+  getScenarioDependencyContext,
+  getScenarioOriginalValue,
   getScenarioSourceContext,
-  normalizeFilePath,
-  parseFileUrl,
+  getScenarioTestSourceContext,
+  restoreScenarioSourceContext,
+  restoreScenarioTestSourceContext,
   setScenarioConfigSourceContext,
+  setScenarioOriginalValue,
   setScenarioSourceContext,
-  transferScenarioSourceContext,
-} from '../functions/loadFunction';
-import { ConfigResolutionError } from './errors';
-
-export { getScenarioSourceContext, transferScenarioSourceContext };
+  setScenarioTestSourceContext,
+} from './scenarioContext';
 
 import type {
   EnvOverrides,
@@ -34,16 +37,39 @@ import type {
 } from '../../types/index';
 
 const FILE_REF_PREFIX = 'file://';
-const GLOB_OPTIONS = { windowsPathsNoEscape: process.platform === 'win32' };
+const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
 
 const TEST_CASE_FIELD_NAMES = new Set(Object.keys(TestCaseSchema.shape));
 const MATRIX_ROW_SCHEMA = TestCaseSchema.partial().catchall(z.unknown());
 const MAX_DIAGNOSTIC_KEYS = 8;
 const MAX_DIAGNOSTIC_KEY_LENGTH = 64;
+const MAX_SCENARIO_VALUE_DEPTH = 100;
+const MAX_SOURCE_REF_LENGTH = 512;
 
 interface DiagnosticKeySummary {
   keys: string[];
   omitted: number;
+}
+
+function normalizeFilePath(filePath: string): string {
+  return process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(filePath)
+    ? filePath.slice(1)
+    : filePath;
+}
+
+function parseFileUrl(fileUrl: string): { filePath: string; functionName?: string } {
+  const urlWithoutProtocol = fileUrl.slice(FILE_REF_PREFIX.length);
+  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  if (lastColonIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+    if (isJavascriptFile(candidateFilePath) || candidateFilePath.endsWith('.py')) {
+      return {
+        filePath: normalizeFilePath(candidateFilePath),
+        functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
+      };
+    }
+  }
+  return { filePath: normalizeFilePath(urlWithoutProtocol) };
 }
 
 type ScenarioInput = Exclude<NonNullable<TestSuiteConfig['scenarios']>[number], string>;
@@ -70,6 +96,13 @@ function formatDiagnosticKey(key: string): string {
     : sanitized;
 }
 
+function formatSourceRef(sourceRef: string): string {
+  const sanitized = sourceRef.replace(/[\u0000-\u001f\u007f]/g, '?');
+  return sanitized.length > MAX_SOURCE_REF_LENGTH
+    ? `${sanitized.slice(0, MAX_SOURCE_REF_LENGTH)}...`
+    : sanitized;
+}
+
 function formatKeySummary(summary: DiagnosticKeySummary): string {
   const formatted = summary.keys.map(formatDiagnosticKey).join(', ');
   return summary.omitted > 0 ? `${formatted}, +${summary.omitted} more` : formatted;
@@ -85,27 +118,6 @@ function summarizeKeys(keys: Iterable<string>): DiagnosticKeySummary {
 
 function fileRefToPath(fileRef: string): string {
   return normalizeFilePath(fileRef.slice(FILE_REF_PREFIX.length));
-}
-
-function escapeExistingDirectoryPrefix(pattern: string): string {
-  const { root } = path.parse(pattern);
-  const parts = pattern.slice(root.length).split(path.sep).filter(Boolean);
-  let literalPrefix = root;
-  let consumedParts = 0;
-
-  for (const part of parts) {
-    const candidate = path.join(literalPrefix, part);
-    if (!fs.statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) {
-      break;
-    }
-    literalPrefix = candidate;
-    consumedParts++;
-  }
-
-  if (consumedParts === 0) {
-    return pattern;
-  }
-  return path.join(escapeGlob(literalPrefix, GLOB_OPTIONS), ...parts.slice(consumedParts));
 }
 
 function resolvePathFromBase(basePath: string, rawPath: string): string {
@@ -131,19 +143,17 @@ export function resolveFileRefFromBase(
     return fileRef;
   }
 
-  const renderedFileRef = fileRef.includes('{')
-    ? getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {})
-    : fileRef;
+  const renderedFileRef = renderEnvOnlyInStringForFilePath(fileRef, envOverrides);
   const { filePath, functionName } = parseFileUrl(renderedFileRef);
   const resolvedPath = resolvePathFromBase(basePath, filePath);
   return `${FILE_REF_PREFIX}${resolvedPath}${functionName ? `:${functionName}` : ''}`;
 }
 
 function isBareLocalProviderPath(providerPath: string): boolean {
+  const hasNonFileScheme =
+    /^[a-z][a-z0-9+.-]*:/i.test(providerPath) && !/^[a-z]:[\\/]/i.test(providerPath);
   return (
-    !providerPath.startsWith(FILE_REF_PREFIX) &&
-    (path.isAbsolute(providerPath) || /^\.{1,2}[\\/]/.test(providerPath)) &&
-    isJavascriptFile(providerPath)
+    !providerPath.startsWith(FILE_REF_PREFIX) && !hasNonFileScheme && isJavascriptFile(providerPath)
   );
 }
 
@@ -167,10 +177,6 @@ function splitScriptPathAndFunctionName(
     };
   }
   return { scriptPath };
-}
-
-function quoteExecPart(part: string): string {
-  return /\s/.test(part) ? JSON.stringify(part) : part;
 }
 
 function isLocalScriptPath(scriptPath: string, extensions: string[]): boolean {
@@ -198,14 +204,42 @@ function resolveScriptProviderIdFromBase(
   return `${prefix}${resolvedScriptPath}${functionName ? `:${functionName}` : ''}`;
 }
 
-function parseExecParts(command: string): string[] {
-  const parts: string[] = [];
+interface ExecPart {
+  end: number;
+  raw: string;
+  start: number;
+  value: string;
+}
+
+function parseExecParts(command: string): ExecPart[] {
+  const parts: ExecPart[] = [];
   const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
   let match: RegExpExecArray | null;
   while ((match = scriptPartsRegex.exec(command)) !== null) {
-    parts.push(match[1] ?? match[2] ?? match[0]);
+    parts.push({
+      end: match.index + match[0].length,
+      raw: match[0],
+      start: match.index,
+      value: match[1] ?? match[2] ?? match[0],
+    });
   }
   return parts;
+}
+
+function quoteResolvedExecPart(value: string, originalRaw: string): string {
+  const originalQuote =
+    originalRaw.length >= 2 &&
+    originalRaw[0] === originalRaw[originalRaw.length - 1] &&
+    (originalRaw[0] === '"' || originalRaw[0] === "'")
+      ? originalRaw[0]
+      : undefined;
+  if (originalQuote && !value.includes(originalQuote)) {
+    return `${originalQuote}${value}${originalQuote}`;
+  }
+  if (!/\s/.test(value)) {
+    return value;
+  }
+  return JSON.stringify(value);
 }
 
 function isUrlLikeExecPart(part: string): boolean {
@@ -232,13 +266,22 @@ function resolveExecProviderIdFromBase(basePath: string, providerId: string): st
   if (parts.length === 0) {
     return providerId;
   }
-  const resolvedParts = parts.map((part) =>
-    isLocalExecPart(part) ? resolveProviderPathFromBase(basePath, part) : part,
-  );
-  if (resolvedParts.every((part, index) => part === parts[index])) {
+  const replacements = parts
+    .map((part) => ({
+      ...part,
+      resolved: isLocalExecPart(part.value)
+        ? resolveProviderPathFromBase(basePath, part.value)
+        : part.value,
+    }))
+    .filter((part) => part.resolved !== part.value);
+  if (replacements.length === 0) {
     return providerId;
   }
-  return `${prefix}${leadingWhitespace}${resolvedParts.map(quoteExecPart).join(' ')}`;
+  let resolvedCommand = command;
+  for (const part of replacements.reverse()) {
+    resolvedCommand = `${resolvedCommand.slice(0, part.start)}${quoteResolvedExecPart(part.resolved, part.raw)}${resolvedCommand.slice(part.end)}`;
+  }
+  return `${prefix}${leadingWhitespace}${resolvedCommand}`;
 }
 
 function resolvePrefixedProviderIdFromBase(basePath: string, providerId: string): string {
@@ -286,9 +329,23 @@ export function resolveScenarioConfigValuesRefs(
 
   return {
     ...scenario,
-    config: scenario.config.map((entry) => {
+    config: scenario.config.map((rawEntry) => {
+      const entry = isPlainRecord(rawEntry) ? restoreScenarioTestSourceContext(rawEntry) : rawEntry;
       if (!isScenarioConfigValuesRef(entry)) {
-        return resolveScenarioConfigRowProviders(basePath, entry, envOverrides);
+        const sourceContext =
+          entry && typeof entry === 'object'
+            ? (getScenarioTestSourceContext(entry) ?? { basePath, envOverrides })
+            : { basePath, envOverrides };
+        const resolved = resolveScenarioConfigRowProviders(
+          sourceContext.basePath,
+          entry,
+          sourceContext.envOverrides,
+        );
+        if (resolved && typeof resolved === 'object') {
+          setScenarioOriginalValue(resolved, getScenarioOriginalValue(entry) ?? entry);
+          setScenarioTestSourceContext(resolved, sourceContext);
+        }
+        return resolved;
       }
       const resolved = {
         ...entry,
@@ -316,16 +373,17 @@ function resolveScenarioTestsRefs(
     if (!test || typeof test !== 'object' || Array.isArray(test)) {
       return test;
     }
-    const record = test as Record<string, unknown>;
+    const restoredTest = restoreScenarioTestSourceContext(test as Record<string, unknown>);
+    const record = restoredTest as Record<string, unknown>;
     const generatorPath = typeof record.path === 'string' ? record.path : undefined;
     const isGenerator = generatorPath !== undefined;
     const prototype = Object.getPrototypeOf(test);
     if (!isGenerator && prototype !== Object.prototype && prototype !== null) {
-      return test;
+      return restoredTest;
     }
 
     if (isGenerator) {
-      return materializeScenarioTestSource(basePath, test, envOverrides);
+      return materializeScenarioTestSource(basePath, restoredTest, envOverrides);
     }
 
     const resolved: Record<string, unknown> = { ...record };
@@ -364,57 +422,6 @@ function resolveScenarioVarsRef(
   return resolved.slice(FILE_REF_PREFIX.length);
 }
 
-function resolveNestedFileRefs(
-  basePath: string,
-  value: unknown,
-  envOverrides?: EnvOverrides,
-  seen = new WeakMap<object, unknown>(),
-): unknown {
-  if (typeof value === 'string') {
-    return resolveFileRefFromBase(basePath, value, envOverrides);
-  }
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  const cached = seen.get(value);
-  if (cached !== undefined) {
-    return cached;
-  }
-  if (Array.isArray(value)) {
-    const resolved: unknown[] = [];
-    seen.set(value, resolved);
-    for (const item of value) {
-      resolved.push(resolveNestedFileRefs(basePath, item, envOverrides, seen));
-    }
-    return resolved;
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    return value;
-  }
-
-  const record = value as Record<string, unknown>;
-  const hasId = Object.prototype.hasOwnProperty.call(record, 'id');
-  const hasCallApi = Object.prototype.hasOwnProperty.call(record, 'callApi');
-  if (
-    hasId &&
-    hasCallApi &&
-    typeof record.id === 'function' &&
-    typeof record.callApi === 'function'
-  ) {
-    return value;
-  }
-
-  const resolved: Record<string, unknown> = {};
-  seen.set(value, resolved);
-  for (const [key, nested] of Object.entries(value)) {
-    const resolvedValue = resolveNestedFileRefs(basePath, nested, envOverrides, seen);
-    defineRecordProperty(resolved, key, resolvedValue);
-  }
-  return resolved;
-}
-
 function defineRecordProperty(record: Record<string, unknown>, key: string, value: unknown): void {
   Object.defineProperty(record, key, {
     value,
@@ -430,6 +437,56 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function assertSafeScenarioValue(value: unknown, sourceDescription: string): void {
+  const active = new WeakSet<object>();
+  const seen = new WeakSet<object>();
+  const stack: Array<{ depth: number; exit?: boolean; value: unknown }> = [{ depth: 0, value }];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (!current.value || typeof current.value !== 'object') {
+      continue;
+    }
+    const objectValue = current.value as object;
+    if (current.exit) {
+      active.delete(objectValue);
+      continue;
+    }
+    if (active.has(objectValue)) {
+      throw new ConfigResolutionError(`Scenario value contains a cycle (${sourceDescription})`);
+    }
+    if (seen.has(objectValue)) {
+      continue;
+    }
+    if (current.depth > MAX_SCENARIO_VALUE_DEPTH) {
+      throw new ConfigResolutionError(
+        `Scenario value exceeds the maximum nesting depth of ${MAX_SCENARIO_VALUE_DEPTH} (${sourceDescription})`,
+      );
+    }
+    if (isPlainRecord(objectValue) && isLiveProvider(objectValue)) {
+      continue;
+    }
+    if (
+      isPlainRecord(objectValue) &&
+      (isProviderTypeMap(objectValue) ||
+        (objectValue.type === 'assert-set' && Array.isArray(objectValue.assert)))
+    ) {
+      continue;
+    }
+    const children = Array.isArray(objectValue)
+      ? objectValue
+      : isPlainRecord(objectValue)
+        ? Object.values(objectValue)
+        : [];
+    active.add(objectValue);
+    seen.add(objectValue);
+    stack.push({ depth: current.depth, exit: true, value: objectValue });
+    for (const child of children) {
+      stack.push({ depth: current.depth + 1, value: child });
+    }
+  }
 }
 
 function isLiveProvider(value: Record<string, unknown>): boolean {
@@ -476,7 +533,9 @@ function renderSourceEnvTemplates<T>(
   seen = new WeakMap<object, unknown>(),
 ): T {
   if (typeof value === 'string') {
-    return renderEnvOnlyInStringForFilePath(value, envOverrides) as T;
+    return (
+      value.includes('{{') ? renderEnvOnlyInStringForFilePath(value, envOverrides) : value
+    ) as T;
   }
   if (!value || typeof value !== 'object') {
     return value;
@@ -539,7 +598,13 @@ function resolveScenarioProviderRef(
   }
   if (typeof providerId === 'string') {
     const renderedRecord = renderSourceEnvTemplates(record, envOverrides);
-    const resolvedRecord = resolveNestedFileRefs(basePath, renderedRecord, envOverrides);
+    const resolvedRecord = maybeLoadConfigFromExternalFile(
+      renderedRecord,
+      'provider',
+      envOverrides,
+      new WeakMap(),
+      basePath,
+    );
     if (isPlainRecord(resolvedRecord) && typeof resolvedRecord.id === 'string') {
       const resolvedId = resolveProviderIdFromBase(basePath, resolvedRecord.id, envOverrides);
       if (resolvedId !== resolvedRecord.id) {
@@ -550,6 +615,40 @@ function resolveScenarioProviderRef(
       }
     }
     return resolvedRecord;
+  }
+
+  if (!isProviderTypeMap(record)) {
+    const resolvedMap: Record<string, unknown> = {};
+    seen.set(record, resolvedMap);
+    let mapChanged = false;
+    for (const [key, value] of Object.entries(record)) {
+      const renderedKey = renderSourceEnvTemplates(key, envOverrides);
+      const resolvedKey = resolveProviderIdFromBase(basePath, renderedKey, envOverrides);
+      let resolvedValue = value;
+      if (isPlainRecord(value) && !isLiveProvider(value)) {
+        const renderedValue = renderSourceEnvTemplates(value, envOverrides);
+        resolvedValue = maybeLoadConfigFromExternalFile(
+          renderedValue,
+          'provider',
+          envOverrides,
+          new WeakMap(),
+          basePath,
+        );
+        if (isPlainRecord(resolvedValue) && typeof resolvedValue.id === 'string') {
+          resolvedValue = {
+            ...resolvedValue,
+            id: resolveProviderIdFromBase(basePath, resolvedValue.id, envOverrides),
+          };
+        }
+      }
+      mapChanged ||= resolvedKey !== key || resolvedValue !== value;
+      defineRecordProperty(resolvedMap, resolvedKey, resolvedValue);
+    }
+    if (!mapChanged) {
+      seen.set(record, provider);
+      return provider;
+    }
+    return resolvedMap;
   }
 
   const cached = seen.get(record);
@@ -742,14 +841,26 @@ export function materializeScenarioTestCase<T>(
     ? resolveScenarioConfigRowProviders(
         basePath,
         maybeLoadConfigFromExternalFile(
-          resolveNestedFileRefs(basePath, rendered, envOverrides),
+          rendered,
           'scenario-test',
           envOverrides,
+          new WeakMap(),
+          basePath,
         ),
         envOverrides,
       )
     : resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
-  return resolveScenarioTestVarsFileRefs(basePath, materialized, envOverrides) as T;
+  const resolved = resolveScenarioTestVarsFileRefs(basePath, materialized, envOverrides) as T;
+  if (resolved && typeof resolved === 'object') {
+    setScenarioTestSourceContext(resolved, { basePath, envOverrides });
+    setScenarioOriginalValue(
+      resolved,
+      testCase && typeof testCase === 'object'
+        ? (getScenarioOriginalValue(testCase) ?? testCase)
+        : testCase,
+    );
+  }
+  return resolved;
 }
 
 export function materializeScenarioTestSource<T>(
@@ -767,7 +878,13 @@ export function materializeScenarioTestSource<T>(
     resolved.path = resolveFileRefFromBase(basePath, rendered.path, envOverrides);
   }
   if (rendered.config !== undefined) {
-    resolved.config = resolveNestedFileRefs(basePath, rendered.config, envOverrides);
+    resolved.config = maybeLoadConfigFromExternalFile(
+      rendered.config,
+      'provider',
+      envOverrides,
+      new WeakMap(),
+      basePath,
+    );
   }
   return resolveScenarioConfigRowProviders(basePath, resolved, envOverrides) as T;
 }
@@ -799,18 +916,31 @@ function materializeScenarioConfigRow(
   basePath: string,
   row: unknown,
   envOverrides?: EnvOverrides,
+  sourceDescription = 'inline scenario config row',
 ): Scenario['config'][number] {
+  assertSafeScenarioValue(row, sourceDescription);
   const rendered = renderSourceEnvTemplates(row, envOverrides);
-  if (!containsFileRefString(rendered)) {
-    return resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
+  const materialized = containsFileRefString(rendered)
+    ? resolveScenarioConfigRowProviders(
+        basePath,
+        maybeLoadConfigFromExternalFile(
+          rendered,
+          'scenario-test',
+          envOverrides,
+          new WeakMap(),
+          basePath,
+        ),
+        envOverrides,
+      )
+    : resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
+  if (materialized && typeof materialized === 'object') {
+    setScenarioTestSourceContext(materialized, { basePath, envOverrides });
+    setScenarioOriginalValue(
+      materialized,
+      row && typeof row === 'object' ? (getScenarioOriginalValue(row) ?? row) : row,
+    );
   }
-  const resolvedFileRefs = resolveNestedFileRefs(basePath, rendered, envOverrides);
-  const loadedFileRefs = maybeLoadConfigFromExternalFile(
-    resolvedFileRefs,
-    'scenario-test',
-    envOverrides,
-  );
-  return resolveScenarioConfigRowProviders(basePath, loadedFileRefs, envOverrides);
+  return materialized;
 }
 
 export function resolveScenarioFileRefs(
@@ -833,7 +963,7 @@ function getFilePaths(
   fileRef: string,
   envOverrides?: EnvOverrides,
 ): { paths: string[]; fromGlob: boolean } {
-  const renderedFileRef = getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {});
+  const renderedFileRef = renderEnvOnlyInStringForFilePath(fileRef, envOverrides);
   const rawPath = fileRefToPath(renderedFileRef);
   const resolvedPath = resolvePathFromBase(basePath, rawPath);
   if (fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile()) {
@@ -884,19 +1014,42 @@ export async function loadScenarioConfigs(
   const loadedScenarios: ScenarioInput[] = [];
   for (const scenario of scenarioInputs) {
     if (typeof scenario !== 'string') {
-      loadedScenarios.push(resolveScenarioFileRefs(basePath, scenario, envOverrides));
+      const restoredScenario = restoreScenarioSourceContext(
+        scenario as unknown as Record<string, unknown>,
+      ) as ScenarioInput;
+      const sourceContext = getScenarioSourceContext(restoredScenario) ?? {
+        basePath,
+        envOverrides,
+      };
+      loadedScenarios.push(
+        resolveScenarioFileRefs(
+          sourceContext.basePath,
+          restoredScenario,
+          sourceContext.envOverrides,
+        ),
+      );
       continue;
     }
 
+    const scenarioRefPath = fileRefToPath(renderEnvOnlyInStringForFilePath(scenario, envOverrides));
+    const dependencyContext = getScenarioDependencyContext(scenarioRefPath, basePath);
     for (const scenarioFilePath of getScenarioFilePaths(basePath, scenario, envOverrides)) {
       const scenarioBasePath = path.dirname(scenarioFilePath);
       // Ref is already absolute, so the loader does not re-resolve it against
       // cliState.basePath.
-      const loaded = await maybeLoadFromExternalFile(
-        `${FILE_REF_PREFIX}${scenarioFilePath}`,
-        undefined,
-        envOverrides,
-      );
+      let loaded: unknown;
+      try {
+        loaded = await maybeLoadFromExternalFile(
+          `${FILE_REF_PREFIX}${scenarioFilePath}`,
+          undefined,
+          envOverrides,
+        );
+      } catch (error) {
+        throw new ConfigResolutionError(
+          `Failed to read scenario file: ${formatSourceRef(scenarioFilePath)}`,
+          { cause: error },
+        );
+      }
       const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
       if (loaded === null || loaded === undefined || scenarioEntries.length === 0) {
         throw new ConfigResolutionError(
@@ -909,9 +1062,20 @@ export async function loadScenarioConfigs(
             `Scenario file ${scenarioFilePath} must contain scenario objects; got ${describeValue(entry)}`,
           );
         }
-        loadedScenarios.push(
-          resolveScenarioFileRefs(scenarioBasePath, entry as ScenarioInput, envOverrides),
+        const resolvedScenario = resolveScenarioFileRefs(
+          scenarioBasePath,
+          entry as ScenarioInput,
+          envOverrides,
         );
+        setScenarioSourceContext(resolvedScenario, {
+          basePath: scenarioBasePath,
+          envOverrides,
+          dependencies: Array.from(
+            new Set([scenarioFilePath, ...(dependencyContext.dependencies ?? [])]),
+          ),
+          watchRoots: dependencyContext.watchRoots,
+        });
+        loadedScenarios.push(resolvedScenario);
       }
     }
   }
@@ -940,7 +1104,7 @@ function describeValue(value: unknown): string {
 }
 
 function assertValidValuesRef(entry: object, sourceDescription: string): ScenarioConfigValuesRef {
-  if ('$expand' in entry) {
+  if (Object.prototype.hasOwnProperty.call(entry, '$expand')) {
     throw new ConfigResolutionError(
       `Scenario config rows do not support $expand; use $values (${sourceDescription})`,
     );
@@ -966,12 +1130,15 @@ function validateMatrixRowShape(
   sourceRef: string,
   unrecognizedKeys: DiagnosticKeySummary,
 ): void {
-  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+  if (!isPlainRecord(row)) {
     throw new ConfigResolutionError(
       `Scenario config $values row ${rowIndex + 1} must be an object (partial test case); got ${describeValue(row)} in ${sourceRef}`,
     );
   }
-  if ('$values' in row || '$expand' in row) {
+  if (
+    Object.prototype.hasOwnProperty.call(row, '$values') ||
+    Object.prototype.hasOwnProperty.call(row, '$expand')
+  ) {
     throw new ConfigResolutionError(
       `Nested $values references are not supported; found one in row ${rowIndex + 1} of ${sourceRef}`,
     );
@@ -981,7 +1148,7 @@ function validateMatrixRowShape(
     // A row with nothing the evaluator understands silently produces a test with
     // no vars/asserts — the classic flat-CSV mistake. Fail instead.
     throw new ConfigResolutionError(
-      `Scenario config row from ${sourceRef} has no recognized test case fields (e.g. vars, assert); got keys [${formatKeySummary(summarizeKeys(keys))}]. Did you mean to nest them under "vars"?`,
+      `Scenario config row ${rowIndex + 1} from ${sourceRef} has no recognized test case fields (e.g. vars, assert); got keys [${formatKeySummary(summarizeKeys(keys))}]. Did you mean to nest them under "vars"?`,
     );
   }
   for (const key of keys) {
@@ -1031,14 +1198,18 @@ async function loadScenarioMatrixFile(
       logger.debug(`File disappeared during scenario matrix glob expansion: ${valuesFilePath}`);
       return undefined;
     }
-    throw error;
+    throw new ConfigResolutionError(
+      `Failed to read scenario matrix file: ${formatSourceRef(valuesFilePath)}`,
+      { cause: error },
+    );
   }
 }
 
 /**
  * Expand `$values` matrix-file refs in a scenario's config rows into the rows
- * those files contain. Inline rows pass through unchanged. Every loaded row is
- * validated so malformed matrix files fail here instead of corrupting the eval.
+ * those files contain. Inline rows retain their order while source-env templates
+ * and supported file/provider refs are materialized. Every loaded row is validated
+ * so malformed matrix files fail here instead of corrupting the eval.
  *
  * Accepts unvalidated input: callers feed it config shapes the schema only
  * warns about (the CLI loader is lenient), so defenses here are load-bearing.
@@ -1061,14 +1232,32 @@ export async function expandScenarioConfigValues(
 
   const expandedConfig: Scenario['config'] = [];
 
-  for (const [entryIndex, entry] of config.entries()) {
+  for (const [entryIndex, rawEntry] of config.entries()) {
+    const entry = isPlainRecord(rawEntry) ? restoreScenarioTestSourceContext(rawEntry) : rawEntry;
     const isRefLike =
       entry !== null &&
       typeof entry === 'object' &&
       !Array.isArray(entry) &&
-      ('$values' in entry || '$expand' in entry);
+      (Object.prototype.hasOwnProperty.call(entry, '$values') ||
+        Object.prototype.hasOwnProperty.call(entry, '$expand'));
     if (!isRefLike) {
-      expandedConfig.push(materializeScenarioConfigRow(basePath, entry, envOverrides));
+      if (!isPlainRecord(entry)) {
+        throw new ConfigResolutionError(
+          `Scenario config entry ${entryIndex + 1} must be an object (partial test case); got ${describeValue(entry)}`,
+        );
+      }
+      const entrySourceContext = getScenarioTestSourceContext(entry) ?? {
+        basePath,
+        envOverrides,
+      };
+      expandedConfig.push(
+        materializeScenarioConfigRow(
+          entrySourceContext.basePath,
+          entry,
+          entrySourceContext.envOverrides,
+          `scenario config entry ${entryIndex + 1}`,
+        ),
+      );
       continue;
     }
 
@@ -1081,6 +1270,10 @@ export async function expandScenarioConfigValues(
     );
     const expansionStart = expandedConfig.length;
     let sawLoadedValue = false;
+    const valuesDependencyContext = getScenarioDependencyContext(
+      fileRefToPath(valuesRef),
+      sourceContext.basePath,
+    );
     const { paths: valuesFilePaths, fromGlob } = getFilePaths(
       sourceContext.basePath,
       valuesRef,
@@ -1104,11 +1297,35 @@ export async function expandScenarioConfigValues(
         continue;
       }
       validateMatrixRowShapes(rows, concreteRef);
-      const materializedRows = rows.map((row) =>
-        materializeScenarioConfigRow(path.dirname(valuesFilePath), row, sourceContext.envOverrides),
-      );
-      for (const [rowIndex, row] of materializedRows.entries()) {
+      for (const [rowIndex, rawRow] of rows.entries()) {
+        let row: Scenario['config'][number];
+        try {
+          row = materializeScenarioConfigRow(
+            path.dirname(valuesFilePath),
+            rawRow,
+            sourceContext.envOverrides,
+            `row ${rowIndex + 1} of ${concreteRef}`,
+          );
+        } catch (error) {
+          if (error instanceof ConfigResolutionError) {
+            throw error;
+          }
+          throw new ConfigResolutionError(
+            `Failed to materialize scenario config row ${rowIndex + 1} from ${concreteRef}`,
+            { cause: error },
+          );
+        }
         validateMatrixRowValues(row, rowIndex, concreteRef);
+        if (row && typeof row === 'object') {
+          setScenarioTestSourceContext(row, {
+            basePath: path.dirname(valuesFilePath),
+            envOverrides: sourceContext.envOverrides,
+            dependencies: Array.from(
+              new Set([valuesFilePath, ...(valuesDependencyContext.dependencies ?? [])]),
+            ),
+            watchRoots: valuesDependencyContext.watchRoots,
+          });
+        }
         expandedConfig.push(row);
       }
     }

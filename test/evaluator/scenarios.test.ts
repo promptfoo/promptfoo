@@ -1,6 +1,8 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
+import os from 'os';
+import path from 'path';
 
 import { expect, it, vi } from 'vitest';
 import {
@@ -8,11 +10,14 @@ import {
   __resolveRuntimeGradingProviderReferencesForTests,
   evaluate,
 } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import * as providerModule from '../../src/providers';
 import {
   type ApiProvider,
   type CompletedPrompt,
   type EvaluateSummaryV3,
+  type TestCase,
   type TestSuite,
 } from '../../src/types/index';
 import { loadScenarioConfigs } from '../../src/util/config/scenarioMatrix';
@@ -125,7 +130,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
           tests: [{}],
         },
       ],
-      '',
+      '/source/scenarios',
       { GRADER_TOKEN: 'source-env' },
     );
     const testSuite = {
@@ -135,13 +140,121 @@ describeEvaluator('evaluator scenarios and conversations', () => {
       scenarios,
     } as TestSuite;
     const [testCase] = __buildTestsFromSuiteForTests(testSuite);
+    const configuredSuiteGrader: ApiProvider = {
+      id: () => 'echo',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output: 'unused' }),
+    };
+
+    __resolveRuntimeGradingProviderReferencesForTests(
+      testCase,
+      { echo: configuredSuiteGrader },
+      testSuite,
+    );
+
+    expect(testCase.options?.provider).toEqual({
+      id: 'echo',
+      config: { basePath: '/source/scenarios' },
+      env: { GRADER_TOKEN: 'source-env' },
+    });
+    expect(testCase.options?.provider).not.toBe(configuredSuiteGrader);
+  });
+
+  it('keeps defaultTest and scenario-owned grader environments separate', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [
+        {
+          config: [
+            {
+              options: { provider: 'echo' },
+            },
+          ],
+          tests: [{}],
+        },
+      ],
+      '',
+      { GRADER_TOKEN: 'source-env' },
+    );
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      env: { GRADER_TOKEN: 'suite-env' },
+      defaultTest: {
+        assert: [{ type: 'llm-rubric', value: 'default', provider: 'echo' }],
+      },
+      scenarios,
+    } as TestSuite;
+    const [testCase] = __buildTestsFromSuiteForTests(testSuite);
+    testCase.assert = [
+      ...((testSuite.defaultTest as TestCase | undefined)?.assert ?? []),
+      ...(testCase.assert ?? []),
+    ];
 
     __resolveRuntimeGradingProviderReferencesForTests(testCase, Object.create(null), testSuite);
 
+    expect((testCase.assert?.[0] as { provider?: unknown } | undefined)?.provider).toEqual({
+      id: 'echo',
+      env: { GRADER_TOKEN: 'suite-env' },
+    });
     expect(testCase.options?.provider).toEqual({
       id: 'echo',
       env: { GRADER_TOKEN: 'source-env' },
     });
+  });
+
+  it('restores scenario source context after beforeAll clones scenario objects', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [{ config: [{ provider: 'echo' }], tests: [{}] }],
+      '/source/scenarios',
+      { SOURCE_TOKEN: 'source-env' },
+    );
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'scenario' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementationOnce(async (_extensions, _hookName, context) => {
+      const beforeAllContext = context as { suite: TestSuite };
+      return {
+        ...beforeAllContext,
+        suite: {
+          ...beforeAllContext.suite,
+          scenarios: beforeAllContext.suite.scenarios?.map((scenario) => ({
+            ...scenario,
+            config: scenario.config.map((row) => ({ ...row })),
+            tests: scenario.tests?.map((test) => ({ ...test })),
+          })),
+        },
+      } as never;
+    });
+    const resolveProviderSpy = vi
+      .spyOn(providerModule, 'resolveProvider')
+      .mockResolvedValueOnce(scenarioProvider);
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('Prompt')],
+      scenarios: scenarios as TestSuite['scenarios'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(resolveProviderSpy).toHaveBeenCalledWith(
+        'echo',
+        expect.any(Object),
+        expect.objectContaining({
+          basePath: '/source/scenarios',
+          env: { SOURCE_TOKEN: 'source-env' },
+        }),
+      );
+      expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(suiteProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      resolveProviderSpy.mockRestore();
+    }
   });
 
   it('does not serialize valid cyclic scenario provider state in invariant messages', async () => {
@@ -165,6 +278,32 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves cyclic assertion sets while applying scenario grader context', async () => {
+    const assertion: Record<string, unknown> = {
+      type: 'assert-set',
+      assert: [],
+    };
+    (assertion.assert as unknown[]).push(assertion);
+    const scenarios = await loadScenarioConfigs(
+      [{ config: [{ assert: [assertion] }], tests: [{}] } as never],
+      '/source/scenarios',
+      { GRADER_TOKEN: 'source-env' },
+    );
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      scenarios: scenarios as TestSuite['scenarios'],
+    } as TestSuite;
+
+    const [testCase] = __buildTestsFromSuiteForTests(testSuite);
+    const resolvedAssertion = testCase.assert?.[0] as unknown as {
+      assert: unknown[];
+    };
+
+    expect(resolvedAssertion.assert).toHaveLength(1);
+    expect(resolvedAssertion.assert[0]).toBe(resolvedAssertion);
   });
 
   it('resolves string and options-object provider overrides from scenario rows', async () => {
@@ -413,6 +552,34 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].provider.id).toBe('suite-provider');
     expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not instantiate scenario providers with no eligible provider or prompt slots', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-provider' }),
+    };
+    const missingProvider = `file://${path.join(os.tmpdir(), `missing-${randomUUID()}.cjs`)}`;
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('eligible')],
+      scenarios: [
+        {
+          config: [
+            { provider: missingProvider, providers: [] },
+            { provider: missingProvider, prompts: ['not-eligible'] },
+          ],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(0);
+    expect(suiteProvider.callApi).not.toHaveBeenCalled();
   });
 
   it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {

@@ -1,5 +1,9 @@
 import chalk from 'chalk';
 import { evaluate } from '../evaluator';
+import {
+  transferScenarioSourceContext,
+  transferScenarioTestSourceContext,
+} from '../evaluator/scenarioContext';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
@@ -557,17 +561,23 @@ function buildCandidateScenarios(
   seedPrompt: Prompt,
   candidateLabels: string[],
 ): TestSuite['scenarios'] {
-  return scenarios?.map((scenario) => ({
-    ...scenario,
-    config: scenario.config.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-    tests: scenario.tests.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-  }));
+  return scenarios?.map((scenario) =>
+    transferScenarioSourceContext(scenario, {
+      ...scenario,
+      config: scenario.config.map((test) =>
+        transferScenarioTestSourceContext(test, {
+          ...test,
+          prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+        }),
+      ),
+      tests: scenario.tests.map((test) =>
+        transferScenarioTestSourceContext(test, {
+          ...test,
+          prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+        }),
+      ),
+    }),
+  );
 }
 
 function createCandidateTestSuite(
@@ -640,13 +650,13 @@ function cloneTestCaseForOptimization<T extends Record<string, unknown>>(testCas
     cloned.providers = [...testCase.providers];
   }
 
-  return cloned as T;
+  return transferScenarioTestSourceContext(testCase, cloned as T);
 }
 
 function cloneScenarioForOptimization(
   scenario: NonNullable<TestSuite['scenarios']>[number],
 ): NonNullable<TestSuite['scenarios']>[number] {
-  return {
+  return transferScenarioSourceContext(scenario, {
     ...scenario,
     config: scenario.config.map((testCase) =>
       cloneTestCaseForOptimization(testCase as Record<string, unknown>),
@@ -654,7 +664,7 @@ function cloneScenarioForOptimization(
     tests: scenario.tests.map((testCase) =>
       cloneTestCaseForOptimization(testCase as Record<string, unknown>),
     ) as typeof scenario.tests,
-  };
+  });
 }
 
 function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {

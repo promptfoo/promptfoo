@@ -5,7 +5,8 @@ import logger from '../../src/logger';
 import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
-import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError } from '../../src/util/config/errors';
+import { resolveConfigs } from '../../src/util/config/load';
 import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';

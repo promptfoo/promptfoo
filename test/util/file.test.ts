@@ -214,6 +214,8 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://scenarios/*.yaml');
       expect(result).toEqual([mockData1, mockData2]);
       expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'scenarios/*.yaml'), {
+        magicalBraces: true,
+        nodir: true,
         windowsPathsNoEscape: process.platform === 'win32',
       });
     });
@@ -802,6 +804,8 @@ describe('file utilities', () => {
       // Glob expansion should still work correctly
       expect(result).toEqual([mockData1, mockData2]);
       expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'test*.yaml'), {
+        magicalBraces: true,
+        nodir: true,
         windowsPathsNoEscape: process.platform === 'win32',
       });
     });

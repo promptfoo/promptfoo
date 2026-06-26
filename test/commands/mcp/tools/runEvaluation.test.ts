@@ -323,9 +323,8 @@ describe('runEvaluation tool', () => {
     });
 
     it('should return an error when config resolution fails instead of terminating the host', async () => {
-      const { ConfigResolutionError, resolveConfigs } = await import(
-        '../../../../src/util/config/load'
-      );
+      const { ConfigResolutionError } = await import('../../../../src/util/config/errors');
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
 
       vi.mocked(resolveConfigs).mockRejectedValueOnce(
         new ConfigResolutionError('You must provide at least 1 prompt'),

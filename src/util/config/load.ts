@@ -50,13 +50,12 @@ import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { failConfigResolution } from './errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+import { getScenarioSourceContext, transferScenarioSourceContext } from './scenarioContext';
 import {
   expandScenarioConfigValues,
-  getScenarioSourceContext,
   loadScenarioConfigs,
   resolveFileRefFromBase,
   resolveScenarioFileRefs,
-  transferScenarioSourceContext,
 } from './scenarioMatrix';
 
 export { ConfigResolutionError, logConfigResolutionError } from './errors';

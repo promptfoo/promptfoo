@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
@@ -6,7 +5,6 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -21,14 +19,22 @@ import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { ConfigResolutionError } from './config/errors';
 import {
-  containsScenarioFileRefs,
+  getScenarioDependencyContext,
+  getScenarioTestSourceContext,
+  restoreScenarioTestSourceContext,
+  setScenarioOriginalValue,
+  setScenarioTestSourceContext,
+  transferScenarioTestSourceContext,
+} from './config/scenarioContext';
+import {
   materializeScenarioTestCase,
   materializeScenarioTestSource,
   renderScenarioSourceEnvTemplates,
 } from './config/scenarioMatrix';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
-import { sanitizeUrl } from './sanitizer';
+import { resolveLiteralPathOrGlob } from './pathUtils';
+import { REDACTED, sanitizeUrl } from './sanitizer';
 import { parseXlsxFile } from './xlsx';
 
 import type {
@@ -51,29 +57,6 @@ type StandaloneTestsFileMetadata = {
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
-const GLOB_OPTIONS = { windowsPathsNoEscape: process.platform === 'win32' };
-
-function escapeExistingDirectoryPrefix(pattern: string): string {
-  const { root } = path.parse(pattern);
-  const parts = pattern.slice(root.length).split(path.sep).filter(Boolean);
-  let literalPrefix = root;
-  let consumedParts = 0;
-
-  for (const part of parts) {
-    const candidate = path.join(literalPrefix, part);
-    if (!fs.statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) {
-      break;
-    }
-    literalPrefix = candidate;
-    consumedParts++;
-  }
-
-  if (consumedParts === 0) {
-    return pattern;
-  }
-  return path.join(escapeGlob(literalPrefix, GLOB_OPTIONS), ...parts.slice(consumedParts));
-}
-
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -86,7 +69,7 @@ export async function readTestFiles(
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
 
-    const paths = globSync(resolvedPath, GLOB_OPTIONS);
+    const paths = resolveLiteralPathOrGlob(resolvedPath);
 
     for (const p of paths) {
       const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
@@ -497,10 +480,7 @@ export async function loadTestsFromGlob(
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
-  const globPattern = hasMagic(resolvedPath, GLOB_OPTIONS)
-    ? escapeExistingDirectoryPrefix(resolvedPath)
-    : resolvedPath;
-  const testFiles: Array<string> = globSync(globPattern, GLOB_OPTIONS);
+  const testFiles: Array<string> = resolveLiteralPathOrGlob(resolvedPath);
 
   // Check for possible function names in the path (Windows-aware)
   const lastColonIndex = resolvedPath.lastIndexOf(':');
@@ -733,11 +713,33 @@ export async function readScenarioTests(
   const normalizedTests: TestCase[] = [];
   for (const test of Array.isArray(tests) ? tests : [tests]) {
     if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
-      const renderedTest = renderScenarioSourceEnvTemplates(test, envOverrides);
-      const normalizedTest = containsScenarioFileRefs(renderedTest)
-        ? materializeScenarioTestCase(basePath, renderedTest, envOverrides)
-        : renderedTest;
-      normalizedTests.push(await readTest(normalizedTest as TestCaseWithVarsFile, basePath, true));
+      const restoredTest = restoreScenarioTestSourceContext(test);
+      const sourceContext = getScenarioTestSourceContext(restoredTest) ?? {
+        basePath,
+        envOverrides,
+      };
+      const renderedTest = renderScenarioSourceEnvTemplates(
+        restoredTest,
+        sourceContext.envOverrides,
+      );
+      const materializedTest = materializeScenarioTestCase(
+        sourceContext.basePath,
+        renderedTest,
+        sourceContext.envOverrides,
+      ) as TestCaseWithVarsFile;
+      const hasProvider = Object.prototype.hasOwnProperty.call(materializedTest, 'provider');
+      const providerRef = hasProvider ? materializedTest.provider : undefined;
+      const testForNormalization = hasProvider ? { ...materializedTest } : materializedTest;
+      if (hasProvider) {
+        Reflect.deleteProperty(testForNormalization, 'provider');
+      }
+      const normalizedTest = await readTest(testForNormalization, sourceContext.basePath, true);
+      if (hasProvider) {
+        normalizedTest.provider = providerRef as TestCase['provider'];
+      }
+      transferScenarioTestSourceContext(materializedTest, normalizedTest);
+      setScenarioOriginalValue(normalizedTest, restoredTest);
+      normalizedTests.push(normalizedTest);
       continue;
     }
     for (const loadedTest of await loadScenarioTestSource(test, basePath, envOverrides)) {
@@ -753,7 +755,7 @@ function isScenarioTestRecord(value: unknown): value is Record<string, unknown> 
     return false;
   }
   const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  return prototype === Object.prototype || prototype === null || Object.keys(value).length > 0;
 }
 
 function isGeneratorLikeScenarioTest(value: Record<string, unknown>): boolean {
@@ -790,7 +792,9 @@ async function loadScenarioTestSource(
   let normalizedTests: TestCase[];
   try {
     const loaded = (await readTests(
-      materializedTest as TestSuiteConfig['tests'],
+      (typeof materializedTest === 'string'
+        ? [materializedTest]
+        : materializedTest) as TestSuiteConfig['tests'],
       basePath,
       true,
       envOverrides,
@@ -805,13 +809,15 @@ async function loadScenarioTestSource(
       envOverrides,
     );
   } catch (error) {
+    const detail = sanitizeScenarioSourceErrorDetail(sourcePath, safeSourcePath, error);
     throw new ConfigResolutionError(
-      `Failed to load scenario test ${sourceType} ${safeSourcePath}: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to load scenario test ${sourceType} ${safeSourcePath}: ${detail}`,
+      { cause: new Error(detail) },
     );
   }
   if (normalizedTests.length === 0) {
     throw new ConfigResolutionError(
-      `Scenario test ${sourceType} contributed no tests: ${safeSourcePath}`,
+      `Failed to load scenario test ${sourceType} ${safeSourcePath}: source contributed no tests`,
     );
   }
   return normalizedTests;
@@ -826,11 +832,21 @@ async function normalizeLoadedScenarioTests(
   const normalizedTests: TestCase[] = [];
   const sourceBasePath = getScenarioTestSourceBasePath(sourcePath, fallbackBasePath);
   const shouldNormalize = isLocalScenarioTestSource(sourcePath);
+  const dependencyContext = shouldNormalize
+    ? getScenarioDependencyContext(
+        getStandaloneTestsFileMetadata(sourcePath, fallbackBasePath).pathWithoutFunction,
+        fallbackBasePath,
+      )
+    : {};
   for (const [index, loadedTest] of loadedTests.entries()) {
     if (!isScenarioTestRecord(loadedTest)) {
       throw new Error(`test case ${index + 1} must be a plain object`);
     }
     if (!shouldNormalize) {
+      setScenarioTestSourceContext(loadedTest, {
+        basePath: fallbackBasePath,
+        envOverrides,
+      });
       normalizedTests.push(loadedTest as TestCase);
       continue;
     }
@@ -842,13 +858,48 @@ async function normalizeLoadedScenarioTests(
     ) as TestCaseWithVarsFile;
     const hasProvider = Object.prototype.hasOwnProperty.call(resolvedTest, 'provider');
     const providerRef = hasProvider ? resolvedTest.provider : undefined;
-    const normalizedTest = await readTest(resolvedTest, sourceBasePath, true);
+    const testForNormalization = hasProvider ? { ...resolvedTest } : resolvedTest;
+    if (hasProvider) {
+      Reflect.deleteProperty(testForNormalization, 'provider');
+    }
+    const normalizedTest = await readTest(testForNormalization, sourceBasePath, true);
     if (hasProvider) {
       normalizedTest.provider = providerRef as TestCase['provider'];
     }
+    transferScenarioTestSourceContext(resolvedTest, normalizedTest);
+    setScenarioTestSourceContext(normalizedTest, {
+      basePath: sourceBasePath,
+      envOverrides,
+      ...dependencyContext,
+    });
     normalizedTests.push(normalizedTest);
   }
   return normalizedTests;
+}
+
+function sanitizeScenarioSourceErrorDetail(
+  sourcePath: string,
+  safeSourcePath: string,
+  error: unknown,
+): string {
+  let detail = error instanceof Error ? error.message : String(error);
+  detail = detail.split(sourcePath).join(safeSourcePath);
+  try {
+    const url = new URL(sourcePath);
+    const sensitiveValues = [
+      url.username,
+      url.password,
+      ...Array.from(url.searchParams.values()),
+    ].filter(Boolean);
+    for (const value of sensitiveValues) {
+      detail = detail.split(value).join(REDACTED);
+      try {
+        detail = detail.split(decodeURIComponent(value)).join(REDACTED);
+      } catch {}
+    }
+  } catch {}
+  const sanitized = detail.replace(/[\u0000-\u001f\u007f]/g, '?');
+  return sanitized.length > 512 ? `${sanitized.slice(0, 512)}...` : sanitized;
 }
 
 function getScenarioTestSourceBasePath(sourcePath: string, fallbackBasePath: string): string {

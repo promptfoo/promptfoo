@@ -427,6 +427,54 @@ describe('programmatic scenario config expansion', () => {
     ]);
   });
 
+  it('preserves env templates in persisted matrix rows and re-renders rotated values', async () => {
+    const tmpDir = makeTmpDir();
+    const providerPath = path.join(tmpDir, 'provider.cjs');
+    const matrixPath = path.join(tmpDir, 'matrix.yaml');
+    fs.writeFileSync(
+      providerPath,
+      `module.exports = class ScenarioSecretProvider {
+  constructor(options = {}) { this.options = options; }
+  id() { return 'scenario-secret-provider'; }
+  async callApi() { return { output: this.options.config.secretValue }; }
+};
+`,
+    );
+    fs.writeFileSync(
+      matrixPath,
+      `- provider:
+    id: file://provider.cjs
+    config:
+      secretValue: "{{ env.PR9695_SCENARIO_SECRET }}"
+`,
+    );
+    vi.stubEnv('PR9695_SCENARIO_SECRET', 'initial-secret-sentinel');
+
+    const firstRecord = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [{ config: [{ $values: `file://${matrixPath}` }], tests: [{}] }],
+      writeLatestResults: false,
+    });
+    const firstSummary = await firstRecord.toEvaluateSummary();
+    const persistedConfig = JSON.parse(JSON.stringify(firstRecord.config));
+
+    expect(firstSummary.results[0].response?.output).toBe('initial-secret-sentinel');
+    expect(JSON.stringify(persistedConfig)).not.toContain('initial-secret-sentinel');
+    expect(JSON.stringify(persistedConfig)).toContain('{{ env.PR9695_SCENARIO_SECRET }}');
+
+    vi.stubEnv('PR9695_SCENARIO_SECRET', 'rotated-secret-sentinel');
+    const replayRecord = await evaluate({
+      ...persistedConfig,
+      providers: [createMockProvider('suite-provider')],
+      writeLatestResults: false,
+    });
+    const replaySummary = await replayRecord.toEvaluateSummary();
+
+    expect(replaySummary.results[0].response?.output).toBe('rotated-secret-sentinel');
+    expect(JSON.stringify(replayRecord.config)).not.toContain('rotated-secret-sentinel');
+  });
+
   it('serializes live providers in scenario config rows without cyclic runtime state', async () => {
     const cyclic: { self?: unknown } = {};
     cyclic.self = cyclic;
@@ -753,6 +801,50 @@ describe('programmatic scenario config expansion', () => {
     });
 
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
+  });
+
+  it('reuses and cleans up evaluator-owned scenario provider instances', async () => {
+    const tmpDir = makeTmpDir();
+    const stateKey = '__promptfooScenarioProviderLifecycle';
+    const state = { calls: 0, cleaned: 0, constructed: 0 };
+    (globalThis as Record<string, unknown>)[stateKey] = state;
+    const providerPath = path.join(tmpDir, 'provider.cjs');
+    fs.writeFileSync(
+      providerPath,
+      `const state = globalThis[${JSON.stringify(stateKey)}];
+module.exports = class ScenarioProvider {
+  constructor() { state.constructed += 1; }
+  id() { return 'scenario-file-provider'; }
+  async callApi(prompt) {
+    state.calls += 1;
+    if (prompt === 'two') { throw new Error('scenario provider failure'); }
+    return { output: prompt };
+  }
+  async cleanup() { state.cleaned += 1; }
+};
+`,
+    );
+
+    try {
+      const record = await evaluate({
+        prompts: ['{{case}}'],
+        providers: [createMockProvider('suite-provider')],
+        scenarios: [
+          {
+            config: [{ vars: { case: 'one' } }, { vars: { case: 'two' } }],
+            tests: [{ provider: `file://${providerPath}` }],
+          },
+        ],
+        writeLatestResults: false,
+      });
+      const summary = await record.toEvaluateSummary();
+
+      expect(summary.results).toHaveLength(2);
+      expect(summary.stats.errors).toBe(1);
+      expect(state).toEqual({ calls: 2, cleaned: 1, constructed: 1 });
+    } finally {
+      delete (globalThis as Record<string, unknown>)[stateKey];
+    }
   });
 
   it('resolves relative programmatic matrix refs from cwd instead of stale CLI state', async () => {

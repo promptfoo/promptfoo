@@ -43,7 +43,12 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
-import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError } from '../../src/util/config/errors';
+import { resolveConfigs } from '../../src/util/config/load';
+import {
+  setScenarioSourceContext,
+  setScenarioTestSourceContext,
+} from '../../src/util/config/scenarioContext';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
@@ -94,10 +99,12 @@ vi.mock('path', async () => {
 const chokidarMocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: any[]) => unknown>();
   const watcher = {
+    add: vi.fn(),
     on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
       handlers.set(event, handler);
       return watcher;
     }),
+    unwatch: vi.fn().mockResolvedValue(undefined),
   };
 
   return {
@@ -183,6 +190,8 @@ describe('evalCommand', () => {
         chokidarMocks.handlers.set(event, handler);
         return chokidarMocks.watcher;
       });
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
@@ -563,10 +572,10 @@ describe('evalCommand', () => {
     try {
       await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
 
-      const onChange = chokidarMocks.handlers.get('change');
+      const onChange = chokidarMocks.handlers.get('all');
       expect(onChange).toBeDefined();
 
-      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      await expect(onChange?.('change', defaultConfigPath)).resolves.toBeUndefined();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
       expect(resolveConfigs).toHaveBeenCalledTimes(2);
@@ -597,14 +606,14 @@ describe('evalCommand', () => {
     );
     await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
 
-    const onChange = chokidarMocks.handlers.get('change');
+    const onChange = chokidarMocks.handlers.get('all');
     expect(onChange).toBeDefined();
 
     vi.mocked(checkEmailStatusAndMaybeExit).mockRejectedValueOnce(
       new EmailValidationError('email_verification_required', 'Please verify your email'),
     );
 
-    await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+    await expect(onChange?.('change', defaultConfigPath)).resolves.toBeUndefined();
     expect(resolveConfigs).toHaveBeenCalledTimes(2);
   });
 
@@ -636,10 +645,10 @@ describe('evalCommand', () => {
     try {
       await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
 
-      const onChange = chokidarMocks.handlers.get('change');
+      const onChange = chokidarMocks.handlers.get('all');
       expect(onChange).toBeDefined();
 
-      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      await expect(onChange?.('change', defaultConfigPath)).resolves.toBeUndefined();
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Missing required API keys: OPENAI_API_KEY (openai:gpt-4)',
       );
@@ -678,10 +687,10 @@ describe('evalCommand', () => {
         eventSource: 'library',
       });
 
-      const onChange = chokidarMocks.handlers.get('change');
+      const onChange = chokidarMocks.handlers.get('all');
       expect(onChange).toBeDefined();
 
-      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      await expect(onChange?.('change', defaultConfigPath)).resolves.toBeUndefined();
       expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
       expect(process.exitCode).toBeUndefined();
     } finally {
@@ -1285,11 +1294,26 @@ describe('evalCommand', () => {
       providers: ['file://providers/provider.yaml'],
       tests: ['file://vars/scenario.yaml', { vars: { body: 'file://vars/body.txt', inline: 'x' } }],
     } as UnifiedConfig;
+    const scenario = { config: [{}], tests: [{}] };
+    setScenarioSourceContext(scenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/scenario.yaml'],
+      watchRoots: ['/suite/scenarios'],
+    });
+    setScenarioTestSourceContext(scenario.config[0], {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/matrix.yaml'],
+    });
+    setScenarioTestSourceContext(scenario.tests[0], {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/tests.yaml', '/suite/scenarios/generate.cjs'],
+    });
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config,
       testSuite: {
         prompts: [],
         providers: [],
+        scenarios: [scenario],
       },
       basePath: path.resolve('/suite'),
     });
@@ -1312,9 +1336,16 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'providers/provider.yaml'),
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
+        '/suite/scenarios/scenario.yaml',
+        '/suite/scenarios/matrix.yaml',
+        '/suite/scenarios/tests.yaml',
+        '/suite/scenarios/generate.cjs',
+        '/suite/scenarios',
       ]),
-      { ignored: /^\./, persistent: true },
+      { ignored: /^\./, ignoreInitial: true, persistent: true },
     );
+
+    expect(chokidarMocks.handlers.has('all')).toBe(true);
 
     const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     chokidarMocks.handlers.get('ready')?.();
@@ -1330,10 +1361,107 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
+  it('persists live scenario providers with their stable id in CLI eval records', async () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const liveProvider: ApiProvider = {
+      id: () => 'scenario-live-provider',
+      label: 'Scenario live provider',
+      config: { cyclic },
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output: 'unused' }),
+    };
+    const scenario = { config: [{ provider: liveProvider }], tests: [{}] };
+    const config = { scenarios: [scenario] } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], scenarios: [scenario] },
+      basePath: '/suite',
+    });
+    let capturedEval: Eval | undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      capturedEval = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval({ write: false }, config, defaultConfigPath, {});
+
+    expect(() => JSON.stringify(capturedEval?.config)).not.toThrow();
+    expect(capturedEval?.config.scenarios?.[0]).toMatchObject({
+      config: [
+        {
+          provider: {
+            id: 'scenario-live-provider',
+            label: 'Scenario live provider',
+          },
+        },
+      ],
+    });
+  });
+
+  it('reconciles scenario watch dependencies after add and unlink events', async () => {
+    const initialScenario = { config: [{}], tests: [{}] };
+    const updatedScenario = { config: [{}], tests: [{}] };
+    const finalScenario = { config: [{}], tests: [{}] };
+    setScenarioSourceContext(initialScenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/old.yaml'],
+    });
+    setScenarioSourceContext(updatedScenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/new.yaml'],
+    });
+    setScenarioSourceContext(finalScenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/final.yaml'],
+    });
+    const config = {} as UnifiedConfig;
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [], scenarios: [initialScenario] },
+        basePath: '/suite',
+      })
+      .mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [], scenarios: [updatedScenario] },
+        basePath: '/suite',
+      })
+      .mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [], scenarios: [finalScenario] },
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      config,
+      undefined,
+      {},
+    );
+
+    const allHandler = chokidarMocks.handlers.get('all');
+    expect(allHandler).toBeDefined();
+    await allHandler?.('add', '/suite/scenarios/new.yaml');
+    await allHandler?.('unlink', '/suite/scenarios/new.yaml');
+
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenNthCalledWith(1, ['/suite/scenarios/old.yaml']);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenNthCalledWith(2, ['/suite/scenarios/new.yaml']);
+    expect(chokidarMocks.watcher.add).toHaveBeenNthCalledWith(1, ['/suite/scenarios/new.yaml']);
+    expect(chokidarMocks.watcher.add).toHaveBeenNthCalledWith(2, ['/suite/scenarios/final.yaml']);
+  });
+
   it('should resume an existing eval with persisted prompts', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.prompts = [
-      { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
+      { id: 'logical-prompt', raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
+      {
+        id: 'logical-prompt',
+        provider: 'scenario-override',
+        raw: 'saved prompt',
+        label: 'Saved',
+        config: { temperature: 0 },
+      },
     ] as any;
     resumeEval.runtimeOptions = {
       repeat: 2,
@@ -1386,7 +1514,16 @@ describe('evalCommand', () => {
 
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
-    latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
+    latestEval.prompts = [
+      { id: 'logical-prompt', raw: 'retry prompt', label: 'Retry', config: {} },
+      {
+        id: 'logical-prompt',
+        provider: 'scenario-override',
+        raw: 'retry prompt',
+        label: 'Retry',
+        config: {},
+      },
+    ] as any;
     latestEval.runtimeOptions = { providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);

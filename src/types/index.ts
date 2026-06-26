@@ -970,6 +970,7 @@ export function isScenarioConfigValuesRef(value: unknown): value is ScenarioConf
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
+    Object.prototype.hasOwnProperty.call(value, '$values') &&
     typeof (value as ScenarioConfigValuesRef).$values === 'string'
   );
 }

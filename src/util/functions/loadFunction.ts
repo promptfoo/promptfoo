@@ -8,48 +8,6 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
-export interface ScenarioConfigSourceContext {
-  basePath: string;
-  envOverrides?: Record<string, string | undefined>;
-}
-
-const scenarioConfigSourceContexts = new WeakMap<object, ScenarioConfigSourceContext>();
-const scenarioSourceContexts = new WeakMap<object, ScenarioConfigSourceContext>();
-
-export function getScenarioConfigSourceContext(
-  valuesRef: object,
-): ScenarioConfigSourceContext | undefined {
-  return scenarioConfigSourceContexts.get(valuesRef);
-}
-
-export function setScenarioConfigSourceContext(
-  valuesRef: object,
-  sourceContext: ScenarioConfigSourceContext,
-): void {
-  scenarioConfigSourceContexts.set(valuesRef, sourceContext);
-}
-
-export function getScenarioSourceContext(
-  scenario: object,
-): ScenarioConfigSourceContext | undefined {
-  return scenarioSourceContexts.get(scenario);
-}
-
-export function setScenarioSourceContext(
-  scenario: object,
-  sourceContext: ScenarioConfigSourceContext,
-): void {
-  scenarioSourceContexts.set(scenario, sourceContext);
-}
-
-export function transferScenarioSourceContext<T extends object>(source: object, target: T): T {
-  const sourceContext = scenarioSourceContexts.get(source);
-  if (sourceContext) {
-    scenarioSourceContexts.set(target, sourceContext);
-  }
-  return target;
-}
-
 interface LoadFunctionOptions {
   filePath: string;
   functionName?: string;

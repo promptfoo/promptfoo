@@ -7,6 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { ConfigResolutionError } from '../../../src/util/config/errors';
+import { toSerializableScenarioTestCase } from '../../../src/util/config/persistableScenario';
+import {
+  getScenarioDependencyContext,
+  getScenarioSourceContext,
+  PERSISTED_SCENARIO_SOURCE_KEY,
+} from '../../../src/util/config/scenarioContext';
 import {
   expandScenarioConfigValues,
   loadScenarioConfigs,
@@ -150,6 +156,54 @@ describe('scenarioMatrix (real filesystem)', () => {
 
       expect(error).toBeDefined();
       expect(String(error)).not.toContain('stale-secret-matrix.yaml');
+    });
+  });
+
+  describe('scenario dependency tracking', () => {
+    it('tracks literal magic filenames exactly and uses the nearest glob directory', () => {
+      const exactPath = write('configs [prod]/scenario[one].yaml', '[]\n');
+      write('configs [prod]/matrices/a.yaml', '- vars:\n    source: a\n');
+
+      expect(getScenarioDependencyContext(exactPath, tmpDir)).toEqual({
+        dependencies: [exactPath],
+      });
+      expect(
+        getScenarioDependencyContext(path.join(tmpDir, 'configs [prod]/matrices/*.yaml'), tmpDir),
+      ).toEqual({
+        dependencies: [path.join(tmpDir, 'configs [prod]/matrices/a.yaml')],
+        watchRoots: [path.join(tmpDir, 'configs [prod]/matrices')],
+      });
+    });
+
+    it('does not let persisted context markers bypass disabled process-env templating', async () => {
+      vi.stubEnv('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'true');
+      vi.stubEnv('PR9695_MARKER_SECRET', 'must-not-be-injected');
+      const scenario = {
+        config: [{}],
+        tests: [{}],
+        [PERSISTED_SCENARIO_SOURCE_KEY]: {
+          version: 1,
+          basePath: tmpDir,
+          processEnvKeys: ['PR9695_MARKER_SECRET'],
+        },
+      };
+
+      const [loaded] = (await loadScenarioConfigs([scenario as never], tmpDir)) ?? [];
+
+      expect(loaded).toBeDefined();
+      expect(getScenarioSourceContext(loaded!)?.envOverrides?.PR9695_MARKER_SECRET).toBeUndefined();
+    });
+  });
+
+  describe('scenario persistence', () => {
+    it('serializes cyclic assertion sets without retaining a JSON cycle', () => {
+      const assertion: Record<string, unknown> = { type: 'assert-set', assert: [] };
+      (assertion.assert as unknown[]).push(assertion);
+
+      const serialized = toSerializableScenarioTestCase({ assert: [assertion] });
+
+      expect(() => JSON.stringify(serialized)).not.toThrow();
+      expect(serialized).toEqual({ assert: [{ type: 'assert-set', assert: [] }] });
     });
   });
 
@@ -362,6 +416,49 @@ describe('scenarioMatrix (real filesystem)', () => {
           },
         },
       ]);
+    });
+
+    it('preserves quoted exec arguments while canonicalizing only local path tokens', async () => {
+      const matrixPath = write(
+        'matrices/exec.yaml',
+        `- provider: >-
+    exec:node ./provider.js --config '{"message":"hello world"}' "" --label "two words"
+`,
+      );
+
+      const [expanded] = await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]);
+
+      expect(expanded.provider).toBe(
+        `exec:node ${path.join(tmpDir, 'matrices/provider.js')} --config '{"message":"hello world"}' "" --label "two words"`,
+      );
+    });
+
+    it('keeps ProviderOptionsMap config strings opaque while resolving explicit file refs', async () => {
+      const matrixPath = write(
+        'matrices/provider-map-config.yaml',
+        `- provider:
+    http:
+      config:
+        body:
+          callback: ./callback.js
+          runtime: python:./nested.py
+          payload: file://payload.json
+`,
+      );
+
+      const [expanded] = await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]);
+
+      expect(expanded.provider).toEqual({
+        http: {
+          config: {
+            body: {
+              callback: './callback.js',
+              runtime: 'python:./nested.py',
+              payload: `file://${path.join(tmpDir, 'matrices/payload.json')}`,
+            },
+          },
+        },
+      });
     });
 
     it('canonicalizes bare matrix provider map keys against the matrix file', async () => {
@@ -803,6 +900,37 @@ describe('scenarioMatrix (real filesystem)', () => {
       ).rejects.toThrow(/must be an object/);
     });
 
+    it('rejects Date rows and cyclic or excessively deep values before evaluation', async () => {
+      await expect(expandScenarioConfigValues([new Date() as never])).rejects.toThrow(
+        /must be an object/,
+      );
+
+      const cyclicVars: Record<string, unknown> = {};
+      cyclicVars.self = cyclicVars;
+      await expect(expandScenarioConfigValues([{ vars: cyclicVars }])).rejects.toThrow(/cycle/);
+
+      const deepVars: Record<string, unknown> = {};
+      let cursor = deepVars;
+      for (let depth = 0; depth < 100; depth++) {
+        cursor.child = {};
+        cursor = cursor.child as Record<string, unknown>;
+      }
+      await expect(expandScenarioConfigValues([{ vars: deepVars }])).rejects.toThrow(
+        /maximum nesting depth/,
+      );
+    });
+
+    it('attributes malformed flat rows to their concrete file and row number', async () => {
+      const matrixPath = write(
+        'matrices/invalid-row.json',
+        JSON.stringify([{ vars: { valid: true } }, { language: 'French' }]),
+      );
+
+      await expect(
+        expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]),
+      ).rejects.toThrow(/row 2 from file:\/\/.*invalid-row\.json.*no recognized test case fields/);
+    });
+
     it.each([
       ['vars', { vars: 'super-secret-vars-value' }],
       ['assert', { assert: { type: 'equals', value: 'super-secret-assert-value' } }],
@@ -958,6 +1086,22 @@ describe('scenarioMatrix (real filesystem)', () => {
           {},
         ),
       ).resolves.toEqual([{ vars: { source: 'absolute-bracket-base' } }]);
+    });
+
+    it('supports brace-only matrix globs and excludes matching directories', async () => {
+      write('matrices/a.yaml', '- vars:\n    source: a\n');
+      write('matrices/b.yaml', '- vars:\n    source: b\n');
+      fs.mkdirSync(path.join(tmpDir, 'matrices', 'directory.yaml'));
+
+      await expect(
+        expandScenarioConfigValues([{ $values: 'file://matrices/{a,b}.yaml' }], tmpDir, {}),
+      ).resolves.toEqual(
+        expect.arrayContaining([{ vars: { source: 'a' } }, { vars: { source: 'b' } }]),
+      );
+
+      await expect(
+        expandScenarioConfigValues([{ $values: 'file://matrices/*.yaml' }], tmpDir, {}),
+      ).resolves.toHaveLength(2);
     });
 
     it('prefers a literal magic filename when both its base and child contain magic', async () => {
@@ -1192,6 +1336,103 @@ describe('scenarioMatrix (real filesystem)', () => {
       const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
 
       expect(tests?.[0].assert?.[0]).toMatchObject({ value: `file://${assertionPath}` });
+    });
+
+    it('preserves executable transform refs and opaque metadata file URIs', async () => {
+      const transformPath = write('tests/transform.cjs', 'module.exports = (output) => output;\n');
+      const testsPath = write(
+        'tests/transforms.yaml',
+        `- metadata:
+    artifact: file://${path.join(tmpDir, 'does-not-exist.txt')}
+  options:
+    transform: file://transform.cjs
+  assert:
+    - type: equals
+      value: ok
+      transform: file://transform.cjs
+      contextTransform: file://transform.cjs
+`,
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+      expect(tests?.[0]).toMatchObject({
+        metadata: { artifact: `file://${path.join(tmpDir, 'does-not-exist.txt')}` },
+        options: { transform: `file://${transformPath}` },
+        assert: [
+          {
+            transform: `file://${transformPath}`,
+            contextTransform: `file://${transformPath}`,
+          },
+        ],
+      });
+    });
+
+    it('prefers literal scenario-test and vars filenames containing glob characters', async () => {
+      const testsPath = write(
+        'tests/tests[prod].yaml',
+        '- vars: vars[prod].yaml\n  metadata:\n    source: exact\n',
+      );
+      write('tests/testsp.yaml', '- vars:\n    source: decoy-test\n');
+      write('tests/vars[prod].yaml', 'source: exact-vars\n');
+      write('tests/varsp.yaml', 'source: decoy-vars\n');
+
+      await expect(readScenarioTests(`file://${testsPath}`, tmpDir)).resolves.toEqual([
+        expect.objectContaining({
+          vars: { source: 'exact-vars' },
+          metadata: { source: 'exact' },
+        }),
+      ]);
+    });
+
+    it('loads globbed JSON and JSONL scenario tests through the standard reader', async () => {
+      write('tests/json/a.json', JSON.stringify([{ vars: { source: 'json-a' } }]));
+      write('tests/json/b.json', JSON.stringify([{ vars: { source: 'json-b' } }]));
+      write('tests/jsonl/a.jsonl', '{"vars":{"source":"jsonl-a"}}\n');
+      write('tests/jsonl/b.jsonl', '{"vars":{"source":"jsonl-b"}}\n');
+
+      const jsonTests = await readScenarioTests(
+        `file://${path.join(tmpDir, 'tests/json/*.json')}`,
+        tmpDir,
+      );
+      const jsonlTests = await readScenarioTests(
+        `file://${path.join(tmpDir, 'tests/jsonl/*.jsonl')}`,
+        tmpDir,
+      );
+
+      expect(jsonTests?.map((test) => test.vars?.source).sort()).toEqual(['json-a', 'json-b']);
+      expect(jsonlTests?.map((test) => test.vars?.source).sort()).toEqual(['jsonl-a', 'jsonl-b']);
+    });
+
+    it('redacts signed source URLs from nested scenario-test errors', async () => {
+      const signedSecret = 'signed-query-secret-sentinel';
+      const source = `http://127.0.0.1:1/tests.json?sig=${signedSecret}`;
+
+      let error: unknown;
+      try {
+        await readScenarioTests(source, tmpDir);
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeInstanceOf(ConfigResolutionError);
+      expect(String(error)).not.toContain(signedSecret);
+      expect(String((error as Error & { cause?: unknown }).cause)).not.toContain(signedSecret);
+      expect(String(error)).toContain('Failed to load scenario test file');
+    });
+
+    it('accepts structurally valid programmatic scenario test class instances', async () => {
+      class ScenarioTest {
+        vars = { source: 'class-instance' };
+        metadata = { preserved: true };
+      }
+
+      await expect(readScenarioTests([new ScenarioTest() as never])).resolves.toEqual([
+        expect.objectContaining({
+          vars: { source: 'class-instance' },
+          metadata: { preserved: true },
+        }),
+      ]);
     });
 
     it('executes generator objects with their config', async () => {

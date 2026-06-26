@@ -75,6 +75,7 @@ describe('Scenario loading with glob patterns', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    vi.resetAllMocks();
   });
 
   it('should flatten scenarios when loaded with glob patterns', async () => {

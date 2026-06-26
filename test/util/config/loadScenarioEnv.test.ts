@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { __resolveScenarioTargetProviderReferencesForTests } from '../../../src/evaluator';
 import { type ApiProvider, type Scenario, type TestSuite } from '../../../src/types/index';
 import { combineConfigs } from '../../../src/util/config/load';
+import { getScenarioSourceContext } from '../../../src/util/config/scenarioContext';
 import {
   expandScenarioConfigValues,
-  getScenarioSourceContext,
   loadScenarioConfigs,
 } from '../../../src/util/config/scenarioMatrix';
 import { readScenarioTests } from '../../../src/util/testCaseReader';
