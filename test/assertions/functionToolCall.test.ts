@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { FunctionToolCallValidationSetupError } from '../../src/contracts';
 
 import type { ApiProvider, AssertionParams, AssertionType } from '../../src/types/index';
@@ -136,6 +136,59 @@ describe('handleIsValidFunctionCall', () => {
       score: 0,
       reason: 'async schema unavailable',
     });
+  });
+
+  it.each([
+    ['a string rejection', () => Promise.reject('invalid call'), 'invalid call'],
+    [
+      'an empty Error',
+      () => Promise.reject(Object.assign(new Error('placeholder'), { message: '' })),
+      'Function call validation failed',
+    ],
+  ])('keeps %s as a failed aggregate', async (_name, validateFunctionToolCall, reason) => {
+    const provider = {
+      ...validProvider,
+      validateFunctionToolCall,
+    } as ApiProvider;
+    const result = await runAssertions({
+      prompt: 'test prompt',
+      provider,
+      providerResponse: { output: '{}' },
+      test: {
+        vars: {},
+        assert: [{ type: 'is-valid-function-call' }],
+      },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0, reason });
+    expect(result.componentResults?.[0]).toMatchObject({ pass: false, score: 0, reason });
+  });
+
+  it.each([
+    'is-valid-function-call',
+    'is-valid-openai-function-call',
+    'not-is-valid-function-call',
+    'not-is-valid-openai-function-call',
+  ] as const)('%s does not invert an empty-message setup error', async (type) => {
+    const provider = {
+      ...validProvider,
+      validateFunctionToolCall: async () => {
+        throw new FunctionToolCallValidationSetupError('');
+      },
+    } as ApiProvider;
+    const result = await runAssertions({
+      prompt: 'test prompt',
+      provider,
+      providerResponse: { output: '{}' },
+      test: { vars: {}, assert: [{ type }] },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Function call validation failed',
+    });
+    expect(result.componentResults?.[0]).toMatchObject({ pass: false, score: 0 });
   });
 
   describe('inverse (not-is-valid-function-call)', () => {

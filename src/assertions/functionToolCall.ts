@@ -27,7 +27,8 @@ export const handleIsValidFunctionCall = async ({
     await provider.validateFunctionToolCall(output, test.vars);
     isValid = true;
   } catch (err) {
-    invalidReason = (err as Error).message;
+    const errorMessage = err instanceof Error ? err.message : String(err ?? '');
+    invalidReason = errorMessage.trim() ? errorMessage : 'Function call validation failed';
     if (isFunctionToolCallValidationSetupError(err)) {
       return {
         pass: false,
