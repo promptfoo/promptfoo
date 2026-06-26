@@ -27,20 +27,20 @@ defaultTest:
               properties:
                 name:
                   type: string
-                  pattern: '[^\s\p{C}\p{M}]'
+                  pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
                 experience:
                   type: string
-                  pattern: '[^\s\p{C}\p{M}]'
+                  pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
                 skills:
                   type: array
                   minItems: 1
                   items:
                     type: string
-                    pattern: '[^\s\p{C}\p{M}]'
+                    pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
               required: ['name', 'experience', 'skills']
           summary:
             type: string
-            pattern: '[^\s\p{C}\p{M}]'
+            pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
         required: ['candidates', 'summary']
 
 tests:

@@ -192,8 +192,9 @@ print(json.dumps(result))
       ['NaN', 'Invalid JSON constant: NaN'],
       ['Infinity', 'Invalid JSON constant: Infinity'],
       ['-Infinity', 'Invalid JSON constant: -Infinity'],
-      ['1e999', 'JSON number is outside the finite range: 1e999'],
-      ['-1e999', 'JSON number is outside the finite range: -1e999'],
+      ['1e999', "JSON number is outside JavaScript's safe range"],
+      ['-1e999', "JSON number is outside JavaScript's safe range"],
+      ['9007199254740991.1', "JSON number is outside JavaScript's safe range"],
       ['9007199254740993.0', "JSON number is outside JavaScript's safe range"],
       ['9007199254740993e0', "JSON number is outside JavaScript's safe range"],
       ['9007199254740992', "JSON integer is outside JavaScript's safe range"],
@@ -319,7 +320,18 @@ print(json.dumps(result))
         summary: 'Matches',
       }),
     ).toBe(false);
-    for (const invisible of ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']) {
+    for (const invisible of [
+      '\u115f',
+      '\u1160',
+      '\u200b',
+      '\u200c',
+      '\u200d',
+      '\u2060',
+      '\u2800',
+      '\u3164',
+      '\ufeff',
+      '\uffa0',
+    ]) {
       expect(
         validate({
           candidates: [{ ...validCandidate, name: invisible }, otherValidCandidate],
@@ -439,7 +451,18 @@ print(json.dumps(result))
         candidates: [validOutput.candidates[0], validOutput.candidates[0]],
       }),
     ).toBe(false);
-    expect(validate({ ...validOutput, summary: '\u200b\u2060' })).toBe(false);
+    for (const invisible of [
+      '\u115f',
+      '\u1160',
+      '\u200b',
+      '\u2060',
+      '\u2800',
+      '\u3164',
+      '\ufeff',
+      '\uffa0',
+    ]) {
+      expect(validate({ ...validOutput, summary: invisible })).toBe(false);
+    }
 
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['COBOL', 'Java']))).toBe(false);
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails']))).toBe(false);

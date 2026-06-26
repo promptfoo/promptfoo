@@ -1,8 +1,8 @@
 import asyncio
 import json
-import math
 import os
 import textwrap
+from decimal import Decimal
 from typing import Any, Dict, NoReturn
 
 from crewai import LLM, Agent, Crew, Task
@@ -32,12 +32,10 @@ def reject_invalid_json_constant(value: str) -> NoReturn:
 
 
 def parse_safe_json_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        raise ValueError(f"JSON number is outside the finite range: {value}")
+    parsed = Decimal(value)
     if abs(parsed) > MAX_SAFE_JSON_INTEGER:
         raise ValueError(f"JSON number is outside JavaScript's safe range: {value}")
-    return parsed
+    return float(parsed)
 
 
 def parse_safe_json_int(value: str) -> int | float:

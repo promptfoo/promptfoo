@@ -1,6 +1,6 @@
 ---
 sidebar_label: Red Teaming a CrewAI Agent
-description: Evaluate a CrewAI agent with structured checks and red team testing in Promptfoo.
+description: Connect a CrewAI recruitment agent to Promptfoo, validate structured candidate responses with assertions, and run targeted red team checks against the provider.
 ---
 
 # Red Teaming a CrewAI Agent
@@ -177,9 +177,9 @@ Inside your project folder, create a file called `agent.py` that contains the Cr
 ````python
 import asyncio
 import json
-import math
 import os
 import textwrap
+from decimal import Decimal
 from typing import Any, Dict, NoReturn
 
 from crewai import LLM, Agent, Crew, Task
@@ -209,12 +209,10 @@ def reject_invalid_json_constant(value: str) -> NoReturn:
 
 
 def parse_safe_json_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        raise ValueError(f"JSON number is outside the finite range: {value}")
+    parsed = Decimal(value)
     if abs(parsed) > MAX_SAFE_JSON_INTEGER:
         raise ValueError(f"JSON number is outside JavaScript's safe range: {value}")
-    return parsed
+    return float(parsed)
 
 
 def parse_safe_json_int(value: str) -> int | float:
@@ -414,20 +412,20 @@ defaultTest:
               properties:
                 name:
                   type: string
-                  pattern: '[^\s\p{C}\p{M}]'
+                  pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
                 experience:
                   type: string
-                  pattern: '[^\s\p{C}\p{M}]'
+                  pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
                 skills:
                   type: array
                   minItems: 1
                   items:
                     type: string
-                    pattern: '[^\s\p{C}\p{M}]'
+                    pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
               required: ['name', 'experience', 'skills']
           summary:
             type: string
-            pattern: '[^\s\p{C}\p{M}]'
+            pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
         required: ['candidates', 'summary'] # Both fields must be present
 
 # 🧪 Specific test case to validate role-specific skills
