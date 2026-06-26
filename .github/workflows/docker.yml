@@ -112,6 +112,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - name: Resolve source commit
@@ -226,7 +227,7 @@ jobs:
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
-        run: npm install -g npm@11.11.0
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
 
       - name: run promptfoo eval
         id: eval
@@ -234,7 +235,7 @@ jobs:
           PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:3000
           PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
         run: |
-          npm install
+          npm install --registry=https://registry.npmjs.org/
           npm run local -- eval -c .github/assets/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
