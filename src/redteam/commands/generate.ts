@@ -271,7 +271,8 @@ async function withGenerationConcurrency<T>(
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
-  setupEnv(options.envFile);
+  const explicitEnvPath = options.envFile ?? options.envPath;
+  setupEnv(explicitEnvPath);
   const cacheOverride = options.cache === false ? false : undefined;
   if (cacheOverride === false) {
     logger.info('Cache is disabled');
@@ -283,6 +284,7 @@ export async function doGenerateRedteam(
 async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
+  const explicitEnvPath = options.envFile ?? options.envPath;
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
@@ -336,7 +338,7 @@ async function doGenerateRedteamInternal(
     const currentHash = await getConfigHash(configPath, options);
 
     if (storedHash === currentHash) {
-      await validateUnknownConfigKeysForConfigPaths([configPath], options.envFile);
+      await validateUnknownConfigKeysForConfigPaths([configPath], explicitEnvPath);
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );
@@ -351,7 +353,7 @@ async function doGenerateRedteamInternal(
     const resolved = await resolveConfigs(
       {
         config: [configPath],
-        envPath: options.envFile,
+        envPath: explicitEnvPath,
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
       },
@@ -1156,6 +1158,7 @@ export function redteamGenerateCommand(
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           ...overrides,
+          envFile: opts.envFile ?? opts.envPath,
           defaultConfig,
           defaultConfigPath,
         });

@@ -22,6 +22,7 @@ import {
   resolveCliProvidersWithConfig,
   resolveConfigs,
   resolveStrictConfigEnabled,
+  validateUnknownConfigKeysForConfigPaths,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
@@ -2839,6 +2840,21 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     const config = await maybeReadConfig('config.json', true);
 
     expect(() => enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json')).not.toThrow();
+  });
+
+  it('does not resolve external tests on a diagnostics-only config path', async () => {
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['hello'],
+      tests: 'file://missing-tests.yaml',
+    };
+    vi.mocked(globSync).mockReturnValue(['config.json']);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(validateUnknownConfigKeysForConfigPaths(['config.json'])).resolves.toBeUndefined();
+
+    expect(readTests).not.toHaveBeenCalled();
   });
 
   it('falls back to process strictness when an env override is undefined', () => {

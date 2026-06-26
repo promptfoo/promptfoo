@@ -397,6 +397,24 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('preserves the common envPath option as an explicit config override', async () => {
+    const envPath = ['cli.env'];
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      envPath,
+      write: false,
+    });
+
+    expect(configModule.resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ envPath }),
+      {},
+    );
+  });
+
   it.each([
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],

@@ -700,10 +700,10 @@ interface CombineConfigsResult {
   unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[];
 }
 
-async function combineConfigsWithDiagnostics(
-  configPaths: string[],
-  deferUnknownKeyValidation = false,
-): Promise<CombineConfigsResult> {
+async function readConfigsWithDiagnostics(configPaths: string[]): Promise<{
+  configs: UnifiedConfig[];
+  unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[];
+}> {
   const configs: UnifiedConfig[] = [];
   const unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   for (const configPath of configPaths) {
@@ -725,6 +725,14 @@ async function combineConfigsWithDiagnostics(
       unknownConfigKeyDiagnostics.push(...configDiagnostics);
     }
   }
+  return { configs, unknownConfigKeyDiagnostics };
+}
+
+async function combineConfigsWithDiagnostics(
+  configPaths: string[],
+  deferUnknownKeyValidation = false,
+): Promise<CombineConfigsResult> {
+  const { configs, unknownConfigKeyDiagnostics } = await readConfigsWithDiagnostics(configPaths);
 
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
@@ -1006,8 +1014,26 @@ export async function validateUnknownConfigKeysForConfigPaths(
   configPaths: string[],
   explicitEnvPath?: string | string[],
 ): Promise<void> {
-  const { config } = await combineConfigsWithDiagnostics(configPaths, true);
-  enforceUnknownConfigKeyDiagnosticsForConfig(config, configPaths[0], explicitEnvPath);
+  const { configs, unknownConfigKeyDiagnostics } = await readConfigsWithDiagnostics(configPaths);
+  if (unknownConfigKeyDiagnostics.length === 0) {
+    return;
+  }
+
+  const configEnv = configs.reduce<UnifiedConfig['env']>(
+    (previous, config) => ({ ...previous, ...config.env }),
+    {},
+  );
+  const commandLineOptions = normalizeConfiguredCommandLineOptions(
+    configs.reduce((previous, config) => ({ ...previous, ...config.commandLineOptions }), {}),
+    `configuration file ${configPaths[0]}`,
+  );
+  const { strictConfigEnabled } = resolveConfiguredEnvStrictness(
+    commandLineOptions,
+    path.dirname(configPaths[0]),
+    explicitEnvPath,
+    configEnv,
+  );
+  reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
 }
 
 /**

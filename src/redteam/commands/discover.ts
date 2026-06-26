@@ -80,6 +80,8 @@ export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
 export const ArgsSchema = z
   .object({
     config: z.string().optional(),
+    envFile: z.union([z.string(), z.array(z.string())]).optional(),
+    envPath: z.union([z.string(), z.array(z.string())]).optional(),
     target: z.string().optional(),
   })
   // Config and target are mutually exclusive:
@@ -429,7 +431,11 @@ export function discoverCommand(
         if (!config) {
           throw new Error(`Config is invalid at ${args.config}`);
         }
-        enforceUnknownConfigKeyDiagnosticsForConfig(config, args.config);
+        enforceUnknownConfigKeyDiagnosticsForConfig(
+          config,
+          args.config,
+          args.envFile ?? args.envPath,
+        );
 
         if (!config.providers) {
           throw new Error('Config must contain a target');
@@ -451,7 +457,11 @@ export function discoverCommand(
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
-        enforceUnknownConfigKeyDiagnosticsForConfig(defaultConfig, defaultConfigPath);
+        enforceUnknownConfigKeyDiagnosticsForConfig(
+          defaultConfig,
+          defaultConfigPath,
+          args.envFile ?? args.envPath,
+        );
         if (!defaultConfig.providers) {
           throw new Error('Config must contain a target or provider');
         }
