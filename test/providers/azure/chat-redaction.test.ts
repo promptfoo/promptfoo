@@ -24,6 +24,7 @@ describe('Azure chat redaction integration', () => {
       const mode = [
         'success',
         'hidden-choice',
+        'malformed-alternate-content',
         'malformed-alternate-audio-format',
         'malformed-alternate-audio',
         'malformed-alternate-tool-sibling',
@@ -42,6 +43,9 @@ describe('Azure chat redaction integration', () => {
         'refusal',
         'filtered-audio',
         'audio',
+        'untrusted-total-token',
+        'untrusted-prompt-token',
+        'untrusted-completion-token',
         'untrusted-completion-details',
         'untrusted-completion-reasoning',
         'untrusted-completion-accepted',
@@ -69,7 +73,15 @@ describe('Azure chat redaction integration', () => {
           role: 'assistant',
           content: 'safe alternate output',
         };
-        if (alternate === 'audio-format') {
+        if (alternate === 'content') {
+          message.content = { private: 'malformed-content-body-secret-sentinel' };
+          message.audio = {
+            id: 'audio-id',
+            data: 'safe-audio-data',
+            transcript: 'safe alternate output',
+            expires_at: 1_800_000_000,
+          };
+        } else if (alternate === 'audio-format') {
           message.audio = {
             id: 'audio-id',
             data: 'safe-audio-data',
@@ -212,10 +224,12 @@ describe('Azure chat redaction integration', () => {
           prompt_tokens: 2,
           completion_tokens: 1,
         };
-        if (mode === 'untrusted-metadata') {
-          usage.total_tokens = 0.5;
-          usage.prompt_tokens = Number.MAX_SAFE_INTEGER + 1;
-          usage.completion_tokens = -1;
+        if (mode === 'untrusted-total-token') {
+          usage.total_tokens = 'total-usage-body-secret-sentinel';
+        } else if (mode === 'untrusted-prompt-token') {
+          usage.prompt_tokens = 'prompt-usage-body-secret-sentinel';
+        } else if (mode === 'untrusted-completion-token') {
+          usage.completion_tokens = 'completion-usage-body-secret-sentinel';
         } else if (mode === 'untrusted-completion-details') {
           usage.completion_tokens_details = {
             audio_tokens: 'completion-audio-usage-body-secret-sentinel',
@@ -598,7 +612,9 @@ describe('Azure chat redaction integration', () => {
     const getLogs = captureLogs();
     const provider = createProvider();
     const modes = [
-      'untrusted-metadata',
+      'untrusted-total-token',
+      'untrusted-prompt-token',
+      'untrusted-completion-token',
       'untrusted-completion-details',
       'untrusted-completion-reasoning',
       'untrusted-completion-accepted',
@@ -622,8 +638,21 @@ describe('Azure chat redaction integration', () => {
         expect(result.logProbs).toBeUndefined();
         expect(JSON.stringify(result)).not.toContain('secret-sentinel');
       }
-      if (mode === 'untrusted-metadata') {
-        expect(results.map((result) => result.tokenUsage)).toEqual([{}, {}]);
+      if (mode === 'untrusted-total-token') {
+        expect(results.map((result) => result.tokenUsage)).toEqual([
+          { prompt: 2, completion: 1 },
+          { prompt: 2, completion: 1 },
+        ]);
+      } else if (mode === 'untrusted-prompt-token') {
+        expect(results.map((result) => result.tokenUsage)).toEqual([
+          { total: 3, completion: 1 },
+          { total: 3, completion: 1 },
+        ]);
+      } else if (mode === 'untrusted-completion-token') {
+        expect(results.map((result) => result.tokenUsage)).toEqual([
+          { total: 3, prompt: 2 },
+          { total: 3, prompt: 2 },
+        ]);
       }
       expect(requestCounts.get(mode)).toBe(previousRequests + 2);
     }
@@ -635,6 +664,7 @@ describe('Azure chat redaction integration', () => {
     const provider = createProvider();
     const modes = [
       'untrusted-finish-reason',
+      'malformed-alternate-content',
       'malformed-alternate-audio-format',
       'malformed-alternate-audio',
       'malformed-alternate-tool-sibling',
