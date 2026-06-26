@@ -1,5 +1,6 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
+import { AGENTIC_STRATEGIES_SET } from './constants/strategies';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
 import {
@@ -93,7 +94,12 @@ function maybeWrapTargetProviderForCharLimits(
   provider: ApiProvider,
   test: AtomicTestCase | undefined,
 ): ApiProvider {
-  if (!isRedteamTest(test) || !hasTargetPromptCharLimits(test)) {
+  const strategyId =
+    typeof test?.metadata?.strategyId === 'string' ? test.metadata.strategyId : undefined;
+  const isAgenticSeedProvider =
+    (strategyId !== undefined && AGENTIC_STRATEGIES_SET.has(strategyId)) ||
+    [...AGENTIC_STRATEGIES_SET].some((agenticId) => provider.id().endsWith(agenticId));
+  if (!isRedteamTest(test) || !hasTargetPromptCharLimits(test) || isAgenticSeedProvider) {
     return provider;
   }
   return (provider as CharLimitedProvider)[WRAPPED_CHAR_LIMIT_PROVIDER]
