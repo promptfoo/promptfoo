@@ -18,11 +18,7 @@ import {
 } from './util';
 
 import type { EvaluateOptions, TestSuite } from '../types/index';
-import type {
-  ApiProvider,
-  ConfigurationChangeSuggestion,
-  ProviderResponse,
-} from '../types/providers';
+import type { ApiProvider, ProviderResponse } from '../types/providers';
 import type { Inputs } from '../types/shared';
 
 interface Result {
@@ -41,7 +37,7 @@ export interface ProviderTestResult {
     changes_needed?: boolean;
     changes_needed_reason?: string;
     changes_needed_suggestions?: string[];
-    configuration_change_suggestion?: ConfigurationChangeSuggestion;
+    configuration_change_suggestion?: { transformResponse: string };
   };
 }
 
