@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
+  blobReferencesTable,
   datasetsTable,
   evalResultsTable,
   evalsTable,
@@ -20,23 +21,39 @@ import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
+  type CompletedPrompt,
+  type DerivedMetric,
   type EvaluateSummaryV2,
   type EvaluateTable,
   type EvalWithMetadata,
+  type PromptMetrics,
   type PromptWithMetadata,
+  ResultFailureReason,
   type ResultsFile,
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
+  type Vars,
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
+import {
+  accumulateNamedMetric,
+  type NamedMetricAccumulator,
+  subtractNamedMetric,
+} from './namedMetrics';
 import { restoreAzureBlobSasTokens } from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from './standaloneEvalCache';
+import {
+  accumulateAssertionTokenUsage,
+  createEmptyAssertions,
+  subtractAssertionTokenUsage,
+  subtractResponseTokenUsage,
+} from './tokenUsageUtils';
 
 import type { StandaloneEval } from './standaloneEvalCache';
 
@@ -461,6 +478,568 @@ export async function deleteEval(evalId: string) {
 }
 
 /**
+ * Sentinel thrown by {@link deleteEvalResult} when no row matches the
+ * (evalId, resultId) pair. Lets API/CLI callers translate to 404 / exit-1
+ * without string-matching `Error.message`.
+ */
+export class EvalResultNotFoundError extends Error {
+  constructor(evalId: string, resultId: string) {
+    super(`Eval result not found: evalId=${evalId} resultId=${resultId}`);
+    this.name = 'EvalResultNotFoundError';
+  }
+}
+
+export async function getEvalIdForResult(resultId: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db
+    .select({ evalId: evalResultsTable.evalId })
+    .from(evalResultsTable)
+    .where(eq(evalResultsTable.id, resultId))
+    .get();
+  return row?.evalId ?? null;
+}
+
+function getAssertionCounts(result: Pick<typeof evalResultsTable.$inferSelect, 'gradingResult'>): {
+  pass: number;
+  fail: number;
+} | null {
+  const gradingResult = result.gradingResult;
+  if (!gradingResult) {
+    return null;
+  }
+  const componentResults = gradingResult.componentResults;
+  if (!Array.isArray(componentResults)) {
+    return Object.prototype.hasOwnProperty.call(gradingResult, 'componentResults')
+      ? null
+      : { pass: gradingResult.pass ? 1 : 0, fail: gradingResult.pass ? 0 : 1 };
+  }
+  const pass = componentResults.filter((r) => r.pass).length;
+  return { pass, fail: componentResults.length - pass };
+}
+
+function getSurvivingAssertionCounts(
+  results: Array<Pick<typeof evalResultsTable.$inferSelect, 'gradingResult'>>,
+): { pass: number; fail: number } {
+  return results.reduce(
+    (acc, result) => {
+      const counts = getAssertionCounts(result);
+      if (!counts) {
+        return acc;
+      }
+      acc.pass += counts.pass;
+      acc.fail += counts.fail;
+      return acc;
+    },
+    { pass: 0, fail: 0 },
+  );
+}
+
+function recomputeAssertionTokenUsageFromResults(
+  results: Array<Pick<typeof evalResultsTable.$inferSelect, 'gradingResult'>>,
+): ReturnType<typeof createEmptyAssertions> {
+  const assertions = createEmptyAssertions();
+  for (const result of results) {
+    accumulateAssertionTokenUsage(assertions, result.gradingResult?.tokensUsed);
+  }
+  return assertions;
+}
+
+type NamedMetricResult = Pick<
+  typeof evalResultsTable.$inferSelect,
+  'gradingResult' | 'namedScores' | 'testCase'
+>;
+
+function recomputeNamedMetricsFromResults(
+  metrics: PromptMetrics,
+  metricNames: Set<string>,
+  results: NamedMetricResult[],
+): void {
+  if (metricNames.size === 0) {
+    return;
+  }
+
+  const hadScoreCounts = metrics.namedScoresCount !== undefined;
+  const hadScoreWeights = metrics.namedScoreWeights !== undefined;
+  const recomputed: Required<NamedMetricAccumulator> = {
+    namedScores: {},
+    namedScoresCount: {},
+    namedScoreWeights: {},
+  };
+
+  for (const result of results) {
+    const namedScores = (result.namedScores ?? {}) as Record<string, unknown>;
+    const testVars = (result.testCase?.vars ?? {}) as Vars;
+    for (const metricName of metricNames) {
+      const metricValue = namedScores[metricName];
+      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
+        continue;
+      }
+      accumulateNamedMetric(recomputed, {
+        metricName,
+        metricValue,
+        gradingResult: result.gradingResult ?? null,
+        testVars,
+      });
+    }
+  }
+
+  metrics.namedScores ||= {};
+  for (const metricName of metricNames) {
+    if (Object.prototype.hasOwnProperty.call(recomputed.namedScores, metricName)) {
+      metrics.namedScores[metricName] = recomputed.namedScores[metricName];
+    } else {
+      delete metrics.namedScores[metricName];
+    }
+
+    if (hadScoreCounts) {
+      const count = recomputed.namedScoresCount?.[metricName];
+      if (count) {
+        metrics.namedScoresCount ||= {};
+        metrics.namedScoresCount[metricName] = count;
+      } else {
+        delete metrics.namedScoresCount?.[metricName];
+      }
+    }
+
+    if (hadScoreWeights) {
+      const weight = recomputed.namedScoreWeights?.[metricName];
+      if (weight) {
+        metrics.namedScoreWeights ||= {};
+        metrics.namedScoreWeights[metricName] = weight;
+      } else {
+        delete metrics.namedScoreWeights?.[metricName];
+      }
+    }
+  }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function subtractTrackedMetric(current: number | undefined, delta: unknown): number {
+  if (!isFiniteNumber(delta)) {
+    return current ?? 0;
+  }
+  return current === undefined ? 0 : current - delta;
+}
+
+async function recomputeDerivedMetrics(
+  metrics: PromptMetrics,
+  derivedMetrics: DerivedMetric[] | undefined,
+  promptEvalCount: number,
+): Promise<void> {
+  if (!derivedMetrics || derivedMetrics.length === 0) {
+    return;
+  }
+
+  const math = await import('mathjs');
+  metrics.namedScores ||= {};
+  const evalContext: Record<string, number> = { __count: promptEvalCount };
+  for (const [name, value] of Object.entries(metrics.namedScores)) {
+    if (isFiniteNumber(value)) {
+      evalContext[name] = value;
+    }
+  }
+
+  for (const metric of derivedMetrics) {
+    try {
+      const value =
+        typeof metric.value === 'function'
+          ? metric.value(evalContext, {} as Parameters<typeof metric.value>[1])
+          : math.evaluate(metric.value, evalContext);
+      if (isFiniteNumber(value)) {
+        metrics.namedScores[metric.name] = value;
+        evalContext[metric.name] = value;
+      } else {
+        delete metrics.namedScores[metric.name];
+        delete evalContext[metric.name];
+      }
+    } catch {
+      delete metrics.namedScores[metric.name];
+      delete evalContext[metric.name];
+    }
+  }
+}
+
+type BlobUsageResult = Pick<
+  typeof evalResultsTable.$inferSelect,
+  'id' | 'testIdx' | 'promptIdx' | 'response' | 'testCase' | 'metadata' | 'gradingResult'
+>;
+type DatabaseTransaction = Parameters<
+  Parameters<Awaited<ReturnType<typeof getDb>>['transaction']>[0]
+>[0];
+
+const BLOB_URI_PREFIX = 'promptfoo://blob/';
+const BLOB_SCAN_MAX_DEPTH = 8;
+const BLOB_SCAN_MAX_STRING_LENGTH = 100_000;
+const BLOB_SURVIVOR_SCAN_BATCH_SIZE = 500;
+
+function valueUsesBlobHash(
+  value: unknown,
+  blobHash: string,
+  visited = new WeakSet<object>(),
+  depth = 0,
+): boolean {
+  if (depth > BLOB_SCAN_MAX_DEPTH) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    return (
+      value.includes(BLOB_URI_PREFIX) &&
+      (value.startsWith(BLOB_URI_PREFIX) || value.length <= BLOB_SCAN_MAX_STRING_LENGTH) &&
+      value.toLowerCase().includes(`${BLOB_URI_PREFIX}${blobHash}`)
+    );
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (visited.has(value)) {
+    return false;
+  }
+  visited.add(value);
+
+  const candidate = value as { hash?: unknown; uri?: unknown };
+  if (typeof candidate.hash === 'string' && candidate.hash.toLowerCase() === blobHash) {
+    return true;
+  }
+  if (
+    typeof candidate.uri === 'string' &&
+    valueUsesBlobHash(candidate.uri, blobHash, visited, depth)
+  ) {
+    return true;
+  }
+
+  return Object.values(value as Record<string, unknown>).some((child) =>
+    valueUsesBlobHash(child, blobHash, visited, depth + 1),
+  );
+}
+
+function resultUsesBlobHash(result: BlobUsageResult, blobHash: string): boolean {
+  const normalizedBlobHash = blobHash.toLowerCase();
+  return [result.response, result.testCase, result.metadata, result.gradingResult].some((value) =>
+    valueUsesBlobHash(value, normalizedBlobHash),
+  );
+}
+
+async function findSurvivingResultUsingBlobHash(
+  tx: DatabaseTransaction,
+  evalId: string,
+  resultId: string,
+  blobHash: string,
+  cell?: { testIdx: number; promptIdx: number },
+): Promise<BlobUsageResult | undefined> {
+  let offset = 0;
+  for (;;) {
+    const baseCondition = and(
+      eq(evalResultsTable.evalId, evalId),
+      ne(evalResultsTable.id, resultId),
+    );
+    const rows = await tx
+      .select({
+        id: evalResultsTable.id,
+        testIdx: evalResultsTable.testIdx,
+        promptIdx: evalResultsTable.promptIdx,
+        response: evalResultsTable.response,
+        testCase: evalResultsTable.testCase,
+        metadata: evalResultsTable.metadata,
+        gradingResult: evalResultsTable.gradingResult,
+      })
+      .from(evalResultsTable)
+      .where(
+        cell
+          ? and(
+              baseCondition,
+              eq(evalResultsTable.testIdx, cell.testIdx),
+              eq(evalResultsTable.promptIdx, cell.promptIdx),
+            )
+          : baseCondition,
+      )
+      .limit(BLOB_SURVIVOR_SCAN_BATCH_SIZE)
+      .offset(offset)
+      .all();
+
+    const match = rows.find((survivingResult) => resultUsesBlobHash(survivingResult, blobHash));
+    if (match || rows.length < BLOB_SURVIVOR_SCAN_BATCH_SIZE) {
+      return match;
+    }
+    offset += rows.length;
+  }
+}
+
+async function updatePromptMetricsForDeletedResult(
+  tx: DatabaseTransaction,
+  evalId: string,
+  resultId: string,
+  result: typeof evalResultsTable.$inferSelect,
+): Promise<void> {
+  const evalRow = await tx
+    .select({ config: evalsTable.config, prompts: evalsTable.prompts })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, evalId))
+    .get();
+  const prompts = evalRow?.prompts ?? null;
+  const prompt = prompts?.[result.promptIdx];
+  if (!prompts || !prompt?.metrics) {
+    return;
+  }
+
+  const resultAssertionCounts = getAssertionCounts(result);
+  const derivedMetrics = Array.isArray(evalRow?.config?.derivedMetrics)
+    ? evalRow.config.derivedMetrics
+    : undefined;
+  const shouldRecomputeAssertionTokenUsage =
+    result.gradingResult == null && Boolean(prompt.metrics.tokenUsage?.assertions);
+  const shouldLoadSurvivingPromptResults =
+    !resultAssertionCounts ||
+    shouldRecomputeAssertionTokenUsage ||
+    (result.gradingResult == null && Object.keys(result.namedScores ?? {}).length > 0) ||
+    Boolean(derivedMetrics?.length);
+  const survivingPromptResults = shouldLoadSurvivingPromptResults
+    ? await tx
+        .select({
+          gradingResult: evalResultsTable.gradingResult,
+          namedScores: evalResultsTable.namedScores,
+          testCase: evalResultsTable.testCase,
+        })
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, evalId),
+            eq(evalResultsTable.promptIdx, result.promptIdx),
+            ne(evalResultsTable.id, resultId),
+          ),
+        )
+        .all()
+    : undefined;
+  const survivingAssertionCounts = resultAssertionCounts
+    ? undefined
+    : getSurvivingAssertionCounts(survivingPromptResults ?? []);
+  const survivingAssertionTokenUsage = shouldRecomputeAssertionTokenUsage
+    ? recomputeAssertionTokenUsageFromResults(survivingPromptResults ?? [])
+    : undefined;
+  const survivingNamedMetricResults =
+    result.gradingResult == null && Object.keys(result.namedScores ?? {}).length > 0
+      ? survivingPromptResults
+      : undefined;
+
+  // `prompts` is a JSON column; mutate a fresh copy so the in-memory row used by
+  // any cached Eval instance is not silently aliased to the write payload.
+  const updatedPrompts: CompletedPrompt[] = prompts.map((p, i) =>
+    i === result.promptIdx && p.metrics ? { ...p, metrics: { ...p.metrics } } : p,
+  );
+  const updatedPrompt = updatedPrompts[result.promptIdx];
+  // updatedPrompt.metrics is non-null because we cloned it on the matching index above.
+  invariant(updatedPrompt?.metrics, 'cloned prompt is missing metrics');
+  subtractResultFromPromptMetrics(
+    updatedPrompt.metrics,
+    result,
+    survivingAssertionCounts,
+    survivingNamedMetricResults,
+    survivingAssertionTokenUsage,
+  );
+  await recomputeDerivedMetrics(
+    updatedPrompt.metrics,
+    derivedMetrics,
+    survivingPromptResults?.length ?? 0,
+  );
+  await tx
+    .update(evalsTable)
+    .set({ prompts: updatedPrompts })
+    .where(eq(evalsTable.id, evalId))
+    .run();
+}
+
+async function cleanupBlobReferencesForDeletedResult(
+  tx: DatabaseTransaction,
+  evalId: string,
+  resultId: string,
+  result: typeof evalResultsTable.$inferSelect,
+): Promise<void> {
+  const blobReferences = await tx
+    .select({
+      id: blobReferencesTable.id,
+      blobHash: blobReferencesTable.blobHash,
+      testIdx: blobReferencesTable.testIdx,
+      promptIdx: blobReferencesTable.promptIdx,
+    })
+    .from(blobReferencesTable)
+    .where(
+      and(
+        eq(blobReferencesTable.evalId, evalId),
+        or(
+          and(
+            eq(blobReferencesTable.testIdx, result.testIdx),
+            eq(blobReferencesTable.promptIdx, result.promptIdx),
+          ),
+          and(isNull(blobReferencesTable.testIdx), isNull(blobReferencesTable.promptIdx)),
+        ),
+      ),
+    )
+    .all();
+
+  if (blobReferences.length === 0) {
+    return;
+  }
+
+  for (const blobReference of blobReferences) {
+    const isEvalLevelReference = blobReference.testIdx === null && blobReference.promptIdx === null;
+    if (isEvalLevelReference && !resultUsesBlobHash(result, blobReference.blobHash)) {
+      continue;
+    }
+
+    const sameCellResult = isEvalLevelReference
+      ? undefined
+      : await findSurvivingResultUsingBlobHash(tx, evalId, resultId, blobReference.blobHash, {
+          testIdx: blobReference.testIdx ?? result.testIdx,
+          promptIdx: blobReference.promptIdx ?? result.promptIdx,
+        });
+    if (sameCellResult) {
+      continue;
+    }
+
+    const survivingBlobResult = await findSurvivingResultUsingBlobHash(
+      tx,
+      evalId,
+      resultId,
+      blobReference.blobHash,
+    );
+    if (survivingBlobResult) {
+      if (!isEvalLevelReference) {
+        await tx
+          .update(blobReferencesTable)
+          .set({
+            testIdx: survivingBlobResult.testIdx,
+            promptIdx: survivingBlobResult.promptIdx,
+          })
+          .where(eq(blobReferencesTable.id, blobReference.id))
+          .run();
+      }
+    } else {
+      await tx
+        .delete(blobReferencesTable)
+        .where(eq(blobReferencesTable.id, blobReference.id))
+        .run();
+    }
+  }
+}
+
+/**
+ * Inverse of the per-row accumulation in `evaluator.ts:evaluateRowResult` /
+ * `updatePromptResultCounts`: debit this one result row's contribution from the parent
+ * eval's prompt-level aggregates so the surviving results stay consistent. The eval list
+ * and detail header derive their stats from `prompts[i].metrics` (see `src/models/eval.ts`
+ * "only reliable source of truth" comment); the redteam filter chips and custom-metrics
+ * dialog also read `prompts[i].metrics.namedScores` directly. A missed decrement here
+ * surfaces directly as phantom pass/fail counts, stale custom-metric badges, or wrong
+ * token totals on the eval header.
+ */
+function subtractResultFromPromptMetrics(
+  metrics: PromptMetrics,
+  result: typeof evalResultsTable.$inferSelect,
+  survivingAssertionCounts?: { pass: number; fail: number },
+  survivingNamedMetricResults?: NamedMetricResult[],
+  survivingAssertionTokenUsage?: ReturnType<typeof createEmptyAssertions>,
+): void {
+  if (result.success) {
+    metrics.testPassCount = subtractTrackedMetric(metrics.testPassCount, 1);
+  } else if (result.failureReason === ResultFailureReason.ERROR) {
+    metrics.testErrorCount = subtractTrackedMetric(metrics.testErrorCount, 1);
+  } else {
+    metrics.testFailCount = subtractTrackedMetric(metrics.testFailCount, 1);
+  }
+
+  const assertionCounts = getAssertionCounts(result);
+  if (assertionCounts) {
+    metrics.assertPassCount = subtractTrackedMetric(metrics.assertPassCount, assertionCounts.pass);
+    metrics.assertFailCount = subtractTrackedMetric(metrics.assertFailCount, assertionCounts.fail);
+  } else if (survivingAssertionCounts) {
+    metrics.assertPassCount = survivingAssertionCounts.pass;
+    metrics.assertFailCount = survivingAssertionCounts.fail;
+  }
+
+  metrics.score = subtractTrackedMetric(metrics.score, result.score);
+  metrics.totalLatencyMs = subtractTrackedMetric(metrics.totalLatencyMs, result.latencyMs);
+  metrics.cost = subtractTrackedMetric(metrics.cost, result.cost);
+
+  // Debit custom (named) metrics — read by FilterChips and CustomMetricsDialog. Pass the
+  // row's own gradingResult + testVars so the contribution math mirrors the forward path
+  // (see `accumulateNamedMetric` / `getNamedMetricContribution`).
+  const namedScores = result.namedScores ?? {};
+  const namedScoreNames = new Set(Object.keys(namedScores));
+  if (survivingNamedMetricResults) {
+    recomputeNamedMetricsFromResults(metrics, namedScoreNames, survivingNamedMetricResults);
+  } else {
+    const testVars = (result.testCase?.vars ?? {}) as Vars;
+    for (const [metricName, metricValue] of Object.entries(namedScores)) {
+      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
+        continue;
+      }
+      subtractNamedMetric(metrics, {
+        metricName,
+        metricValue,
+        gradingResult: result.gradingResult ?? null,
+        testVars,
+      });
+    }
+  }
+
+  // Debit response token usage and assertion-side token usage (see EvalHeader's
+  // `numRequests` and `models/eval.ts:1411` `accumulateTokenUsage` into eval stats).
+  if (metrics.tokenUsage) {
+    subtractResponseTokenUsage(metrics.tokenUsage, result.response ?? undefined);
+    if (result.gradingResult?.tokensUsed && metrics.tokenUsage.assertions) {
+      subtractAssertionTokenUsage(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
+    } else if (survivingAssertionTokenUsage && metrics.tokenUsage.assertions) {
+      metrics.tokenUsage.assertions = survivingAssertionTokenUsage;
+    }
+  }
+}
+
+/**
+ * Deletes a single result row within an eval session, leaving the parent eval
+ * (and every other result) in place. Both ids must match the same row: an
+ * orphan `resultId` belonging to a different eval is treated as not-found
+ * rather than silently deleted, so a UI / CLI can't accidentally cross
+ * sessions. The eval's `prompts[i].metrics` aggregates are decremented in the
+ * same transaction so a running view server doesn't observe a half-applied
+ * mutation; standalone/count caches are then invalidated and a change-signal
+ * fires so `promptfoo view` clients re-fetch.
+ *
+ * Trace records are intentionally left in place. `traces.evaluation_id` is
+ * scoped to the eval, not the result row — multiple results within the same
+ * testCase typically share one trace (see `tracesTable.testCaseId`), so
+ * cascading a delete to traces here would break trace export / replay for the
+ * surviving results. Traces are reaped when the parent eval is deleted via
+ * `deleteEval` -> `deleteTraceRecordsForEvals`. If per-result trace cleanup is
+ * ever needed, it has to look at all surviving results' `traceLinkage` first.
+ */
+export async function deleteEvalResult(evalId: string, resultId: string): Promise<void> {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    // Read the row first so we know which prompt's metrics to debit, then check the
+    // (evalId, resultId) pair as the cross-session guard before mutating anything.
+    const result = await tx
+      .select()
+      .from(evalResultsTable)
+      .where(and(eq(evalResultsTable.id, resultId), eq(evalResultsTable.evalId, evalId)))
+      .get();
+    if (!result) {
+      throw new EvalResultNotFoundError(evalId, resultId);
+    }
+
+    await updatePromptMetricsForDeletedResult(tx, evalId, resultId, result);
+    await cleanupBlobReferencesForDeletedResult(tx, evalId, resultId, result);
+
+    await tx
+      .delete(evalResultsTable)
+      .where(and(eq(evalResultsTable.id, resultId), eq(evalResultsTable.evalId, evalId)))
+      .run();
+  });
+  notifyEvaluationChanged(evalId);
+}
+
+/**
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
@@ -577,7 +1156,11 @@ export async function getStandaloneEvals({
         (acc, row) => {
           const pluginId = row.test.metadata?.pluginId;
           if (pluginId) {
-            const isPass = row.outputs[index].pass;
+            const output = row.outputs[index];
+            if (!output) {
+              return acc;
+            }
+            const isPass = output.pass;
             acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
             acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
           }

@@ -266,7 +266,11 @@ async function removeTemporaryJsonlOutput(tempOutputPath: string): Promise<void>
   });
 }
 
-const outputToSimpleString = (output: EvaluateTableOutput) => {
+const outputToSimpleString = (output: EvaluateTableOutput | undefined) => {
+  if (!output) {
+    return '';
+  }
+
   const passFailText = output.pass
     ? '[PASS]'
     : output.failureReason === ResultFailureReason.ASSERT

@@ -49,6 +49,40 @@ function addNumbers(a: number | undefined, b: number | undefined): number {
   return (a ?? 0) + (b ?? 0);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Helper to subtract numeric values; ignores malformed imported deltas. */
+function subtractNumbers(a: number | undefined, b: unknown): number {
+  return isFiniteNumber(b) ? (a ?? 0) - b : (a ?? 0);
+}
+
+/** Inverse of {@link accumulateCompletionDetails} — mirrors the field-by-field structure
+ * so a deletion debits exactly what the matching accumulation credited. */
+function subtractCompletionDetails(
+  target: CompletionTokenDetails | undefined,
+  update: CompletionTokenDetails | undefined,
+): CompletionTokenDetails | undefined {
+  if (!update || !target) {
+    return target;
+  }
+
+  return {
+    reasoning: subtractNumbers(target?.reasoning, update.reasoning),
+    acceptedPrediction: subtractNumbers(target?.acceptedPrediction, update.acceptedPrediction),
+    rejectedPrediction: subtractNumbers(target?.rejectedPrediction, update.rejectedPrediction),
+    cacheReadInputTokens: subtractNumbers(
+      target?.cacheReadInputTokens,
+      update.cacheReadInputTokens,
+    ),
+    cacheCreationInputTokens: subtractNumbers(
+      target?.cacheCreationInputTokens,
+      update.cacheCreationInputTokens,
+    ),
+  };
+}
+
 /**
  * Helper to accumulate completion details
  */
@@ -142,6 +176,86 @@ export function accumulateTokenUsage(
 }
 
 /**
+ * Inverse of {@link accumulateTokenUsage}: subtracts the same delta `accumulateTokenUsage`
+ * would add for the same `update`. Mirrors the forward function's structure exactly so a
+ * deleted row's contribution can be debited from a running aggregate without drifting.
+ * Notes:
+ * - `incrementRequests` is intentionally absent: forward only auto-increments when
+ *   `update.numRequests` is missing, and we don't want a debit to silently change
+ *   `numRequests` based on an unrelated heuristic at delete time.
+ * - Mutates {@code target}.
+ */
+export function subtractTokenUsage(
+  target: TokenUsage,
+  update: Partial<TokenUsage> | undefined,
+): void {
+  if (!update) {
+    return;
+  }
+
+  if (target.prompt !== undefined) {
+    target.prompt = subtractNumbers(target.prompt, update.prompt);
+  }
+  if (target.completion !== undefined) {
+    target.completion = subtractNumbers(target.completion, update.completion);
+  }
+  if (target.cached !== undefined) {
+    target.cached = subtractNumbers(target.cached, update.cached);
+  }
+  if (target.total !== undefined) {
+    target.total = subtractNumbers(target.total, update.total);
+  }
+
+  if (update.numRequests !== undefined && target.numRequests !== undefined) {
+    target.numRequests = subtractNumbers(target.numRequests, update.numRequests);
+  }
+
+  if (update.completionDetails) {
+    target.completionDetails = subtractCompletionDetails(
+      target.completionDetails,
+      update.completionDetails,
+    );
+  }
+
+  if (update.assertions && target.assertions) {
+    if (target.assertions.total !== undefined) {
+      target.assertions.total = subtractNumbers(target.assertions.total, update.assertions.total);
+    }
+    if (target.assertions.prompt !== undefined) {
+      target.assertions.prompt = subtractNumbers(
+        target.assertions.prompt,
+        update.assertions.prompt,
+      );
+    }
+    if (target.assertions.completion !== undefined) {
+      target.assertions.completion = subtractNumbers(
+        target.assertions.completion,
+        update.assertions.completion,
+      );
+    }
+    if (target.assertions.cached !== undefined) {
+      target.assertions.cached = subtractNumbers(
+        target.assertions.cached,
+        update.assertions.cached,
+      );
+    }
+    if (target.assertions.numRequests !== undefined) {
+      target.assertions.numRequests = subtractNumbers(
+        target.assertions.numRequests,
+        update.assertions.numRequests,
+      );
+    }
+
+    if (update.assertions.completionDetails) {
+      target.assertions.completionDetails = subtractCompletionDetails(
+        target.assertions.completionDetails,
+        update.assertions.completionDetails,
+      );
+    }
+  }
+}
+
+/**
  * Accumulate token usage specifically for assertions.
  * This function operates directly on an assertions object rather than a full TokenUsage object.
  * @param target Assertions object to update
@@ -166,6 +280,36 @@ export function accumulateAssertionTokenUsage(
   // Handle completion details
   if (update.completionDetails) {
     target.completionDetails = accumulateCompletionDetails(
+      target.completionDetails,
+      update.completionDetails,
+    );
+  }
+}
+
+/** Inverse of {@link accumulateAssertionTokenUsage}; mirrors its field set. Mutates {@code target}. */
+export function subtractAssertionTokenUsage(
+  target: NonNullable<TokenUsage['assertions']>,
+  update: Partial<TokenUsage> | undefined,
+): void {
+  if (!update) {
+    return;
+  }
+
+  if (target.total !== undefined) {
+    target.total = subtractNumbers(target.total, update.total);
+  }
+  if (target.prompt !== undefined) {
+    target.prompt = subtractNumbers(target.prompt, update.prompt);
+  }
+  if (target.completion !== undefined) {
+    target.completion = subtractNumbers(target.completion, update.completion);
+  }
+  if (target.cached !== undefined) {
+    target.cached = subtractNumbers(target.cached, update.cached);
+  }
+
+  if (update.completionDetails) {
+    target.completionDetails = subtractCompletionDetails(
       target.completionDetails,
       update.completionDetails,
     );
@@ -219,6 +363,36 @@ export function accumulateResponseTokenUsage(
   } else if (response && countAsRequest) {
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
+  }
+}
+
+/**
+ * Inverse of {@link accumulateResponseTokenUsage}; mirrors the same branching so a row
+ * that was credited with `accumulateResponseTokenUsage(target, row.response)` can be
+ * debited with `subtractResponseTokenUsage(target, row.response)`. Mutates {@code target}.
+ */
+export function subtractResponseTokenUsage(
+  target: TokenUsage,
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean },
+): void {
+  const countAsRequest = options?.countAsRequest ?? true;
+
+  if (response?.tokenUsage) {
+    if (countAsRequest) {
+      subtractTokenUsage(target, response.tokenUsage);
+      if (response.tokenUsage.numRequests === undefined && target.numRequests !== undefined) {
+        target.numRequests = (target.numRequests ?? 0) - 1;
+      }
+    } else {
+      const tokenUsageWithoutRequests: Partial<TokenUsage> = {
+        ...response.tokenUsage,
+        numRequests: undefined,
+      };
+      subtractTokenUsage(target, tokenUsageWithoutRequests);
+    }
+  } else if (response && countAsRequest && target.numRequests !== undefined) {
+    target.numRequests = (target.numRequests ?? 0) - 1;
   }
 }
 

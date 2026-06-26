@@ -1759,6 +1759,39 @@ describe('writeOutput', () => {
     expect(columnKeys).toContain('[openai:gpt-4] Test Prompt');
     expect(columnKeys).toContain('[anthropic:claude-3] Test Prompt');
   });
+
+  it('writes blank Google Sheets cells for sparse prompt outputs', async () => {
+    const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
+
+    const eval_ = new Eval({});
+    await eval_.addPrompts([
+      { raw: 'prompt1', label: 'First Prompt', provider: 'openai:gpt-4' },
+      { raw: 'prompt2', label: 'Second Prompt', provider: 'anthropic:claude-3' },
+    ]);
+    eval_.setVars(['input']);
+
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 0.8,
+      namedScores: {},
+      latencyMs: 150,
+      provider: { id: 'anthropic:claude-3' },
+      prompt: { raw: 'prompt2', label: 'Second Prompt' },
+      response: { output: 'Surviving output' },
+      vars: { input: 'test input' },
+      promptIdx: 1,
+      testIdx: 0,
+      testCase: { vars: { input: 'test input' } },
+      promptId: 'prompt2',
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+    expect(rows[0]['[openai:gpt-4] First Prompt']).toBe('');
+    expect(rows[0]['[anthropic:claude-3] Second Prompt']).toContain('Surviving output');
+  });
 });
 
 describe('warnOnDegradedJsonlRecovery', () => {

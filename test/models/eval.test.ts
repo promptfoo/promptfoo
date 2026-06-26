@@ -7,6 +7,7 @@ import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
   buildSafeJsonPath,
+  chunkEvalSummaryIds,
   combineFilterConditions,
   EvalQueries,
   escapeJsonPathKey,
@@ -22,7 +23,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -272,6 +277,109 @@ describe('evaluator', () => {
   });
 
   describe('summaryResults', () => {
+    it('chunks eval ids for summary result-count queries', () => {
+      const chunks = chunkEvalSummaryIds(
+        Array.from({ length: 5 }, (_, index) => `eval-${index}`),
+        2,
+      );
+
+      expect(chunks).toEqual([['eval-0', 'eval-1'], ['eval-2', 'eval-3'], ['eval-4']]);
+    });
+
+    it('counts sparse prompt results when prompts no longer have matching row counts', async () => {
+      const eval_ = await Eval.create({}, [], {
+        completedPrompts: [
+          createCompletedPrompt('prompt zero', {
+            metrics: createPromptMetrics({
+              score: 0,
+              testPassCount: 0,
+              testFailCount: 0,
+              testErrorCount: 0,
+            }),
+          }),
+          createCompletedPrompt('prompt one', {
+            metrics: createPromptMetrics({
+              score: 1,
+              testPassCount: 1,
+              testFailCount: 0,
+              testErrorCount: 0,
+            }),
+          }),
+        ],
+      });
+
+      const summary = (await getEvalSummaries()).find((row) => row.evalId === eval_.id);
+
+      expect(summary?.numTests).toBe(1);
+      expect(summary?.passRate).toBe(100);
+    });
+
+    it('counts distinct sparse test rows across prompts', async () => {
+      const eval_ = await Eval.create({}, [], {
+        completedPrompts: [
+          createCompletedPrompt('prompt zero', {
+            metrics: createPromptMetrics({
+              score: 1,
+              testPassCount: 1,
+              testFailCount: 0,
+              testErrorCount: 0,
+            }),
+          }),
+          createCompletedPrompt('prompt one', {
+            metrics: createPromptMetrics({
+              score: 1,
+              testPassCount: 1,
+              testFailCount: 0,
+              testErrorCount: 0,
+            }),
+          }),
+        ],
+      });
+      await eval_.setResults([
+        new EvalResult({
+          id: `diagonal-${eval_.id}-0-1`,
+          evalId: eval_.id,
+          promptIdx: 1,
+          testIdx: 0,
+          testCase: { vars: {} },
+          prompt: { raw: 'prompt one', label: 'prompt one' },
+          provider: { id: 'test-provider' },
+          response: { output: 'prompt one result' },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        }),
+        new EvalResult({
+          id: `diagonal-${eval_.id}-1-0`,
+          evalId: eval_.id,
+          promptIdx: 0,
+          testIdx: 1,
+          testCase: { vars: {} },
+          prompt: { raw: 'prompt zero', label: 'prompt zero' },
+          provider: { id: 'test-provider' },
+          response: { output: 'prompt zero result' },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        }),
+      ]);
+
+      const summary = (await getEvalSummaries()).find((row) => row.evalId === eval_.id);
+
+      expect(summary?.numTests).toBe(2);
+      expect(summary?.passRate).toBe(100);
+    });
+
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();

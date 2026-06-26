@@ -6,6 +6,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
   normalizeTokenUsage,
+  subtractResponseTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
 import type { TokenUsage } from '../../src/types/shared';
@@ -279,6 +280,76 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('subtractResponseTokenUsage', () => {
+    it('ignores non-numeric token deltas from imported rows', () => {
+      const target: TokenUsage = {
+        total: 10,
+        prompt: 5,
+        completion: 4,
+        cached: 1,
+        numRequests: 2,
+      };
+
+      subtractResponseTokenUsage(target, {
+        tokenUsage: {
+          total: 'bad',
+          prompt: Number.NaN,
+          completion: Infinity,
+          cached: 1,
+          numRequests: 'bad',
+        } as any,
+      });
+
+      expect(target).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 4,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it('should not create completionDetails for legacy aggregates', () => {
+      const target: TokenUsage = {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+      };
+
+      subtractResponseTokenUsage(target, {
+        tokenUsage: {
+          completionDetails: {
+            reasoning: 3,
+            cacheReadInputTokens: 2,
+          },
+        },
+      });
+
+      expect(target.completionDetails).toBeUndefined();
+    });
+
+    it('should not create negative missing buckets for legacy aggregates', () => {
+      const target: TokenUsage = {
+        total: 10,
+      };
+
+      subtractResponseTokenUsage(target, {
+        tokenUsage: {
+          total: 6,
+          prompt: 3,
+          completion: 2,
+          cached: 1,
+        },
+      });
+
+      expect(target).toEqual({ total: 4 });
+      expect('prompt' in target).toBe(false);
+      expect('completion' in target).toBe(false);
+      expect('cached' in target).toBe(false);
     });
   });
 

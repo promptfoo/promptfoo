@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   },
   createShareableUrl: vi.fn(),
   deleteEval: vi.fn(),
+  deleteEvalResult: vi.fn(),
   deleteEvals: vi.fn(),
   determineShareDomain: vi.fn(),
   doRedteamRun: vi.fn(),
@@ -203,7 +204,12 @@ vi.mock('../../../src/util/apiHealth', () => ({
 
 vi.mock('../../../src/util/database', () => ({
   deleteEval: mocks.deleteEval,
+  deleteEvalResult: mocks.deleteEvalResult,
   deleteEvals: mocks.deleteEvals,
+  // `EvalResultNotFoundError` is a runtime export from the same module; the route
+  // narrows on `instanceof`, so mocking it as a plain class keeps the check stable
+  // while the smoke test only exercises the success path.
+  EvalResultNotFoundError: class EvalResultNotFoundError extends Error {},
   getPrompts: mocks.getPrompts,
   getPromptsForTestCasesHash: mocks.getPromptsForTestCasesHash,
   getStandaloneEvals: mocks.getStandaloneEvals,
@@ -298,6 +304,7 @@ function setupDefaultMocks() {
   mocks.cloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.dev');
   mocks.cloudConfig.isEnabled.mockReturnValue(false);
   mocks.deleteEval.mockResolvedValue(undefined);
+  mocks.deleteEvalResult.mockResolvedValue(undefined);
   mocks.deleteEvals.mockReturnValue(undefined);
   mocks.determineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' });
   mocks.evalModel.findById.mockResolvedValue(null);
@@ -519,6 +526,12 @@ const smokeCases: SmokeCase[] = [
     path: '/api/eval',
     body: { ids: [] },
     expectedStatus: 400,
+  },
+  {
+    method: 'delete',
+    openApiPath: '/api/eval/{evalId}/results/{id}',
+    path: '/api/eval/eval-1/results/result-1',
+    expectedStatus: 204,
   },
   {
     method: 'post',

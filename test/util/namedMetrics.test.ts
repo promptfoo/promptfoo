@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { accumulateNamedMetric, backfillNamedScoreWeights } from '../../src/util/namedMetrics';
+import {
+  accumulateNamedMetric,
+  backfillNamedScoreWeights,
+  subtractNamedMetric,
+} from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetric', () => {
   it('preserves weighted totals from grading results while keeping assertion counts', () => {
@@ -104,6 +108,73 @@ describe('backfillNamedScoreWeights', () => {
       namedScores: { accuracy: 1.6 },
       namedScoresCount: { accuracy: 2 },
       namedScoreWeights: { accuracy: 2 },
+    });
+  });
+});
+
+describe('subtractNamedMetric', () => {
+  it('removes legacy metric keys after the final debit without creating count buckets', () => {
+    const metrics = {
+      namedScores: { accuracy: 1 },
+    } as {
+      namedScores: Record<string, number>;
+      namedScoresCount?: Record<string, number>;
+      namedScoreWeights?: Record<string, number>;
+    };
+
+    subtractNamedMetric(metrics as any, {
+      metricName: 'accuracy',
+      metricValue: 1,
+      gradingResult: null,
+    });
+
+    expect(metrics).toEqual({
+      namedScores: {},
+    });
+  });
+
+  it('preserves missing legacy count buckets when surviving rows still have the metric', () => {
+    const metrics = {
+      namedScores: { accuracy: 1.5 },
+    } as {
+      namedScores: Record<string, number>;
+      namedScoresCount?: Record<string, number>;
+      namedScoreWeights?: Record<string, number>;
+    };
+
+    subtractNamedMetric(metrics as any, {
+      metricName: 'accuracy',
+      metricValue: 0.5,
+      gradingResult: null,
+    });
+
+    expect(metrics).toEqual({
+      namedScores: { accuracy: 1 },
+    });
+  });
+
+  it('treats malformed componentResults as having no contributing assertions', () => {
+    const metrics = {
+      namedScores: { accuracy: 1 },
+      namedScoresCount: { accuracy: 1 },
+      namedScoreWeights: { accuracy: 1 },
+    };
+
+    subtractNamedMetric(metrics, {
+      metricName: 'accuracy',
+      metricValue: 1,
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'malformed imported grading result',
+        componentResults: 'not-an-array',
+      } as any,
+    });
+
+    expect(metrics).toEqual({
+      namedScores: {},
+      namedScoresCount: {},
+      namedScoreWeights: {},
     });
   });
 });

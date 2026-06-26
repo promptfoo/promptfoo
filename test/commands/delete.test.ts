@@ -1,17 +1,38 @@
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
+import {
+  deleteCommand,
+  handleEvalDelete,
+  handleEvalDeleteAll,
+  handleEvalResultDelete,
+} from '../../src/commands/delete';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import * as database from '../../src/util/database';
 
 import type { EvalWithMetadata } from '../../src/types/index';
 
 vi.mock('@inquirer/confirm');
-vi.mock('../../src/util/database');
+// `EvalResultNotFoundError` is a runtime export from this module — keep the
+// real class so `instanceof` checks in the SUT (handleEvalResultDelete) work
+// against the same constructor identity the production code throws.
+vi.mock('../../src/util/database', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/util/database')>('../../src/util/database');
+  return {
+    ...actual,
+    deleteEval: vi.fn(),
+    deleteAllEvals: vi.fn(),
+    deleteEvalResult: vi.fn(),
+    getEvalIdForResult: vi.fn(),
+    getEvalFromId: vi.fn(),
+  };
+});
 vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
+vi.mock('../../src/models/evalResult');
 
 describe('delete command', () => {
   let program: Command;
@@ -223,6 +244,61 @@ describe('delete command', () => {
         await program.parseAsync(['node', 'test', 'delete', 'eval', 'specific-id']);
 
         expect(database.deleteEval).toHaveBeenCalledWith('specific-id');
+      });
+    });
+
+    describe('eval-result subcommand', () => {
+      it('looks up the parent evalId then deletes the result scoped to it', async () => {
+        // The CLI takes only the resultId; it must resolve the parent evalId
+        // itself so the storage delete is scoped to (evalId, resultId).
+        vi.mocked(database.getEvalIdForResult).mockResolvedValueOnce('eval-42');
+
+        deleteCommand(program);
+        await program.parseAsync(['node', 'test', 'delete', 'eval-result', 'result-1']);
+
+        expect(EvalResult.findById).not.toHaveBeenCalled();
+        expect(database.getEvalIdForResult).toHaveBeenCalledWith('result-1');
+        expect(database.deleteEvalResult).toHaveBeenCalledWith('eval-42', 'result-1');
+        expect(logger.info).toHaveBeenCalledWith(
+          'Eval result with ID result-1 has been successfully deleted.',
+        );
+      });
+
+      it('exits 1 and skips the storage call when the resultId is unknown', async () => {
+        vi.mocked(database.getEvalIdForResult).mockResolvedValueOnce(null);
+
+        await handleEvalResultDelete('missing-id');
+
+        expect(database.deleteEvalResult).not.toHaveBeenCalled();
+        expect(logger.error).toHaveBeenCalledWith('No eval result found with ID missing-id.');
+        expect(process.exitCode).toBe(1);
+      });
+
+      it('exits 1 with the "not found" message when the row vanishes between lookup and delete', async () => {
+        // Race window: the row passed the existence check, then a concurrent
+        // delete removed it before our DELETE ran. Must surface as "not found"
+        // rather than a generic 500-style error.
+        vi.mocked(database.getEvalIdForResult).mockResolvedValueOnce('eval-42');
+        vi.mocked(database.deleteEvalResult).mockRejectedValueOnce(
+          new database.EvalResultNotFoundError('eval-42', 'result-1'),
+        );
+
+        await handleEvalResultDelete('result-1');
+
+        expect(logger.error).toHaveBeenCalledWith('No eval result found with ID result-1.');
+        expect(process.exitCode).toBe(1);
+      });
+
+      it('exits 1 with the underlying error message for unexpected storage failures', async () => {
+        vi.mocked(database.getEvalIdForResult).mockResolvedValueOnce('eval-42');
+        vi.mocked(database.deleteEvalResult).mockRejectedValueOnce(new Error('disk full'));
+
+        await handleEvalResultDelete('result-1');
+
+        expect(logger.error).toHaveBeenCalledWith(
+          'Could not delete eval result with ID result-1:\ndisk full',
+        );
+        expect(process.exitCode).toBe(1);
       });
     });
   });
