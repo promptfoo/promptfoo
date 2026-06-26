@@ -329,6 +329,69 @@ describe('synthesize', () => {
       );
     });
 
+    it('does not apply the final minimum to an agentic strategy seed', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
+        key: 'mockPlugin',
+      });
+      const strategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: { query: 'long enough final attack' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({ action: strategyAction, id: 'goat' });
+
+      const result = await synthesize({
+        minCharsPerMessage: 10,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(strategyAction).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        'query',
+        expect.any(Object),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+        ]),
+      );
+      expect(result.testCases).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+      );
+    });
+
+    it('preserves effective limits when a plugin intentionally omits pluginConfig', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi
+          .fn()
+          .mockResolvedValue([
+            { vars: { query: 'long enough' }, metadata: { pluginConfig: undefined } },
+          ]),
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        minCharsPerMessage: 10,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases[0].metadata?.pluginConfig).toBeUndefined();
+      expect(result.testCases[0].metadata?.strategyConfig).toEqual(
+        expect.objectContaining({ minCharsPerMessage: 10 }),
+      );
+    });
+
     it('should drop short strategy outputs using strategy minCharsPerMessage', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: vi.fn().mockResolvedValue([{ vars: { query: 'long enough' } }]),

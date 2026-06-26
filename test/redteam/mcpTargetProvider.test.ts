@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPProvider } from '../../src/providers/mcp';
+import { SequenceProvider } from '../../src/providers/sequence';
 import { maybeWrapMcpProviderForRedteam } from '../../src/redteam/mcpTargetProvider';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
@@ -251,5 +252,46 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const wrapped = maybeWrapMcpProviderForRedteam(target, test);
 
     expect(maybeWrapMcpProviderForRedteam(wrapped, test)).toBe(wrapped);
+  });
+
+  it('enforces metadata-only limits after Sequence renders the underlying call', async () => {
+    const target = {
+      id: () => 'openai:test',
+      callApi: vi.fn().mockResolvedValue({ output: 'ok' }),
+    };
+    const test = { metadata: { pluginConfig: { minCharsPerMessage: 5 } } };
+    const wrappedTarget = maybeWrapMcpProviderForRedteam(target, test);
+    const sequence = new SequenceProvider({
+      id: 'sequence',
+      config: { inputs: ['x'] },
+    });
+
+    await expect(
+      sequence.callApi('a sufficiently long outer prompt', {
+        originalProvider: wrappedTarget,
+        prompt: { raw: '{{prompt}}', label: 'prompt' },
+        test,
+        vars: {},
+      }),
+    ).rejects.toThrow('minCharsPerMessage=5');
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('enforces limits after MCP materializes the underlying call', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({ output: JSON.stringify(searchCompaniesCall) }),
+    });
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const test = { metadata: { pluginConfig: { maxCharsPerMessage: 20 } } };
+    const wrapped = maybeWrapMcpProviderForRedteam(target, test);
+
+    await expect(
+      wrapped.callApi('x', {
+        ...redteamContext('x'),
+        test,
+      }),
+    ).rejects.toThrow('maxCharsPerMessage=20');
+    expect(target.calls).toHaveLength(0);
   });
 });

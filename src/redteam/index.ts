@@ -13,30 +13,20 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
-  BIAS_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
-  FINANCIAL_PLUGINS,
-  FOUNDATION_PLUGINS,
   getDefaultNFanout,
-  HARM_PLUGINS,
-  INSURANCE_PLUGINS,
   isFanoutStrategy,
-  MEDICAL_PLUGINS,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
-  PHARMACY_PLUGINS,
-  PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
-  TEEN_SAFETY_PLUGINS,
-  TELECOM_PLUGINS,
 } from './constants';
-import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
+import { AGENTIC_STRATEGIES_SET } from './constants/strategies';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { expandRuntimePlugins, runtimePluginCategories } from './pluginExpansion';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -50,6 +40,7 @@ import {
   getGeneratedTestCaseLengthViolation,
   getMaxCharsPerMessageModifierValue,
   getMinCharsPerMessageModifierValue,
+  getTargetPromptCharLimits,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
   MIN_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from './shared/promptLength';
@@ -396,21 +387,6 @@ function buildRedteamModifiers({
   return modifiers;
 }
 
-const categories = {
-  foundation: FOUNDATION_PLUGINS,
-  harmful: Object.keys(HARM_PLUGINS),
-  'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
-  'coding-agent:all': CODING_AGENT_PLUGINS,
-  bias: BIAS_PLUGINS,
-  pii: PII_PLUGINS,
-  medical: MEDICAL_PLUGINS,
-  pharmacy: PHARMACY_PLUGINS,
-  insurance: INSURANCE_PLUGINS,
-  financial: FINANCIAL_PLUGINS,
-  telecom: TELECOM_PLUGINS,
-  'teen-safety': TEEN_SAFETY_PLUGINS,
-} as const;
-
 /**
  * Formats the test count for display.
  * @param numTests - The number of tests.
@@ -497,24 +473,16 @@ function filterGeneratedTestCasesByCharLimits<T extends TestCase>(
   sourceLabel: string,
   maxCharsPerMessage?: number,
   minCharsPerMessage?: number,
+  ignoreMinCharsPerMessage = false,
 ): T[] {
   return testCases.filter((testCase) => {
-    const strategyConfig = testCase.metadata?.strategyConfig as
-      | { maxCharsPerMessage?: number; minCharsPerMessage?: number }
-      | undefined;
-    const pluginConfig = testCase.metadata?.pluginConfig as
-      | { maxCharsPerMessage?: number; minCharsPerMessage?: number }
-      | undefined;
-    const charLimits = {
-      maxCharsPerMessage:
-        maxCharsPerMessage ??
-        strategyConfig?.maxCharsPerMessage ??
-        pluginConfig?.maxCharsPerMessage,
-      minCharsPerMessage:
-        minCharsPerMessage ??
-        strategyConfig?.minCharsPerMessage ??
-        pluginConfig?.minCharsPerMessage,
-    };
+    const resolvedCharLimits = getTargetPromptCharLimits(
+      { test: testCase },
+      { maxCharsPerMessage, minCharsPerMessage },
+    );
+    const charLimits = ignoreMinCharsPerMessage
+      ? { ...resolvedCharLimits, minCharsPerMessage: undefined }
+      : resolvedCharLimits;
     const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, charLimits);
     if (!violation) {
       return true;
@@ -564,6 +532,21 @@ function addLanguageToPluginMetadata(
       undefined,
     testGenerationInstructions,
   });
+  // Some plugins intentionally omit pluginConfig. Keep that contract while retaining the
+  // effective limits where the canonical runtime resolver can still find them.
+  const resolvedConfig = resolvePluginConfigWithCharLimits(
+    plugin.config,
+    maxCharsPerMessage,
+    minCharsPerMessage,
+  );
+  const effectiveCharLimits = {
+    ...(typeof resolvedConfig.maxCharsPerMessage === 'number' && {
+      maxCharsPerMessage: resolvedConfig.maxCharsPerMessage,
+    }),
+    ...(typeof resolvedConfig.minCharsPerMessage === 'number' && {
+      minCharsPerMessage: resolvedConfig.minCharsPerMessage,
+    }),
+  };
 
   return {
     ...test,
@@ -572,14 +555,17 @@ function addLanguageToPluginMetadata(
       pluginId: plugin.id,
       ...(includePluginConfig && {
         pluginConfig: {
-          ...resolvePluginConfigWithCharLimits(
-            plugin.config,
-            maxCharsPerMessage,
-            minCharsPerMessage,
-          ),
+          ...resolvedConfig,
           ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
         },
       }),
+      ...(!includePluginConfig &&
+        Object.keys(effectiveCharLimits).length > 0 && {
+          strategyConfig: {
+            ...effectiveCharLimits,
+            ...(test.metadata?.strategyConfig as Record<string, unknown> | undefined),
+          },
+        }),
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
       modifiers: {
         ...pluginModifiers,
@@ -1096,6 +1082,17 @@ export async function synthesize({
     return true;
   });
 
+  let hasAgenticStrategy = strategies.some((strategy) => {
+    if (AGENTIC_STRATEGIES_SET.has(strategy.id as any)) {
+      return true;
+    }
+    if (strategy.id !== 'layer' || !Array.isArray(strategy.config?.steps)) {
+      return false;
+    }
+    return strategy.config.steps.some((step: string | { id?: string }) =>
+      AGENTIC_STRATEGIES_SET.has((typeof step === 'string' ? step : step.id) as any),
+    );
+  });
   // Only extract intent/goal when strategies that need it are selected
   const needsGoalExtraction = strategies.some(
     (s) => Strategies.find((def) => def.id === s.id)?.requiresGoalExtraction,
@@ -1232,61 +1229,16 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
-  // Expand plugins first
-  for (const [category, categoryPlugins] of Object.entries(categories)) {
-    const plugin = plugins.find((p) => p.id === category);
-    if (plugin) {
-      plugins.push(
-        ...categoryPlugins.map((p) => ({
-          id: p,
-          numTests: plugin.numTests,
-          config: plugin.config,
-        })),
-      );
-    }
-  }
-
-  const expandedPlugins: typeof plugins = [];
-  const expandPlugin = (
-    plugin: (typeof plugins)[0],
-    mapping: { plugins: string[]; strategies: string[] },
-  ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests, config: plugin.config }),
-    );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
-  };
-
-  plugins.forEach((plugin) => {
-    // First check if this is a direct plugin that should not be expanded
-    // This is for plugins like bias:gender that have a prefix matching an alias
-    const isDirectPlugin = Plugins.some((p) => p.key === plugin.id);
-
-    if (isDirectPlugin) {
-      expandedPlugins.push(plugin);
-      return;
-    }
-
-    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
-      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
-    );
-
-    if (mappingKey) {
-      const mapping =
-        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((_m) =>
-          plugin.id.startsWith(`${mappingKey}:`),
-        );
-      if (mapping) {
-        expandPlugin(plugin, mapping);
-      }
-    } else {
-      expandedPlugins.push(plugin);
-    }
-  });
+  // Expand plugins using the same concrete expansion shared with config validation.
+  const expanded = expandRuntimePlugins(plugins, (id) =>
+    Plugins.some((registered) => registered.key === id),
+  );
+  const expandedPlugins = expanded.plugins;
+  strategies.push(...expanded.strategyIds.map((id) => ({ id })));
+  hasAgenticStrategy ||= expanded.strategyIds.some((id) => AGENTIC_STRATEGIES_SET.has(id as any));
 
   const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
-    if (Object.keys(categories).includes(plugin.id)) {
+    if (Object.keys(runtimePluginCategories).includes(plugin.id)) {
       return false;
     }
     const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
@@ -1462,6 +1414,7 @@ export async function synthesize({
               `Plugin ${plugin.id}`,
               maxCharsPerMessage,
               minCharsPerMessage,
+              hasAgenticStrategy,
             );
 
             return {
@@ -1631,6 +1584,7 @@ export async function synthesize({
             `Custom plugin ${plugin.id}`,
             maxCharsPerMessage,
             minCharsPerMessage,
+            hasAgenticStrategy,
           );
 
           return {
@@ -1774,8 +1728,20 @@ export async function synthesize({
     progressBar?.increment(strategyTestCases.length);
   }
 
+  // Agentic strategies may need a short seed to produce a compliant final attack. Do not
+  // expose that seed as a basic test: enforce the final minimum after strategies complete.
+  const finalPluginTestCases = hasAgenticStrategy
+    ? filterGeneratedTestCasesByCharLimits(
+        pluginTestCases,
+        injectVar,
+        'Plugin final output',
+        maxCharsPerMessage,
+        minCharsPerMessage,
+      )
+    : pluginTestCases;
+
   // Combine test cases based on basic strategy setting
-  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+  const finalTestCases = [...(includeBasicTests ? finalPluginTestCases : []), ...strategyTestCases];
 
   // Check for abort signal
   checkAbort();

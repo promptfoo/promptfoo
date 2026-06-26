@@ -64,8 +64,8 @@ export async function addLayerTestCases(
     const step = steps[i];
     const stepObj = typeof step === 'string' ? { id: step } : step;
     const stepConfig = {
-      ...(stepObj.config || {}),
       ...(config || {}),
+      ...(stepObj.config || {}),
     };
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -90,9 +90,25 @@ export async function addLayerTestCases(
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
       const { steps: _steps, ...layerConfig } = config || {};
+      // Runtime enforcement happens after every per-turn transform. A trailing step's
+      // explicit limit therefore becomes the attack provider's effective limit.
+      const trailingCharLimits = remainingSteps.reduceRight<Record<string, unknown>>(
+        (limits, remainingStep) => {
+          const remainingConfig =
+            typeof remainingStep === 'string' ? undefined : remainingStep.config;
+          for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
+            if (limits[key] === undefined && remainingConfig?.[key] !== undefined) {
+              limits[key] = remainingConfig[key];
+            }
+          }
+          return limits;
+        },
+        {},
+      );
       const attackProviderConfig = {
-        ...(stepObj.config || {}),
         ...layerConfig,
+        ...(stepObj.config || {}),
+        ...trailingCharLimits,
       };
 
       logger.debug(`layer strategy: configuring attack provider`, {
@@ -172,8 +188,8 @@ export async function addLayerTestCases(
     );
 
     const next = await stepAction(applicable, injectVar, stepConfig);
-    const maxCharsPerMessage = stepConfig.maxCharsPerMessage as number | undefined;
-    const minCharsPerMessage = stepConfig.minCharsPerMessage as number | undefined;
+    const maxCharsPerMessage = stepObj.config?.maxCharsPerMessage as number | undefined;
+    const minCharsPerMessage = stepObj.config?.minCharsPerMessage as number | undefined;
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = (next as TestCaseWithPlugin[]).filter((testCase) => {
@@ -193,7 +209,17 @@ export async function addLayerTestCases(
     });
   }
 
-  return current;
+  // Inherited layer limits describe the completed pipeline, not every intermediate
+  // transform. Step-specific limits above remain immediate constraints.
+  const finalMaxCharsPerMessage = config.maxCharsPerMessage as number | undefined;
+  const finalMinCharsPerMessage = config.minCharsPerMessage as number | undefined;
+  return current.filter(
+    (testCase) =>
+      !getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, {
+        maxCharsPerMessage: finalMaxCharsPerMessage,
+        minCharsPerMessage: finalMinCharsPerMessage,
+      }),
+  );
 }
 
 /**

@@ -55,14 +55,25 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
     if (
       Array.isArray(parsed) &&
       parsed.every(
-        // TODO(ian): Support multimodal chat content arrays and count only text parts instead of
-        // falling back to the full serialized JSON payload, which can include base64 media blobs.
         (item) =>
-          isRecord(item) && typeof item.role === 'string' && typeof item.content === 'string',
+          isRecord(item) &&
+          typeof item.role === 'string' &&
+          (typeof item.content === 'string' ||
+            (Array.isArray(item.content) &&
+              item.content.every((part) => isRecord(part) && typeof part.type === 'string'))),
       )
     ) {
       return parsed.map((message, index) => ({
-        content: message.content,
+        content:
+          typeof message.content === 'string'
+            ? message.content
+            : message.content
+                .filter(
+                  (part: Record<string, unknown>) =>
+                    part.type === 'text' && typeof part.text === 'string',
+                )
+                .map((part: Record<string, unknown>) => part.text)
+                .join(''),
         path: `[${index}].content`,
         role: message.role,
       }));
@@ -294,6 +305,13 @@ export function getTargetPromptCharLimits(
     maxCharsPerMessage: getLimit('maxCharsPerMessage'),
     minCharsPerMessage: getLimit('minCharsPerMessage'),
   };
+}
+
+export function isTargetPromptCharLimitError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    (error.message.includes('maxCharsPerMessage=') || error.message.includes('minCharsPerMessage='))
+  );
 }
 
 export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {

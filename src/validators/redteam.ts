@@ -4,7 +4,6 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   ALL_STRATEGIES,
-  CANARY_BREAKING_STRATEGY_IDS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
@@ -17,18 +16,18 @@ import {
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
-  PLUGIN_CATEGORIES,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
-  STRATEGY_EXEMPT_PLUGINS,
   TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
-import { isCustomStrategy, MULTI_TURN_STRATEGIES } from '../redteam/constants/strategies';
+import { isCustomStrategy } from '../redteam/constants/strategies';
+import { expandRuntimePlugins } from '../redteam/pluginExpansion';
+import { pluginIdMatchesStrategyTargets } from '../redteam/strategies/pluginTargeting';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
@@ -231,82 +230,22 @@ function strategyTargetsPlugin(
   pluginId: string,
   pluginConfig: Record<string, unknown> | undefined,
 ): boolean {
-  if (!strategyId) {
-    return true;
-  }
-  if (STRATEGY_EXEMPT_PLUGINS.some((exemptPlugin) => exemptPlugin === pluginId)) {
-    return false;
-  }
-  if (
-    (CANARY_BREAKING_STRATEGY_IDS as readonly string[]).includes(strategyId) &&
-    getExpandedPluginIds(pluginId).some((expandedPluginId) =>
-      expandedPluginId.startsWith('coding-agent:'),
-    )
-  ) {
-    return false;
-  }
-  if (
-    (MULTI_TURN_STRATEGIES as readonly string[]).includes(strategyId) &&
-    getExpandedPluginIds(pluginId).includes('cross-session-leak')
-  ) {
-    return false;
-  }
-  if (getStringList(pluginConfig?.excludeStrategies)?.includes(strategyId)) {
-    return false;
-  }
-  const targetPlugins = getStringList(strategyConfig?.plugins);
-  return (
-    !targetPlugins ||
-    targetPlugins.length === 0 ||
-    targetPlugins.some((targetPlugin) => pluginMatchesTarget(pluginId, targetPlugin))
-  );
-}
-
-function pluginMatchesTarget(pluginId: string, targetPlugin: string): boolean {
-  return getExpandedPluginIds(pluginId).some((expandedPluginId) =>
-    pluginIdsOverlap(expandedPluginId, targetPlugin),
-  );
-}
-
-function getExpandedPluginIds(pluginId: string): string[] {
-  if (ALIASED_PLUGIN_MAPPINGS[pluginId]) {
-    return Object.values(ALIASED_PLUGIN_MAPPINGS[pluginId]).flatMap(({ plugins }) =>
-      plugins.flatMap(getExpandedPluginIds),
-    );
-  }
-  if (COLLECTIONS.includes(pluginId as Collection)) {
-    return getCollectionPluginIds(pluginId as Collection);
-  }
-  const aliasedMapping = Object.values(ALIASED_PLUGIN_MAPPINGS).find((mapping) =>
-    Object.keys(mapping).includes(pluginId),
-  );
-  return aliasedMapping?.[pluginId].plugins.flatMap(getExpandedPluginIds) ?? [pluginId];
-}
-
-function getCollectionPluginIds(collection: Collection): string[] {
-  const collectionPlugins: Record<Collection, readonly string[]> = {
-    ...PLUGIN_CATEGORIES,
-    foundation: [...FOUNDATION_PLUGINS],
-    default: [...REDTEAM_DEFAULT_PLUGINS],
-    'guardrails-eval': [...GUARDRAILS_EVALUATION_PLUGINS],
-    'coding-agent:core': [...CODING_AGENT_CORE_PLUGINS],
-    'coding-agent:all': [...CODING_AGENT_PLUGINS],
-  };
-  return [...collectionPlugins[collection]];
-}
-
-function pluginIdsOverlap(pluginId: string, targetPlugin: string): boolean {
-  return (
-    pluginId === targetPlugin ||
-    pluginId.startsWith(`${targetPlugin}:`) ||
-    targetPlugin.startsWith(`${pluginId}:`)
+  // Validate the same concrete plugin ids that runtime materializes, then delegate the
+  // targeting decision to runtime's predicate instead of maintaining a validator simulation.
+  return expandRuntimePlugins([{ id: pluginId, config: pluginConfig }]).plugins.some((plugin) =>
+    pluginIdMatchesStrategyTargets(
+      plugin.id,
+      plugin.config,
+      strategyId,
+      getStringList(strategyConfig?.plugins),
+    ),
   );
 }
 
 type ScopedPromptLimitConfig = Record<string, unknown> & {
   maxCharsPerMessage?: unknown;
   minCharsPerMessage?: unknown;
-  steps?: ScopedPromptLimit[];
+  steps?: unknown[];
 };
 type ScopedPromptLimit = string | { id: string; config?: ScopedPromptLimitConfig };
 
@@ -316,6 +255,18 @@ type PromptLimitConfig = {
   plugins?: ScopedPromptLimit[];
   strategies?: ScopedPromptLimit[];
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '[unserializable]';
+  }
+}
 
 function isBasicStrategy(strategy: ScopedPromptLimit): boolean {
   return (typeof strategy === 'string' ? strategy : strategy.id) === 'basic';
@@ -330,12 +281,17 @@ function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | numb
 }
 
 function validateScopedCharsPerMessageLimits(
-  scopes: ScopedPromptLimit[],
+  scopes: unknown[],
   pathPrefix: Array<string | number>,
   ctx: z.RefinementCtx,
+  seen = new WeakSet<object>(),
 ): void {
   for (const [index, scope] of scopes.entries()) {
-    if (typeof scope === 'string' || !scope.config) {
+    if (typeof scope === 'string' || !isRecord(scope) || seen.has(scope)) {
+      continue;
+    }
+    seen.add(scope);
+    if (!isRecord(scope.config)) {
       continue;
     }
     const configPath = [...pathPrefix, index, 'config'];
@@ -357,7 +313,7 @@ function validateScopedCharsPerMessageLimits(
       addCharsPerMessageRangeIssue(ctx, [...configPath, 'minCharsPerMessage']);
     }
     if (Array.isArray(scope.config.steps)) {
-      validateScopedCharsPerMessageLimits(scope.config.steps, [...configPath, 'steps'], ctx);
+      validateScopedCharsPerMessageLimits(scope.config.steps, [...configPath, 'steps'], ctx, seen);
     }
   }
 }
@@ -370,34 +326,50 @@ function validateEffectiveCharsPerMessageRanges(
     index,
     plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
   }));
+  const seenLayerScopes = new WeakSet<object>();
+  const expandLayerSteps = (
+    strategy: ScopedPromptLimit,
+    index: number,
+    inheritedConfig?: Record<string, unknown>,
+  ): Array<{ index: number; strategy: { id: string; config?: Record<string, unknown> } }> => {
+    if (typeof strategy === 'string') {
+      return [{ index, strategy: { id: strategy, config: inheritedConfig } }];
+    }
+    if (!isRecord(strategy) || typeof strategy.id !== 'string' || seenLayerScopes.has(strategy)) {
+      return [];
+    }
+    seenLayerScopes.add(strategy);
+    const ownConfig = isRecord(strategy.config) ? strategy.config : {};
+    // Runtime layers inherit their outer config, while a step's explicit targeting wins.
+    const config = {
+      ...inheritedConfig,
+      ...ownConfig,
+      ...(ownConfig.plugins === undefined && inheritedConfig?.plugins !== undefined
+        ? { plugins: inheritedConfig.plugins }
+        : {}),
+    };
+    const current = [{ index, strategy: { id: strategy.id, config } }];
+    if (strategy.id !== 'layer' || !Array.isArray(ownConfig.steps)) {
+      return current;
+    }
+    return [
+      ...current,
+      ...ownConfig.steps.flatMap((step) =>
+        expandLayerSteps(step as ScopedPromptLimit, index, config),
+      ),
+    ];
+  };
   const strategyConfigs = (data.strategies ?? [])
     .filter((strategy) => !isBasicStrategy(strategy))
-    .flatMap((strategy, index) => {
-      const strategyObject = typeof strategy === 'string' ? { id: strategy } : strategy;
-      if (strategyObject.id !== 'layer' || !Array.isArray(strategyObject.config?.steps)) {
-        return [{ index, strategy: strategyObject }];
-      }
-
-      const layerStepConfigs = strategyObject.config.steps
-        .filter((step): step is Exclude<ScopedPromptLimit, string> => typeof step !== 'string')
-        .map((step) => ({
-          index,
-          strategy: {
-            id: step.id,
-            config: {
-              ...step.config,
-              ...strategyObject.config,
-              ...(step.config?.plugins === undefined ? {} : { plugins: step.config.plugins }),
-            },
-          },
-        }));
-      return [{ index, strategy: strategyObject }, ...layerStepConfigs];
-    });
+    .flatMap((strategy, index) => expandLayerSteps(strategy, index));
   const effectivePlugins =
     pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
   const effectiveStrategies =
     strategyConfigs.length > 0 ? strategyConfigs : [{ index: 0, strategy: { id: '' } }];
   for (const { index: strategyIndex, strategy } of effectiveStrategies) {
+    if (strategy.config?.numTests === 0) {
+      continue;
+    }
     for (const { index: pluginIndex, plugin } of effectivePlugins) {
       if (!strategyTargetsPlugin(strategy.id, strategy.config, plugin.id, plugin.config)) {
         continue;
@@ -424,6 +396,24 @@ function validateEffectiveCharsPerMessageRanges(
   }
 }
 
+function safeConfigKey(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    return (
+      JSON.stringify(value, (_key, item) => {
+        if (isRecord(item)) {
+          if (seen.has(item)) {
+            return '[Circular]';
+          }
+          seen.add(item);
+        }
+        return item;
+      }) ?? ''
+    );
+  } catch {
+    return '[Unserializable]';
+  }
+}
 /**
  * Schema for `promptfoo redteam generate` command options
  */
@@ -647,7 +637,7 @@ export const RedteamConfigSchema = z
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      const key = `${id}:${JSON.stringify(config)}:${severity || ''}`;
+      const key = `${id}:${safeJsonStringify(config)}:${severity || ''}`;
       const pluginObject: RedteamPluginObject = { id };
       if (numTests !== undefined || data.numTests !== undefined) {
         pluginObject.numTests = numTests ?? data.numTests;
@@ -669,7 +659,9 @@ export const RedteamConfigSchema = z
     ) => {
       (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
         // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
-        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
+        const existingPlugin = pluginMap.get(
+          `${item}:${safeJsonStringify(config)}:${severity || ''}`,
+        );
         if (!existingPlugin || existingPlugin.numTests === undefined) {
           addPlugin(item, config, numTests, severity);
         }
@@ -776,7 +768,7 @@ export const RedteamConfigSchema = z
         if (a.id !== b.id) {
           return a.id.localeCompare(b.id);
         }
-        return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
+        return safeConfigKey(a.config || {}).localeCompare(safeConfigKey(b.config || {}));
       });
 
     // Helper to generate a unique key for strategies
@@ -790,12 +782,12 @@ export const RedteamConfigSchema = z
           return `layer/${strategy.config.label}`;
         }
         if (strategy.config.steps) {
-          return `layer:${JSON.stringify(strategy.config.steps)}`;
+          return `layer:${safeJsonStringify(strategy.config.steps)}`;
         }
       }
       // For other strategies with config, include config in key to allow multiple instances
       if (strategy.config && Object.keys(strategy.config).length > 0) {
-        return `${strategy.id}:${JSON.stringify(strategy.config)}`;
+        return `${strategy.id}:${safeJsonStringify(strategy.config)}`;
       }
       return strategy.id;
     };

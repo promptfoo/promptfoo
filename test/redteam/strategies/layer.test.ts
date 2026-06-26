@@ -198,6 +198,19 @@ describe('addLayerTestCases', () => {
     expect(result).toEqual([]);
   });
 
+  it('validates inherited limits after the completed layer pipeline', async () => {
+    const result = await addLayerTestCases(
+      [{ vars: { input: 'a' }, metadata: { pluginId: 'test-plugin' } }],
+      'input',
+      { minCharsPerMessage: 10, steps: ['base64', 'multilingual'] },
+      mockStrategies,
+      mockLoadStrategy,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars?.input).toContain('[Translated to Spanish]');
+  });
+
   it('should validate layer step limits against multi-input values', async () => {
     const result = await addLayerTestCases(
       [
@@ -493,6 +506,28 @@ describe('addLayerTestCases', () => {
       );
 
       expect(result[0].metadata?.strategyConfig).toEqual({ minCharsPerMessage: 100 });
+    });
+
+    it('carries trailing per-turn limits into attack provider effective config', async () => {
+      const result = await addLayerTestCases(
+        [{ vars: { input: 'test' }, metadata: { pluginId: 'test-plugin' } }],
+        'input',
+        {
+          minCharsPerMessage: 10,
+          steps: ['jailbreak:hydra', { id: 'audio', config: { minCharsPerMessage: 42 } }],
+        },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({ minCharsPerMessage: 42 }),
+        }),
+      );
+      expect(result[0].metadata?.strategyConfig).toEqual(
+        expect.objectContaining({ minCharsPerMessage: 42 }),
+      );
     });
 
     it('should detect hydra as attack provider and configure per-turn layers', async () => {

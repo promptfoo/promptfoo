@@ -29,6 +29,7 @@ import {
 } from '../remoteMaterialization';
 import {
   getTargetPromptCharLimits,
+  isTargetPromptCharLimitError,
   throwIfTargetPromptViolatesCharLimits,
 } from '../shared/promptLength';
 import {
@@ -820,7 +821,7 @@ export default class GoatProvider implements ApiProvider {
           logger.debug('[GOAT] Operation aborted');
           throw error;
         }
-        if (isRemoteMaterializationUpgradeError(error)) {
+        if (isRemoteMaterializationUpgradeError(error) || isTargetPromptCharLimitError(error)) {
           throw error;
         }
         logger.error(

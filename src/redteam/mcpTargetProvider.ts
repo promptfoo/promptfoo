@@ -2,6 +2,11 @@ import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
+import {
+  getTargetPromptCharLimits,
+  isTargetPromptCharLimitError,
+  throwIfTargetPromptViolatesCharLimits,
+} from './shared/promptLength';
 
 import type { MCPTool } from '../providers/mcp/types';
 import type {
@@ -13,18 +18,87 @@ import type {
 } from '../types';
 
 const WRAPPED_MCP_PROVIDER = Symbol('wrappedMcpProvider');
+const WRAPPED_CHAR_LIMIT_PROVIDER = Symbol('wrappedCharLimitProvider');
 
 type McpProviderWithTools = ApiProvider & {
   getAvailableTools: () => Promise<MCPTool[]>;
   [WRAPPED_MCP_PROVIDER]?: true;
 };
 
+type CharLimitedProvider = ApiProvider & {
+  [WRAPPED_CHAR_LIMIT_PROVIDER]?: true;
+};
+
 function isRedteamTest(test: AtomicTestCase | undefined): boolean {
-  return Boolean(test?.metadata?.pluginId || test?.metadata?.strategyId);
+  return Boolean(
+    test?.metadata?.pluginId ||
+      test?.metadata?.strategyId ||
+      test?.metadata?.pluginConfig ||
+      test?.metadata?.strategyConfig,
+  );
+}
+
+function hasTargetPromptCharLimits(test: AtomicTestCase | undefined): boolean {
+  const limits = getTargetPromptCharLimits(test ? { test } : undefined);
+  return limits.maxCharsPerMessage !== undefined || limits.minCharsPerMessage !== undefined;
 }
 
 function isMcpProviderWithTools(provider: ApiProvider): provider is McpProviderWithTools {
   return provider instanceof MCPProvider && typeof provider.getAvailableTools === 'function';
+}
+
+class CharLimitedTargetProvider implements ApiProvider {
+  [WRAPPED_CHAR_LIMIT_PROVIDER] = true as const;
+  label?: string;
+  config?: ApiProvider['config'];
+  delay?: ApiProvider['delay'];
+  transform?: ApiProvider['transform'];
+  inputs?: ApiProvider['inputs'];
+
+  constructor(private readonly target: ApiProvider) {
+    this.label = target.label;
+    this.config = target.config;
+    this.delay = target.delay;
+    this.transform = target.transform;
+    this.inputs = target.inputs;
+  }
+
+  id(): string {
+    return this.target.id();
+  }
+
+  toString(): string {
+    return this.target.toString?.() ?? this.id();
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    throwIfTargetPromptViolatesCharLimits(prompt, getTargetPromptCharLimits(context));
+    return this.target.callApi(prompt, context, options);
+  }
+
+  async cleanup(): Promise<void> {
+    await this.target.cleanup?.();
+  }
+
+  async getAvailableTools(): Promise<MCPTool[]> {
+    return (this.target as McpProviderWithTools).getAvailableTools();
+  }
+}
+
+function maybeWrapTargetProviderForCharLimits(
+  provider: ApiProvider,
+  test: AtomicTestCase | undefined,
+): ApiProvider {
+  if (!isRedteamTest(test) || !hasTargetPromptCharLimits(test)) {
+    return provider;
+  }
+  return (provider as CharLimitedProvider)[WRAPPED_CHAR_LIMIT_PROVIDER]
+    ? provider
+    : new CharLimitedTargetProvider(provider);
 }
 
 class RedteamMcpTargetProvider implements ApiProvider {
@@ -106,6 +180,9 @@ class RedteamMcpTargetProvider implements ApiProvider {
 
       return await this.target.callApi(materializedPrompt, materializedContext, options);
     } catch (error) {
+      if (isTargetPromptCharLimitError(error)) {
+        throw error;
+      }
       return {
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
@@ -128,9 +205,12 @@ export function maybeWrapMcpProviderForRedteam(
   provider: ApiProvider,
   test: AtomicTestCase | undefined,
 ): ApiProvider {
-  if (!isRedteamTest(test) || (provider as McpProviderWithTools)[WRAPPED_MCP_PROVIDER]) {
-    return provider;
+  const limitedProvider = maybeWrapTargetProviderForCharLimits(provider, test);
+  if (!isRedteamTest(test) || (limitedProvider as McpProviderWithTools)[WRAPPED_MCP_PROVIDER]) {
+    return limitedProvider;
   }
 
-  return isMcpProviderWithTools(provider) ? new RedteamMcpTargetProvider(provider) : provider;
+  return isMcpProviderWithTools(provider)
+    ? new RedteamMcpTargetProvider(limitedProvider as McpProviderWithTools)
+    : limitedProvider;
 }

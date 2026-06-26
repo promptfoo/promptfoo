@@ -171,7 +171,7 @@ describe('RedteamGoatProvider', () => {
     const targetProvider = createMockTargetProvider();
     const context = createMockContext(targetProvider);
 
-    await provider.callApi('test prompt', context);
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('maxCharsPerMessage=5');
 
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
@@ -186,7 +186,7 @@ describe('RedteamGoatProvider', () => {
     const targetProvider = createMockTargetProvider();
     const context = createMockContext(targetProvider);
 
-    await provider.callApi('test prompt', context);
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('minCharsPerMessage=20');
 
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
@@ -202,7 +202,7 @@ describe('RedteamGoatProvider', () => {
     const targetProvider = createMockTargetProvider();
     const context = createMockContext(targetProvider);
 
-    await provider.callApi('test prompt', context);
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('minCharsPerMessage=20');
 
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
