@@ -367,12 +367,42 @@ async function resolveConfiguredProviderInputs(
   providerPath: string,
   providerOptions: ProviderOptions = {},
   configEnv?: EnvOverrides,
+  basePath?: string,
+  visitedProviderFiles: ReadonlySet<string> = new Set(),
 ): Promise<unknown> {
   const mergedEnv =
     configEnv || providerOptions.env ? { ...configEnv, ...providerOptions.env } : undefined;
   const renderedProviderPath = renderValidationEnvTemplates(providerPath, mergedEnv);
   const renderedOptions = renderValidationEnvTemplates(providerOptions, mergedEnv);
   const configuredInputs = getConfiguredProviderInputs(renderedOptions);
+
+  if (isProviderConfigFileReference(renderedProviderPath)) {
+    if (visitedProviderFiles.has(renderedProviderPath)) {
+      throw new Error('Circular provider config file reference');
+    }
+    const nextVisitedProviderFiles = new Set(visitedProviderFiles).add(renderedProviderPath);
+    const { configs, relativePath, wasArray } = readProviderConfigFile(
+      renderedProviderPath,
+      basePath,
+    );
+    const fileContent = configs[0];
+    invariant(fileContent, `Provider config file ${relativePath} contains no providers`);
+    if (wasArray) {
+      throw new Error(
+        `Multiple providers found in ${relativePath}. Use loadApiProviders instead of loadApiProvider.`,
+      );
+    }
+    invariant(fileContent.id, `Provider config ${relativePath} must have an id`);
+    const mergedFileEnv =
+      fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
+    return resolveConfiguredProviderInputs(
+      fileContent.id,
+      { ...fileContent, env: mergedFileEnv },
+      configEnv,
+      basePath,
+      nextVisitedProviderFiles,
+    );
+  }
 
   if (!isCloudProvider(renderedProviderPath)) {
     for (const factory of await getProviderFactories(renderedProviderPath)) {
@@ -393,39 +423,54 @@ async function resolveConfiguredProviderInputs(
   if (isCloudProvider(renderedCloudProviderId)) {
     throw new Error('A cloud provider cannot point to another cloud provider');
   }
-  for (const factory of await getProviderFactories(renderedCloudProviderId)) {
-    if (factory.test(renderedCloudProviderId)) {
-      return configuredInputs ?? getConfiguredProviderInputs(cloudProvider);
-    }
-  }
-  throw new Error(getUnknownProviderErrorMessage('[redacted]'));
+  return resolveConfiguredProviderInputs(
+    renderedCloudProviderId,
+    {
+      ...cloudProvider,
+      inputs: configuredInputs ?? getConfiguredProviderInputs(cloudProvider),
+      env: { ...cloudProvider.env, ...providerOptions.env },
+    },
+    configEnv,
+    basePath,
+    visitedProviderFiles,
+  );
 }
 
 const SIMPLE_ENV_TEMPLATE =
-  /\{\{\s*env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(['"])([^'"]+)\2\s*\])\s*\}\}/g;
+  /\{\{\s*env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(['"])([^'"]+)\2\s*\])(?:\s*\|\s*default\(\s*(['"])([^\r\n]*?)\4\s*(?:,\s*(true|false)\s*)?\))?\s*\}\}/g;
 const MAX_PROVIDER_VALIDATION_DEPTH = 1000;
 const MAX_PROVIDER_VALIDATION_NODES = 10_000;
 const PROVIDER_VALIDATION_COMPLEXITY_ERROR = 'Provider configuration is too complex to validate';
 
 /**
- * Render only direct environment lookups during provider metadata validation.
+ * Render direct environment lookups and literal default filters during provider validation.
  *
  * Runtime provider loading supports the full Nunjucks language, but validation happens before
  * provider lifecycle ownership is established. Keeping this renderer deliberately small prevents
- * expressions and filters from executing while still supporting the documented {{ env.NAME }}
- * and {{ env['NAME'] }} forms needed to locate provider configs and read input metadata.
+ * expressions and arbitrary filters from executing while still supporting the documented
+ * {{ env.NAME }}, {{ env['NAME'] }}, and literal default(...) forms needed to locate provider
+ * configs and read input metadata.
  */
 function renderValidationEnvTemplates<T>(value: T, env: EnvOverrides | undefined): T {
   if (typeof value === 'string') {
     if (isConfigTemplatingDisabled()) {
       return value;
     }
-    return value.replace(SIMPLE_ENV_TEMPLATE, (match, dotName, _quote, bracketName) => {
-      const name = dotName ?? bracketName;
-      const replacement =
-        env && Object.prototype.hasOwnProperty.call(env, name) ? env[name] : undefined;
-      return replacement === undefined ? match : replacement;
-    }) as T;
+    return value.replace(
+      SIMPLE_ENV_TEMPLATE,
+      (match, dotName, _quote, bracketName, defaultQuote, defaultValue, useFalsyDefault) => {
+        const name = dotName ?? bracketName;
+        const replacement =
+          env && Object.prototype.hasOwnProperty.call(env, name) ? env[name] : undefined;
+        if (
+          defaultQuote !== undefined &&
+          (replacement === undefined || (useFalsyDefault === 'true' && !replacement))
+        ) {
+          return defaultValue;
+        }
+        return replacement === undefined ? match : replacement;
+      },
+    ) as T;
   }
   if (!value || typeof value !== 'object') {
     return value;
@@ -573,13 +618,19 @@ export async function resolveProviderInputsForValidation(
       const descriptor = normalizeProviderRef(provider, { index });
       switch (descriptor.kind) {
         case 'named':
-          return resolveConfiguredProviderInputs(descriptor.loadProviderPath, {}, configEnv);
+          return resolveConfiguredProviderInputs(
+            descriptor.loadProviderPath,
+            {},
+            configEnv,
+            options.basePath,
+          );
         case 'options':
         case 'map':
           return resolveConfiguredProviderInputs(
             descriptor.loadProviderPath,
             descriptor.loadOptions,
             configEnv,
+            options.basePath,
           );
         case 'file':
           throw new Error(`Unresolved provider config file: ${descriptor.loadProviderPath}`);

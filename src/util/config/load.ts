@@ -965,6 +965,10 @@ export async function resolveConfigs(
       env: config.env,
       basePath,
     });
+    // Keep hook callers on the same selected-provider view used for construction.
+    if (hooks?.beforeProviderLoad) {
+      config.providers = filteredProviderConfigs;
+    }
   } catch (error) {
     cliState.basePath = previousBasePath;
     cliState.config = previousConfig;

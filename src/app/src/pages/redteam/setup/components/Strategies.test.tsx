@@ -253,6 +253,34 @@ describe('Strategies', () => {
       expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeDisabled();
     });
 
+    it('allows Posterior Attack for sequence provider input arrays', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            id: 'sequence',
+            config: {
+              stateful: false,
+              inputs: ['First {{prompt}}', 'Second {{prompt}}'],
+            },
+          },
+          strategies: [{ id: 'posterior' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeEnabled();
+      expect(
+        screen.queryByText('Posterior Attack requires a single-input target'),
+      ).not.toBeInTheDocument();
+    });
+
     it('blocks progression but allows removing Posterior Attack after inputs are configured', async () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({

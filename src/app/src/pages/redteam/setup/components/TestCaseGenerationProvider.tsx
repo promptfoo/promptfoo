@@ -18,6 +18,7 @@ import {
   type Strategy,
 } from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
+import { isPluginCompatibleWithStrategy } from './strategies/utils';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
@@ -235,14 +236,22 @@ export const TestCaseGenerationProvider: React.FC<{
 
   // Compute available plugins from config
   const availablePlugins = useMemo(() => {
-    const plugins =
-      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
+    const configuredPlugins = redTeamConfig.plugins ?? [];
+    const compatiblePlugins = strategy
+      ? configuredPlugins.filter((plugin) =>
+          isPluginCompatibleWithStrategy(plugin, strategy.id, strategy.config?.plugins),
+        )
+      : configuredPlugins;
+    const previewPlugins = compatiblePlugins.length > 0 ? compatiblePlugins : configuredPlugins;
+    const plugins = previewPlugins
+      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+      .filter(Boolean);
     // If no plugins are configured, provide a default
     if (plugins.length === 0) {
       return [DEFAULT_PLUGIN];
     }
     return plugins;
-  }, [redTeamConfig.plugins]);
+  }, [redTeamConfig.plugins, strategy]);
 
   // ===================================================================
   // Refs

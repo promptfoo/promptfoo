@@ -5,6 +5,7 @@ import {
   getStrategyId,
   hasAnyPosteriorStrategy,
   hasPosteriorStrategy,
+  isPluginCompatibleWithStrategy,
   isStrategyConfigured,
 } from './utils';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
@@ -101,6 +102,24 @@ describe('hasPosteriorStrategy', () => {
 
     expect(hasPosteriorStrategy([nested as RedteamStrategy])).toBe(true);
     expect(hasPosteriorStrategy([wide as RedteamStrategy])).toBe(false);
+  });
+});
+
+describe('isPluginCompatibleWithStrategy', () => {
+  it('supports direct and category-prefix targeting', () => {
+    expect(isPluginCompatibleWithStrategy('policy', 'layer', ['policy'])).toBe(true);
+    expect(isPluginCompatibleWithStrategy('harmful:hate', 'layer', ['harmful'])).toBe(true);
+    expect(isPluginCompatibleWithStrategy('pii:direct', 'layer', ['harmful'])).toBe(false);
+  });
+
+  it('excludes plugins that disable the strategy', () => {
+    expect(
+      isPluginCompatibleWithStrategy(
+        { id: 'harmful:hate', config: { excludeStrategies: ['layer'] } },
+        'layer',
+        ['harmful'],
+      ),
+    ).toBe(false);
   });
 });
 

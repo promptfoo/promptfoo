@@ -1,4 +1,4 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, STRATEGY_EXEMPT_PLUGINS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy, RedteamStrategyObject } from '@promptfoo/redteam/types';
 
@@ -6,6 +6,28 @@ import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
+}
+
+export function isPluginCompatibleWithStrategy(
+  plugin: string | { id: string; config?: unknown },
+  strategyId: string,
+  targetPlugins?: readonly string[],
+): boolean {
+  const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
+  if (STRATEGY_EXEMPT_PLUGINS.some((exemptPlugin) => exemptPlugin === pluginId)) {
+    return false;
+  }
+  const excludedStrategies =
+    typeof plugin === 'object'
+      ? (plugin.config as { excludeStrategies?: unknown } | undefined)?.excludeStrategies
+      : undefined;
+  if (Array.isArray(excludedStrategies) && excludedStrategies.includes(strategyId)) {
+    return false;
+  }
+  if (!targetPlugins || targetPlugins.length === 0) {
+    return true;
+  }
+  return targetPlugins.some((target) => target === pluginId || pluginId.startsWith(`${target}:`));
 }
 
 function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {

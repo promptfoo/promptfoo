@@ -4,6 +4,7 @@ import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
+import { isPluginCompatibleWithStrategy } from './utils';
 
 import type { TargetPlugin } from '../testCaseGenerationTypes';
 
@@ -49,7 +50,11 @@ export function useStrategyTestGeneration({
       };
     }
 
-    const selectedPlugin = plugins[Math.floor(Math.random() * plugins.length)];
+    const compatiblePlugins = plugins.filter((plugin) =>
+      isPluginCompatibleWithStrategy(plugin, strategyId, strategyConfig.plugins),
+    );
+    const previewPlugins = compatiblePlugins.length > 0 ? compatiblePlugins : plugins;
+    const selectedPlugin = previewPlugins[Math.floor(Math.random() * previewPlugins.length)];
     if (typeof selectedPlugin === 'string') {
       return {
         id: selectedPlugin as Plugin,
@@ -63,7 +68,7 @@ export function useStrategyTestGeneration({
       config: selectedPlugin.config ?? {},
       isStatic: true,
     };
-  }, [config.plugins]);
+  }, [config.plugins, strategyConfig.plugins, strategyId]);
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(testGenerationTargetPlugin, {

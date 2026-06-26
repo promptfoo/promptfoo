@@ -2635,6 +2635,84 @@ inputs:
     ).rejects.toThrow('Could not identify provider');
   });
 
+  it('supports a literal default filter during provider validation', async () => {
+    await expect(
+      resolveProviderInputsForValidation([
+        {
+          id: "{{ env.MISSING_PROVIDER | default('echo') }}",
+          inputs: { question: 'User question' },
+        },
+      ]),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it.each([
+    "{{ env.MISSING_PROVIDER | default('echo') | upper }}",
+    '{{ env.MISSING_PROVIDER | default(env.CANARY.constructor.constructor("return \'echo\'")()) }}',
+  ])('does not execute non-allowlisted default expressions: %s', async (providerId) => {
+    await expect(resolveProviderInputsForValidation([providerId])).rejects.toThrow(
+      'Could not identify provider',
+    );
+  });
+
+  it('resolves a file-backed ProviderOptions id without constructing the provider', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  question: File question
+`);
+    const basePath = path.join(path.sep, 'workspace');
+
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: "{{ env.MISSING_PROVIDER | default('file://targets/provider.yaml') }}",
+            inputs: { question: 'Outer question' },
+          },
+        ],
+        { basePath },
+      ),
+    ).resolves.toEqual([{ question: 'File question' }]);
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'targets', 'provider.yaml'),
+      'utf8',
+    );
+  });
+
+  it('resolves a cloud provider id that renders to a provider config file', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: '{{ env.TARGET_PROVIDER_FILE }}',
+      env: { TARGET_PROVIDER_FILE: 'file://targets/provider.yaml' },
+      inputs: { question: 'Cloud question' },
+    });
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  question: File question
+`);
+
+    await expect(
+      resolveProviderInputsForValidation(
+        'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+        { basePath: path.join(path.sep, 'workspace') },
+      ),
+    ).resolves.toEqual([{ question: 'File question' }]);
+  });
+
+  it('rejects an array behind a file-backed ProviderOptions id like runtime loading', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+- id: echo
+- id: echo
+`);
+
+    await expect(
+      resolveProviderInputsForValidation([{ id: 'file://targets/providers.yaml' }], {
+        basePath: path.join(path.sep, 'workspace'),
+      }),
+    ).rejects.toThrow('Use loadApiProviders instead of loadApiProvider');
+  });
+
   it('redacts rendered environment values from provider validation errors', async () => {
     const secretProviderId = 'private-provider-name-from-env';
 
