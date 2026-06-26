@@ -1357,7 +1357,11 @@ function renderImageCellContent({
         onClick={() => toggleLightbox(imgSrc)}
       />
       {lightboxOpen && lightboxImage === imgSrc && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
+        <div
+          key={`lightbox-${getMediaRefreshKey(lightboxImage)}`}
+          className="lightbox"
+          onClick={() => toggleLightbox()}
+        >
           <img
             src={lightboxImage}
             alt="Lightbox"
@@ -1366,6 +1370,8 @@ function renderImageCellContent({
               maxHeight: '90vh',
               objectFit: 'contain',
             }}
+            onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
           />
         </div>
       )}

@@ -783,6 +783,9 @@ describe('EvalOutputCell', () => {
     expect(firstImage).not.toBeNull();
     expect(firstImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
     fireEvent.error(firstImage!);
+    fireEvent.click(firstImage!);
+    const firstLightboxImage = screen.getByAltText('Lightbox');
+    fireEvent.error(firstLightboxImage);
 
     rerender(
       <ShiftKeyProvider>
@@ -799,6 +802,9 @@ describe('EvalOutputCell', () => {
     expect(refreshedImage).not.toBeNull();
     expect(refreshedImage).not.toBe(firstImage);
     expect(refreshedImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
+    const refreshedLightboxImage = screen.getByAltText('Lightbox');
+    expect(refreshedLightboxImage).not.toBe(firstLightboxImage);
+    expect(refreshedLightboxImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
   });
 
   it('does not remount a successfully loaded blob after a refreshed output object arrives', () => {

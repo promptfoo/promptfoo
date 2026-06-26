@@ -76,6 +76,7 @@ function responseSignalsMissingEval(responseBody: string): boolean {
 interface AdaptiveChunkConfig {
   minResultsPerChunk: number;
   maxResultsPerChunk: number;
+  continueAfterSplitFailure?: boolean;
 }
 
 const TARGET_SHARE_CHUNK_SIZE = 0.9 * 1024 * 1024;
@@ -343,7 +344,7 @@ async function sendChunkWithRetry<T>(
   sendChunk: (chunk: T[]) => Promise<ChunkSendResult>,
   itemName: string,
   config: AdaptiveChunkConfig,
-  onProgress: (sentCount: number) => void,
+  onProgress: (sentChunk: T[]) => void,
   depth: number = 0,
   maxDepth?: number,
 ): Promise<number> {
@@ -364,7 +365,7 @@ async function sendChunkWithRetry<T>(
   const result = await sendChunk(chunk);
 
   if (result.success) {
-    onProgress(chunk.length);
+    onProgress(chunk);
     return chunk.length;
   }
 
@@ -395,27 +396,48 @@ async function sendChunkWithRetry<T>(
         `Splitting into ${firstHalf.length} + ${secondHalf.length} and retrying...`,
     );
 
-    // Send first half, then second half
-    const firstSent = await sendChunkWithRetry(
-      firstHalf,
-      sendChunk,
-      itemName,
-      config,
-      onProgress,
-      depth + 1,
-      effectiveMaxDepth,
-    );
-    const secondSent = await sendChunkWithRetry(
-      secondHalf,
-      sendChunk,
-      itemName,
-      config,
-      onProgress,
-      depth + 1,
-      effectiveMaxDepth,
-    );
+    const sendHalf = (half: T[]) =>
+      sendChunkWithRetry(
+        half,
+        sendChunk,
+        itemName,
+        config,
+        onProgress,
+        depth + 1,
+        effectiveMaxDepth,
+      );
+    if (!config.continueAfterSplitFailure) {
+      return (await sendHalf(firstHalf)) + (await sendHalf(secondHalf));
+    }
 
-    return firstSent + secondSent;
+    let sentCount = 0;
+    let splitError: unknown;
+    try {
+      sentCount += await sendHalf(firstHalf);
+    } catch (error) {
+      if (
+        error instanceof ShareEvalNotFoundError ||
+        error instanceof UnsupportedShareEndpointError
+      ) {
+        throw error;
+      }
+      splitError = error;
+    }
+    try {
+      sentCount += await sendHalf(secondHalf);
+    } catch (error) {
+      if (
+        error instanceof ShareEvalNotFoundError ||
+        error instanceof UnsupportedShareEndpointError
+      ) {
+        throw error;
+      }
+      splitError ??= error;
+    }
+    if (splitError) {
+      throw splitError;
+    }
+    return sentCount;
   }
 
   // Bubble unknown errors so each caller can apply its own rollback or best-effort policy.
@@ -682,13 +704,11 @@ async function sendTraceChunksForShare(
   }
 
   const traceSegments = traces.flatMap(segmentTraceForShare);
-  const tracesPerChunk = Math.min(
-    MAX_TRACES_PER_APPEND_REQUEST,
-    Math.max(1, Math.floor(TARGET_SHARE_CHUNK_SIZE / findLargestItemSize(traceSegments))),
-  );
+  const tracesPerChunk = MAX_TRACES_PER_APPEND_REQUEST;
   const chunkConfig: AdaptiveChunkConfig = {
     minResultsPerChunk: 1,
     maxResultsPerChunk: tracesPerChunk,
+    continueAfterSplitFailure: true,
   };
   const targetUrl = `${url}/${evalId}/traces`;
   const acceptedTraces: EvalTraces = [];
@@ -699,32 +719,36 @@ async function sendTraceChunksForShare(
     const chunk: EvalTraces = [];
     const chunkTraceIds = new Set<string>();
     let spanCount = 0;
+    let chunkSizeBytes = 2; // Enclosing JSON array brackets.
     while (offset < traceSegments.length && chunk.length < tracesPerChunk) {
       const nextTrace = traceSegments[offset];
-      if (chunk.length > 0 && spanCount + nextTrace.spans.length > MAX_SPANS_PER_APPEND_REQUEST) {
-        break;
-      }
+      const separatorSize = chunk.length > 0 ? 1 : 0;
+      const nextTraceSize = getResultSize(nextTrace);
       // The receiver rejects duplicate trace IDs within one request. Consecutive segments from
       // one oversized trace therefore travel in separate, idempotent append requests.
       if (chunkTraceIds.has(nextTrace.traceId)) {
         break;
       }
+      if (
+        chunk.length > 0 &&
+        (spanCount + nextTrace.spans.length > MAX_SPANS_PER_APPEND_REQUEST ||
+          chunkSizeBytes + separatorSize + nextTraceSize > TARGET_SHARE_CHUNK_SIZE)
+      ) {
+        break;
+      }
       chunk.push(nextTrace);
       chunkTraceIds.add(nextTrace.traceId);
       spanCount += nextTrace.spans.length;
+      chunkSizeBytes += separatorSize + nextTraceSize;
       offset += 1;
     }
-    let acceptedCount = 0;
     try {
       await sendChunkWithRetry(
         chunk,
         (chunk) => sendJsonChunk(chunk, targetUrl, evalId, headers, 'trace'),
         'trace',
         chunkConfig,
-        (sentCount) => {
-          acceptedTraces.push(...chunk.slice(acceptedCount, acceptedCount + sentCount));
-          acceptedCount += sentCount;
-        },
+        (sentChunk) => acceptedTraces.push(...sentChunk),
       );
     } catch (error) {
       // The remote eval being missing is fatal: let it roll back the whole share.
@@ -811,7 +835,9 @@ async function sendResultChunksForShare(
       remoteBlobUploadCache,
       traceIds,
     );
-    await sendChunkWithRetry(chunkToSend, sendResultChunk, 'result', chunkConfig, onProgress);
+    await sendChunkWithRetry(chunkToSend, sendResultChunk, 'result', chunkConfig, (sentChunk) =>
+      onProgress(sentChunk.length),
+    );
     currentChunk = [];
   };
 

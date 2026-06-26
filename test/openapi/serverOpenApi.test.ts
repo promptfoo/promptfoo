@@ -129,6 +129,10 @@ describe('server OpenAPI generation', () => {
     ]?.schema as any;
     expect(addTracesRequestSchema?.maxItems).toBe(1_000);
     expect(addTracesRequestSchema?.items?.properties?.spans?.maxItems).toBe(10_000);
+    expect(addTracesRequestSchema?.description).toContain('20000 spans total');
+    expect(addTracesRequestSchema?.description).toContain(
+      'serialize to at most 1000000 characters',
+    );
     expect(addTracesRequestSchema?.items?.properties?.testCaseId?.minLength).toBeUndefined();
     expect(
       addTracesRequestSchema?.items?.properties?.spans?.items?.properties?.name?.minLength,

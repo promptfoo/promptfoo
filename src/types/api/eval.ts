@@ -296,7 +296,10 @@ export const AddTracesRequestSchema = z
         message: `Request contains more than ${MAX_SPANS_PER_APPEND_REQUEST} spans`,
       });
     }
-  });
+  })
+  .describe(
+    `Accepts at most ${MAX_TRACES_PER_APPEND_REQUEST} traces, ${MAX_SPANS_PER_TRACE} spans per trace, and ${MAX_SPANS_PER_APPEND_REQUEST} spans total. Trace metadata and each span attributes object must serialize to at most ${MAX_TRACE_RECORD_LENGTH} characters.`,
+  );
 
 export type AddTracesParams = z.infer<typeof AddTracesParamsSchema>;
 export type AddTracesRequest = z.infer<typeof AddTracesRequestSchema>;

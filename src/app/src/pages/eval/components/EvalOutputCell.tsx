@@ -1693,8 +1693,17 @@ function EvalOutputCell({
         setActionsHovered,
       })}
       {lightboxOpen && lightboxImage && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
-          <img src={lightboxImage} alt="Lightbox" />
+        <div
+          key={`lightbox-${getMediaRefreshKey(lightboxImage)}`}
+          className="lightbox"
+          onClick={() => toggleLightbox()}
+        >
+          <img
+            src={lightboxImage}
+            alt="Lightbox"
+            onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
+          />
         </div>
       )}
       {commentDialogOpen && (

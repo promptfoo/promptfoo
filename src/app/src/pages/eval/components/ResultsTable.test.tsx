@@ -4,7 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -48,6 +48,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  getApiBaseUrl: vi.fn(() => ''),
 }));
 
 const mockNavigate = vi.fn();
@@ -810,6 +811,71 @@ describe('ResultsTable Metrics Display', () => {
         'src',
         'data:image/png;base64,encodedImage',
       );
+    });
+
+    it('remounts a failed blob image and its open lightbox after a table refresh', async () => {
+      const user = userEvent.setup();
+      const blobHash = '2'.repeat(64);
+      const createTable = () => ({
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                text: 'test output',
+                metadata: {
+                  [FILE_METADATA_KEY]: {
+                    imageVar: {
+                      path: '/path/to/input.png',
+                      type: 'image',
+                      format: 'png',
+                    },
+                  },
+                },
+              },
+            ],
+            test: {},
+            vars: [`promptfoo://blob/${blobHash}`],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: ['imageVar'],
+        },
+      });
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: createTable(),
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: { metric: [] },
+        },
+      }));
+
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const firstImage = screen.getByRole('img', { name: 'Input image' });
+      fireEvent.error(firstImage);
+      await user.click(firstImage);
+      const openMainImage = screen.getByRole('img', { name: 'Input image' });
+      const firstLightboxImage = screen.getByRole('img', { name: 'Lightbox' });
+      fireEvent.error(openMainImage);
+      fireEvent.error(firstLightboxImage);
+
+      // ResultsTable is memoized; changing a prop models the render that a real Zustand table
+      // update triggers internally.
+      rerender(<ResultsTable {...defaultProps} maxTextLength={101} />);
+
+      const refreshedImage = screen.getByRole('img', { name: 'Input image' });
+      const refreshedLightboxImage = screen.getByRole('img', { name: 'Lightbox' });
+      expect(refreshedImage).not.toBe(openMainImage);
+      expect(refreshedLightboxImage).not.toBe(firstLightboxImage);
+      expect(refreshedLightboxImage).toHaveAttribute('src', `/api/blobs/${blobHash}`);
     });
 
     it('renders variable video from file metadata', () => {

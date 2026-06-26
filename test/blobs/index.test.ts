@@ -283,6 +283,7 @@ describe('storeBlob failure and MIME boundaries', () => {
   const evalId = `eval-${randomUUID()}`;
   const hash = '6'.repeat(64);
   let deleteCalls: string[];
+  let storeCalls: number;
 
   beforeAll(async () => {
     await runDbMigrations();
@@ -290,6 +291,7 @@ describe('storeBlob failure and MIME boundaries', () => {
 
   beforeEach(async () => {
     deleteCalls = [];
+    storeCalls = 0;
     const db = await getDb();
     await db.insert(evalsTable).values({ id: evalId, config: {}, results: {} });
   });
@@ -305,16 +307,19 @@ describe('storeBlob failure and MIME boundaries', () => {
   function setStoreProvider(deduplicated: boolean, mimeType = 'image/png') {
     setBlobStorageProvider({
       providerId: 'test-stub',
-      store: async () => ({
-        deduplicated,
-        ref: {
-          hash,
-          mimeType,
-          provider: 'test-stub',
-          sizeBytes: 5,
-          uri: `promptfoo://blob/${hash}`,
-        },
-      }),
+      store: async () => {
+        storeCalls += 1;
+        return {
+          deduplicated,
+          ref: {
+            hash,
+            mimeType,
+            provider: 'test-stub',
+            sizeBytes: 5,
+            uri: `promptfoo://blob/${hash}`,
+          },
+        };
+      },
       getByHash: async () => ({
         data: Buffer.from('bytes'),
         metadata: {
@@ -333,25 +338,26 @@ describe('storeBlob failure and MIME boundaries', () => {
     });
   }
 
-  it('does not delete pre-existing bytes when a deduplicated reference insert fails', async () => {
+  it('rejects a missing reference eval before calling the provider', async () => {
     setStoreProvider(true);
 
     await expect(
       storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
     ).rejects.toThrow();
+    expect(storeCalls).toBe(0);
     expect(deleteCalls).toEqual([]);
   });
 
-  it('does not delete bytes another store may have referenced when persistence fails', async () => {
+  it('does not disturb an existing reference when a later eval is missing', async () => {
     setStoreProvider(false);
 
     await expect(storeBlob(Buffer.from('bytes'), 'image/png', { evalId })).resolves.toBeDefined();
+    expect(storeCalls).toBe(1);
 
     await expect(
       storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
     ).rejects.toThrow();
-    // A content-addressed provider can report two concurrent first writes as non-deduplicated.
-    // The failed transaction cannot prove exclusive ownership of the shared bytes.
+    expect(storeCalls).toBe(1);
     expect(deleteCalls).toEqual([]);
 
     const db = await getDb();

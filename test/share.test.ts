@@ -1005,6 +1005,55 @@ describe('createShareableUrl', () => {
       expect(traceBodies.map((body) => body.length)).toEqual([2, 1, 1]);
     });
 
+    it('continues a split trace chunk when the first singleton still fails', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const padding = 'x'.repeat(300_000);
+      const traces = ['bad', 'good'].map((traceId) => ({
+        traceId,
+        evaluationId: mockEval.id as string,
+        testCaseId: `${traceId}-test`,
+        metadata: { padding },
+        spans: [],
+      }));
+      mockEval.getTraces = vi.fn().mockResolvedValue(traces);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 413,
+          statusText: 'Payload Too Large',
+          text: () => Promise.resolve('split the chunk'),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 413,
+          statusText: 'Payload Too Large',
+          text: () => Promise.resolve('bad trace remains too large'),
+        })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      const result = await createShareableUrl(mockEval as Eval, { silent: true });
+
+      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      const traceBodies = mockFetch.mock.calls
+        .filter(([url]) => /\/traces$/.test(url as string))
+        .map(([, options]) => JSON.parse(options.body));
+      const [remoteBadTraceId, remoteGoodTraceId] = traceBodies[0].map(
+        (trace: { traceId: string }) => trace.traceId,
+      );
+      expect(
+        traceBodies.map((body) => body.map((trace: { traceId: string }) => trace.traceId)),
+      ).toEqual([[remoteBadTraceId, remoteGoodTraceId], [remoteBadTraceId], [remoteGoodTraceId]]);
+      expect(uploadTraceBlobRefsForShare).toHaveBeenCalledTimes(1);
+      expect(uploadTraceBlobRefsForShare).toHaveBeenCalledWith(
+        expect.objectContaining({ traceId: remoteGoodTraceId }),
+        expect.any(Map),
+        expect.any(Object),
+        expect.objectContaining({ url: expect.stringContaining('/api/blobs') }),
+      );
+    });
+
     it('keeps every trace request within the aggregate span limit', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const traces = Array.from({ length: 1_000 }, (_, traceIndex) => ({
@@ -1041,6 +1090,45 @@ describe('createShareableUrl', () => {
             ) <= 20_000,
         ),
       ).toBe(true);
+    });
+
+    it('keeps later heterogeneous traces within the target request size', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const smallTraces = Array.from({ length: 1_000 }, (_, traceIndex) => ({
+        traceId: `small-${traceIndex}`,
+        evaluationId: mockEval.id as string,
+        testCaseId: '',
+        spans: [],
+      }));
+      const largeTraces = Array.from({ length: 10 }, (_, traceIndex) => ({
+        traceId: `large-${traceIndex}`,
+        evaluationId: mockEval.id as string,
+        testCaseId: '',
+        metadata: { padding: 'x'.repeat(200_000) },
+        spans: [],
+      }));
+      mockEval.getTraces = vi.fn().mockResolvedValue([...smallTraces, ...largeTraces]);
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: mockEval.id }),
+      });
+
+      const result = await createShareableUrl(mockEval as Eval, { silent: true });
+
+      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      const traceRequests = mockFetch.mock.calls.filter(([url]) => /\/traces$/.test(url as string));
+      expect(traceRequests.length).toBeGreaterThan(2);
+      expect(
+        traceRequests.every(
+          ([, options]) => Buffer.byteLength(options.body, 'utf8') <= 0.9 * 1024 * 1024,
+        ),
+      ).toBe(true);
+      expect(
+        traceRequests
+          .flatMap(([, options]) => JSON.parse(options.body))
+          .map((trace: { traceId: string }) => trace.traceId),
+      ).toHaveLength(smallTraces.length + largeTraces.length);
     });
 
     it('segments a trace that exceeds the per-trace span limit', async () => {

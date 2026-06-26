@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
-import { blobAssetsTable, blobReferencesTable } from '../database/tables';
+import { blobAssetsTable, blobReferencesTable, evalsTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 import { sanitizeBlobMimeType } from './mimeTypes';
@@ -52,6 +52,18 @@ export async function storeBlob(
     kind?: string;
   },
 ): Promise<BlobStoreResult> {
+  const db = await getDb();
+  if (refContext?.evalId) {
+    const evalExists = await db
+      .select({ id: evalsTable.id })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, refContext.evalId))
+      .get();
+    if (!evalExists) {
+      throw new Error(`[BlobStorage] Eval not found: ${refContext.evalId}`);
+    }
+  }
+
   const provider = getBlobStorageProvider();
   // Keep provider metadata inert too. The result is sanitized again for legacy/deduplicated
   // objects whose stored metadata predates this boundary.
@@ -63,7 +75,6 @@ export async function storeBlob(
   };
 
   // Track asset and reference in DB for dedup/auth/cascade
-  const db = await getDb();
   await db.transaction(async (tx) => {
     await tx
       .insert(blobAssetsTable)

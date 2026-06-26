@@ -5,8 +5,8 @@ import {
   getMediaRefreshKey,
   markMediaLoadFailed,
   markMediaLoadSucceeded,
-  normalizeMediaText,
   resolveAudioSource,
+  resolveBlobUri,
   resolveImageSource,
 } from '@app/utils/media';
 import invariant from '@promptfoo/util/invariant';
@@ -110,20 +110,15 @@ const ChatMessage = ({
             src={imageSrc}
             alt={`${roleLabel} message image`}
             data-testid="image"
-            className="min-h-[180px] w-[min(500px,70vw)] max-w-full object-contain object-left sm:min-h-[300px]"
+            className="h-[180px] w-[min(500px,70vw)] max-w-full object-contain object-left sm:h-[300px]"
             onError={(event) => markMediaLoadFailed(imageSrc, event.currentTarget)}
             onLoad={(event) => markMediaLoadSucceeded(imageSrc, event.currentTarget)}
           />
         );
       }
       case 'video': {
-        const normalizedVideo = normalizeMediaText(loadedMessage.content);
         const videoSrc =
-          normalizedVideo.startsWith('data:') ||
-          normalizedVideo.startsWith('http') ||
-          normalizedVideo.startsWith('/api/')
-            ? normalizedVideo
-            : `data:video/mp4;base64,${loadedMessage.content}`;
+          resolveBlobUri(loadedMessage.content) ?? `data:video/mp4;base64,${loadedMessage.content}`;
         return (
           <div className="flex w-full max-w-[500px] justify-center">
             <video
