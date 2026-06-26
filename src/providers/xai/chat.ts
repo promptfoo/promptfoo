@@ -191,23 +191,15 @@ export const XAI_CHAT_MODELS = [
     },
     aliases: ['grok-4-1-fast-non-reasoning-latest'],
   },
-  // Grok Code Fast Models
+  // Grok Build 0.1 (the retired Grok Code Fast slugs are aliases)
   {
-    id: 'grok-code-fast-1',
+    id: 'grok-build-0.1',
     cost: {
-      input: 0.2 / 1e6,
-      output: 1.5 / 1e6,
-      cache_read: 0.02 / 1e6,
+      input: 1.0 / 1e6,
+      output: 2.0 / 1e6,
+      cache_read: 0.2 / 1e6,
     },
-    aliases: ['grok-code-fast'],
-  },
-  {
-    id: 'grok-code-fast-1-0825',
-    cost: {
-      input: 0.2 / 1e6,
-      output: 1.5 / 1e6,
-      cache_read: 0.02 / 1e6,
-    },
+    aliases: ['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'],
   },
   // Grok-4 Fast Models (2M context window)
   {
@@ -309,14 +301,13 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
-// xAI's May 15, 2026 (12:00 PM PT) retirement email confirms the following
-// behaviour for the listed legacy chat slugs: requests continue to work after
+// xAI's May 15, 2026 migration guide confirms the following behaviour for the
+// listed legacy chat slugs: requests continue to work after
 // the cutoff but redirect to grok-4.3 (low reasoning effort for the reasoning
 // variants, none for the non-reasoning variants) and are billed at standard
 // grok-4.3 pricing ($1.25 / 1M input, $2.50 / 1M output). The set mirrors
-// every id/alias pair xAI lists on `/v1/language-models` for the retired
-// models so that any spelling a user might have in their config maps to the
-// correct post-retirement billing target.
+// the retired model families that share that target. Grok Code Fast is excluded:
+// its aliases route to Grok Build 0.1 instead.
 const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
   // grok-4-1-fast-{reasoning,non-reasoning} family
   'grok-4-1-fast-reasoning',
@@ -336,10 +327,6 @@ const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
   'grok-4-0709',
   'grok-4',
   'grok-4-latest',
-  // grok-code-fast-1 family — xAI's catalog also exposes a dated slug.
-  'grok-code-fast-1',
-  'grok-code-fast',
-  'grok-code-fast-1-0825',
   // grok-3 family — xAI's catalog collapses every -beta/-fast variant into
   // the same id, so they all share the post-retirement billing target.
   'grok-3',
@@ -406,6 +393,7 @@ export const GROK_REASONING_MODELS = [
   'grok-4-1-fast-latest',
   'grok-4-1-fast-reasoning-latest',
   // Grok Code Fast
+  'grok-build-0.1',
   'grok-code-fast-1',
   'grok-code-fast',
   'grok-code-fast-1-0825',

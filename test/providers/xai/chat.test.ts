@@ -141,6 +141,7 @@ describe('xAI Chat Provider', () => {
         'grok-4.20-0309-reasoning',
         'grok-4.20-multi-agent-0309',
         'grok-4.3',
+        'grok-build-0.1',
         'grok-code-fast-1',
       ];
       const trackedModelIds = XAI_CHAT_MODELS.flatMap((model) => [
@@ -270,6 +271,7 @@ describe('xAI Chat Provider', () => {
     });
 
     it('identifies Grok Code Fast as reasoning models', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-build-0.1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1-0825');
@@ -323,6 +325,22 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Grok-4 specific functionality', () => {
+    it('treats Grok Build as a reasoning model when constructing requests', async () => {
+      const provider = createXAIProvider('xai:grok-build-0.1') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            max_completion_tokens: 2048,
+            max_tokens: 1024,
+          },
+        },
+      });
+
+      expect(provider.isReasoningModel()).toBe(true);
+      expect(result.body.max_completion_tokens).toBe(2048);
+      expect(result.body.max_tokens).toBeUndefined();
+    });
+
     it('recognizes Grok 4.3 models as reasoning models', () => {
       const provider = createXAIProvider('xai:grok-4.3') as any;
       expect(provider.isReasoningModel()).toBe(true);
@@ -561,6 +579,17 @@ describe('xAI Chat Provider', () => {
       }
     });
 
+    it('includes Grok Build with its retired Grok Code Fast aliases and current pricing', () => {
+      const grokBuild = XAI_CHAT_MODELS.find((model) => model.id === 'grok-build-0.1');
+
+      expect(grokBuild?.aliases).toEqual(
+        expect.arrayContaining(['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825']),
+      );
+      expect(grokBuild?.cost?.input).toBe(1 / 1e6);
+      expect(grokBuild?.cost?.output).toBe(2 / 1e6);
+      expect(grokBuild?.cost?.cache_read).toBe(0.2 / 1e6);
+    });
+
     it('includes Grok 4.1 Fast in XAI_CHAT_MODELS with correct pricing', () => {
       const grok41Fast = XAI_CHAT_MODELS.find((m) => m.id === 'grok-4-1-fast-reasoning');
       expect(grok41Fast).toBeDefined();
@@ -680,10 +709,6 @@ describe('xAI Chat Provider', () => {
         'grok-4-1-fast-reasoning',
         'grok-4-fast-non-reasoning',
         'grok-4',
-        'grok-code-fast',
-        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
-        // it shares the post-retirement billing target with the undated slug.
-        'grok-code-fast-1-0825',
         'grok-3',
         // The grok-3 family collapses every -beta and -fast variant into the
         // same id on xAI's catalog, so all of them must redirect together.
@@ -693,6 +718,21 @@ describe('xAI Chat Provider', () => {
         'grok-3-fast-latest',
       ]) {
         expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
+      }
+    });
+
+    it('uses Grok Build pricing for the retired Grok Code Fast aliases', () => {
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3, 10);
+        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000, 0, 800_000)).toBeCloseTo(
+          2.36,
+          10,
+        );
       }
     });
 
