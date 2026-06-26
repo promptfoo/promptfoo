@@ -241,6 +241,21 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
+async function cleanupRedteamProvider(testSuite: TestSuite): Promise<void> {
+  try {
+    logger.debug('Cleaning up provider');
+    const provider = testSuite.providers[0] as ApiProvider;
+    if (provider && typeof provider.cleanup === 'function') {
+      const cleanupResult = provider.cleanup();
+      if (cleanupResult instanceof Promise) {
+        await cleanupResult;
+      }
+    }
+  } catch (cleanupErr) {
+    logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+  }
+}
+
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
@@ -582,30 +597,9 @@ async function doGenerateRedteamInternal(
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
-  /**
-   * Cleans up the provider after redteam generation completes.
-   * This should always be called before returning, since providers are
-   * re-initialized when running the red team. Cleanup is particularly
-   * important for MCP servers to release resources and prevent memory leaks.
-   */
-  const cleanupProvider = async (): Promise<void> => {
-    try {
-      logger.debug('Cleaning up provider');
-      const provider = testSuite.providers[0] as ApiProvider;
-      if (provider && typeof provider.cleanup === 'function') {
-        const cleanupResult = provider.cleanup();
-        if (cleanupResult instanceof Promise) {
-          await cleanupResult;
-        }
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-    }
-  };
-
   const compatibilityError = getStrategyCompatibilityError(strategyObjs, targetInputs);
   if (compatibilityError) {
-    await cleanupProvider();
+    await cleanupRedteamProvider(testSuite);
     throw new Error(compatibilityError);
   }
 
@@ -775,6 +769,14 @@ async function doGenerateRedteamInternal(
     finalInjectVar = result.injectVar;
     failedPlugins = result.failedPlugins;
   }
+
+  /**
+   * Cleans up the provider after redteam generation completes.
+   * This should always be called before returning, since providers are
+   * re-initialized when running the red team. Cleanup is particularly
+   * important for MCP servers to release resources and prevent memory leaks.
+   */
+  const cleanupProvider = () => cleanupRedteamProvider(testSuite);
 
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
