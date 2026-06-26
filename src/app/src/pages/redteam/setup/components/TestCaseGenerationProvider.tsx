@@ -237,20 +237,15 @@ export const TestCaseGenerationProvider: React.FC<{
   // Compute available plugins from config
   const availablePlugins = useMemo(() => {
     const configuredPlugins = redTeamConfig.plugins ?? [];
+    const previewPlugins = configuredPlugins.length > 0 ? configuredPlugins : [DEFAULT_PLUGIN];
     const compatiblePlugins = strategy
-      ? configuredPlugins.filter((plugin) =>
-          isPluginCompatibleWithStrategy(plugin, strategy.id, strategy.config?.plugins),
+      ? previewPlugins.filter((plugin) =>
+          isPluginCompatibleWithStrategy(plugin, strategy.id, strategy.config),
         )
-      : configuredPlugins;
-    const previewPlugins = compatiblePlugins.length > 0 ? compatiblePlugins : configuredPlugins;
-    const plugins = previewPlugins
+      : previewPlugins;
+    return compatiblePlugins
       .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
       .filter(Boolean);
-    // If no plugins are configured, provide a default
-    if (plugins.length === 0) {
-      return [DEFAULT_PLUGIN];
-    }
-    return plugins;
   }, [redTeamConfig.plugins, strategy]);
 
   // ===================================================================

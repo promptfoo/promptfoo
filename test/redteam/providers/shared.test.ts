@@ -16,6 +16,7 @@ import {
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
+  resolveRedteamTargetProviderInputMetadata,
   resolveRedteamTargetProviderInputs,
   setRedteamProviderLoader,
   tryUnblocking,
@@ -35,6 +36,7 @@ import type {
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
+const mockIsProviderInputMetadataUnresolved = vi.hoisted(() => vi.fn());
 const mockResolveProviderInputsForValidation = vi.hoisted(() => vi.fn());
 const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
 // Create a hoisted mock class that can be instantiated with `new`
@@ -89,6 +91,7 @@ vi.mock('../../../src/providers/openai/chat', () => ({
   OpenAiChatCompletionProvider: MockOpenAiChatCompletionProvider,
 }));
 vi.mock('../../../src/providers/index', () => ({
+  isProviderInputMetadataUnresolved: mockIsProviderInputMetadataUnresolved,
   loadApiProviders: mockLoadApiProviders,
   resolveProviderInputsForValidation: mockResolveProviderInputsForValidation,
 }));
@@ -118,6 +121,7 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockReset();
     mockedLoadApiProviders.mockReset();
+    mockIsProviderInputMetadataUnresolved.mockReset().mockReturnValue(false);
     mockedResolveProviderInputsForValidation.mockReset();
     mockedCheckServerFeatureSupport.mockReset();
 
@@ -150,6 +154,31 @@ describe('shared redteam provider utilities', () => {
       {
         basePath: '/config',
         env: { PROVIDER_DIR: 'providers' },
+        loadDynamicProviders: undefined,
+      },
+    );
+  });
+
+  it('reports unresolved dynamic metadata and forwards runtime-loading options', async () => {
+    const unresolved = Symbol('unresolved');
+    mockedResolveProviderInputsForValidation.mockResolvedValue([unresolved]);
+    mockIsProviderInputMetadataUnresolved.mockImplementation((value) => value === unresolved);
+
+    await expect(
+      resolveRedteamTargetProviderInputMetadata(
+        ['package:custom-provider'],
+        '/config',
+        undefined,
+        undefined,
+        { loadDynamicProviders: true },
+      ),
+    ).resolves.toEqual({ inputs: [unresolved], hasUnresolved: true });
+    expect(mockedResolveProviderInputsForValidation).toHaveBeenCalledWith(
+      ['package:custom-provider'],
+      {
+        basePath: '/config',
+        env: undefined,
+        loadDynamicProviders: true,
       },
     );
   });

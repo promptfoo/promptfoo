@@ -786,9 +786,12 @@ export default function Review({
 
   const handleCancel = async () => {
     try {
-      await callApi('/redteam/cancel', {
+      const response = await callApi('/redteam/cancel', {
         method: 'POST',
       });
+      if (!response.ok) {
+        throw new Error(`Cancel request failed (${response.status})`);
+      }
 
       runRequestRef.current += 1;
       pollGenerationRef.current += 1;

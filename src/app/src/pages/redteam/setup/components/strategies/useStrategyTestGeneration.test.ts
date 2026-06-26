@@ -192,4 +192,28 @@ describe('useStrategyTestGeneration', () => {
       },
     );
   });
+
+  it('disables preview when no configured plugin is compatible', async () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: ['pii:direct'],
+        strategies: [
+          {
+            id: 'layer',
+            config: { plugins: ['harmful'], steps: ['base64'] },
+          },
+        ],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() => useStrategyTestGeneration({ strategyId: 'layer' }));
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBeNull();
+    expect(result.current.isTestCaseGenerationAvailable).toBe(false);
+    expect(generateTestCase).not.toHaveBeenCalled();
+  });
 });

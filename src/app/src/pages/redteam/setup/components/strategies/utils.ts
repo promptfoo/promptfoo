@@ -1,4 +1,4 @@
-import { REDTEAM_DEFAULTS, STRATEGY_EXEMPT_PLUGINS } from '@promptfoo/redteam/constants';
+import { pluginConfigMatchesStrategy, REDTEAM_DEFAULTS } from '@promptfoo/redteam/sharedFrontend';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy, RedteamStrategyObject } from '@promptfoo/redteam/types';
 
@@ -11,23 +11,14 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 export function isPluginCompatibleWithStrategy(
   plugin: string | { id: string; config?: unknown },
   strategyId: string,
-  targetPlugins?: readonly string[],
+  strategyConfig?: RedteamStrategyObject['config'],
 ): boolean {
   const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
-  if (STRATEGY_EXEMPT_PLUGINS.some((exemptPlugin) => exemptPlugin === pluginId)) {
-    return false;
-  }
-  const excludedStrategies =
-    typeof plugin === 'object'
-      ? (plugin.config as { excludeStrategies?: unknown } | undefined)?.excludeStrategies
-      : undefined;
-  if (Array.isArray(excludedStrategies) && excludedStrategies.includes(strategyId)) {
-    return false;
-  }
-  if (!targetPlugins || targetPlugins.length === 0) {
-    return true;
-  }
-  return targetPlugins.some((target) => target === pluginId || pluginId.startsWith(`${target}:`));
+  return pluginConfigMatchesStrategy(
+    pluginId,
+    typeof plugin === 'string' ? undefined : plugin.config,
+    { id: strategyId as Strategy, config: strategyConfig },
+  );
 }
 
 function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {

@@ -107,9 +107,24 @@ describe('hasPosteriorStrategy', () => {
 
 describe('isPluginCompatibleWithStrategy', () => {
   it('supports direct and category-prefix targeting', () => {
-    expect(isPluginCompatibleWithStrategy('policy', 'layer', ['policy'])).toBe(true);
-    expect(isPluginCompatibleWithStrategy('harmful:hate', 'layer', ['harmful'])).toBe(true);
-    expect(isPluginCompatibleWithStrategy('pii:direct', 'layer', ['harmful'])).toBe(false);
+    expect(
+      isPluginCompatibleWithStrategy('policy', 'layer', {
+        plugins: ['policy'],
+        steps: ['base64'],
+      }),
+    ).toBe(true);
+    expect(
+      isPluginCompatibleWithStrategy('harmful:hate', 'layer', {
+        plugins: ['harmful'],
+        steps: ['base64'],
+      }),
+    ).toBe(true);
+    expect(
+      isPluginCompatibleWithStrategy('pii:direct', 'layer', {
+        plugins: ['harmful'],
+        steps: ['base64'],
+      }),
+    ).toBe(false);
   });
 
   it('excludes plugins that disable the strategy', () => {
@@ -117,9 +132,33 @@ describe('isPluginCompatibleWithStrategy', () => {
       isPluginCompatibleWithStrategy(
         { id: 'harmful:hate', config: { excludeStrategies: ['layer'] } },
         'layer',
-        ['harmful'],
+        { plugins: ['harmful'], steps: ['base64'] },
       ),
     ).toBe(false);
+  });
+
+  it('checks exclusions on nested layer steps', () => {
+    expect(
+      isPluginCompatibleWithStrategy(
+        { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
+        'layer',
+        { plugins: ['harmful'], steps: ['posterior'] },
+      ),
+    ).toBe(false);
+  });
+
+  it('applies implicit coding-agent strategy exclusions', () => {
+    expect(isPluginCompatibleWithStrategy('coding-agent:secret-env-read', 'posterior')).toBe(false);
+  });
+
+  it('rejects cyclic layer configurations without overflowing the stack', () => {
+    const layer: { id: string; config: { steps: unknown[] } } = {
+      id: 'layer',
+      config: { steps: [] },
+    };
+    layer.config.steps.push(layer);
+
+    expect(isPluginCompatibleWithStrategy('harmful:hate', 'layer', layer.config)).toBe(false);
   });
 });
 

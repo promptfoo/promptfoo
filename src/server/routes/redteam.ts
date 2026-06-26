@@ -12,7 +12,7 @@ import {
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import {
   redteamProviderManager,
-  resolveRedteamTargetProviderInputs,
+  resolveRedteamTargetProviderInputMetadata,
 } from '../../redteam/providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -47,6 +47,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function getLiveConfigCompatibilityError(
   config: Record<string, unknown>,
+  options: { loadDynamicProviders?: boolean } = {},
 ): Promise<string | undefined> {
   const redteam = isRecord(config.redteam) ? config.redteam : undefined;
   const commandLineOptions = isRecord(config.commandLineOptions)
@@ -77,13 +78,14 @@ async function getLiveConfigCompatibilityError(
   const env = isRecord(config.env) ? (config.env as Record<string, string>) : undefined;
   const configuredFilter = commandLineOptions?.filterProviders || commandLineOptions?.filterTargets;
   const filter = typeof configuredFilter === 'string' ? configuredFilter : undefined;
-  const resolvedInputs = await resolveRedteamTargetProviderInputs(
+  const resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
     configuredTargets,
     cliState.basePath,
     env,
     filter,
+    options,
   );
-  return resolvedInputs
+  return resolvedInputs.inputs
     .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
     .find((error) => error !== undefined);
 }
@@ -134,6 +136,22 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
         return;
       }
+    }
+
+    if (
+      !['basic', 'default'].includes(strategy.id) &&
+      !isStrategyApplicable(
+        {
+          vars: {},
+          metadata: { pluginId: plugin.id, pluginConfig: plugin.config },
+        } as TestCaseWithPlugin,
+        strategy,
+      )
+    ) {
+      res.status(400).json({
+        error: `Strategy ${strategy.id} is not compatible with plugin ${plugin.id}`,
+      });
+      return;
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)
@@ -322,7 +340,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   let compatibilityError: string | undefined;
   let preflightError: unknown;
   try {
-    compatibilityError = await getLiveConfigCompatibilityError(config);
+    compatibilityError = await getLiveConfigCompatibilityError(config, {
+      loadDynamicProviders: currentJobId !== null,
+    });
   } catch (error) {
     preflightError = error;
   } finally {

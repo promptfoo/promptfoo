@@ -58,18 +58,34 @@ const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) =>
   return loadApiProviders(providers);
 };
 
+export async function resolveRedteamTargetProviderInputMetadata(
+  providers: unknown,
+  basePath?: string,
+  env?: Record<string, string>,
+  filter?: string,
+  options: { loadDynamicProviders?: boolean } = {},
+): Promise<{ inputs: unknown[]; hasUnresolved: boolean }> {
+  const { isProviderInputMetadataUnresolved, resolveProviderInputsForValidation } =
+    await getProviderModule();
+  const inputs = await resolveProviderInputsForValidation(providers as ProvidersConfig, {
+    basePath,
+    env,
+    ...(filter === undefined ? {} : { filter }),
+    loadDynamicProviders: options.loadDynamicProviders,
+  });
+  return {
+    inputs,
+    hasUnresolved: inputs.some(isProviderInputMetadataUnresolved),
+  };
+}
+
 export async function resolveRedteamTargetProviderInputs(
   providers: unknown,
   basePath?: string,
   env?: Record<string, string>,
   filter?: string,
 ): Promise<unknown[]> {
-  const { resolveProviderInputsForValidation } = await getProviderModule();
-  return resolveProviderInputsForValidation(providers as ProvidersConfig, {
-    basePath,
-    env,
-    ...(filter === undefined ? {} : { filter }),
-  });
+  return (await resolveRedteamTargetProviderInputMetadata(providers, basePath, env, filter)).inputs;
 }
 
 let redteamProviderLoader = defaultRedteamProviderLoader;

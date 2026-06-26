@@ -16,10 +16,11 @@ interface UseStrategyTestGenerationOptions {
 
 interface UseStrategyTestGenerationResult {
   strategyConfig: StrategyConfig;
-  testGenerationPlugin: Plugin;
+  testGenerationPlugin: Plugin | null;
   handleTestCaseGeneration: () => Promise<void>;
   isGenerating: boolean;
   isCurrentStrategy: boolean;
+  isTestCaseGenerationAvailable: boolean;
 }
 
 /**
@@ -40,21 +41,25 @@ export function useStrategyTestGeneration({
   }, [config.strategies, strategyId]);
 
   // Select a random plugin from the user's configured plugins, preserving any plugin config.
-  const testGenerationTargetPlugin = useMemo<TargetPlugin>(() => {
-    const plugins = config.plugins ?? [];
-    if (plugins.length === 0) {
-      return {
-        id: DEFAULT_TEST_GENERATION_PLUGIN,
-        config: {},
-        isStatic: true,
-      };
+  const testGenerationTargetPlugin = useMemo<TargetPlugin | null>(() => {
+    const configuredPlugins = config.plugins ?? [];
+    const plugins =
+      configuredPlugins.length > 0
+        ? configuredPlugins
+        : [
+            {
+              id: DEFAULT_TEST_GENERATION_PLUGIN,
+              config: {},
+            },
+          ];
+    const compatiblePlugins = plugins.filter((plugin) =>
+      isPluginCompatibleWithStrategy(plugin, strategyId, strategyConfig),
+    );
+    if (compatiblePlugins.length === 0) {
+      return null;
     }
 
-    const compatiblePlugins = plugins.filter((plugin) =>
-      isPluginCompatibleWithStrategy(plugin, strategyId, strategyConfig.plugins),
-    );
-    const previewPlugins = compatiblePlugins.length > 0 ? compatiblePlugins : plugins;
-    const selectedPlugin = previewPlugins[Math.floor(Math.random() * previewPlugins.length)];
+    const selectedPlugin = compatiblePlugins[Math.floor(Math.random() * compatiblePlugins.length)];
     if (typeof selectedPlugin === 'string') {
       return {
         id: selectedPlugin as Plugin,
@@ -68,21 +73,24 @@ export function useStrategyTestGeneration({
       config: selectedPlugin.config ?? {},
       isStatic: true,
     };
-  }, [config.plugins, strategyConfig.plugins, strategyId]);
+  }, [config.plugins, strategyConfig, strategyId]);
 
   const handleTestCaseGeneration = useCallback(async () => {
-    await generateTestCase(testGenerationTargetPlugin, {
-      id: strategyId,
-      config: strategyConfig,
-      isStatic: false,
-    });
+    if (testGenerationTargetPlugin) {
+      await generateTestCase(testGenerationTargetPlugin, {
+        id: strategyId,
+        config: strategyConfig,
+        isStatic: false,
+      });
+    }
   }, [strategyConfig, generateTestCase, strategyId, testGenerationTargetPlugin]);
 
   return {
     strategyConfig,
-    testGenerationPlugin: testGenerationTargetPlugin.id,
+    testGenerationPlugin: testGenerationTargetPlugin?.id ?? null,
     handleTestCaseGeneration,
     isGenerating,
     isCurrentStrategy: currentStrategy === strategyId,
+    isTestCaseGenerationAvailable: testGenerationTargetPlugin !== null,
   };
 }

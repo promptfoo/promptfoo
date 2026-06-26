@@ -49,9 +49,12 @@ export function StrategyItem({
   isConfigured = true,
   testCaseGenerationDisabledReason,
 }: StrategyItemProps) {
-  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
-    strategyId: strategy.id,
-  });
+  const {
+    handleTestCaseGeneration,
+    isGenerating,
+    isCurrentStrategy,
+    isTestCaseGenerationAvailable,
+  } = useStrategyTestGeneration({ strategyId: strategy.id });
 
   const requiresConfig = isSelected && !isConfigured;
 
@@ -60,6 +63,7 @@ export function StrategyItem({
 
   const isTestCaseGenerationDisabled =
     Boolean(testCaseGenerationDisabledReason) ||
+    !isTestCaseGenerationAvailable ||
     STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
       // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
       strategy.id as any,
@@ -75,6 +79,9 @@ export function StrategyItem({
     if (testCaseGenerationDisabledReason) {
       return testCaseGenerationDisabledReason;
     }
+    if (!isTestCaseGenerationAvailable) {
+      return 'No configured plugins are compatible with this strategy.';
+    }
     if (isTestCaseGenerationDisabled) {
       return `Test case generation is not available for ${strategy.name} strategy.`;
     }
@@ -84,6 +91,7 @@ export function StrategyItem({
     strategy.id,
     strategy.name,
     isTestCaseGenerationDisabled,
+    isTestCaseGenerationAvailable,
     testCaseGenerationDisabledReason,
   ]);
 
