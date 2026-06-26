@@ -289,7 +289,11 @@ export async function doEval(
 
   let watcher: ReturnType<typeof chokidar.watch> | undefined;
   let watchedPaths = new Set<string>();
-  let watchEvaluationQueue = Promise.resolve();
+  let resolveInitialWatchEvaluation: () => void;
+  const initialWatchEvaluation = new Promise<void>((resolve) => {
+    resolveInitialWatchEvaluation = resolve;
+  });
+  let watchEvaluationQueue = initialWatchEvaluation;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -1190,7 +1194,9 @@ export async function doEval(
                 throw error;
               }
             });
-            watchEvaluationQueue = evaluation.catch(() => {});
+            watchEvaluationQueue = evaluation.catch((error) => {
+              logger.error('Watch evaluation failed', { error });
+            });
             return evaluation;
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
@@ -1248,5 +1254,9 @@ export async function doEval(
     return ret;
   };
 
-  return await runEvaluation(true /* initialization */);
+  try {
+    return await runEvaluation(true /* initialization */);
+  } finally {
+    resolveInitialWatchEvaluation!();
+  }
 }

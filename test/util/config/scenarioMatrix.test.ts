@@ -289,6 +289,58 @@ describe('scenarioMatrix (real filesystem)', () => {
 
       expect(expanded).toEqual([{ vars: { safe: 'source-safe', token: 'rotated-secret' } }]);
     });
+
+    it('restores mixed and filtered env templates in arbitrary scenario fields', () => {
+      const runtimeRow = {
+        vars: {
+          endpoint: 'https://example.test/?token=initial-secret',
+          normalized: 'INITIAL-SECRET',
+        },
+      };
+      setScenarioOriginalValue(runtimeRow, {
+        vars: {
+          endpoint: 'https://example.test/?token={{ env.SECRET }}',
+          normalized: '{{ env.SECRET | trim | upper }}',
+        },
+      });
+
+      expect(toSerializableScenarioTestCase(runtimeRow)).toEqual({
+        vars: {
+          endpoint: 'https://example.test/?token={{ env.SECRET }}',
+          normalized: '{{ env.SECRET | trim | upper }}',
+        },
+      });
+    });
+
+    it('preserves provider templates from inline scenario tests', async () => {
+      const [scenario] = (await loadScenarioConfigs(
+        [
+          {
+            config: [{}],
+            tests: [
+              {
+                provider: {
+                  id: 'echo',
+                  config: { apiKey: '{{ env.INLINE_TEST_SECRET }}' },
+                },
+              },
+            ],
+          },
+        ],
+        tmpDir,
+        { INLINE_TEST_SECRET: 'initial-secret-value' },
+      ))!;
+      const [runtimeTest] = (await readScenarioTests(scenario.tests, tmpDir, {
+        INLINE_TEST_SECRET: 'initial-secret-value',
+      }))!;
+
+      expect(toSerializableScenarioTestCase(runtimeTest)).toMatchObject({
+        provider: {
+          id: 'echo',
+          config: { apiKey: '{{ env.INLINE_TEST_SECRET }}' },
+        },
+      });
+    });
   });
 
   describe('expandScenarioConfigValues', () => {
@@ -326,6 +378,24 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(String(processError)).not.toContain(processSecret);
       expect(String((processError as Error & { cause?: unknown }).cause)).not.toContain(
         processSecret,
+      );
+
+      const filterSecret = 'sk-live/secret+abcdefghijklmnop';
+      let filteredError: unknown;
+      try {
+        await expandScenarioConfigValues(
+          [{ $values: 'file://{{ env.FILTER_SECRET | urlencode }}/missing.json' }],
+          tmpDir,
+          { FILTER_SECRET: filterSecret },
+        );
+      } catch (caught) {
+        filteredError = caught;
+      }
+
+      expect(filteredError).toBeInstanceOf(ConfigResolutionError);
+      expect(String(filteredError)).not.toContain(encodeURIComponent(filterSecret));
+      expect(String((filteredError as Error & { cause?: unknown }).cause)).not.toContain(
+        encodeURIComponent(filterSecret),
       );
     });
 
@@ -1360,6 +1430,37 @@ describe('scenarioMatrix (real filesystem)', () => {
       );
     });
 
+    it('does not instantiate file-backed scenario providers while reading tests', async () => {
+      const stateKey = '__promptfooScenarioReaderProvider';
+      const state = { constructed: 0 };
+      (globalThis as Record<string, unknown>)[stateKey] = state;
+      const testsPath = write(
+        'tests/lazy-provider.yaml',
+        '- vars:\n    case: lazy\n  provider: file://provider.cjs\n',
+      );
+      write(
+        'tests/provider.cjs',
+        `const state = globalThis[${JSON.stringify(stateKey)}];
+module.exports = class LazyProvider {
+  constructor() { state.constructed += 1; }
+  id() { return 'lazy-provider'; }
+  async callApi() { return { output: 'ok' }; }
+};
+`,
+      );
+
+      try {
+        const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+        expect(tests?.[0].provider).toBe(
+          `file://${path.join(path.dirname(testsPath), 'provider.cjs')}`,
+        );
+        expect(state.constructed).toBe(0);
+      } finally {
+        delete (globalThis as Record<string, unknown>)[stateKey];
+      }
+    });
+
     it('uses source env while loading nested refs in file-backed scenario tests', async () => {
       const expectedPath = write('tests/expected.txt', 'EXPECTED_FROM_SOURCE_ENV');
       const testsPath = write(
@@ -1379,6 +1480,23 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(tests?.[0].assert?.[0]).toMatchObject({
         value: 'EXPECTED_FROM_SOURCE_ENV',
       });
+    });
+
+    it('retains concrete nested dependencies from file-backed scenario tests', async () => {
+      const varsPath = write('tests/vars.yaml', 'source: nested\n');
+      const transformPath = write('tests/transform.cjs', 'module.exports = (output) => output;\n');
+      const testsPath = write(
+        'tests/dependencies.yaml',
+        '- vars: file://vars.yaml\n  options:\n    transform: file://transform.cjs\n',
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+      const context = getScenarioTestSourceContext(tests![0]);
+
+      expect(context?.basePath).toBe(path.dirname(testsPath));
+      expect(context?.dependencies).toEqual(
+        expect.arrayContaining([testsPath, varsPath, transformPath]),
+      );
     });
 
     it('renders source env in inline scenario tests without file refs', async () => {
@@ -1500,6 +1618,28 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
     });
 
+    it('canonicalizes additional option file refs without dereferencing them', async () => {
+      const testsPath = write(
+        'tests/options.yaml',
+        `- options:
+    response_format: file://schemas/missing.json
+    tools: file://tools/missing.yaml
+    functions: file://functions/missing.json
+    rubricPrompt: file://rubrics/missing.txt
+`,
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+      const testDir = path.dirname(testsPath);
+
+      expect(tests?.[0].options).toMatchObject({
+        response_format: `file://${path.join(testDir, 'schemas/missing.json')}`,
+        tools: `file://${path.join(testDir, 'tools/missing.yaml')}`,
+        functions: `file://${path.join(testDir, 'functions/missing.json')}`,
+        rubricPrompt: `file://${path.join(testDir, 'rubrics/missing.txt')}`,
+      });
+    });
+
     it('prefers literal scenario-test and vars filenames containing glob characters', async () => {
       const testsPath = write(
         'tests/tests[prod].yaml',
@@ -1535,6 +1675,20 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(jsonTests?.map((test) => test.vars?.source).sort()).toEqual(['json-a', 'json-b']);
       expect(jsonlTests?.map((test) => test.vars?.source).sort()).toEqual(['jsonl-a', 'jsonl-b']);
     });
+
+    it.runIf(process.platform !== 'win32')(
+      'treats colons in non-script test paths as literal filename characters',
+      async () => {
+        const testsPath = write(
+          'tests:production/cases.json',
+          JSON.stringify([{ vars: { source: 'colon-directory' } }]),
+        );
+
+        await expect(readScenarioTests(`file://${testsPath}`, tmpDir)).resolves.toEqual([
+          expect.objectContaining({ vars: { source: 'colon-directory' } }),
+        ]);
+      },
+    );
 
     it('redacts signed source URLs from nested scenario-test errors', async () => {
       const signedSecret = 'signed-query-secret-sentinel';
@@ -1579,6 +1733,25 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
 
       expect(tests?.map((test) => test.vars?.name)).toEqual(['generated-one', 'generated-two']);
+    });
+
+    it('retains generator module and config file dependencies', async () => {
+      const payloadPath = write('generator/payload.txt', 'payload');
+      const generatorPath = write(
+        'generator/generate.cjs',
+        'module.exports = ({ payload }) => [{ vars: { payload } }];\n',
+      );
+
+      const tests = await readScenarioTests(
+        {
+          path: `file://${generatorPath}`,
+          config: { payload: `file://${payloadPath}` },
+        },
+        tmpDir,
+      );
+      const context = getScenarioTestSourceContext(tests![0]);
+
+      expect(context?.dependencies).toEqual(expect.arrayContaining([generatorPath, payloadPath]));
     });
 
     it('renders source env in scenario test generator config', async () => {

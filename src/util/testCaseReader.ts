@@ -20,6 +20,7 @@ import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } fr
 import { ConfigResolutionError } from './config/errors';
 import {
   getScenarioDependencyContext,
+  getScenarioOriginalValue,
   getScenarioTestSourceContext,
   mergeScenarioSourceContexts,
   restoreScenarioTestSourceContext,
@@ -36,7 +37,7 @@ import {
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { resolveLiteralPathOrGlob } from './pathUtils';
-import { REDACTED, sanitizeUrl } from './sanitizer';
+import { REDACTED, redactEnvValues, sanitizeUrl } from './sanitizer';
 import { parseXlsxFile } from './xlsx';
 
 import type {
@@ -263,23 +264,15 @@ function getStandaloneTestsFileMetadata(
   varsPath: string,
   basePath: string,
 ): StandaloneTestsFileMetadata {
-  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  // Split on the last colon to handle Windows drive letters correctly
-  const colonCount = resolvedVarsPath.split(':').length - 1;
-  const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
-
-  // For Windows paths, we need to account for the drive letter colon
-  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
-  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
-
-  if (effectiveColonCount > 1) {
-    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
+  let localPath = varsPath.replace(/^file:\/\//, '');
+  if (process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(localPath)) {
+    localPath = localPath.slice(1);
   }
-
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
-  const maybeFunctionName =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
+  const resolvedVarsPath = path.isAbsolute(localPath)
+    ? localPath
+    : path.resolve(basePath, localPath);
+  const { pathWithoutFunction, functionName: maybeFunctionName } =
+    splitTestScriptPath(resolvedVarsPath);
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
   // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
   const extensionWithoutSheet = fileExtension.split('#')[0];
@@ -290,6 +283,24 @@ function getStandaloneTestsFileMetadata(
     maybeFunctionName,
     fileExtension,
     extensionWithoutSheet,
+  };
+}
+
+function splitTestScriptPath(value: string): {
+  pathWithoutFunction: string;
+  functionName?: string;
+} {
+  const lastColonIndex = value.lastIndexOf(':');
+  if (lastColonIndex <= 1) {
+    return { pathWithoutFunction: value };
+  }
+  const candidatePath = value.slice(0, lastColonIndex);
+  if (!isJavascriptFile(candidatePath) && !candidatePath.endsWith('.py')) {
+    return { pathWithoutFunction: value };
+  }
+  return {
+    pathWithoutFunction: candidatePath,
+    functionName: value.slice(lastColonIndex + 1),
   };
 }
 
@@ -480,14 +491,15 @@ export async function loadTestsFromGlob(
   if (loadTestsGlob.startsWith('file://')) {
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
+  if (process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(loadTestsGlob)) {
+    loadTestsGlob = loadTestsGlob.slice(1);
+  }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
   const testFiles: Array<string> = resolveLiteralPathOrGlob(resolvedPath);
 
   // Check for possible function names in the path (Windows-aware)
-  const lastColonIndex = resolvedPath.lastIndexOf(':');
-  const pathWithoutFunction: string =
-    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
+  const { pathWithoutFunction } = splitTestScriptPath(resolvedPath);
   // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
@@ -507,15 +519,13 @@ export async function loadTestsFromGlob(
 
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
-    logger.error(`No test files found for path: ${loadTestsGlob}`);
+    logger.error(`No test files found for path: ${redactEnvValues(loadTestsGlob, envOverrides)}`);
     return ret;
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
     // Extract path without function name (Windows-aware)
-    const lastColonIndex = testFile.lastIndexOf(':');
-    const pathWithoutFunction: string =
-      lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
+    const { pathWithoutFunction } = splitTestScriptPath(testFile);
 
     // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
     const fileWithoutSheet = testFile.split('#')[0];
@@ -589,10 +599,16 @@ async function appendLoadedTestCases(
     const hasProvider =
       allowPartialTests && Object.prototype.hasOwnProperty.call(normalizedTest, 'provider');
     const providerRef = hasProvider ? normalizedTest.provider : undefined;
-    const loadedTest = await readTest(normalizedTest, testBasePath, allowPartialTests);
+    const testForNormalization = hasProvider ? { ...normalizedTest } : normalizedTest;
+    if (hasProvider) {
+      Reflect.deleteProperty(testForNormalization, 'provider');
+    }
+    const loadedTest = await readTest(testForNormalization, testBasePath, allowPartialTests);
     if (hasProvider) {
       loadedTest.provider = providerRef as TestCase['provider'];
     }
+    transferScenarioTestSourceContext(normalizedTest, loadedTest);
+    setScenarioOriginalValue(loadedTest, getScenarioOriginalValue(normalizedTest) ?? testCase);
     destination.push(loadedTest);
   }
 }
@@ -639,9 +655,8 @@ export async function readTests(
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
         // Extract path without function name (Windows-aware)
-        const lastColonIndex = globOrTest.lastIndexOf(':');
-        const pathWithoutFunction: string =
-          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
+        const localPath = globOrTest.replace(/^file:\/\//, '');
+        const { functionName, pathWithoutFunction } = splitTestScriptPath(localPath);
         // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
         const pathWithoutSheet = globOrTest.split('#')[0];
         // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
@@ -650,7 +665,7 @@ export async function readTests(
           pathWithoutFunction.endsWith('.py') ||
           pathWithoutSheet.endsWith('.xlsx') ||
           pathWithoutSheet.endsWith('.xls') ||
-          globOrTest.replace(/^file:\/\//, '').includes(':')
+          functionName !== undefined
         ) {
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {
@@ -741,7 +756,10 @@ export async function readScenarioTests(
         normalizedTest.provider = providerRef as TestCase['provider'];
       }
       transferScenarioTestSourceContext(materializedTest, normalizedTest);
-      setScenarioOriginalValue(normalizedTest, restoredTest);
+      setScenarioOriginalValue(
+        normalizedTest,
+        getScenarioOriginalValue(restoredTest) ?? restoredTest,
+      );
       normalizedTests.push(normalizedTest);
       continue;
     }
@@ -789,9 +807,16 @@ async function loadScenarioTestSource(
   const sourceType = typeof test === 'string' ? 'file' : 'generator';
   const sourcePath =
     typeof materializedTest === 'string' ? materializedTest : (materializedTest.path as string);
-  const safeSourcePath = sourcePath.startsWith('az://')
-    ? sanitizeAzureBlobUriForError(sourcePath)
-    : sanitizeUrl(sourcePath);
+  const safeSourcePath = redactEnvValues(
+    sourcePath.startsWith('az://')
+      ? sanitizeAzureBlobUriForError(sourcePath)
+      : sanitizeUrl(sourcePath),
+    envOverrides,
+  );
+  const sourceContext =
+    materializedTest && typeof materializedTest === 'object'
+      ? getScenarioTestSourceContext(materializedTest)
+      : undefined;
   let normalizedTests: TestCase[];
   try {
     const loaded = (await readTests(
@@ -810,9 +835,15 @@ async function loadScenarioTestSource(
       sourcePath,
       basePath,
       envOverrides,
+      sourceContext,
     );
   } catch (error) {
-    const detail = sanitizeScenarioSourceErrorDetail(sourcePath, safeSourcePath, error);
+    const detail = sanitizeScenarioSourceErrorDetail(
+      sourcePath,
+      safeSourcePath,
+      error,
+      envOverrides,
+    );
     throw new ConfigResolutionError(
       `Failed to load scenario test ${sourceType} ${safeSourcePath}: ${detail}`,
       { cause: new Error(detail) },
@@ -831,11 +862,11 @@ async function normalizeLoadedScenarioTests(
   sourcePath: string,
   fallbackBasePath: string,
   envOverrides?: EnvOverrides,
+  declaringContext?: ReturnType<typeof getScenarioTestSourceContext>,
 ): Promise<TestCase[]> {
   const normalizedTests: TestCase[] = [];
-  const sourceBasePath = getScenarioTestSourceBasePath(sourcePath, fallbackBasePath);
   const shouldNormalize = isLocalScenarioTestSource(sourcePath);
-  const dependencyContext = shouldNormalize
+  const declarationDependencyContext = shouldNormalize
     ? getScenarioDependencyContext(
         getStandaloneTestsFileMetadata(sourcePath, fallbackBasePath).pathWithoutFunction,
         fallbackBasePath,
@@ -846,14 +877,21 @@ async function normalizeLoadedScenarioTests(
       throw new Error(`test case ${index + 1} must be a plain object`);
     }
     if (!shouldNormalize) {
-      setScenarioTestSourceContext(loadedTest, {
-        basePath: fallbackBasePath,
-        envOverrides,
-      });
+      const sourceContext = mergeScenarioSourceContexts(
+        getScenarioTestSourceContext(loadedTest),
+        declaringContext,
+        { basePath: fallbackBasePath, envOverrides },
+      );
+      if (sourceContext) {
+        setScenarioTestSourceContext(loadedTest, sourceContext);
+      }
       normalizedTests.push(loadedTest as TestCase);
       continue;
     }
 
+    const loadedContext = getScenarioTestSourceContext(loadedTest);
+    const sourceBasePath =
+      loadedContext?.basePath ?? getScenarioTestSourceBasePath(sourcePath, fallbackBasePath);
     const resolvedTest = materializeScenarioTestCase(
       sourceBasePath,
       loadedTest,
@@ -872,15 +910,18 @@ async function normalizeLoadedScenarioTests(
     transferScenarioTestSourceContext(resolvedTest, normalizedTest);
     const sourceContext = mergeScenarioSourceContexts(
       getScenarioTestSourceContext(normalizedTest),
+      loadedContext,
+      declaringContext,
       {
         basePath: sourceBasePath,
         envOverrides,
-        ...dependencyContext,
+        ...declarationDependencyContext,
       },
     );
     if (sourceContext) {
       setScenarioTestSourceContext(normalizedTest, sourceContext);
     }
+    setScenarioOriginalValue(normalizedTest, getScenarioOriginalValue(loadedTest) ?? loadedTest);
     normalizedTests.push(normalizedTest);
   }
   return normalizedTests;
@@ -890,6 +931,7 @@ function sanitizeScenarioSourceErrorDetail(
   sourcePath: string,
   safeSourcePath: string,
   error: unknown,
+  envOverrides?: EnvOverrides,
 ): string {
   let detail = error instanceof Error ? error.message : String(error);
   detail = detail.split(sourcePath).join(safeSourcePath);
@@ -907,7 +949,7 @@ function sanitizeScenarioSourceErrorDetail(
       } catch {}
     }
   } catch {}
-  const sanitized = detail.replace(/[\u0000-\u001f\u007f]/g, '?');
+  const sanitized = redactEnvValues(detail, envOverrides).replace(/[\u0000-\u001f\u007f]/g, '?');
   return sanitized.length > 512 ? `${sanitized.slice(0, 512)}...` : sanitized;
 }
 

@@ -9,9 +9,11 @@ import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
+import { ConfigResolutionError } from './util/config/errors';
 import { createSerializableUnifiedConfig } from './util/config/persistableScenario';
 import {
   getScenarioSourceContext,
+  redactSensitiveEnvValues,
   transferScenarioSourceContext,
   withScenarioSourceFallback,
 } from './util/config/scenarioContext';
@@ -92,36 +94,53 @@ async function createRuntimeTestSuite(
     process.cwd(),
     scenarioEnv,
   );
-  const scenarios = loadedScenarios
-    ? await Promise.all(
-        loadedScenarios.map(async (scenario) => {
-          const sourceContext = withScenarioSourceFallback(
-            getScenarioSourceContext(scenario),
-            process.cwd(),
-            scenarioEnv,
-          );
-          const scenarioTests = await readScenarioTests(
-            (scenario as { tests?: unknown }).tests,
-            sourceContext.basePath,
-            sourceContext.envOverrides,
-          );
-          return transferScenarioSourceContext(scenario, {
+  let scenarios: TestSuite['scenarios'];
+  if (loadedScenarios) {
+    scenarios = [];
+    for (const scenario of loadedScenarios) {
+      const sourceContext = withScenarioSourceFallback(
+        getScenarioSourceContext(scenario),
+        process.cwd(),
+        scenarioEnv,
+      );
+      try {
+        const scenarioTests = await readScenarioTests(
+          (scenario as { tests?: unknown }).tests,
+          sourceContext.basePath,
+          sourceContext.envOverrides,
+        );
+        scenarios.push(
+          transferScenarioSourceContext(scenario, {
             ...scenario,
-            ...(scenarioTests === undefined ? {} : { tests: scenarioTests }),
+            tests: scenarioTests ?? [{}],
             config: await expandScenarioConfigValues(
               scenario.config,
               sourceContext.basePath,
               sourceContext.envOverrides,
             ),
-          });
-        }),
-      )
-    : undefined;
+          }),
+        );
+      } catch (error) {
+        const declaringSource = sourceContext.dependencies?.[0];
+        if (!declaringSource) {
+          throw error;
+        }
+        const safeSource = redactSensitiveEnvValues(declaringSource, sourceContext.envOverrides);
+        const detail = redactSensitiveEnvValues(
+          error instanceof Error ? error.message : String(error),
+          sourceContext.envOverrides,
+        );
+        throw new ConfigResolutionError(`Failed to load scenario ${safeSource}: ${detail}`, {
+          cause: new Error(detail),
+        });
+      }
+    }
+  }
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios: scenarios as TestSuite['scenarios'],
+    scenarios,
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),

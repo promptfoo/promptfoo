@@ -400,6 +400,7 @@ function resolveScenarioTestsRefs(
       return test;
     }
     const restoredTest = restoreScenarioTestSourceContext(test as Record<string, unknown>);
+    const originalValue = getScenarioOriginalValue(restoredTest) ?? restoredTest;
     const sourceContext = withScenarioSourceFallback(
       getScenarioTestSourceContext(restoredTest),
       basePath,
@@ -411,30 +412,48 @@ function resolveScenarioTestsRefs(
     const isGenerator = generatorPath !== undefined;
     const prototype = Object.getPrototypeOf(test);
     if (!isGenerator && prototype !== Object.prototype && prototype !== null) {
+      setScenarioOriginalValue(restoredTest, originalValue);
+      setScenarioTestSourceContext(restoredTest, sourceContext);
       return restoredTest;
     }
 
     if (isGenerator) {
-      return materializeScenarioTestSource(
+      const materialized = materializeScenarioTestSource(
         sourceContext.basePath,
         restoredTest,
         sourceContext.envOverrides,
       );
+      if (materialized && typeof materialized === 'object') {
+        setScenarioOriginalValue(materialized, originalValue);
+        const materializedContext = mergeScenarioSourceContexts(
+          getScenarioTestSourceContext(materialized),
+          sourceContext,
+        );
+        if (materializedContext) {
+          setScenarioTestSourceContext(materialized, materializedContext);
+        }
+      }
+      return materialized;
     }
 
-    const resolved: Record<string, unknown> = { ...record };
+    const resolvedRecord: Record<string, unknown> = { ...record };
     if (typeof record.vars === 'string' || Array.isArray(record.vars)) {
-      resolved.vars = Array.isArray(record.vars)
+      resolvedRecord.vars = Array.isArray(record.vars)
         ? record.vars.map((varsRef) =>
             resolveScenarioVarsRef(sourceContext.basePath, varsRef, sourceContext.envOverrides),
           )
         : resolveScenarioVarsRef(sourceContext.basePath, record.vars, sourceContext.envOverrides);
     }
-    return resolveScenarioConfigRowProviders(
+    const resolvedTest = resolveScenarioConfigRowProviders(
       sourceContext.basePath,
-      resolved,
+      resolvedRecord,
       sourceContext.envOverrides,
     );
+    if (resolvedTest && typeof resolvedTest === 'object') {
+      setScenarioOriginalValue(resolvedTest, originalValue);
+      setScenarioTestSourceContext(resolvedTest, sourceContext);
+    }
+    return resolvedTest;
   };
 
   if (tests === undefined || tests === null) {
@@ -922,6 +941,12 @@ export function materializeScenarioTestSource<T>(
   }
 
   assertSafeScenarioValue(testSource, 'scenario test generator');
+  const dependencyContext = collectScenarioConfigDependencies(
+    testSource,
+    basePath,
+    envOverrides,
+    'file-ref',
+  );
   const rendered = renderSourceEnvTemplates(testSource, envOverrides) as Record<string, unknown>;
   const resolved: Record<string, unknown> = { ...rendered };
   if (typeof rendered.path === 'string') {
@@ -936,7 +961,16 @@ export function materializeScenarioTestSource<T>(
       basePath,
     );
   }
-  return resolveScenarioConfigRowProviders(basePath, resolved, envOverrides) as T;
+  const materialized = resolveScenarioConfigRowProviders(basePath, resolved, envOverrides) as T;
+  if (materialized && typeof materialized === 'object') {
+    setScenarioTestSourceContext(materialized, {
+      basePath,
+      envOverrides,
+      ...dependencyContext,
+    });
+    setScenarioOriginalValue(materialized, getScenarioOriginalValue(testSource) ?? testSource);
+  }
+  return materialized;
 }
 
 function resolveScenarioTestVarsFileRefs(
@@ -966,6 +1000,7 @@ function collectScenarioConfigDependencies(
   value: unknown,
   basePath: string,
   envOverrides?: EnvOverrides,
+  initialContext: ConfigFileContext = 'scenario-test',
 ): Pick<ScenarioSourceContext, 'dependencies' | 'watchRoots'> {
   const dependencies = new Set<string>();
   const watchRoots = new Set<string>();
@@ -1001,7 +1036,7 @@ function collectScenarioConfigDependencies(
     }
   };
 
-  visit(value, 'scenario-test');
+  visit(value, initialContext);
   return {
     ...(dependencies.size > 0 ? { dependencies: [...dependencies] } : {}),
     ...(watchRoots.size > 0 ? { watchRoots: [...watchRoots] } : {}),

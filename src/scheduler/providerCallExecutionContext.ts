@@ -14,6 +14,13 @@ export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
+  ownedProviders?: { add(provider: never): unknown };
+  providerCache?: ProviderCacheEntry[];
+}
+
+export interface ProviderCacheEntry {
+  definition: unknown;
+  promise: Promise<unknown>;
 }
 
 const providerCallExecutionContext = new AsyncLocalStorage<ProviderCallExecutionContext>();
@@ -26,5 +33,8 @@ export function withProviderCallExecutionContext<T>(
   context: ProviderCallExecutionContext,
   fn: () => Promise<T>,
 ): Promise<T> {
-  return providerCallExecutionContext.run(context, fn);
+  return providerCallExecutionContext.run(
+    { ...providerCallExecutionContext.getStore(), ...context },
+    fn,
+  );
 }

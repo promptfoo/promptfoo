@@ -1806,6 +1806,40 @@ describe('resolveConfigs', () => {
     expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://tests.yaml' }]);
   });
 
+  it('attributes scenario materialization errors to external scenario files', async () => {
+    const secret = 'scenario-source-secret-canary';
+    const scenarioPath = path.resolve('/mock/cwd', 'scenarios.yaml');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['Prompt'],
+        providers: ['echo'],
+        env: { TEST_PATH_SECRET: secret },
+        scenarios: 'file://scenarios.yaml',
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['config.json']);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (input) =>
+      input === `file://${scenarioPath}`
+        ? [{ config: [{}], tests: `file://{{ env.TEST_PATH_SECRET }}/missing.json` }]
+        : input,
+    );
+    vi.mocked(readScenarioTests).mockRejectedValueOnce(
+      new ConfigResolutionError(`source contributed no tests: ${secret}`),
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Prompt', label: 'Prompt', config: {} }]);
+
+    let error: unknown;
+    try {
+      await resolveConfigs({ config: ['config.json'] }, {});
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(String(error)).toContain(`Failed to load scenario ${scenarioPath}`);
+    expect(String(error)).not.toContain(secret);
+  });
+
   it('should expand scenario config values from external files', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};

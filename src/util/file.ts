@@ -82,11 +82,12 @@ export function renderEnvOnlyInStringForFilePath(
     'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
     getEnvBool('PROMPTFOO_SELF_HOSTED', false),
   );
-  const envGlobals = {
+  const effectiveEnvOverrides = envOverrides ?? cliState.config?.env ?? {};
+  const envGlobals: Record<string, string | undefined> = {
     ...(processEnvVarsDisabled ? {} : process.env),
-    ...(envOverrides ?? {}),
+    ...effectiveEnvOverrides,
   };
-  const nunjucksEngine = getNunjucksEngineForFilePath(envOverrides ?? {});
+  const nunjucksEngine = getNunjucksEngineForFilePath(envOverrides);
 
   return template.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
     if (!match.match(/\benv\.|env\[/)) {
@@ -317,6 +318,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export type ConfigFileContext =
   | 'assertion'
+  | 'file-ref'
   | 'general'
   | 'opaque'
   | 'vars'
@@ -342,6 +344,10 @@ const SCENARIO_CONFIG_CHILD_CONTEXTS: Partial<
     transformVars: 'assertion',
     contextTransform: 'assertion',
     postprocess: 'assertion',
+    response_format: 'file-ref',
+    tools: 'file-ref',
+    functions: 'file-ref',
+    rubricPrompt: 'file-ref',
   },
   'scenario-test-assertions': {
     provider: 'provider',
@@ -376,9 +382,10 @@ export function getConfigFileChildContext(
   }
   const structuralContext = context ? SCENARIO_CONFIG_CHILD_CONTEXTS[context] : undefined;
   if (structuralContext) {
-    return Object.prototype.hasOwnProperty.call(structuralContext, key)
-      ? structuralContext[key]
-      : 'opaque';
+    if (Object.prototype.hasOwnProperty.call(structuralContext, key)) {
+      return structuralContext[key];
+    }
+    return 'opaque';
   }
   return isScriptAssertionValue(config, key) ? 'assertion' : key === 'vars' ? 'vars' : context;
 }
@@ -450,13 +457,19 @@ export function maybeLoadConfigFromExternalFile(
   }
   const externalContext =
     context === 'assertion' ||
+    context === 'file-ref' ||
     context === 'general' ||
     context === 'opaque' ||
     context === 'provider' ||
     context === 'vars'
       ? context
       : undefined;
-  return maybeLoadFromExternalFile(config, externalContext, envOverrides, basePath);
+  return maybeLoadFromExternalFile(
+    config,
+    externalContext === 'file-ref' ? 'provider' : externalContext,
+    envOverrides,
+    basePath,
+  );
 }
 
 /**

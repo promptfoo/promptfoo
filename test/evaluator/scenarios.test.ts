@@ -258,6 +258,43 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     }
   });
 
+  it('accepts frozen scenario objects returned by beforeAll hooks', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [{ config: [{ vars: { source: 'frozen' } }], tests: [{}] }],
+      '/source/scenarios',
+      { SOURCE_TOKEN: 'source-env' },
+    );
+    const provider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'frozen' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementationOnce(async (_extensions, _hookName, context) => {
+      const beforeAllContext = context as { suite: TestSuite };
+      const frozenScenarios = beforeAllContext.suite.scenarios?.map((scenario) =>
+        Object.freeze({
+          ...scenario,
+          config: scenario.config.map((row) => Object.freeze({ ...row })),
+          tests: scenario.tests?.map((test) => Object.freeze({ ...test })),
+        }),
+      );
+      return {
+        ...beforeAllContext,
+        suite: { ...beforeAllContext.suite, scenarios: frozenScenarios },
+      } as never;
+    });
+    const testSuite: TestSuite = {
+      extensions: ['file://before-all.js'],
+      providers: [provider],
+      prompts: [toPrompt('{{source}}')],
+      scenarios: scenarios as TestSuite['scenarios'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps source context attached when beforeAll clones, mutates, and reorders scenarios', async () => {
     const [scenarioA] = (await loadScenarioConfigs(
       [{ config: [{ provider: 'echo-a', vars: { source: 'a' } }], tests: [{}] }],

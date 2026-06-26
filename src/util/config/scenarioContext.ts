@@ -3,7 +3,13 @@ import path from 'path';
 
 import { hasMagic } from 'glob';
 import { GLOB_OPTIONS, resolveLiteralPathOrGlob } from '../pathUtils';
-import { isSecretField, looksLikeSecret, REDACTED, sanitizeObject } from '../sanitizer';
+import {
+  isSecretField,
+  looksLikeSecret,
+  REDACTED,
+  redactEnvValues,
+  sanitizeObject,
+} from '../sanitizer';
 
 type EnvOverrides = Record<string, string | undefined>;
 
@@ -125,15 +131,7 @@ export function redactSensitiveEnvValues(
   value: string,
   envOverrides: EnvOverrides | undefined,
 ): string {
-  return Object.entries({ ...process.env, ...envOverrides })
-    .filter(
-      (entry): entry is [string, string] =>
-        typeof entry[1] === 'string' &&
-        entry[1].length > 0 &&
-        isSensitiveEnvOverride(entry[0], entry[1]),
-    )
-    .sort((left, right) => right[1].length - left[1].length)
-    .reduce((sanitized, [, envValue]) => sanitized.split(envValue).join(REDACTED), value);
+  return redactEnvValues(value, envOverrides);
 }
 
 function serializeEnvOverrides(envOverrides: EnvOverrides | undefined): {

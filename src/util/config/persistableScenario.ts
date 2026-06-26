@@ -1,5 +1,5 @@
 import { sanitizeProvider } from '../../models/evalResult';
-import { sanitizeObject } from '../sanitizer';
+import { REDACTED, sanitizeObject } from '../sanitizer';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from '../transform';
 import {
   addPersistedScenarioSourceContext,
@@ -18,7 +18,7 @@ interface ApiProviderRecord extends Record<string, unknown> {
 }
 
 const ENV_TEMPLATE_PATTERN =
-  /\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*(['"])[A-Za-z_][A-Za-z0-9_.-]*\1\s*\])\s*\}\}/g;
+  /\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*(['"])[A-Za-z_][A-Za-z0-9_.-]*\1\s*\])(?:\s*\|\s*(?:lower|trim|upper|urlencode))*\s*\}\}/g;
 
 function isSafeEnvTemplate(value: string): boolean {
   const withoutTemplates = value.replace(ENV_TEMPLATE_PATTERN, '').trim();
@@ -91,8 +91,10 @@ function restoreTemplates(
   originalValue: unknown,
   seen = new WeakMap<object, unknown>(),
 ): unknown {
-  if (typeof originalValue === 'string' && isSafeEnvTemplate(originalValue)) {
-    return originalValue;
+  if (typeof originalValue === 'string' && originalValue.includes('{{')) {
+    return runtimeValue === REDACTED && !isSafeEnvTemplate(originalValue)
+      ? runtimeValue
+      : originalValue;
   }
   if (!runtimeValue || typeof runtimeValue !== 'object') {
     return runtimeValue;

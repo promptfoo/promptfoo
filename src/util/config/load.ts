@@ -48,10 +48,11 @@ import { promptfooCommand } from '../promptfooCommand';
 import { readScenarioTests, readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
-import { failConfigResolution } from './errors';
+import { ConfigResolutionError, failConfigResolution } from './errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import {
   getScenarioSourceContext,
+  redactSensitiveEnvValues,
   transferScenarioSourceContext,
   withScenarioSourceFallback,
 } from './scenarioContext';
@@ -105,11 +106,26 @@ async function materializeScenarioSources(
     fallbackEnv,
   );
   const { basePath, envOverrides } = sourceContext;
-  if (scenario.tests !== undefined) {
-    scenario.tests = (await readScenarioTests(scenario.tests, basePath, envOverrides)) ?? [];
-  }
-  if (scenario.config !== undefined) {
-    scenario.config = await expandScenarioConfigValues(scenario.config, basePath, envOverrides);
+  try {
+    if (scenario.tests !== undefined) {
+      scenario.tests = (await readScenarioTests(scenario.tests, basePath, envOverrides)) ?? [];
+    }
+    if (scenario.config !== undefined) {
+      scenario.config = await expandScenarioConfigValues(scenario.config, basePath, envOverrides);
+    }
+  } catch (error) {
+    const declaringSource = sourceContext.dependencies?.[0];
+    if (!declaringSource) {
+      throw error;
+    }
+    const safeSource = redactSensitiveEnvValues(declaringSource, envOverrides);
+    const detail = redactSensitiveEnvValues(
+      error instanceof Error ? error.message : String(error),
+      envOverrides,
+    );
+    throw new ConfigResolutionError(`Failed to load scenario ${safeSource}: ${detail}`, {
+      cause: new Error(detail),
+    });
   }
 }
 

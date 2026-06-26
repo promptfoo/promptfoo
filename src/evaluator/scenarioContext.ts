@@ -16,6 +16,9 @@ type ScenarioContextTarget = {
 };
 
 function setHiddenContext(target: object, key: symbol, sourceContext: ScenarioSourceContext): void {
+  if (!Object.isExtensible(target)) {
+    return;
+  }
   Object.defineProperty(target, key, {
     value: sourceContext,
     configurable: true,
@@ -59,7 +62,7 @@ export function transferScenarioTestSourceContext<T extends object>(source: obje
     setScenarioTestSourceContext(target, sourceContext);
   }
   const originalValue = (source as ScenarioContextTarget)[SCENARIO_ORIGINAL_VALUE];
-  if (originalValue !== undefined) {
+  if (originalValue !== undefined && Object.isExtensible(target)) {
     Object.defineProperty(target, SCENARIO_ORIGINAL_VALUE, {
       value: originalValue,
       configurable: true,
@@ -67,4 +70,8 @@ export function transferScenarioTestSourceContext<T extends object>(source: obje
     });
   }
   return target;
+}
+
+export function getScenarioOriginalValue(value: object): unknown {
+  return (value as ScenarioContextTarget)[SCENARIO_ORIGINAL_VALUE];
 }

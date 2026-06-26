@@ -82,14 +82,16 @@ describe('programmatic scenario config expansion', () => {
   it('runs scenario config rows when programmatic evals omit scenario tests', async () => {
     const provider = createMockProvider('omitted-scenario-tests-provider');
 
-    await evaluate({
+    const record = await evaluate({
       prompts: ['Topic: {{topic}}'],
       providers: [provider],
       scenarios: [{ config: [{ vars: { topic: 'billing' } }] }],
+      writeLatestResults: false,
     });
 
     expect(provider.callApi).toHaveBeenCalledTimes(1);
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
+    expect(record.config.scenarios?.[0]).toMatchObject({ tests: [{}] });
   });
 
   it('accepts frozen programmatic scenario config rows', async () => {
@@ -318,6 +320,71 @@ describe('programmatic scenario config expansion', () => {
     expect(String(error)).toContain('Failed to load scenario target provider');
     expect(String(error)).not.toContain(secret);
     expect(String((error as Error & { cause?: unknown }).cause)).not.toContain(secret);
+  });
+
+  it('clears the global duration timer when scenario provider resolution fails', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      await expect(
+        evaluate(
+          {
+            prompts: ['Prompt'],
+            providers: [createMockProvider('suite-provider')],
+            scenarios: [
+              {
+                config: [{ provider: 'file:///definitely-missing-scenario-provider.cjs' }],
+                tests: [{}],
+              },
+            ],
+            writeLatestResults: false,
+          },
+          { maxEvalTimeMs: 60_000 },
+        ),
+      ).rejects.toThrow(/Failed to load scenario target provider/);
+
+      const durationTimer = setTimeoutSpy.mock.results.find(
+        (_result, index) => setTimeoutSpy.mock.calls[index][1] === 60_000,
+      )?.value;
+      expect(durationTimer).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(durationTimer);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('redacts source environment values from scenario grader failures', async () => {
+    const secret = 'grader-secret-canary-9695';
+    vi.stubEnv('GRADER_PATH_SECRET', secret);
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'llm-rubric',
+                  value: 'pass',
+                  provider: `file://{{ env.GRADER_PATH_SECRET }}/missing-grader.cjs`,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      writeLatestResults: false,
+    });
+    const summary = await record.toEvaluateSummary();
+    const serialized = JSON.stringify(summary.results);
+
+    expect(summary.stats.errors).toBe(1);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).toContain('[REDACTED]');
   });
 
   it('rejects empty programmatic scenario files instead of returning zero results', async () => {
@@ -708,6 +775,93 @@ describe('programmatic scenario config expansion', () => {
     expect(persistedTest?.provider).toBe(`file://${path.join(scenarioDir, 'provider.cjs')}`);
   });
 
+  it('preserves mixed env templates from file-backed tests for secret rotation', async () => {
+    const tmpDir = makeTmpDir();
+    const testsPath = path.join(tmpDir, 'tests.yaml');
+    fs.writeFileSync(
+      testsPath,
+      '- vars:\n    endpoint: "https://example.test/?token={{ env.TEST_SECRET | urlencode }}"\n',
+    );
+    vi.stubEnv('TEST_SECRET', 'initial/secret+abcdefghijklmnop');
+    const firstProvider = createMockProvider('first-suite-provider');
+
+    const firstRecord = await evaluate({
+      prompts: ['{{endpoint}}'],
+      providers: [firstProvider],
+      scenarios: [{ config: [{}], tests: `file://${testsPath}` }],
+      writeLatestResults: false,
+    });
+    const persistedConfig = JSON.parse(JSON.stringify(firstRecord.config));
+
+    expect(calledPrompts(firstProvider)).toEqual([
+      'https://example.test/?token=initial%2Fsecret%2Babcdefghijklmnop',
+    ]);
+    expect(JSON.stringify(persistedConfig)).not.toContain('initial%2Fsecret');
+    expect(JSON.stringify(persistedConfig)).toContain('{{ env.TEST_SECRET | urlencode }}');
+
+    vi.stubEnv('TEST_SECRET', 'rotated/secret+abcdefghijklmnop');
+    const replayProvider = createMockProvider('replay-suite-provider');
+    await evaluate({
+      ...persistedConfig,
+      providers: [replayProvider],
+      writeLatestResults: false,
+    });
+
+    expect(calledPrompts(replayProvider)).toEqual([
+      'https://example.test/?token=rotated%2Fsecret%2Babcdefghijklmnop',
+    ]);
+  });
+
+  it('reuses and cleans up structurally identical file-backed scenario graders', async () => {
+    const tmpDir = makeTmpDir();
+    const stateKey = '__promptfooScenarioGraderLifecycle';
+    const state = { calls: 0, cleaned: 0, constructed: 0 };
+    (globalThis as Record<string, unknown>)[stateKey] = state;
+    const graderPath = path.join(tmpDir, 'grader.cjs');
+    fs.writeFileSync(
+      graderPath,
+      `const state = globalThis[${JSON.stringify(stateKey)}];
+module.exports = class ScenarioGrader {
+  constructor() { state.constructed += 1; }
+  id() { return 'scenario-grader'; }
+  async callApi() {
+    state.calls += 1;
+    return { output: JSON.stringify({ pass: true, score: 1, reason: 'passes' }) };
+  }
+  async cleanup() { state.cleaned += 1; }
+};
+`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'tests.yaml'),
+      `- assert:
+    - type: llm-rubric
+      value: first
+      provider:
+        id: file://grader.cjs
+    - type: llm-rubric
+      value: second
+      provider:
+        id: file://grader.cjs
+`,
+    );
+
+    try {
+      const record = await evaluate({
+        prompts: ['Prompt'],
+        providers: [createMockProvider('suite-provider')],
+        scenarios: [{ config: [{}], tests: `file://${path.join(tmpDir, 'tests.yaml')}` }],
+        writeLatestResults: false,
+      });
+      const summary = await record.toEvaluateSummary();
+
+      expect(summary.stats.successes).toBe(1);
+      expect(state).toEqual({ calls: 2, cleaned: 1, constructed: 1 });
+    } finally {
+      delete (globalThis as Record<string, unknown>)[stateKey];
+    }
+  });
+
   it('loads nested file refs in inline scenario config and test rows', async () => {
     const tmpDir = makeTmpDir();
     const scenarioDir = path.join(tmpDir, 'scenarios');
@@ -766,6 +920,56 @@ describe('programmatic scenario config expansion', () => {
       }),
     ).rejects.toThrow(/contributed no tests/);
     expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('does not start later scenario generators after an earlier source fails', async () => {
+    const tmpDir = makeTmpDir();
+    const markerPath = path.join(tmpDir, 'later-generator-ran');
+    fs.writeFileSync(
+      path.join(tmpDir, 'fail.cjs'),
+      `module.exports = () => { throw new Error('first generator failed'); };\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'later.cjs'),
+      `module.exports = () => {
+  require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, 'ran');
+  return [{ vars: { source: 'later' } }];
+};
+`,
+    );
+
+    await expect(
+      evaluate({
+        prompts: ['Prompt'],
+        providers: [createMockProvider('suite-provider')],
+        scenarios: [
+          { config: [{}], tests: { path: `file://${path.join(tmpDir, 'fail.cjs')}` } },
+          { config: [{}], tests: { path: `file://${path.join(tmpDir, 'later.cjs')}` } },
+        ],
+        writeLatestResults: false,
+      }),
+    ).rejects.toThrow(/first generator failed/);
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
+  it('attributes scenario materialization failures to the declaring scenario file', async () => {
+    const tmpDir = makeTmpDir();
+    const scenarioPath = path.join(tmpDir, 'scenario.yaml');
+    fs.writeFileSync(
+      scenarioPath,
+      '- config:\n    - $values: file://missing-matrix.yaml\n  tests:\n    - {}\n',
+    );
+
+    await expect(
+      evaluate({
+        prompts: ['Prompt'],
+        providers: [createMockProvider('suite-provider')],
+        scenarios: [`file://${scenarioPath}`],
+        writeLatestResults: false,
+      }),
+    ).rejects.toThrow(
+      new RegExp(`Failed to load scenario ${scenarioPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+    );
   });
 
   it('resolves scenario config refs relative to each programmatic scenario glob match', async () => {

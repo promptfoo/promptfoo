@@ -699,6 +699,72 @@ describe('evalCommand', () => {
     }
   });
 
+  it('logs non-recoverable watch evaluation failures', async () => {
+    const config = { prompts: [], providers: [] } as UnifiedConfig;
+    const testSuite = { prompts: [], providers: [] } as TestSuite;
+    const watchFailure = new Error('unexpected watch failure');
+    vi.mocked(resolveConfigs).mockResolvedValue({ config, testSuite, basePath: path.resolve('/') });
+    vi.mocked(evaluate)
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
+      .mockRejectedValueOnce(watchFailure);
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+      const onChange = chokidarMocks.handlers.get('all');
+
+      await expect(onChange?.('change', defaultConfigPath)).rejects.toThrow(
+        'unexpected watch failure',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Watch evaluation failed', {
+        error: watchFailure,
+      });
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
+  it('waits for initial provider cleanup before starting a watch rerun', async () => {
+    const config = { prompts: [], providers: [] } as UnifiedConfig;
+    let releaseCleanup: (() => void) | undefined;
+    const cleanupBlocked = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let markCleanupStarted: (() => void) | undefined;
+    const cleanupStarted = new Promise<void>((resolve) => {
+      markCleanupStarted = resolve;
+    });
+    const provider: ApiProvider = {
+      id: () => 'watch-provider',
+      callApi: vi.fn<ApiProvider['callApi']>(),
+      cleanup: vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          markCleanupStarted?.();
+          await cleanupBlocked;
+        })
+        .mockResolvedValue(undefined),
+    };
+    const testSuite = { prompts: [], providers: [provider] } as TestSuite;
+    vi.mocked(resolveConfigs).mockResolvedValue({ config, testSuite, basePath: path.resolve('/') });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    const initialRun = doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+    await cleanupStarted;
+    const onChange = chokidarMocks.handlers.get('all');
+    expect(onChange).toBeDefined();
+    const rerun = onChange?.('change', defaultConfigPath) as Promise<void>;
+
+    await Promise.resolve();
+    expect(resolveConfigs).toHaveBeenCalledTimes(1);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+
+    releaseCleanup?.();
+    await Promise.all([initialRun, rerun]);
+    expect(resolveConfigs).toHaveBeenCalledTimes(2);
+    expect(evaluate).toHaveBeenCalledTimes(2);
+  });
+
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
     const cmdObj = { config: [cloudConfigUuid] };
