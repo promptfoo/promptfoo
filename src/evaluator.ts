@@ -2502,7 +2502,7 @@ async function resolveScenarioTargetProvidersForTests(
 ): Promise<AtomicTestCase[]> {
   let changed = false;
   const resolvedTests: AtomicTestCase[] = [];
-  const cache = new Map<unknown, Map<ScenarioSourceContext, AtomicTestCase['provider']>>();
+  const cache = new Map<unknown, Map<string, AtomicTestCase['provider']>>();
   for (const test of tests) {
     if (!scenarioTargetOverrideTests.has(test) || !test.provider || isApiProvider(test.provider)) {
       resolvedTests.push(test);
@@ -2516,15 +2516,21 @@ async function resolveScenarioTargetProvidersForTests(
       basePath: cliState.basePath ?? process.cwd(),
       envOverrides: testSuite.env,
     };
-    const contextCache = cache.get(test.provider);
-    const wasCached = contextCache?.has(context) ?? false;
+    const contextKey = JSON.stringify([
+      context.basePath,
+      Object.entries(context.envOverrides ?? {}).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    ]);
+    const providerCache = cache.get(test.provider);
+    const wasCached = providerCache?.has(contextKey) ?? false;
     const provider = wasCached
-      ? contextCache?.get(context)
+      ? providerCache?.get(contextKey)
       : await resolveRuntimeTargetProviderReference(test.provider, context);
     if (!wasCached) {
-      const providerCache = contextCache ?? new Map();
-      providerCache.set(context, provider);
-      cache.set(test.provider, providerCache);
+      const nextProviderCache = providerCache ?? new Map();
+      nextProviderCache.set(contextKey, provider);
+      cache.set(test.provider, nextProviderCache);
       if (provider && isApiProvider(provider) && !isApiProvider(test.provider)) {
         ownedProviders?.add(provider);
       }
@@ -2609,55 +2615,118 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   return tests;
 }
 
+const BEFORE_ALL_SCENARIO_CONTEXT_TOKEN = Symbol('promptfoo.beforeAllScenarioContextToken');
+
+type ScenarioContextTokenTarget = {
+  [BEFORE_ALL_SCENARIO_CONTEXT_TOKEN]?: object;
+};
+
+function captureScenarioContextValue<T extends object>(
+  value: T,
+  context: ScenarioSourceContext | undefined,
+) {
+  const token = {};
+  try {
+    Object.defineProperty(value, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN, {
+      value: token,
+      configurable: true,
+      enumerable: true,
+    });
+  } catch {
+    // Frozen user objects still use identity/deep-equality fallback restoration.
+  }
+  return { value, context, token };
+}
+
 function captureScenarioSourceContexts(scenarios: TestSuite['scenarios']) {
   return scenarios?.map((scenario) => ({
-    value: scenario,
-    context: getScenarioSourceContext(scenario),
-    config: scenario.config.map((row) => ({
-      value: row,
-      context: getScenarioTestSourceContext(row),
-    })),
+    ...captureScenarioContextValue(scenario, getScenarioSourceContext(scenario)),
+    config: scenario.config.map((row) =>
+      captureScenarioContextValue(row, getScenarioTestSourceContext(row)),
+    ),
     tests:
-      scenario.tests?.map((test) => ({
-        value: test,
-        context: getScenarioTestSourceContext(test),
-      })) ?? [],
+      scenario.tests?.map((test) =>
+        captureScenarioContextValue(test, getScenarioTestSourceContext(test)),
+      ) ?? [],
   }));
+}
+
+function clearCapturedScenarioContextTokens(
+  captured: ReturnType<typeof captureScenarioSourceContexts>,
+): void {
+  for (const scenario of captured ?? []) {
+    Reflect.deleteProperty(scenario.value, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+    for (const entry of [...scenario.config, ...scenario.tests]) {
+      Reflect.deleteProperty(entry.value, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+    }
+  }
+}
+
+function getScenarioContextToken(value: object): object | undefined {
+  return (value as ScenarioContextTokenTarget)[BEFORE_ALL_SCENARIO_CONTEXT_TOKEN];
 }
 
 function restoreCapturedScenarioSourceContexts(
   scenarios: TestSuite['scenarios'],
   captured: ReturnType<typeof captureScenarioSourceContexts>,
 ): void {
+  const scenariosByToken = new Map((captured ?? []).map((entry) => [entry.token, entry]));
   scenarios?.forEach((scenario, scenarioIndex) => {
+    const token = getScenarioContextToken(scenario);
+    const indexedSource = captured?.[scenarioIndex];
     const sourceContexts =
-      captured?.find(
-        (candidate) => candidate.value === scenario || isDeepStrictEqual(candidate.value, scenario),
-      ) ?? captured?.[scenarioIndex];
+      (token ? scenariosByToken.get(token) : undefined) ??
+      (indexedSource &&
+      (indexedSource.value === scenario || isDeepStrictEqual(indexedSource.value, scenario))
+        ? indexedSource
+        : captured?.find(
+            (candidate) =>
+              candidate.value === scenario || isDeepStrictEqual(candidate.value, scenario),
+          ));
     if (!sourceContexts) {
+      for (const entry of [...scenario.config, ...(scenario.tests ?? [])]) {
+        Reflect.deleteProperty(entry, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+      }
+      Reflect.deleteProperty(scenario, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
       return;
     }
     if (sourceContexts.context && !getScenarioSourceContext(scenario)) {
       setScenarioSourceContext(scenario, sourceContexts.context);
     }
+    const configByToken = new Map(sourceContexts.config.map((entry) => [entry.token, entry]));
     scenario.config.forEach((row, rowIndex) => {
+      const rowToken = getScenarioContextToken(row);
+      const indexedEntry = sourceContexts.config[rowIndex];
       const sourceEntry =
-        sourceContexts.config.find(
-          (candidate) => candidate.value === row || isDeepStrictEqual(candidate.value, row),
-        ) ?? sourceContexts.config[rowIndex];
+        (rowToken ? configByToken.get(rowToken) : undefined) ??
+        (indexedEntry && (indexedEntry.value === row || isDeepStrictEqual(indexedEntry.value, row))
+          ? indexedEntry
+          : sourceContexts.config.find(
+              (candidate) => candidate.value === row || isDeepStrictEqual(candidate.value, row),
+            ));
       if (sourceEntry?.context && !getScenarioTestSourceContext(row)) {
         setScenarioTestSourceContext(row, sourceEntry.context);
       }
+      Reflect.deleteProperty(row, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
     });
+    const testsByToken = new Map(sourceContexts.tests.map((entry) => [entry.token, entry]));
     scenario.tests?.forEach((test, testIndex) => {
+      const testToken = getScenarioContextToken(test);
+      const indexedEntry = sourceContexts.tests[testIndex];
       const sourceEntry =
-        sourceContexts.tests.find(
-          (candidate) => candidate.value === test || isDeepStrictEqual(candidate.value, test),
-        ) ?? sourceContexts.tests[testIndex];
+        (testToken ? testsByToken.get(testToken) : undefined) ??
+        (indexedEntry &&
+        (indexedEntry.value === test || isDeepStrictEqual(indexedEntry.value, test))
+          ? indexedEntry
+          : sourceContexts.tests.find(
+              (candidate) => candidate.value === test || isDeepStrictEqual(candidate.value, test),
+            ));
       if (sourceEntry?.context && !getScenarioTestSourceContext(test)) {
         setScenarioTestSourceContext(test, sourceEntry.context);
       }
+      Reflect.deleteProperty(test, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
     });
+    Reflect.deleteProperty(scenario, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
   });
 }
 
@@ -5112,12 +5181,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithMaxScoreAssertion = new Set<number>();
 
     ensureDefaultTestForExtensions(testSuite);
-    const scenarioSourceContexts = captureScenarioSourceContexts(testSuite.scenarios);
-    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
-      suite: testSuite,
-    });
+    const scenarioSourceContexts = testSuite.extensions?.length
+      ? captureScenarioSourceContexts(testSuite.scenarios)
+      : undefined;
+    const beforeAllOut = await (async () => {
+      try {
+        return await runExtensionHook(testSuite.extensions, 'beforeAll', {
+          suite: testSuite,
+        });
+      } finally {
+        clearCapturedScenarioContextTokens(scenarioSourceContexts);
+      }
+    })();
     testSuite = beforeAllOut.suite;
-    restoreCapturedScenarioSourceContexts(testSuite.scenarios, scenarioSourceContexts);
+    if (scenarioSourceContexts) {
+      restoreCapturedScenarioSourceContexts(testSuite.scenarios, scenarioSourceContexts);
+    }
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;

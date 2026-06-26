@@ -50,7 +50,11 @@ import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { failConfigResolution } from './errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { getScenarioSourceContext, transferScenarioSourceContext } from './scenarioContext';
+import {
+  getScenarioSourceContext,
+  transferScenarioSourceContext,
+  withScenarioSourceFallback,
+} from './scenarioContext';
 import {
   expandScenarioConfigValues,
   loadScenarioConfigs,
@@ -95,9 +99,12 @@ async function materializeScenarioSources(
   fallbackBasePath: string,
   fallbackEnv: EnvOverrides,
 ): Promise<void> {
-  const sourceContext = getScenarioSourceContext(scenario);
-  const basePath = sourceContext?.basePath ?? fallbackBasePath;
-  const envOverrides = sourceContext?.envOverrides ?? fallbackEnv;
+  const sourceContext = withScenarioSourceFallback(
+    getScenarioSourceContext(scenario),
+    fallbackBasePath,
+    fallbackEnv,
+  );
+  const { basePath, envOverrides } = sourceContext;
   if (scenario.tests !== undefined) {
     scenario.tests = (await readScenarioTests(scenario.tests, basePath, envOverrides)) ?? [];
   }

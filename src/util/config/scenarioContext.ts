@@ -105,6 +105,37 @@ export function getScenarioOriginalValue(value: object): unknown {
   return (value as ScenarioContextTarget)[SCENARIO_ORIGINAL_VALUE];
 }
 
+function isSensitiveEnvOverride(key: string, value: string): boolean {
+  const sanitized = sanitizeObject({ [key]: value }, { context: 'scenario source env' }) as Record<
+    string,
+    unknown
+  >;
+  return (
+    isSecretField(key) ||
+    /(?:secret|token|password|api[_-]?key|credential|authorization|signature|sig)/i.test(key) ||
+    looksLikeSecret(value) ||
+    sanitized[key] === REDACTED
+  );
+}
+
+export function redactSensitiveEnvValues(
+  value: string,
+  envOverrides: EnvOverrides | undefined,
+): string {
+  if (!envOverrides) {
+    return value;
+  }
+  return Object.entries(envOverrides)
+    .filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' &&
+        entry[1].length > 0 &&
+        isSensitiveEnvOverride(entry[0], entry[1]),
+    )
+    .sort((left, right) => right[1].length - left[1].length)
+    .reduce((sanitized, [, envValue]) => sanitized.split(envValue).join(REDACTED), value);
+}
+
 function serializeEnvOverrides(envOverrides: EnvOverrides | undefined): {
   envOverrides?: EnvOverrides;
 } {
@@ -117,16 +148,7 @@ function serializeEnvOverrides(envOverrides: EnvOverrides | undefined): {
     if (value === undefined) {
       continue;
     }
-    const sanitized = sanitizeObject(
-      { [key]: value },
-      { context: 'scenario source env' },
-    ) as Record<string, unknown>;
-    if (
-      isSecretField(key) ||
-      /(?:secret|token|password|api[_-]?key|credential|authorization|signature|sig)/i.test(key) ||
-      looksLikeSecret(value) ||
-      sanitized[key] === REDACTED
-    ) {
+    if (isSensitiveEnvOverride(key, value)) {
       continue;
     }
     persisted[key] = value;
@@ -208,6 +230,25 @@ export function restoreScenarioTestSourceContext<T extends Record<string, unknow
   const { [PERSISTED_SCENARIO_SOURCE_KEY]: _persisted, ...rest } = value;
   setScenarioTestSourceContext(rest, sourceContext);
   return rest as T;
+}
+
+export function withScenarioSourceFallback(
+  sourceContext: ScenarioSourceContext | undefined,
+  fallbackBasePath: string,
+  fallbackEnv: EnvOverrides | undefined,
+): ScenarioSourceContext {
+  const sourceEnv = sourceContext?.envOverrides;
+  const envOverrides =
+    sourceEnv === undefined
+      ? fallbackEnv
+      : fallbackEnv === undefined
+        ? sourceEnv
+        : { ...fallbackEnv, ...sourceEnv };
+  return {
+    ...sourceContext,
+    basePath: sourceContext?.basePath ?? fallbackBasePath,
+    ...(envOverrides === undefined ? {} : { envOverrides }),
+  };
 }
 
 function getGlobWatchRoot(pattern: string): string {

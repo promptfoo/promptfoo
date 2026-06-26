@@ -20,12 +20,14 @@ import {
   getScenarioOriginalValue,
   getScenarioSourceContext,
   getScenarioTestSourceContext,
+  redactSensitiveEnvValues,
   restoreScenarioSourceContext,
   restoreScenarioTestSourceContext,
   setScenarioConfigSourceContext,
   setScenarioOriginalValue,
   setScenarioSourceContext,
   setScenarioTestSourceContext,
+  withScenarioSourceFallback,
 } from './scenarioContext';
 
 import type {
@@ -96,11 +98,27 @@ function formatDiagnosticKey(key: string): string {
     : sanitized;
 }
 
-function formatSourceRef(sourceRef: string): string {
-  const sanitized = sourceRef.replace(/[\u0000-\u001f\u007f]/g, '?');
+function formatSourceRef(sourceRef: string, envOverrides?: EnvOverrides): string {
+  const sanitized = redactSensitiveEnvValues(sourceRef, envOverrides).replace(
+    /[\u0000-\u001f\u007f]/g,
+    '?',
+  );
   return sanitized.length > MAX_SOURCE_REF_LENGTH
     ? `${sanitized.slice(0, MAX_SOURCE_REF_LENGTH)}...`
     : sanitized;
+}
+
+function sanitizeSourceError(error: unknown, envOverrides?: EnvOverrides): Error {
+  const message = formatSourceRef(
+    error instanceof Error ? error.message : String(error),
+    envOverrides,
+  );
+  const sanitized = new Error(message);
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (typeof code === 'string') {
+    Object.defineProperty(sanitized, 'code', { value: code, configurable: true });
+  }
+  return sanitized;
 }
 
 function formatKeySummary(summary: DiagnosticKeySummary): string {
@@ -332,10 +350,12 @@ export function resolveScenarioConfigValuesRefs(
     config: scenario.config.map((rawEntry) => {
       const entry = isPlainRecord(rawEntry) ? restoreScenarioTestSourceContext(rawEntry) : rawEntry;
       if (!isScenarioConfigValuesRef(entry)) {
-        const sourceContext =
-          entry && typeof entry === 'object'
-            ? (getScenarioTestSourceContext(entry) ?? { basePath, envOverrides })
-            : { basePath, envOverrides };
+        const sourceContext = withScenarioSourceFallback(
+          entry && typeof entry === 'object' ? getScenarioTestSourceContext(entry) : undefined,
+          basePath,
+          envOverrides,
+        );
+        assertSafeScenarioValue(entry, 'scenario config entry');
         const resolved = resolveScenarioConfigRowProviders(
           sourceContext.basePath,
           entry,
@@ -374,7 +394,13 @@ function resolveScenarioTestsRefs(
       return test;
     }
     const restoredTest = restoreScenarioTestSourceContext(test as Record<string, unknown>);
+    const sourceContext = withScenarioSourceFallback(
+      getScenarioTestSourceContext(restoredTest),
+      basePath,
+      envOverrides,
+    );
     const record = restoredTest as Record<string, unknown>;
+    assertSafeScenarioValue(restoredTest, 'scenario test');
     const generatorPath = typeof record.path === 'string' ? record.path : undefined;
     const isGenerator = generatorPath !== undefined;
     const prototype = Object.getPrototypeOf(test);
@@ -383,16 +409,26 @@ function resolveScenarioTestsRefs(
     }
 
     if (isGenerator) {
-      return materializeScenarioTestSource(basePath, restoredTest, envOverrides);
+      return materializeScenarioTestSource(
+        sourceContext.basePath,
+        restoredTest,
+        sourceContext.envOverrides,
+      );
     }
 
     const resolved: Record<string, unknown> = { ...record };
     if (typeof record.vars === 'string' || Array.isArray(record.vars)) {
       resolved.vars = Array.isArray(record.vars)
-        ? record.vars.map((varsRef) => resolveScenarioVarsRef(basePath, varsRef, envOverrides))
-        : resolveScenarioVarsRef(basePath, record.vars, envOverrides);
+        ? record.vars.map((varsRef) =>
+            resolveScenarioVarsRef(sourceContext.basePath, varsRef, sourceContext.envOverrides),
+          )
+        : resolveScenarioVarsRef(sourceContext.basePath, record.vars, sourceContext.envOverrides);
     }
-    return resolveScenarioConfigRowProviders(basePath, resolved, envOverrides);
+    return resolveScenarioConfigRowProviders(
+      sourceContext.basePath,
+      resolved,
+      sourceContext.envOverrides,
+    );
   };
 
   if (tests === undefined || tests === null) {
@@ -455,6 +491,9 @@ function assertSafeScenarioValue(value: unknown, sourceDescription: string): voi
       continue;
     }
     if (active.has(objectValue)) {
+      if (isPlainRecord(objectValue) && isProviderTypeMap(objectValue)) {
+        continue;
+      }
       throw new ConfigResolutionError(`Scenario value contains a cycle (${sourceDescription})`);
     }
     if (seen.has(objectValue)) {
@@ -466,13 +505,6 @@ function assertSafeScenarioValue(value: unknown, sourceDescription: string): voi
       );
     }
     if (isPlainRecord(objectValue) && isLiveProvider(objectValue)) {
-      continue;
-    }
-    if (
-      isPlainRecord(objectValue) &&
-      (isProviderTypeMap(objectValue) ||
-        (objectValue.type === 'assert-set' && Array.isArray(objectValue.assert)))
-    ) {
       continue;
     }
     const children = Array.isArray(objectValue)
@@ -828,6 +860,7 @@ export function resolveScenarioTestCaseProviderRefs<T>(
   testCase: T,
   envOverrides?: EnvOverrides,
 ): T {
+  assertSafeScenarioValue(testCase, 'scenario test');
   return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
 }
 
@@ -836,6 +869,7 @@ export function materializeScenarioTestCase<T>(
   testCase: T,
   envOverrides?: EnvOverrides,
 ): T {
+  assertSafeScenarioValue(testCase, 'scenario test');
   const rendered = renderSourceEnvTemplates(testCase, envOverrides);
   const materialized = containsFileRefString(rendered)
     ? resolveScenarioConfigRowProviders(
@@ -872,6 +906,7 @@ export function materializeScenarioTestSource<T>(
     return testSource;
   }
 
+  assertSafeScenarioValue(testSource, 'scenario test generator');
   const rendered = renderSourceEnvTemplates(testSource, envOverrides) as Record<string, unknown>;
   const resolved: Record<string, unknown> = { ...rendered };
   if (typeof rendered.path === 'string') {
@@ -948,7 +983,11 @@ export function resolveScenarioFileRefs(
   scenario: ScenarioInput,
   envOverrides?: EnvOverrides,
 ): ScenarioInput {
-  const sourceContext = getScenarioSourceContext(scenario) ?? { basePath, envOverrides };
+  const sourceContext = withScenarioSourceFallback(
+    getScenarioSourceContext(scenario),
+    basePath,
+    envOverrides,
+  );
   const resolved = resolveScenarioTestsRefs(
     sourceContext.basePath,
     resolveScenarioConfigValuesRefs(sourceContext.basePath, scenario, sourceContext.envOverrides),
@@ -978,7 +1017,9 @@ function getFilePaths(
 
   const matchedFiles = globSync(resolvedPath, GLOB_OPTIONS);
   if (matchedFiles.length === 0) {
-    throw new ConfigResolutionError(`No files found matching pattern: ${resolvedPath}`);
+    throw new ConfigResolutionError(
+      `No files found matching pattern: ${formatSourceRef(resolvedPath, envOverrides)}`,
+    );
   }
   return { paths: matchedFiles, fromGlob: true };
 }
@@ -1017,10 +1058,11 @@ export async function loadScenarioConfigs(
       const restoredScenario = restoreScenarioSourceContext(
         scenario as unknown as Record<string, unknown>,
       ) as ScenarioInput;
-      const sourceContext = getScenarioSourceContext(restoredScenario) ?? {
+      const sourceContext = withScenarioSourceFallback(
+        getScenarioSourceContext(restoredScenario),
         basePath,
         envOverrides,
-      };
+      );
       loadedScenarios.push(
         resolveScenarioFileRefs(
           sourceContext.basePath,
@@ -1046,20 +1088,20 @@ export async function loadScenarioConfigs(
         );
       } catch (error) {
         throw new ConfigResolutionError(
-          `Failed to read scenario file: ${formatSourceRef(scenarioFilePath)}`,
-          { cause: error },
+          `Failed to read scenario file: ${formatSourceRef(scenarioFilePath, envOverrides)}`,
+          { cause: sanitizeSourceError(error, envOverrides) },
         );
       }
       const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
       if (loaded === null || loaded === undefined || scenarioEntries.length === 0) {
         throw new ConfigResolutionError(
-          `Scenario file contributed no scenarios: ${scenarioFilePath}`,
+          `Scenario file contributed no scenarios: ${formatSourceRef(scenarioFilePath, envOverrides)}`,
         );
       }
       for (const entry of scenarioEntries) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
           throw new ConfigResolutionError(
-            `Scenario file ${scenarioFilePath} must contain scenario objects; got ${describeValue(entry)}`,
+            `Scenario file ${formatSourceRef(scenarioFilePath, envOverrides)} must contain scenario objects; got ${describeValue(entry)}`,
           );
         }
         const resolvedScenario = resolveScenarioFileRefs(
@@ -1195,12 +1237,14 @@ async function loadScenarioMatrixFile(
     return await maybeLoadFromExternalFile(concreteRef, undefined, envOverrides);
   } catch (error) {
     if (fromGlob && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-      logger.debug(`File disappeared during scenario matrix glob expansion: ${valuesFilePath}`);
+      logger.debug(
+        `File disappeared during scenario matrix glob expansion: ${formatSourceRef(valuesFilePath, envOverrides)}`,
+      );
       return undefined;
     }
     throw new ConfigResolutionError(
-      `Failed to read scenario matrix file: ${formatSourceRef(valuesFilePath)}`,
-      { cause: error },
+      `Failed to read scenario matrix file: ${formatSourceRef(valuesFilePath, envOverrides)}`,
+      { cause: sanitizeSourceError(error, envOverrides) },
     );
   }
 }
@@ -1246,10 +1290,11 @@ export async function expandScenarioConfigValues(
           `Scenario config entry ${entryIndex + 1} must be an object (partial test case); got ${describeValue(entry)}`,
         );
       }
-      const entrySourceContext = getScenarioTestSourceContext(entry) ?? {
+      const entrySourceContext = withScenarioSourceFallback(
+        getScenarioTestSourceContext(entry),
         basePath,
         envOverrides,
-      };
+      );
       expandedConfig.push(
         materializeScenarioConfigRow(
           entrySourceContext.basePath,
@@ -1262,7 +1307,11 @@ export async function expandScenarioConfigValues(
     }
 
     const ref = assertValidValuesRef(entry, `scenario config entry ${entryIndex + 1}`);
-    const sourceContext = getScenarioConfigSourceContext(ref) ?? { basePath, envOverrides };
+    const sourceContext = withScenarioSourceFallback(
+      getScenarioConfigSourceContext(ref),
+      basePath,
+      envOverrides,
+    );
     const valuesRef = resolveFileRefFromBase(
       sourceContext.basePath,
       ref.$values,
@@ -1281,6 +1330,7 @@ export async function expandScenarioConfigValues(
     );
     for (const valuesFilePath of valuesFilePaths) {
       const concreteRef = `${FILE_REF_PREFIX}${valuesFilePath}`;
+      const safeConcreteRef = formatSourceRef(concreteRef, sourceContext.envOverrides);
       const loadedValues = await loadScenarioMatrixFile(
         concreteRef,
         valuesFilePath,
@@ -1296,7 +1346,7 @@ export async function expandScenarioConfigValues(
       if (rows.length === 0) {
         continue;
       }
-      validateMatrixRowShapes(rows, concreteRef);
+      validateMatrixRowShapes(rows, safeConcreteRef);
       for (const [rowIndex, rawRow] of rows.entries()) {
         let row: Scenario['config'][number];
         try {
@@ -1304,18 +1354,18 @@ export async function expandScenarioConfigValues(
             path.dirname(valuesFilePath),
             rawRow,
             sourceContext.envOverrides,
-            `row ${rowIndex + 1} of ${concreteRef}`,
+            `row ${rowIndex + 1} of ${safeConcreteRef}`,
           );
         } catch (error) {
           if (error instanceof ConfigResolutionError) {
             throw error;
           }
           throw new ConfigResolutionError(
-            `Failed to materialize scenario config row ${rowIndex + 1} from ${concreteRef}`,
-            { cause: error },
+            `Failed to materialize scenario config row ${rowIndex + 1} from ${safeConcreteRef}`,
+            { cause: sanitizeSourceError(error, sourceContext.envOverrides) },
           );
         }
-        validateMatrixRowValues(row, rowIndex, concreteRef);
+        validateMatrixRowValues(row, rowIndex, safeConcreteRef);
         if (row && typeof row === 'object') {
           setScenarioTestSourceContext(row, {
             basePath: path.dirname(valuesFilePath),
@@ -1332,8 +1382,8 @@ export async function expandScenarioConfigValues(
     if (expandedConfig.length === expansionStart) {
       throw new ConfigResolutionError(
         sawLoadedValue
-          ? `Scenario config $values file contributed no rows: ${valuesRef}`
-          : `Scenario config $values file is empty: ${valuesRef}`,
+          ? `Scenario config $values file contributed no rows: ${formatSourceRef(valuesRef, sourceContext.envOverrides)}`
+          : `Scenario config $values file is empty: ${formatSourceRef(valuesRef, sourceContext.envOverrides)}`,
       );
     }
   }

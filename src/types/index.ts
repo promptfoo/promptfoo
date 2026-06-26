@@ -1097,14 +1097,18 @@ const ScenarioInlineTestInputSchema = TestCaseWithVarsFileSchema.extend({
 
 // Raw config accepts matrix-file references and test generators. ScenarioSchema
 // remains the resolved runtime contract for consumers of materialized suites.
-const ScenarioInputSchema = ScenarioSchema.extend({
+export const ScenarioInputSchema = ScenarioSchema.extend({
   config: z.array(ScenarioConfigSchema),
-  tests: z.union([
-    z.string(),
-    z.array(z.union([z.string(), TestGeneratorConfigSchema, ScenarioInlineTestInputSchema])),
-    TestGeneratorConfigSchema,
-  ]),
+  tests: z
+    .union([
+      z.string(),
+      z.array(z.union([z.string(), TestGeneratorConfigSchema, ScenarioInlineTestInputSchema])),
+      TestGeneratorConfigSchema,
+    ])
+    .optional(),
 });
+
+export type ScenarioInput = z.infer<typeof ScenarioInputSchema>;
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric

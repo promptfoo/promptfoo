@@ -233,6 +233,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
       .spyOn(providerModule, 'resolveProvider')
       .mockResolvedValueOnce(scenarioProvider);
     const testSuite: TestSuite = {
+      extensions: ['file://before-all.js'],
       providers: [suiteProvider],
       prompts: [toPrompt('Prompt')],
       scenarios: scenarios as TestSuite['scenarios'],
@@ -251,6 +252,82 @@ describeEvaluator('evaluator scenarios and conversations', () => {
         }),
       );
       expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(suiteProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      resolveProviderSpy.mockRestore();
+    }
+  });
+
+  it('keeps source context attached when beforeAll clones, mutates, and reorders scenarios', async () => {
+    const [scenarioA] = (await loadScenarioConfigs(
+      [{ config: [{ provider: 'echo-a', vars: { source: 'a' } }], tests: [{}] }],
+      '/source/a',
+      { SOURCE_TOKEN: 'env-a' },
+    ))!;
+    const [scenarioB] = (await loadScenarioConfigs(
+      [{ config: [{ provider: 'echo-b', vars: { source: 'b' } }], tests: [{}] }],
+      '/source/b',
+      { SOURCE_TOKEN: 'env-b' },
+    ))!;
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const scenarioProviderA: ApiProvider = {
+      id: () => 'scenario-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'a' }),
+    };
+    const scenarioProviderB: ApiProvider = {
+      id: () => 'scenario-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'b' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementationOnce(async (_extensions, _hookName, context) => {
+      const beforeAllContext = context as { suite: TestSuite };
+      return {
+        ...beforeAllContext,
+        suite: {
+          ...beforeAllContext.suite,
+          scenarios: beforeAllContext.suite.scenarios
+            ?.map((scenario) => ({
+              ...scenario,
+              config: scenario.config.map((row) => ({
+                ...row,
+                metadata: { ...row.metadata, changedByHook: true },
+              })),
+              tests: scenario.tests?.map((test) => ({ ...test })),
+            }))
+            .reverse(),
+        },
+      } as never;
+    });
+    const resolveProviderSpy = vi
+      .spyOn(providerModule, 'resolveProvider')
+      .mockImplementation(async (provider, _providerMap, _options) => {
+        return provider === 'echo-a' ? scenarioProviderA : scenarioProviderB;
+      });
+    const testSuite: TestSuite = {
+      extensions: ['file://before-all.js'],
+      providers: [suiteProvider],
+      prompts: [toPrompt('{{source}}')],
+      scenarios: [scenarioA, scenarioB] as TestSuite['scenarios'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(resolveProviderSpy).toHaveBeenCalledWith(
+        'echo-a',
+        expect.any(Object),
+        expect.objectContaining({ basePath: '/source/a', env: { SOURCE_TOKEN: 'env-a' } }),
+      );
+      expect(resolveProviderSpy).toHaveBeenCalledWith(
+        'echo-b',
+        expect.any(Object),
+        expect.objectContaining({ basePath: '/source/b', env: { SOURCE_TOKEN: 'env-b' } }),
+      );
+      expect(scenarioProviderA.callApi).toHaveBeenCalledTimes(1);
+      expect(scenarioProviderB.callApi).toHaveBeenCalledTimes(1);
       expect(suiteProvider.callApi).not.toHaveBeenCalled();
     } finally {
       resolveProviderSpy.mockRestore();
@@ -280,30 +357,19 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves cyclic assertion sets while applying scenario grader context', async () => {
+  it('rejects cyclic assertion sets before applying scenario grader context', async () => {
     const assertion: Record<string, unknown> = {
       type: 'assert-set',
       assert: [],
     };
     (assertion.assert as unknown[]).push(assertion);
-    const scenarios = await loadScenarioConfigs(
-      [{ config: [{ assert: [assertion] }], tests: [{}] } as never],
-      '/source/scenarios',
-      { GRADER_TOKEN: 'source-env' },
-    );
-    const testSuite = {
-      providers: [],
-      prompts: [],
-      scenarios: scenarios as TestSuite['scenarios'],
-    } as TestSuite;
-
-    const [testCase] = __buildTestsFromSuiteForTests(testSuite);
-    const resolvedAssertion = testCase.assert?.[0] as unknown as {
-      assert: unknown[];
-    };
-
-    expect(resolvedAssertion.assert).toHaveLength(1);
-    expect(resolvedAssertion.assert[0]).toBe(resolvedAssertion);
+    await expect(
+      loadScenarioConfigs(
+        [{ config: [{ assert: [assertion] }], tests: [{}] } as never],
+        '/source/scenarios',
+        { GRADER_TOKEN: 'source-env' },
+      ),
+    ).rejects.toThrow(/contains a cycle/);
   });
 
   it('resolves string and options-object provider overrides from scenario rows', async () => {

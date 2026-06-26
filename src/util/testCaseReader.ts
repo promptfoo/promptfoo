@@ -25,6 +25,7 @@ import {
   setScenarioOriginalValue,
   setScenarioTestSourceContext,
   transferScenarioTestSourceContext,
+  withScenarioSourceFallback,
 } from './config/scenarioContext';
 import {
   materializeScenarioTestCase,
@@ -714,10 +715,11 @@ export async function readScenarioTests(
   for (const test of Array.isArray(tests) ? tests : [tests]) {
     if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
       const restoredTest = restoreScenarioTestSourceContext(test);
-      const sourceContext = getScenarioTestSourceContext(restoredTest) ?? {
+      const sourceContext = withScenarioSourceFallback(
+        getScenarioTestSourceContext(restoredTest),
         basePath,
         envOverrides,
-      };
+      );
       const renderedTest = renderScenarioSourceEnvTemplates(
         restoredTest,
         sourceContext.envOverrides,

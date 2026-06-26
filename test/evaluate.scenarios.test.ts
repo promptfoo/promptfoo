@@ -85,7 +85,7 @@ describe('programmatic scenario config expansion', () => {
     await evaluate({
       prompts: ['Topic: {{topic}}'],
       providers: [provider],
-      scenarios: [{ config: [{ vars: { topic: 'billing' } }] } as never],
+      scenarios: [{ config: [{ vars: { topic: 'billing' } }] }],
     });
 
     expect(provider.callApi).toHaveBeenCalledTimes(1);
@@ -841,6 +841,48 @@ module.exports = class ScenarioProvider {
 
       expect(summary.results).toHaveLength(2);
       expect(summary.stats.errors).toBe(1);
+      expect(state).toEqual({ calls: 2, cleaned: 1, constructed: 1 });
+    } finally {
+      delete (globalThis as Record<string, unknown>)[stateKey];
+    }
+  });
+
+  it('reuses identical scenario providers across separate config rows', async () => {
+    const tmpDir = makeTmpDir();
+    const stateKey = '__promptfooScenarioConfigProviderLifecycle';
+    const state = { calls: 0, cleaned: 0, constructed: 0 };
+    (globalThis as Record<string, unknown>)[stateKey] = state;
+    const providerPath = path.join(tmpDir, 'provider.cjs');
+    fs.writeFileSync(
+      providerPath,
+      `const state = globalThis[${JSON.stringify(stateKey)}];
+module.exports = class ScenarioProvider {
+  constructor() { state.constructed += 1; }
+  id() { return 'scenario-config-provider'; }
+  async callApi(prompt) { state.calls += 1; return { output: prompt }; }
+  async cleanup() { state.cleaned += 1; }
+};
+`,
+    );
+
+    try {
+      const record = await evaluate({
+        prompts: ['{{case}}'],
+        providers: [createMockProvider('suite-provider')],
+        scenarios: [
+          {
+            config: [
+              { provider: `file://${providerPath}`, vars: { case: 'one' } },
+              { provider: `file://${providerPath}`, vars: { case: 'two' } },
+            ],
+            tests: [{}],
+          },
+        ],
+        writeLatestResults: false,
+      });
+      const summary = await record.toEvaluateSummary();
+
+      expect(summary.results).toHaveLength(2);
       expect(state).toEqual({ calls: 2, cleaned: 1, constructed: 1 });
     } finally {
       delete (globalThis as Record<string, unknown>)[stateKey];

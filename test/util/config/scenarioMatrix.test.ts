@@ -12,6 +12,8 @@ import {
   getScenarioDependencyContext,
   getScenarioSourceContext,
   PERSISTED_SCENARIO_SOURCE_KEY,
+  setScenarioOriginalValue,
+  setScenarioTestSourceContext,
 } from '../../../src/util/config/scenarioContext';
 import {
   expandScenarioConfigValues,
@@ -205,9 +207,61 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(() => JSON.stringify(serialized)).not.toThrow();
       expect(serialized).toEqual({ assert: [{ type: 'assert-set', assert: [] }] });
     });
+
+    it('preserves credential templates while redacting rendered provider secrets', () => {
+      const template = '{{ env.PR9695_PROVIDER_SECRET }}';
+
+      const serialized = toSerializableScenarioTestCase({
+        provider: { id: 'echo', config: { apiKey: template } },
+      });
+
+      expect(serialized).toEqual({
+        provider: { id: 'echo', config: { apiKey: template } },
+      });
+    });
+
+    it('merges persisted source env over replay env after secret values are omitted', async () => {
+      const runtimeRow = {
+        vars: { safe: 'source-safe', token: 'source-secret' },
+      };
+      setScenarioOriginalValue(runtimeRow, {
+        vars: { safe: '{{ env.SAFE }}', token: '{{ env.SECRET }}' },
+      });
+      setScenarioTestSourceContext(runtimeRow, {
+        basePath: tmpDir,
+        envOverrides: { SAFE: 'source-safe', SECRET: 'source-secret' },
+      });
+      const serialized = toSerializableScenarioTestCase(runtimeRow);
+
+      const expanded = await expandScenarioConfigValues([serialized], tmpDir, {
+        SAFE: 'replay-safe',
+        SECRET: 'rotated-secret',
+      });
+
+      expect(expanded).toEqual([{ vars: { safe: 'source-safe', token: 'rotated-secret' } }]);
+    });
   });
 
   describe('expandScenarioConfigValues', () => {
+    it('redacts sensitive rendered env values from matrix path errors and causes', async () => {
+      const secret = 'super-secret-canary-9695';
+
+      let error: unknown;
+      try {
+        await expandScenarioConfigValues(
+          [{ $values: 'file://{{ env.PATH_SECRET }}/missing.json' }],
+          tmpDir,
+          { PATH_SECRET: secret },
+        );
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeInstanceOf(ConfigResolutionError);
+      expect(String(error)).not.toContain(secret);
+      expect(String((error as Error & { cause?: unknown }).cause)).not.toContain(secret);
+    });
+
     it('expands $values rows and keeps inline rows in order', async () => {
       const matrixPath = write(
         'matrix.yaml',
@@ -707,7 +761,7 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(providerMap.text).toBe(liveProvider);
     });
 
-    it('preserves cyclic assertion sets while canonicalizing grader providers', async () => {
+    it('rejects cyclic assertion sets before recursive materialization', async () => {
       const assertion: Record<string, unknown> = {
         type: 'assert-set',
         provider: 'file://grader.cjs',
@@ -715,17 +769,28 @@ describe('scenarioMatrix (real filesystem)', () => {
       };
       (assertion.assert as unknown[]).push(assertion);
 
-      const [expanded] = await expandScenarioConfigValues(
-        [{ vars: { case: 'cyclic' }, assert: [assertion] }],
-        tmpDir,
-      );
-      const resolved = expanded.assert?.[0] as unknown as {
-        provider: string;
-        assert: unknown[];
-      };
+      await expect(
+        expandScenarioConfigValues([{ vars: { case: 'cyclic' }, assert: [assertion] }], tmpDir),
+      ).rejects.toThrow(/contains a cycle/);
+    });
 
-      expect(resolved.provider).toBe(`file://${path.join(tmpDir, 'grader.cjs')}`);
-      expect(resolved.assert[0]).toBe(resolved);
+    it('bounds deeply nested assertion and typed-provider config values', async () => {
+      let assertion: Record<string, unknown> = { type: 'equals', value: 'ok' };
+      let providerConfig: unknown = 'ok';
+      for (let index = 0; index < 110; index++) {
+        assertion = { type: 'assert-set', assert: [assertion] };
+        providerConfig = { nested: providerConfig };
+      }
+
+      await expect(expandScenarioConfigValues([{ assert: [assertion] }], tmpDir)).rejects.toThrow(
+        /maximum nesting depth/,
+      );
+      await expect(
+        readScenarioTests(
+          [{ options: { provider: { text: { id: 'echo', config: providerConfig } } } }],
+          tmpDir,
+        ),
+      ).rejects.toThrow(/maximum nesting depth/);
     });
 
     it('preserves __proto__ as provider-map data without changing the prototype', async () => {

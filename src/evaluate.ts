@@ -13,6 +13,7 @@ import { createSerializableUnifiedConfig } from './util/config/persistableScenar
 import {
   getScenarioSourceContext,
   transferScenarioSourceContext,
+  withScenarioSourceFallback,
 } from './util/config/scenarioContext';
 import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
@@ -94,10 +95,11 @@ async function createRuntimeTestSuite(
   const scenarios = loadedScenarios
     ? await Promise.all(
         loadedScenarios.map(async (scenario) => {
-          const sourceContext = getScenarioSourceContext(scenario) ?? {
-            basePath: process.cwd(),
-            envOverrides: scenarioEnv,
-          };
+          const sourceContext = withScenarioSourceFallback(
+            getScenarioSourceContext(scenario),
+            process.cwd(),
+            scenarioEnv,
+          );
           const scenarioTests = await readScenarioTests(
             (scenario as { tests?: unknown }).tests,
             sourceContext.basePath,

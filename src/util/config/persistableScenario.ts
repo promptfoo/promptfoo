@@ -34,13 +34,15 @@ export function toSerializableProviderRef(
   ancestors = new Set<object>(),
 ): unknown {
   if (isApiProvider(provider)) {
-    return sanitizeProvider(provider as never);
+    const sanitized = sanitizeProvider(provider as never);
+    return restoreTemplates(sanitized, provider);
   }
   if (isProviderOptions(provider)) {
-    return sanitizeObject(provider, {
+    const sanitized = sanitizeObject(provider, {
       context: 'provider options',
       maxDepth: Number.POSITIVE_INFINITY,
     });
+    return restoreTemplates(sanitized, provider);
   }
   if (Array.isArray(provider)) {
     if (ancestors.has(provider)) {
@@ -67,10 +69,11 @@ export function toSerializableProviderRef(
         .filter((entry) => entry[1] !== undefined),
     );
     ancestors.delete(provider);
-    return sanitizeObject(sanitized, {
+    const redacted = sanitizeObject(sanitized, {
       context: 'provider map',
       maxDepth: Number.POSITIVE_INFINITY,
     });
+    return restoreTemplates(redacted, provider);
   }
   return provider;
 }
