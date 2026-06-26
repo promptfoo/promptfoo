@@ -6,11 +6,21 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
+vi.mock('../../../src/util/database', () => ({
+  deleteEval: vi.fn(),
+  deleteEvalResult: vi.fn(async () => {
+    throw new Error('Eval result with ID result-1 not found');
+  }),
+  deleteEvals: vi.fn(),
+  updateResult: vi.fn(),
+  writeResultsToDatabase: vi.fn(),
+}));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
+import * as database from '../../../src/util/database';
 
 const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
@@ -49,6 +59,11 @@ describe('Eval Routes - Zod Validation', () => {
     mockSave = vi.fn();
     mockGetMetadataKeysFromEval = vi.fn();
     mockGetMetadataValuesFromEval = vi.fn();
+
+    vi.mocked(database.deleteEvalResult).mockRejectedValue(
+      new Error('Eval result with ID result-1 not found'),
+    );
+    vi.mocked(database.updateResult).mockResolvedValue(undefined);
 
     // Mock Eval.findById
     mockedEval.findById = mockFindById as any;
@@ -165,6 +180,26 @@ describe('Eval Routes - Zod Validation', () => {
     });
   });
 
+  describe('DELETE /api/eval/:evalId/results/:id', () => {
+    it('should return 404 when result does not exist', async () => {
+      const response = await api.delete('/api/eval/eval-1/results/result-1');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Eval result not found');
+    });
+
+    it('should return 404 when the result does not belong to the requested eval', async () => {
+      vi.mocked(database.deleteEvalResult).mockRejectedValueOnce(
+        new Error('Eval result result-1 does not belong to evaluation eval-1'),
+      );
+
+      const response = await api.delete('/api/eval/eval-1/results/result-1');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Eval result not found for evaluation');
+    });
+  });
+
   describe('POST /api/eval/:id/copy', () => {
     it('should return 404 when id param is whitespace (route does not match)', async () => {
       const response = await api.post('/api/eval/ /copy').send({});
@@ -264,6 +299,7 @@ describe('Eval Routes - Zod Validation', () => {
 
       mockFindById.mockResolvedValue(mockEval);
       mockSave.mockRejectedValue(new Error('database write failed'));
+      vi.mocked(database.updateResult).mockRejectedValueOnce(new Error('database write failed'));
 
       const response = await api.patch('/api/eval/test-id').send({
         config: { description: 'Updated description' },

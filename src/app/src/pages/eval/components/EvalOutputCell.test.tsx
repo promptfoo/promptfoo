@@ -96,6 +96,10 @@ vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => true,
 }));
 
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+}));
+
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
   searchText: string;
@@ -122,6 +126,7 @@ describe('EvalOutputCell', () => {
     },
     maxTextLength: 100,
     onRating: mockOnRating,
+    onDeleteResult: vi.fn().mockResolvedValue(undefined),
     output: {
       cost: 0,
       gradingResult: {
@@ -308,6 +313,8 @@ describe('EvalOutputCell', () => {
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test failed');
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /set test score/i })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: /delete eval result/i })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
     await userEvent.tab();
@@ -2332,9 +2339,24 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'Mark test passed',
       'Mark test failed',
       'Set test score',
+      'Delete eval result',
       'Edit comment',
       'View output and test details',
     ]);
+  });
+
+  it('opens a delete confirmation dialog when delete is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByLabelText('Delete eval result'));
+
+    expect(screen.getByText('Delete eval result?')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This removes the selected prompt output from the evaluation and recalculates metrics. This action cannot be undone.',
+      ),
+    ).toBeInTheDocument();
   });
 });
 

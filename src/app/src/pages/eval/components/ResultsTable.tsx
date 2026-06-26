@@ -999,6 +999,31 @@ async function saveManualRating({
   }
 }
 
+async function deleteResultRow({
+  evalId,
+  resultId,
+}: {
+  evalId: string | null;
+  resultId: string;
+}): Promise<void> {
+  invariant(evalId, 'Cannot delete an eval result without an evaluation ID');
+
+  const response = await callApi(EVAL_ROUTES.RESULT_DELETE(evalId, resultId), {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    let message = 'Network response was not ok';
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload?.error) {
+        message = payload.error;
+      }
+    } catch {}
+    throw new Error(message);
+  }
+}
+
 function renderPromptMetricDetails({
   metrics,
   filteredMetrics,
@@ -1655,7 +1680,6 @@ function ResultsTable({
     setLightboxOpen(!lightboxOpen);
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -1705,7 +1729,52 @@ function ResultsTable({
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [body, head, setTable, evalId, inComparisonMode, showToast, version],
+  );
+
+  const handleDeleteResult = React.useCallback(
+    async (resultId: string) => {
+      if (inComparisonMode) {
+        showToast('Deleting results is not available in comparison mode', 'warning');
+        return;
+      }
+
+      await deleteResultRow({ evalId, resultId });
+      invariant(evalId, 'Evaluation ID must be present before refreshing the table');
+      await fetchEvalData(evalId, {
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        filterMode,
+        searchText: debouncedSearchText,
+        filters: Object.values(filters.values).filter((filter) => {
+          if (filter.type === 'metadata' && filter.operator === 'exists') {
+            return Boolean(filter.field);
+          }
+          if (filter.type === 'metadata') {
+            return Boolean(filter.value && filter.field);
+          }
+          if (filter.type === 'metric' && filter.operator === 'is_defined') {
+            return Boolean(filter.field);
+          }
+          if (filter.type === 'metric') {
+            return Boolean(filter.value && filter.field);
+          }
+          return Boolean(filter.value);
+        }),
+        skipSettingEvalId: true,
+      });
+    },
+    [
+      debouncedSearchText,
+      evalId,
+      fetchEvalData,
+      filterMode,
+      filters.values,
+      inComparisonMode,
+      pagination.pageIndex,
+      pagination.pageSize,
+      showToast,
+    ],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
@@ -2178,6 +2247,7 @@ function ResultsTable({
                       output.originalPromptIndex ?? idx,
                       output.id,
                     )}
+                    onDeleteResult={handleDeleteResult}
                     firstOutput={getFirstOutput(info.row.index)}
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}

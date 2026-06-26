@@ -7,7 +7,13 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import {
+  deleteEval,
+  deleteEvalResult,
+  deleteEvals,
+  updateResult,
+  writeResultsToDatabase,
+} from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -839,6 +845,45 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       body: sanitizeObject(body, { context: 'request body' }),
     });
     res.status(500).json({ error: 'Failed to write eval to database' });
+  }
+});
+
+evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
+  const { evalId, id } = paramsResult.data;
+  try {
+    await deleteEvalResult(id, evalId);
+    res.json(
+      EvalSchemas.DeleteResult.Response.parse({ message: 'Eval result deleted successfully' }),
+    );
+  } catch (error) {
+    logger.error('[DELETE /eval/:evalId/results/:id] Failed to delete eval result', {
+      evalId,
+      resultId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    if (error instanceof Error) {
+      if (error.message === `Eval result with ID ${id} not found`) {
+        res.status(404).json({ error: 'Eval result not found' });
+        return;
+      }
+      if (error.message === `Eval result ${id} does not belong to evaluation ${evalId}`) {
+        res.status(404).json({ error: 'Eval result not found for evaluation' });
+        return;
+      }
+      if (error.message === `Eval with ID ${evalId} not found`) {
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+    }
+
+    res.status(500).json({ error: 'Failed to delete eval result' });
   }
 });
 

@@ -37,6 +37,10 @@ vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => false,
 }));
 
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+}));
+
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
   searchText: string;

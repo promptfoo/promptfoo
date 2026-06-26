@@ -1,7 +1,12 @@
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
+import {
+  deleteCommand,
+  handleEvalDelete,
+  handleEvalDeleteAll,
+  handleEvalResultDelete,
+} from '../../src/commands/delete';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import * as database from '../../src/util/database';
@@ -40,6 +45,34 @@ describe('delete command', () => {
 
       expect(logger.error).toHaveBeenCalledWith(
         'Could not delete evaluation with ID test-id:\nError: Delete failed',
+      );
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('handleEvalResultDelete', () => {
+    it('should successfully delete a single eval result', async () => {
+      vi.mocked(database.deleteEvalResult).mockResolvedValueOnce({
+        evalId: 'eval-1',
+        testIdx: 2,
+        promptIdx: 1,
+      });
+
+      await handleEvalResultDelete('result-1', 'eval-1');
+
+      expect(database.deleteEvalResult).toHaveBeenCalledWith('result-1', 'eval-1');
+      expect(logger.info).toHaveBeenCalledWith(
+        'Deleted eval result result-1 from evaluation eval-1 (testIdx=2, promptIdx=1).',
+      );
+    });
+
+    it('should handle errors when deleting a single eval result', async () => {
+      vi.mocked(database.deleteEvalResult).mockRejectedValueOnce(new Error('delete failed'));
+
+      await handleEvalResultDelete('result-1', 'eval-1');
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Could not delete eval result result-1:\nError: delete failed',
       );
       expect(process.exitCode).toBe(1);
     });
@@ -223,6 +256,85 @@ describe('delete command', () => {
         await program.parseAsync(['node', 'test', 'delete', 'eval', 'specific-id']);
 
         expect(database.deleteEval).toHaveBeenCalledWith('specific-id');
+      });
+
+      it('should delete a specific result from an eval', async () => {
+        vi.mocked(database.deleteEvalResult).mockResolvedValueOnce({
+          evalId: 'specific-id',
+          testIdx: 4,
+          promptIdx: 0,
+        });
+
+        deleteCommand(program);
+        await program.parseAsync([
+          'node',
+          'test',
+          'delete',
+          'eval',
+          'specific-id',
+          '--result-id',
+          'result-77',
+        ]);
+
+        expect(database.deleteEvalResult).toHaveBeenCalledWith('result-77', 'specific-id');
+      });
+
+      it('should delete all prompt outputs for a testIdx from an eval', async () => {
+        vi.mocked(database.deleteEvalResultsByTestIndex).mockResolvedValueOnce(2);
+
+        deleteCommand(program);
+        await program.parseAsync([
+          'node',
+          'test',
+          'delete',
+          'eval',
+          'specific-id',
+          '--result-idx',
+          '4',
+        ]);
+
+        expect(database.deleteEvalResultsByTestIndex).toHaveBeenCalledWith('specific-id', 4);
+      });
+
+      it('should reject using both --result-id and --result-idx together', async () => {
+        deleteCommand(program);
+        await program.parseAsync([
+          'node',
+          'test',
+          'delete',
+          'eval',
+          'specific-id',
+          '--result-id',
+          'result-77',
+          '--result-idx',
+          '4',
+        ]);
+
+        expect(logger.error).toHaveBeenCalledWith(
+          'Use either --result-id or --result-idx, not both.',
+        );
+        expect(process.exitCode).toBe(1);
+      });
+
+      it('should delete a single eval result via eval-result subcommand', async () => {
+        vi.mocked(database.deleteEvalResult).mockResolvedValueOnce({
+          evalId: 'eval-1',
+          testIdx: 1,
+          promptIdx: 2,
+        });
+
+        deleteCommand(program);
+        await program.parseAsync([
+          'node',
+          'test',
+          'delete',
+          'eval-result',
+          'result-42',
+          '--eval-id',
+          'eval-1',
+        ]);
+
+        expect(database.deleteEvalResult).toHaveBeenCalledWith('result-42', 'eval-1');
       });
     });
   });
