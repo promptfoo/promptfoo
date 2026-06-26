@@ -168,7 +168,7 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
     ? config.providers
     : Array.isArray(config.providerIds)
       ? config.providerIds
-      : [];
+      : undefined;
   const prompts = Array.isArray(config.prompts) ? config.prompts : [];
   const tests = Array.isArray(config.tests)
     ? config.tests
@@ -185,7 +185,7 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
 
   const normalizedConfig: Record<string, unknown> = {
     ...config,
-    providers: providers.map(normalizeCloudEvalProvider),
+    ...(providers ? { providers: providers.map(normalizeCloudEvalProvider) } : {}),
     prompts: prompts.map(normalizeCloudEvalPrompt),
     tests,
   };
@@ -251,7 +251,7 @@ export async function getEvalConfigFromCloud(id: string): Promise<UnifiedConfig>
     );
   }
   try {
-    const body = await fetchCloudConfig(`configs/${id}`);
+    const body = await fetchCloudConfig(`eval/configs/${id}/unified`);
     const config = normalizeEvalConfig(extractEvalConfigPayload(body));
     logger.info(`Eval config fetched from cloud: ${id}`);
     return config;

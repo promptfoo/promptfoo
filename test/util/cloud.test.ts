@@ -402,7 +402,7 @@ describe('cloud utils', () => {
       expect((result as any).providerIds).toBeUndefined();
       expect((result as any).testCases).toBeUndefined();
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/configs/eval-config-id',
+        'https://api.example.com/api/v1/eval/configs/eval-config-id/unified',
         {
           method: 'GET',
           body: undefined,
@@ -426,6 +426,40 @@ describe('cloud utils', () => {
 
       const result = await getEvalConfigFromCloud('eval-config-id');
       expect(result.tests).toEqual([]);
+    });
+
+    it('should normalize a target-only config', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            targets: ['echo'],
+            prompts: ['Say hello'],
+            tests: [],
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.providers).toEqual(['echo']);
+      expect(result.targets).toBeUndefined();
+    });
+
+    it('should reject configs with both targets and providers', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            providers: ['echo'],
+            targets: ['echo'],
+            prompts: ['Say hello'],
+            tests: [],
+          }),
+      } as Response);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        "Exactly one of 'targets' or 'providers' must be provided, but not both",
+      );
     });
 
     it('should normalize eval config from flat response payload', async () => {
