@@ -233,15 +233,15 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  logger.debug('Closing logger file transports');
+  await closeDbIfOpen();
 
+  logger.debug('Closing logger file transports');
   try {
     await withTimeout(closeLogger(), 'closeLogger()');
   } catch {
     // Can't log since logger might be closed.
   }
 
-  await closeDbIfOpen();
   clearAgentCache();
 
   try {

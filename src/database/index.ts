@@ -260,6 +260,9 @@ export async function closeDb() {
       // Attempt to checkpoint WAL file before closing
       if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
+          // Do not let the normal 5s busy timeout outlive the 3s graceful-shutdown watchdog.
+          // The client closes immediately after this best-effort checkpoint, so no restoration is needed.
+          await sqliteInstance.execute('PRAGMA busy_timeout = 0');
           const result = await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
           const row = result.rows[0];
           const checkpointStatus = {

@@ -491,6 +491,9 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseLogger).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
     expect(mockDispatcherDestroy).toHaveBeenCalled();
   });
 

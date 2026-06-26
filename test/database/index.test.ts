@@ -16,6 +16,7 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { removeTempDir } from '../util/utils';
 
 vi.mock('../../src/envars');
 vi.mock('../../src/logger');
@@ -41,7 +42,7 @@ describe('database', () => {
 
   afterEach(async () => {
     await closeDb();
-    fs.rmSync(tempConfigDir, { force: true, recursive: true });
+    removeTempDir(tempConfigDir);
   });
 
   describe('getDbPath', () => {
@@ -247,7 +248,6 @@ describe('database', () => {
 
       const db = await getDb();
       await db.run('PRAGMA wal_autocheckpoint = 0');
-      await db.run('PRAGMA busy_timeout = 50');
       await db.run('CREATE TABLE wal_checkpoint_test (id INTEGER PRIMARY KEY)');
       await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
 
