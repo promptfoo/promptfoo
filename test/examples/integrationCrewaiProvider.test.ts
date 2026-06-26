@@ -124,6 +124,7 @@ print(json.dumps(result))
     for (const raw of [
       `${fence}json\n${object}\n${fence}`,
       `${fence}JSON\n${object}\n${fence}`,
+      `${fence} json\n${object}\n${fence}`,
       `${fence}\n${object}\n${fence}`,
     ]) {
       expect(callProvider(raw, 'test-key')).toEqual({
@@ -149,6 +150,22 @@ print(json.dumps(result))
       error: expect.stringContaining('Duplicate JSON key: summary'),
       raw,
     });
+  });
+
+  it('rejects non-finite JSON numbers before crossing the provider boundary', () => {
+    for (const [value, reason] of [
+      ['NaN', 'Invalid JSON constant: NaN'],
+      ['Infinity', 'Invalid JSON constant: Infinity'],
+      ['-Infinity', 'Invalid JSON constant: -Infinity'],
+      ['1e999', 'JSON number is outside the finite range: 1e999'],
+      ['-1e999', 'JSON number is outside the finite range: -1e999'],
+    ]) {
+      const raw = `{"candidates": [], "summary": "No match", "score": ${value}}`;
+      expect(callProvider(raw, 'test-key')).toEqual({
+        error: expect.stringContaining(reason),
+        raw,
+      });
+    }
   });
 
   it('reports a missing OpenAI API key before constructing the crew', () => {
@@ -180,9 +197,17 @@ print(json.dumps(result))
       experience: '8 years',
       skills: ['Python'],
     };
+    const otherValidCandidate = {
+      name: 'Grace',
+      experience: '7 years',
+      skills: ['Python'],
+    };
 
-    expect(validate({ candidates: [validCandidate, validCandidate], summary: 'Two matches' })).toBe(
-      true,
+    expect(
+      validate({ candidates: [validCandidate, otherValidCandidate], summary: 'Two matches' }),
+    ).toBe(true);
+    expect(validate({ candidates: [validCandidate, validCandidate], summary: 'Duplicate' })).toBe(
+      false,
     );
     expect(
       validate({
@@ -203,9 +228,11 @@ print(json.dumps(result))
       }),
     ).toBe(false);
     expect(validate({ candidates: [validCandidate], summary: 'One match' })).toBe(false);
-    expect(validate({ candidates: [validCandidate, validCandidate] })).toBe(false);
+    expect(validate({ candidates: [validCandidate, otherValidCandidate] })).toBe(false);
     expect(validate({ summary: 'No candidates' })).toBe(false);
-    expect(validate({ candidates: [validCandidate, validCandidate], summary: '   ' })).toBe(false);
+    expect(validate({ candidates: [validCandidate, otherValidCandidate], summary: '   ' })).toBe(
+      false,
+    );
     expect(
       validate({
         candidates: [{ ...validCandidate, name: ' ' }, validCandidate],
@@ -291,6 +318,7 @@ print(json.dumps(result))
     expect(end).toBeGreaterThan(start);
 
     const config = yaml.load(guide.slice(start + marker.length, end)) as {
+      defaultTest: { assert: Array<{ type: string; value?: Record<string, unknown> }> };
       tests: Array<{ assert: Array<{ type: string; value?: string }> }>;
     };
     const assertion = config.tests[0].assert.find(
@@ -302,8 +330,25 @@ print(json.dumps(result))
 
     const outputWithSkills = (skills: string[]) => {
       const candidate = { name: 'Ada', experience: '8 years', skills };
-      return { candidates: [candidate, candidate], summary: 'Matches' };
+      const otherCandidate = { ...candidate, name: 'Grace' };
+      return { candidates: [candidate, otherCandidate], summary: 'Matches' };
     };
+
+    const schema = config.defaultTest.assert.find(
+      (candidate) => candidate.type === 'is-json',
+    )?.value;
+    if (!schema) {
+      throw new Error('CrewAI guide is missing its is-json schema');
+    }
+    const validate = new Ajv().compile(schema);
+    const validOutput = outputWithSkills(['Ruby on Rails', 'React']);
+    expect(validate(validOutput)).toBe(true);
+    expect(
+      validate({
+        ...validOutput,
+        candidates: [validOutput.candidates[0], validOutput.candidates[0]],
+      }),
+    ).toBe(false);
 
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['COBOL', 'Java']))).toBe(false);
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails']))).toBe(false);
@@ -312,8 +357,6 @@ print(json.dumps(result))
       false,
     );
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['RoR', 'React']))).toBe(true);
-    expect(evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails', 'React']))).toBe(
-      true,
-    );
+    expect(evaluatePythonAssertion(assertion, validOutput)).toBe(true);
   });
 });

@@ -177,15 +177,17 @@ Inside your project folder, create a file called `agent.py` that contains the Cr
 ````python
 import asyncio
 import json
+import math
 import os
 import re
 import textwrap
-from typing import Any, Dict
+from typing import Any, Dict, NoReturn
 
 from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
     parsed: Dict[str, Any] = {}
@@ -194,6 +196,18 @@ def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
             raise ValueError(f"Duplicate JSON key: {key}")
         parsed[key] = value
     return parsed
+
+
+def reject_invalid_json_constant(value: str) -> NoReturn:
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def parse_finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"JSON number is outside the finite range: {value}")
+    return parsed
+
 
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
@@ -240,12 +254,13 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
               "summary": "Jane Doe and John Smith are strong matches based on their Rails and React experience."
             }
         """).strip(),
-        agent=agent
+        agent=agent,
     )
 
     # ✅ Combine agent + task into a Crew setup
     crew = Crew(agents=[agent], tasks=[task])
     return crew
+
 
 async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     """
@@ -268,7 +283,9 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
 
         # Accept either a JSON object or one complete Markdown JSON fence.
         json_match = re.fullmatch(
-            r"```(?:json)?\s*([\s\S]*?)\s*```", output_text, re.IGNORECASE
+            r"```(?:[ \t]*json)?\s*([\s\S]*?)\s*```",
+            output_text,
+            re.IGNORECASE,
         )
         if not json_match and not output_text.startswith("{"):
             return {
@@ -279,7 +296,12 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
         json_string = json_match.group(1) if json_match else output_text
 
         try:
-            return json.loads(json_string, object_pairs_hook=reject_duplicate_json_keys)
+            return json.loads(
+                json_string,
+                object_pairs_hook=reject_duplicate_json_keys,
+                parse_constant=reject_invalid_json_constant,
+                parse_float=parse_finite_json_float,
+            )
         except (json.JSONDecodeError, ValueError) as e:
             return {
                 "error": f"Failed to parse JSON from agent output: {str(e)}",
@@ -289,12 +311,16 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     except Exception as e:
         # 🔥 Catch and report any error as part of the output
         return {"error": f"An unexpected error occurred: {str(e)}"}
+
+
 ````
 
 Next, add the provider interface to handle Promptfoo's evaluation calls:
 
 ```python
-def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+def call_api(
+    prompt: str, options: Dict[str, Any], context: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Calls the CrewAI recruitment agent with the provided prompt.
     Wraps the async function in a synchronous call for Promptfoo.
@@ -312,6 +338,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     except Exception as e:
         # 🔥 Catch and return any error as part of the output
         return {"error": f"An error occurred in call_api: {str(e)}"}
+
 
 if __name__ == "__main__":
     # 🧪 Simple test block to check provider behavior standalone
@@ -355,6 +382,7 @@ defaultTest:
           candidates:
             type: array
             minItems: 2
+            uniqueItems: true
             items:
               type: object
               properties:
@@ -602,7 +630,7 @@ promptfoo redteam run -c promptfooconfig.redteam.yaml
 Once it starts, Promptfoo will:
 
 - Run tests
-- Show live CLI progress
+- Show run progress
 - Report pass/fail results
 - Let you open the dedicated risk report with:
 
