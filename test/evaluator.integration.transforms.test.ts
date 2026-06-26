@@ -9,12 +9,9 @@ const mockTransform = vi.hoisted(() => vi.fn());
 const mockRunAssertions = vi.hoisted(() => vi.fn());
 
 // Mock the transform function to track calls
-vi.mock('../src/util/transform', () => ({
+vi.mock('../src/util/transform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/util/transform')>()),
   transform: mockTransform,
-  TransformInputType: {
-    OUTPUT: 'output',
-    VARS: 'vars',
-  },
 }));
 
 // Mock assertions to prevent timeouts

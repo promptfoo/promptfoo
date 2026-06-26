@@ -39,7 +39,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import { transform } from '../util/transform';
+import { cloneTransformInput, didTransformChange, transform } from '../util/transform';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -433,12 +433,17 @@ export async function runAssertion({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
+  let assertionTransformChanged = false;
   if (assertion.transform) {
-    output = await transform(assertion.transform, output, {
+    const assertionTransformInput = output;
+    const clonedInput = cloneTransformInput(assertionTransformInput);
+    output = await transform(assertion.transform, clonedInput.value, {
       vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
+    assertionTransformChanged =
+      !clonedInput.reliable || didTransformChange(assertionTransformInput, output);
   }
 
   const context: AssertionValueFunctionContext = {
@@ -621,6 +626,7 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
+    assertionTransformChanged,
     baseType: getAssertionBaseType(assertion),
     providerCallContext,
     assertionValueContext: context,

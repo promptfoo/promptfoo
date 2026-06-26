@@ -955,6 +955,32 @@ describe('OpenAI assertions', () => {
       expect(result.reason).toBe('OpenAI did not return a valid-looking tools response: []');
     });
 
+    it('fails closed when invalid tools output cannot be serialized', async () => {
+      const providerResponse = { output: { count: 1n } };
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse,
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'OpenAI did not return a valid-looking tools response: [unserializable output]',
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'OpenAI did not return a valid-looking tools response: [unserializable output]',
+      });
+    });
+
     it.each([
       'custom',
       'computer',

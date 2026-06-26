@@ -74,5 +74,13 @@ export function coerceString(value: string | object): string {
   if (typeof value === 'string') {
     return value;
   }
-  return JSON.stringify(value);
+  return serializeAssertionOutput(value);
+}
+
+export function serializeAssertionOutput(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '[unserializable output]';
+  } catch {
+    return '[unserializable output]';
+  }
 }

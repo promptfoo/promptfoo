@@ -92,6 +92,8 @@ export interface ProviderResponse {
   providerTransformedOutput?: string | any;
   /** Whether the provider-level transform changed the output. */
   providerTransformChanged?: boolean;
+  /** Whether the test-level transform or postprocess changed the output. */
+  testTransformChanged?: boolean;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   /**

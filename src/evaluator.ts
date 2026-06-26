@@ -99,7 +99,12 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { TransformInputType, transform } from './util/transform';
+import {
+  cloneTransformInput,
+  didTransformChange,
+  TransformInputType,
+  transform,
+} from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
@@ -1226,17 +1231,21 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformChanged, providerTransformedOutput } =
-    await transformRunEvalResponse({
-      evalId,
-      prompt,
-      promptIdx,
-      provider,
-      response,
-      test,
-      testIdx,
-      vars,
-    });
+  const {
+    processedResponse,
+    providerTransformChanged,
+    providerTransformedOutput,
+    testTransformChanged,
+  } = await transformRunEvalResponse({
+    evalId,
+    prompt,
+    promptIdx,
+    provider,
+    response,
+    test,
+    testIdx,
+    vars,
+  });
   const traceId = getTraceId(traceContext);
   if (traceId && hasTraceAwareAssertions(test.assert)) {
     await flushOtel();
@@ -1246,6 +1255,7 @@ async function gradeRunEvalResponse({
     ...processedResponse,
     providerTransformChanged,
     providerTransformedOutput,
+    testTransformChanged,
   };
 
   if (deferGrading) {
@@ -1311,36 +1321,34 @@ async function transformRunEvalResponse({
   processedResponse: ProviderResponse;
   providerTransformChanged: boolean;
   providerTransformedOutput: ProviderResponse['output'];
+  testTransformChanged: boolean;
 }> {
   const processedResponse = { ...response };
-  const providerTransformInput = response.output;
-  let providerTransformInputSnapshot = providerTransformInput;
-  let providerTransformInputSnapshotIsReliable = true;
+  let providerTransformChanged = false;
   if (provider.transform) {
-    try {
-      providerTransformInputSnapshot = structuredClone(providerTransformInput);
-    } catch {
-      providerTransformInputSnapshotIsReliable = false;
-    }
-    processedResponse.output = await transform(provider.transform, processedResponse.output, {
+    const providerTransformInput = processedResponse.output;
+    const clonedInput = cloneTransformInput(providerTransformInput);
+    processedResponse.output = await transform(provider.transform, clonedInput.value, {
       vars,
       prompt,
     });
+    providerTransformChanged =
+      !clonedInput.reliable || didTransformChange(providerTransformInput, processedResponse.output);
   }
   const providerTransformedOutput = processedResponse.output;
-  const providerTransformChanged = Boolean(
-    provider.transform &&
-      (!providerTransformInputSnapshotIsReliable ||
-        !isDeepStrictEqual(providerTransformInputSnapshot, providerTransformedOutput)),
-  );
 
   const testTransform = test.options?.transform || test.options?.postprocess;
+  let testTransformChanged = false;
   if (testTransform) {
-    processedResponse.output = await transform(testTransform, processedResponse.output, {
+    const testTransformInput = processedResponse.output;
+    const clonedInput = cloneTransformInput(testTransformInput);
+    processedResponse.output = await transform(testTransform, clonedInput.value, {
       vars,
       prompt,
       ...(response && response.metadata && { metadata: response.metadata }),
     });
+    testTransformChanged =
+      !clonedInput.reliable || didTransformChange(testTransformInput, processedResponse.output);
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
@@ -1354,6 +1362,7 @@ async function transformRunEvalResponse({
     processedResponse: blobbedResponse || processedResponse,
     providerTransformChanged,
     providerTransformedOutput,
+    testTransformChanged,
   };
 }
 

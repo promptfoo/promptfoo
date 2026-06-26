@@ -1,5 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
-
 import { createFunctionCallValidator, type OpenAiFunction } from '../providers/openai/util';
 import {
   type AssertionParams,
@@ -7,6 +5,7 @@ import {
   isFunctionToolCallValidationSetupError,
 } from '../types/index';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { serializeAssertionOutput } from './utils';
 
 interface OpenAiToolCall {
   type?: 'function';
@@ -266,23 +265,28 @@ function getFunctionToolDefinitions(
 
 function wasMcpOutputTransformed({
   assertion,
+  assertionTransformChanged,
   output,
   provider,
   providerResponse,
   test,
-}: Pick<AssertionParams, 'assertion' | 'output' | 'provider' | 'providerResponse' | 'test'>) {
+}: Pick<
+  AssertionParams,
+  'assertion' | 'assertionTransformChanged' | 'output' | 'provider' | 'providerResponse' | 'test'
+>) {
   const isReferenceLike = (value: unknown) =>
     value !== null && (typeof value === 'object' || typeof value === 'function');
   const assertionChangedOutput =
     Boolean(assertion.transform) &&
-    (isReferenceLike(providerResponse?.output) ||
-      !isDeepStrictEqual(output, providerResponse?.output));
+    (assertionTransformChanged ??
+      (isReferenceLike(providerResponse?.output) || !Object.is(output, providerResponse?.output)));
   const hasTestTransform = Boolean(test.options?.transform || test.options?.postprocess);
   const testChangedOutput =
     hasTestTransform &&
-    (providerResponse?.providerTransformedOutput === undefined ||
-      isReferenceLike(providerResponse.providerTransformedOutput) ||
-      !isDeepStrictEqual(providerResponse.output, providerResponse.providerTransformedOutput));
+    (providerResponse?.testTransformChanged ??
+      (providerResponse?.providerTransformedOutput === undefined ||
+        isReferenceLike(providerResponse.providerTransformedOutput) ||
+        !Object.is(providerResponse.output, providerResponse.providerTransformedOutput)));
   const providerChangedOutput =
     Boolean(provider?.transform) && providerResponse?.providerTransformChanged !== false;
   return assertionChangedOutput || testChangedOutput || providerChangedOutput;
@@ -305,6 +309,7 @@ function trustsRenderedMcpOutput(
 
 export const handleIsValidOpenAiToolsCall = async ({
   assertion,
+  assertionTransformChanged,
   inverse,
   output,
   provider,
@@ -325,6 +330,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   // may itself contain strings that look like result or error markers.
   const outputWasTransformed = wasMcpOutputTransformed({
     assertion,
+    assertionTransformChanged,
     output,
     provider,
     providerResponse,
@@ -373,13 +379,12 @@ export const handleIsValidOpenAiToolsCall = async ({
     toolsOutput.length === 0 ||
     !toolsOutput.every(isValidLookingToolCall)
   ) {
+    const serializedToolsOutput = serializeAssertionOutput(toolsOutput);
     return applyInverse(
       {
         pass: false,
         score: 0,
-        reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
-          toolsOutput,
-        )}`,
+        reason: `OpenAI did not return a valid-looking tools response: ${serializedToolsOutput}`,
         assertion,
       },
       inverse,

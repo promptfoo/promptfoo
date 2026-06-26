@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -45,6 +47,32 @@ export const TransformInputType = {
   VARS: 'vars',
 } as const;
 export type TransformInputType = (typeof TransformInputType)[keyof typeof TransformInputType];
+
+export interface TransformInputClone<T = unknown> {
+  reliable: boolean;
+  value: T;
+}
+
+export function cloneTransformInput<T>(value: T): TransformInputClone<T> {
+  const isReferenceLike =
+    value !== null && (typeof value === 'object' || typeof value === 'function');
+  if (!isReferenceLike) {
+    return { reliable: true, value };
+  }
+  try {
+    return { reliable: true, value: structuredClone(value) as T };
+  } catch {
+    return { reliable: false, value };
+  }
+}
+
+export function didTransformChange(input: unknown, output: unknown): boolean {
+  try {
+    return !isDeepStrictEqual(input, output);
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Parses a file path string to extract the file path and function name.
