@@ -1082,5 +1082,22 @@ describe('PythonProvider', () => {
 
       await provider.shutdown();
     });
+
+    it('should honor public config replacements across initialization cycles', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd(), marker: 'constructor' },
+      });
+      provider.config = { ...provider.config, marker: 'before-first-call' };
+
+      await provider.initialize();
+      expect(provider.config.marker).toBe('before-first-call');
+      await provider.shutdown();
+
+      provider.config = { ...provider.config, marker: 'after-shutdown' };
+      await provider.initialize();
+      expect(provider.config.marker).toBe('after-shutdown');
+
+      await provider.shutdown();
+    });
   });
 });

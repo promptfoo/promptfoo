@@ -150,26 +150,56 @@ describe('filterTests', () => {
       expect(result.map((test) => test.vars?.id)).toEqual(['inherited']);
     });
 
-    it('should pass metadata mismatch details through sanitized logger context', async () => {
+    it('should omit metadata values and descriptions from mismatch diagnostics', async () => {
       const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
-      const secret = 'SYNTHETIC-DEFAULT-SECRET';
+      const expectedSecret = 'SYNTHETIC-EXPECTED-SECRET';
+      const actualSecret = 'SYNTHETIC-ACTUAL-SECRET';
+      const unrelatedSecret = 'SYNTHETIC-UNRELATED-SECRET';
+      const secretDescription = 'SYNTHETIC-DESCRIPTION-SECRET';
       const testSuite: TestSuite = {
         prompts: [],
         providers: [],
-        defaultTest: { metadata: { apiKey: secret, tier: 'silver' } },
-        tests: [{ description: 'inherited metadata test' }],
+        defaultTest: {
+          metadata: { deploymentCode: actualSecret, unrelated: unrelatedSecret },
+        },
+        tests: [{ description: secretDescription }],
       };
 
-      await filterTests(testSuite, { metadata: 'tier=gold' });
+      await filterTests(testSuite, { metadata: `deploymentCode=${expectedSecret}` });
 
       const mismatchCall = debugSpy.mock.calls.find(
         ([message]) => message === 'Test metadata does not match filter',
       );
-      expect(mismatchCall?.[0]).not.toContain(secret);
-      expect(mismatchCall?.[1]).toEqual({
-        testDescription: 'inherited metadata test',
-        expectedMetadata: { tier: 'gold' },
-        metadata: { apiKey: secret, tier: 'silver' },
+      expect(mismatchCall).toEqual([
+        'Test metadata does not match filter',
+        { metadataKey: 'deploymentCode' },
+      ]);
+      const serializedCalls = JSON.stringify(debugSpy.mock.calls);
+      expect(serializedCalls).not.toContain(expectedSecret);
+      expect(serializedCalls).not.toContain(actualSecret);
+      expect(serializedCalls).not.toContain(unrelatedSecret);
+      expect(serializedCalls).not.toContain(secretDescription);
+    });
+
+    it('should not interpolate metadata filter values into diagnostic messages', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const secret = 'SYNTHETIC-FILTER-SECRET';
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ metadata: { apiKey: secret } }],
+      };
+
+      const result = await filterTests(testSuite, { metadata: `apiKey=${secret}` });
+
+      expect(result).toHaveLength(1);
+      expect(debugSpy.mock.calls.map(([message]) => message).join('\n')).not.toContain(secret);
+      expect(debugSpy).toHaveBeenCalledWith('Starting filterTests', {
+        optionNames: ['metadata'],
+      });
+      expect(debugSpy).toHaveBeenCalledWith('Filtering for metadata conditions (AND logic)', {
+        filterCount: 1,
+        metadataKeys: ['apiKey'],
       });
     });
 
@@ -341,6 +371,177 @@ describe('filterTests', () => {
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2', 'test3']);
     });
 
+    it('should preserve unmatched same-vars runtime conversations and providers', async () => {
+      const configuredTest: TestCase = {
+        vars: { input: 'same' },
+        provider: 'provider-a',
+        metadata: { conversationId: 'configured' },
+      };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { input: 'same' },
+              provider: { id: 'provider-a' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: configuredTest,
+            },
+            {
+              vars: { input: 'same' },
+              provider: { id: 'provider-a' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: {
+                vars: { input: 'same' },
+                metadata: { conversationId: 'runtime' },
+              },
+            },
+            {
+              vars: { input: 'same' },
+              provider: { id: 'provider-b' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: {
+                vars: { input: 'same' },
+                metadata: { conversationId: 'configured' },
+              },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(
+        { prompts: [], providers: [], tests: [configuredTest] },
+        { failing: 'eval-runtime-identities' },
+      );
+
+      expect(result).toHaveLength(3);
+      expect(result.map((test) => test.metadata?.conversationId)).toEqual([
+        'configured',
+        'runtime',
+        'configured',
+      ]);
+      expect(result.slice(1).every((test) => test.provider === undefined)).toBe(true);
+    });
+
+    it('should prefer exact conversation identity while retaining legacy fallback', async () => {
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { input: 'same' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: { vars: { input: 'same' } },
+            },
+          ],
+        }),
+      } as any);
+      const topLevelTest: TestCase = {
+        description: 'top-level row',
+        vars: { input: 'same' },
+      };
+      const scenarioTest: TestCase = {
+        description: 'scenario row',
+        vars: { input: 'same' },
+        metadata: { conversationId: '__scenario_0__' },
+      };
+
+      const withTopLevelCollision = await filterTests(
+        { prompts: [], providers: [], tests: [topLevelTest, scenarioTest] },
+        { failing: 'eval-no-conversation-id' },
+      );
+      const legacyScenarioOnly = await filterTests(
+        { prompts: [], providers: [], tests: [scenarioTest] },
+        { failing: 'eval-no-conversation-id' },
+      );
+
+      expect(withTopLevelCollision.map((test) => test.description)).toEqual(['top-level row']);
+      expect(legacyScenarioOnly.map((test) => test.description)).toEqual(['scenario row']);
+    });
+
+    it('should not extract legacy unmerged-default results as duplicate tests', async () => {
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { input: 'same', locale: 'en' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: { vars: { input: 'same', locale: 'en' } },
+            },
+            {
+              vars: { input: 'same' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: { vars: { input: 'same' } },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(
+        {
+          prompts: [],
+          providers: [],
+          defaultTest: { vars: { locale: 'en' } },
+          tests: [{ description: 'configured', vars: { input: 'same' } }],
+        },
+        { failing: 'eval-mixed-default-vars' },
+      );
+
+      expect(result).toEqual([{ description: 'configured', vars: { input: 'same' } }]);
+    });
+
+    it('should apply exact-conversation preference before legacy default-var fallback', async () => {
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { input: 'same', locale: 'en' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: {
+                vars: { input: 'same', locale: 'en' },
+                metadata: { conversationId: 'scenario' },
+              },
+            },
+            {
+              vars: { input: 'same' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: { vars: { input: 'same' } },
+            },
+          ],
+        }),
+      } as any);
+      const topLevelTest: TestCase = {
+        description: 'top-level configured',
+        vars: { input: 'same' },
+      };
+      const scenarioTest: TestCase = {
+        description: 'scenario configured',
+        vars: { input: 'same', locale: 'en' },
+        metadata: { conversationId: 'scenario' },
+      };
+
+      const result = await filterTests(
+        {
+          prompts: [],
+          providers: [],
+          defaultTest: { vars: { locale: 'en' } },
+          tests: [topLevelTest, scenarioTest],
+        },
+        { failing: 'eval-conversation-default-fallback' },
+      );
+
+      expect(result.map((test) => test.description)).toEqual([
+        'top-level configured',
+        'scenario configured',
+      ]);
+    });
+
     it('should match failing tests when provider paths differ', async () => {
       vi.resetAllMocks();
       const absPath = path.join(process.cwd(), 'provider.js');
@@ -475,6 +676,51 @@ describe('filterTests', () => {
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(
         expect.arrayContaining(['test1', 'test2', 'test3']),
       );
+    });
+
+    it('should preserve repeated configured rows when combining result sources', async () => {
+      const duplicateSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          {
+            description: 'first configured row',
+            vars: { input: 'same' },
+            assert: [{ type: 'equals', value: 'first' }],
+          },
+          {
+            description: 'second configured row',
+            vars: { input: 'same' },
+            assert: [{ type: 'equals', value: 'second' }],
+          },
+        ],
+      };
+      vi.mocked(Eval.findById).mockImplementation(
+        async (id) =>
+          ({
+            toEvaluateSummary: vi.fn().mockResolvedValue({
+              results: [
+                {
+                  vars: { input: 'same' },
+                  success: false,
+                  failureReason:
+                    id === 'eval-assert' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+                  testCase: { vars: { input: 'same' } },
+                },
+              ],
+            }),
+          }) as any,
+      );
+
+      const result = await filterTests(duplicateSuite, {
+        failingOnly: 'eval-assert',
+        errorsOnly: 'eval-error',
+      });
+
+      expect(result.map((test) => test.description)).toEqual([
+        'first configured row',
+        'second configured row',
+      ]);
     });
   });
 

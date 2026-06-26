@@ -29,6 +29,7 @@ import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type {
+  EvalRuntimeOptions,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
@@ -822,6 +823,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         // Use !== undefined to handle createdAt=0 (Unix epoch)
         createdAt: incEval.createdAt === undefined ? undefined : new Date(incEval.createdAt),
         results: incEval.results,
+        runtimeOptions: body.runtimeOptions as EvalRuntimeOptions | undefined,
         vars: incEval.vars,
       });
       if (incEval.prompts) {

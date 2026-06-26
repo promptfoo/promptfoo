@@ -20,6 +20,7 @@ import { ResultFailureReason } from '../../types/index';
 import { getTestCaseDeduplicationKey } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
+import { providerToIdentifier } from '../../util/provider';
 import { filterTestsByResults } from './filterTestsUtil';
 
 import type { TestCase, TestSuite } from '../../types/index';
@@ -63,6 +64,34 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
+
+function getResultFilterDeduplicationKey(test: TestCase): string {
+  return JSON.stringify({
+    test: getTestCaseDeduplicationKey(test),
+    provider: providerToIdentifier(test.provider),
+    conversationId: test.metadata?.conversationId,
+  });
+}
+
+function unionTestsPreservingMultiplicity(primary: Tests, secondary: Tests): Tests {
+  const unmatchedPrimaryCounts = new Map<string, number>();
+  for (const test of primary) {
+    const key = getResultFilterDeduplicationKey(test);
+    unmatchedPrimaryCounts.set(key, (unmatchedPrimaryCounts.get(key) ?? 0) + 1);
+  }
+
+  const result = [...primary];
+  for (const test of secondary) {
+    const key = getResultFilterDeduplicationKey(test);
+    const remainingPrimaryCount = unmatchedPrimaryCounts.get(key) ?? 0;
+    if (remainingPrimaryCount > 0) {
+      unmatchedPrimaryCounts.set(key, remainingPrimaryCount - 1);
+    } else {
+      result.push(test);
+    }
+  }
+  return result;
+}
 
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
@@ -159,7 +188,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   let tests = testSuite.tests || [];
   let metadataFilter: TestFilterFn | undefined;
 
-  logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
+  logger.debug('Starting filterTests', { optionNames: Object.keys(options) });
   logger.debug(`Initial test count: ${tests.length}`);
 
   if (Object.keys(options).length === 0) {
@@ -182,9 +211,10 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       parsedFilters.push({ key, value });
     }
 
-    logger.debug(
-      `Filtering for metadata conditions (AND logic): ${parsedFilters.map((f) => `${f.key}=${f.value}`).join(', ')}`,
-    );
+    logger.debug('Filtering for metadata conditions (AND logic)', {
+      filterCount: parsedFilters.length,
+      metadataKeys: parsedFilters.map(({ key }) => key),
+    });
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
     const defaultMetadata =
@@ -194,7 +224,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     metadataFilter = (test) => {
       const metadata = { ...defaultMetadata, ...test.metadata };
       if (Object.keys(metadata).length === 0) {
-        logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
+        logger.debug('Test has no metadata');
         return false;
       }
 
@@ -213,9 +243,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
         if (!matches) {
           logger.debug('Test metadata does not match filter', {
-            testDescription: test.description || 'unnamed test',
-            expectedMetadata: { [key]: value },
-            metadata,
+            metadataKey: key,
           });
           return false;
         }
@@ -250,17 +278,9 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       metadataFilter,
     );
 
-    // Create a union of both sets, deduplicating by test identity
-    const seen = new Set<string>();
-
-    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestCaseDeduplicationKey(test);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+    // Preserve intentionally repeated configured rows while avoiding duplicate rows selected by
+    // both filters. A Set would collapse all rows sharing the same result identity.
+    tests = unionTestsPreservingMultiplicity(failingOnlyTests, errorTests);
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,

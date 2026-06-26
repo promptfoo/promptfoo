@@ -63,16 +63,17 @@ async function applyOptimizationTestFilters(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
   commandLineOptions: Partial<CommandLineOptions> | undefined,
+  rowFiltersApplied: boolean,
 ): Promise<{ config: Partial<UnifiedConfig>; testSuite: TestSuite }> {
   const range = config.evaluateOptions?.filterRange;
   const hasScenarios = Boolean(testSuite.scenarios?.length);
   const filterOptions: FilterOptions = {
-    errorsOnly: commandLineOptions?.filterErrorsOnly,
-    failing: commandLineOptions?.filterFailing,
-    failingOnly: commandLineOptions?.filterFailingOnly,
+    errorsOnly: rowFiltersApplied ? undefined : commandLineOptions?.filterErrorsOnly,
+    failing: rowFiltersApplied ? undefined : commandLineOptions?.filterFailing,
+    failingOnly: rowFiltersApplied ? undefined : commandLineOptions?.filterFailingOnly,
     firstN: commandLineOptions?.filterFirstN,
-    metadata: commandLineOptions?.filterMetadata,
-    pattern: commandLineOptions?.filterPattern,
+    metadata: rowFiltersApplied ? undefined : commandLineOptions?.filterMetadata,
+    pattern: rowFiltersApplied ? undefined : commandLineOptions?.filterPattern,
     range: hasScenarios ? undefined : range,
     sample: commandLineOptions?.filterSample,
     sampleSeed: commandLineOptions?.filterSampleSeed,
@@ -83,6 +84,7 @@ async function applyOptimizationTestFilters(
 
   const explicitTestCount = testSuite.tests?.length ?? 0;
   const shouldApplyFiltersToImplicitDefaultTest =
+    !rowFiltersApplied &&
     testSuite.scenarios === undefined &&
     explicitTestCount === 0 &&
     hasRunnableOptimizationDefaultTest(testSuite.defaultTest);
@@ -91,7 +93,9 @@ async function applyOptimizationTestFilters(
     explicitTestCount === 0 &&
     !shouldApplyFiltersToImplicitDefaultTest
   ) {
-    return { config, testSuite };
+    return rowFiltersApplied
+      ? { config, testSuite: { ...testSuite, scenarios: [] } }
+      : { config, testSuite };
   }
   let filterableTestSuite = testSuite;
   if (shouldApplyFiltersToImplicitDefaultTest) {
@@ -103,9 +107,9 @@ async function applyOptimizationTestFilters(
     };
   }
 
-  // resolveConfigs consumes config.commandLineOptions and has already applied the same
-  // scenario-local filters as eval. This mirrors doEval's second pass over top-level tests while
-  // leaving scenario ranges for post-expansion evaluation.
+  // resolveConfigs applies row-sensitive filters once across top-level and materialized scenario
+  // rows. This second pass applies only selection filters to top-level tests; scenario ranges stay
+  // deferred until evaluator expansion.
   const tests = await filterTests(filterableTestSuite, filterOptions);
   const shouldSuppressImplicitDefaultTest =
     !hasScenarios &&
@@ -174,6 +178,7 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
       mergedConfig,
       resolved.testSuite,
       resolved.commandLineOptions,
+      Boolean(resolved.rowFiltersApplied),
     );
   const runOptimization = () =>
     optimizePromptTestSuite(optimizationConfig, optimizationTestSuite, {

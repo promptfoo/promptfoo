@@ -701,10 +701,17 @@ describe('evaluateOptions behavior', () => {
         },
         providers: ['echo'],
         prompts: ['Hello {{id}}'],
+        defaultTest: { assert: [{ type: 'contains', value: 'Hello' }] },
         tests: [
           { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 0 } },
           { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 1 } },
-          { description: 'keep gold first', metadata: { tier: 'gold' }, vars: { id: 2 } },
+          {
+            description: 'keep gold first',
+            metadata: { tier: 'gold' },
+            vars: { id: 2 },
+            provider: 'echo',
+            assert: [{ type: 'contains', value: '2' }],
+          },
           { description: 'keep gold second', metadata: { tier: 'gold' }, vars: { id: 3 } },
         ],
       });
@@ -717,6 +724,18 @@ describe('evaluateOptions behavior', () => {
       expect(
         (initialEval.config.tests as TestSuite['tests'])?.map((test) => test.vars?.id),
       ).toEqual([2]);
+      const runtimeTest = testSuite.tests?.[0];
+      const persistedTest = (initialEval.config.tests as TestSuite['tests'])?.[0];
+      expect(persistedTest).not.toBe(runtimeTest);
+      expect(persistedTest?.provider).toBe('echo');
+      expect(persistedTest?.assert).toEqual([{ type: 'contains', value: '2' }]);
+      expect(typeof (runtimeTest?.provider as { id?: unknown })?.id).toBe('function');
+      if (runtimeTest) {
+        runtimeTest.assert = [{ type: 'equals', value: 'runtime mutation' }];
+        runtimeTest.vars = { id: 99 };
+      }
+      expect(persistedTest?.assert).toEqual([{ type: 'contains', value: '2' }]);
+      expect(persistedTest?.vars).toEqual({ id: 2 });
       expect(initialEval.runtimeOptions?.testSelectionApplied).toBe(true);
 
       const resumeEval = new Eval(initialEval.config, {

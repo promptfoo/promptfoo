@@ -37,6 +37,7 @@ import {
   ConfigResolutionError,
   logConfigResolutionError,
   resolveConfigs,
+  snapshotTestSelection,
 } from '../util/config/load';
 import {
   filterProviders,
@@ -235,6 +236,7 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let rowFiltersApplied: boolean | undefined = false;
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -382,6 +384,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        rowFiltersApplied,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -439,6 +442,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        rowFiltersApplied,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -458,6 +462,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        rowFiltersApplied,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -618,7 +623,10 @@ export async function doEval(
       filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
-      hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+      hasActiveTestFilter &&
+      !rowFiltersApplied &&
+      canSynthesizeImplicitDefaultTest &&
+      !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
@@ -628,12 +636,12 @@ export async function doEval(
         testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
-        failing: filterFailing,
-        failingOnly: filterFailingOnly,
-        errorsOnly: filterErrorsOnly,
+        failing: rowFiltersApplied ? undefined : filterFailing,
+        failingOnly: rowFiltersApplied ? undefined : filterFailingOnly,
+        errorsOnly: rowFiltersApplied ? undefined : filterErrorsOnly,
         firstN: filterFirstN,
-        metadata: filterMetadata,
-        pattern: filterPattern,
+        metadata: rowFiltersApplied ? undefined : filterMetadata,
+        pattern: rowFiltersApplied ? undefined : filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
         sampleSeed: filterSampleSeed,
@@ -641,13 +649,16 @@ export async function doEval(
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
         testSuite.tests.length === 0 &&
-        ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
+        (rowFiltersApplied ||
+          (explicitTestCountBeforeFiltering ?? 0) > 0 ||
+          shouldApplyFiltersToImplicitDefaultTest);
       if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
       }
       if (hasActiveTestFilter) {
-        config.tests = testSuite.tests;
-        config.scenarios = testSuite.scenarios;
+        const selection = snapshotTestSelection(testSuite);
+        config.tests = selection.tests;
+        config.scenarios = selection.scenarios;
       }
     }
 

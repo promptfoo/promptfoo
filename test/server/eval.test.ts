@@ -133,6 +133,42 @@ describe('eval routes', () => {
         testEvalIds.add(createdEval.id);
       }
     });
+
+    it('preserves filtered-selection runtime options for replay', async () => {
+      const res = await api.post('/api/eval').send({
+        config: {
+          prompts: ['Hello {{id}}'],
+          providers: ['echo'],
+          tests: [{ vars: { id: 2 } }],
+          evaluateOptions: { filterRange: '1:2' },
+        },
+        prompts: [{ raw: 'Hello {{id}}', label: 'Hello {{id}}' }],
+        results: [],
+        runtimeOptions: {
+          filterRange: '1:2',
+          testSelectionApplied: true,
+        },
+      });
+
+      expect(res.status).toBe(200);
+      testEvalIds.add(res.body.id);
+      const savedEval = await Eval.findById(res.body.id);
+      expect(savedEval?.runtimeOptions).toMatchObject({
+        filterRange: '1:2',
+        testSelectionApplied: true,
+      });
+    });
+
+    it('rejects invalid filtered-selection runtime options', async () => {
+      const res = await api.post('/api/eval').send({
+        config: { tests: [] },
+        prompts: [],
+        results: [],
+        runtimeOptions: { testSelectionApplied: 'yes' },
+      });
+
+      expect(res.status).toBe(400);
+    });
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {

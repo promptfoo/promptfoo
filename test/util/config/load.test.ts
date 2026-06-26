@@ -146,6 +146,7 @@ vi.mock('../../../src/util/file', async () => {
 });
 
 vi.mock('../../../src/util/testCaseReader', () => ({
+  originalTestProviderReference: Symbol('originalTestProviderReference'),
   readTest: vi.fn().mockImplementation(async (test) => test),
   readTests: vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
@@ -1791,10 +1792,28 @@ describe('resolveConfigs', () => {
     expect(resolved.testSuite.scenarios?.map((scenario) => scenario.config)).toEqual([[{}], [{}]]);
   });
 
-  it('should extract unmatched prior scenario tests only once', async () => {
-    vi.spyOn(Eval, 'findById').mockResolvedValue({
+  it('should filter top-level and scenario results together and extract unmatched tests once', async () => {
+    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue({
       toEvaluateSummary: vi.fn().mockResolvedValue({
         results: [
+          {
+            vars: { scope: 'top' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+            testCase: { vars: { scope: 'top' } },
+          },
+          {
+            vars: { input: 'Configured', language: 'Spanish' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+            testCase: { vars: { input: 'Configured', language: 'Spanish' } },
+          },
+          {
+            vars: { input: 'Configured', language: 'French' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+            testCase: { vars: { input: 'Configured', language: 'French' } },
+          },
           {
             vars: { input: 'Runtime generated', language: 'German' },
             success: false,
@@ -1808,10 +1827,74 @@ describe('resolveConfigs', () => {
       prompts: ['Translate {{input}} to {{language}}'],
       providers: ['echo'],
       commandLineOptions: { filterFailing: 'eval-runtime-scenario' },
+      tests: [{ vars: { scope: 'top' } }],
       scenarios: [
         {
-          config: [{ vars: { language: 'Spanish' } }, { vars: { language: 'French' } }],
+          config: [{ vars: { language: 'Spanish' } }],
           tests: [{ vars: { input: 'Configured' } }],
+        },
+        {
+          config: [{ vars: { language: 'French' } }],
+          tests: [{ vars: { input: 'Configured' } }],
+        },
+      ],
+    };
+
+    const resolved = await resolveConfigs({}, defaultConfig);
+    const selectedScenarioTests = resolved.testSuite.scenarios?.flatMap(
+      (scenario) => scenario.tests,
+    );
+
+    expect(findByIdSpy).toHaveBeenCalledTimes(1);
+    expect(resolved.testSuite.tests?.map((test) => test.vars)).toEqual([
+      { scope: 'top' },
+      { input: 'Runtime generated', language: 'German' },
+    ]);
+    expect(selectedScenarioTests?.map((test) => test.vars)).toEqual([
+      { input: 'Configured', language: 'Spanish' },
+      { input: 'Configured', language: 'French' },
+    ]);
+    expect(resolved.testSuite.scenarios).toHaveLength(2);
+  });
+
+  it('should preserve provider-distinct scenario rows that share vars', async () => {
+    vi.spyOn(Eval, 'findById').mockResolvedValue({
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [
+          {
+            vars: { input: 'same' },
+            provider: { id: 'echo', label: 'provider-one' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+            testCase: { vars: { input: 'same' } },
+          },
+          {
+            vars: { input: 'same' },
+            provider: { id: 'echo', label: 'provider-two' },
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            testCase: { vars: { input: 'same' } },
+          },
+        ],
+      }),
+    } as any);
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{input}}'],
+      providers: [
+        { id: 'echo', label: 'provider-one' },
+        { id: 'echo', label: 'provider-two' },
+      ],
+      commandLineOptions: {
+        filterErrorsOnly: 'eval-provider-rows',
+        filterFailingOnly: 'eval-provider-rows',
+      },
+      scenarios: [
+        {
+          config: [
+            { provider: { id: 'echo', label: 'provider-one' } },
+            { provider: { id: 'echo', label: 'provider-two' } },
+          ],
+          tests: [{ vars: { input: 'same' } }],
         },
       ],
     };
@@ -1819,10 +1902,82 @@ describe('resolveConfigs', () => {
     const resolved = await resolveConfigs({}, defaultConfig);
     const selectedTests = resolved.testSuite.scenarios?.flatMap((scenario) => scenario.tests);
 
-    expect(selectedTests?.map((test) => test.vars)).toEqual([
-      { input: 'Runtime generated', language: 'German' },
+    expect(selectedTests).toHaveLength(2);
+    expect(selectedTests?.map((test) => (test.provider as { label: string }).label)).toEqual([
+      'provider-one',
+      'provider-two',
     ]);
-    expect(resolved.testSuite.scenarios).toHaveLength(3);
+  });
+
+  it('should match same-vars scenario results by conversation', async () => {
+    vi.spyOn(Eval, 'findById').mockResolvedValue({
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [
+          {
+            vars: { input: 'same' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+            testCase: {
+              vars: { input: 'same' },
+              metadata: { conversationId: '__scenario_1__' },
+            },
+          },
+        ],
+      }),
+    } as any);
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{input}}'],
+      providers: ['echo'],
+      commandLineOptions: { filterFailing: 'eval-conversation-rows' },
+      tests: [{ description: 'top-level row', vars: { input: 'same' } }],
+      scenarios: [
+        {
+          config: [{ description: 'passing row' }, { description: 'failing row' }],
+          tests: [{ vars: { input: 'same' } }],
+        },
+      ],
+    };
+
+    const resolved = await resolveConfigs({}, defaultConfig);
+    const selectedTests = resolved.testSuite.scenarios?.flatMap((scenario) => scenario.tests);
+
+    expect(resolved.testSuite.tests).toEqual([]);
+    expect(selectedTests).toHaveLength(1);
+    expect(selectedTests?.[0]).toMatchObject({
+      description: 'failing row',
+      metadata: { conversationId: '__scenario_1__' },
+    });
+  });
+
+  it('should reuse unseeded sampling positions across materialized config rows', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{group}} {{position}}'],
+      providers: ['echo'],
+      commandLineOptions: {
+        filterPattern: 'keep',
+        filterSample: 3,
+      },
+      scenarios: [
+        {
+          config: [{ vars: { group: 'A' } }, { vars: { group: 'B' } }],
+          tests: Array.from({ length: 10 }, (_, position) => ({
+            description: `keep ${position}`,
+            vars: { position },
+          })),
+        },
+      ],
+    };
+
+    const resolved = await resolveConfigs({}, defaultConfig);
+    const positions = resolved.testSuite.scenarios?.map((scenario) =>
+      scenario.tests.map((test) => test.vars?.position),
+    );
+
+    expect(randomSpy).toHaveBeenCalledTimes(1);
+    expect(positions).toHaveLength(2);
+    expect(positions?.[0]).toEqual(positions?.[1]);
+    expect(positions?.[0]).toHaveLength(3);
   });
 
   it('should derive distinct scenario sampling streams at the maximum safe seed', async () => {

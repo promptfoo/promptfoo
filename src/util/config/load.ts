@@ -44,7 +44,13 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { type FilterOptions, filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
-import { readTest, readTests } from '../testCaseReader';
+import { sanitizeObject } from '../sanitizer';
+import {
+  originalTestProviderReference,
+  readTest,
+  readTests,
+  type TestCaseWithOriginalProvider,
+} from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
@@ -106,8 +112,11 @@ function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
   return state >>> 0;
 }
 
-const scenarioConfigIndex = Symbol('scenarioConfigIndex');
-type TaggedScenarioTest = TestCase & { [scenarioConfigIndex]?: number };
+const testSelectionLocation = Symbol('testSelectionLocation');
+type TestSelectionLocation =
+  | { type: 'test' }
+  | { type: 'scenario'; scenarioIndex: number; dataIndex: number };
+type TaggedTest = TestCase & { [testSelectionLocation]?: TestSelectionLocation };
 
 function hasRowSensitiveScenarioFilter(options: FilterOptions): boolean {
   return (
@@ -119,10 +128,71 @@ function hasRowSensitiveScenarioFilter(options: FilterOptions): boolean {
   );
 }
 
-function removeScenarioConfigIndex(test: TaggedScenarioTest): TestCase {
+function removeTestSelectionLocation(test: TaggedTest): TestCase {
   const copy = { ...test };
-  delete copy[scenarioConfigIndex];
+  delete copy[testSelectionLocation];
   return copy;
+}
+
+function serializeProviderInstance<T>(provider: T): T {
+  if (!isApiProvider(provider)) {
+    return provider;
+  }
+  return {
+    id: provider.id(),
+    label: provider.label,
+    ...(provider.config
+      ? {
+          config: sanitizeObject(provider.config, {
+            context: 'provider config',
+            maxDepth: Number.POSITIVE_INFINITY,
+          }),
+        }
+      : {}),
+  } as T;
+}
+
+function detachTestForPersistence(test: TestCase): TestCase {
+  const originalProvider = (test as TestCaseWithOriginalProvider)[originalTestProviderReference];
+  const detached: TestCaseWithOriginalProvider = {
+    ...test,
+    ...(test.vars ? { vars: { ...test.vars } } : {}),
+    ...(test.options
+      ? {
+          options: {
+            ...test.options,
+            provider: serializeProviderInstance(test.options.provider),
+          },
+        }
+      : {}),
+    ...(test.metadata ? { metadata: { ...test.metadata } } : {}),
+    ...(test.assert
+      ? {
+          assert: test.assert.map((assertion) =>
+            'provider' in assertion
+              ? { ...assertion, provider: serializeProviderInstance(assertion.provider) }
+              : { ...assertion },
+          ),
+        }
+      : {}),
+    provider: originalProvider ?? serializeProviderInstance(test.provider),
+  };
+  delete detached[originalTestProviderReference];
+  return detached;
+}
+
+export function snapshotTestSelection(testSuite: TestSuite): {
+  tests: TestCase[];
+  scenarios: Scenario[] | undefined;
+} {
+  return {
+    tests: (testSuite.tests ?? []).map(detachTestForPersistence),
+    scenarios: testSuite.scenarios?.map((scenario) => ({
+      ...scenario,
+      config: scenario.config.map((data) => detachTestForPersistence(data as TestCase)),
+      tests: scenario.tests.map(detachTestForPersistence),
+    })),
+  };
 }
 
 // Mirrors evaluator.mergeScenarioTest so row-sensitive filters see the same effective test.
@@ -158,68 +228,77 @@ function mergeScenarioTestForFiltering(
   };
 }
 
-async function filterMaterializedScenario(
-  scenario: Scenario,
+async function filterMaterializedTests(
+  tests: TestCase[],
+  scenarios: Scenario[],
   defaultTest: TestCase,
   providers: TestSuite['providers'],
   prompts: TestSuite['prompts'],
   rowFilterOptions: FilterOptions,
-  selectionFilterOptions: FilterOptions,
-  scenarioDataOffset: number,
-): Promise<Scenario[]> {
-  const scenarioConfig = scenario.config ?? [];
-  if (scenarioConfig.length === 0) {
-    return [{ ...scenario, tests: [] }];
+  scenarioSelectionOptions: FilterOptions[],
+): Promise<{ tests: TestCase[]; scenarios: Scenario[] }> {
+  const effectiveTests: TaggedTest[] = tests.map((test) => ({
+    ...test,
+    [testSelectionLocation]: { type: 'test' },
+  }));
+  let scenarioDataOffset = 0;
+  for (const [scenarioIndex, scenario] of scenarios.entries()) {
+    const scenarioConfig = scenario.config ?? [];
+    for (const [dataIndex, data] of scenarioConfig.entries()) {
+      for (const test of scenario.tests) {
+        effectiveTests.push({
+          ...mergeScenarioTestForFiltering(defaultTest, data, test, scenarioDataOffset + dataIndex),
+          [testSelectionLocation]: { type: 'scenario', scenarioIndex, dataIndex },
+        });
+      }
+    }
+    scenarioDataOffset += scenarioConfig.length;
   }
 
-  const effectiveTests: TaggedScenarioTest[] = scenarioConfig.flatMap((data, dataIndex) =>
-    scenario.tests.map((test) => {
-      const effectiveTest = mergeScenarioTestForFiltering(
-        defaultTest,
-        data,
-        test,
-        scenarioDataOffset + dataIndex,
-      ) as TaggedScenarioTest;
-      effectiveTest[scenarioConfigIndex] = dataIndex;
-      return effectiveTest;
-    }),
-  );
   const filteredTests = (await filterTests(
     { defaultTest, providers, prompts, tests: effectiveTests },
     rowFilterOptions,
-  )) as TaggedScenarioTest[];
-  const testsByConfig = scenarioConfig.map(() => [] as TestCase[]);
+  )) as TaggedTest[];
+  const topLevelTests: TestCase[] = [];
+  const testsByScenarioConfig = scenarios.map((scenario) =>
+    (scenario.config ?? []).map(() => [] as TestCase[]),
+  );
   const extractedTests: TestCase[] = [];
 
   for (const test of filteredTests) {
-    const dataIndex = test[scenarioConfigIndex];
-    const untaggedTest = removeScenarioConfigIndex(test);
-    if (dataIndex === undefined) {
+    const location = test[testSelectionLocation];
+    const untaggedTest = removeTestSelectionLocation(test);
+    if (!location) {
       extractedTests.push(untaggedTest);
+    } else if (location.type === 'test') {
+      topLevelTests.push(untaggedTest);
     } else {
-      testsByConfig[dataIndex].push(untaggedTest);
+      testsByScenarioConfig[location.scenarioIndex][location.dataIndex].push(untaggedTest);
     }
   }
 
-  const materializedScenarios = await Promise.all(
-    testsByConfig.map(async (tests) => ({
-      ...scenario,
-      config: [{}],
-      tests: await filterTests({ defaultTest, providers, prompts, tests }, selectionFilterOptions),
-    })),
-  );
-  if (extractedTests.length > 0) {
-    materializedScenarios.push({
-      ...scenario,
-      config: [{}],
-      tests: await filterTests(
-        { defaultTest, providers, prompts, tests: extractedTests },
-        selectionFilterOptions,
-      ),
-    });
+  const materializedScenarios: Scenario[] = [];
+  for (const [scenarioIndex, scenario] of scenarios.entries()) {
+    if ((scenario.config ?? []).length === 0) {
+      materializedScenarios.push({ ...scenario, tests: [] });
+      continue;
+    }
+    for (const tests of testsByScenarioConfig[scenarioIndex]) {
+      materializedScenarios.push({
+        ...scenario,
+        config: [{}],
+        tests: await filterTests(
+          { defaultTest, providers, prompts, tests },
+          scenarioSelectionOptions[scenarioIndex],
+        ),
+      });
+    }
   }
 
-  return materializedScenarios;
+  return {
+    tests: [...topLevelTests, ...extractedTests],
+    scenarios: materializedScenarios,
+  };
 }
 
 /**
@@ -857,6 +936,7 @@ export async function resolveConfigs(
   config: Partial<UnifiedConfig>;
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
+  rowFiltersApplied?: boolean;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
@@ -1039,10 +1119,11 @@ export async function resolveConfigs(
     env: config.env,
     basePath,
   });
-  const parsedTests: TestCase[] = await readTests(
+  let parsedTests: TestCase[] = await readTests(
     config.tests || [],
     cmdObj.tests ? undefined : basePath,
   );
+  let rowFiltersApplied = false;
   const defaultTest: TestCase = {
     metadata: config.metadata,
     options: {
@@ -1068,20 +1149,19 @@ export async function resolveConfigs(
         : scenario,
     );
   }
+  const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+  const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+  const rowFilterOptions: FilterOptions = {
+    errorsOnly: cmdObj.filterErrorsOnly ?? commandLineOptions?.filterErrorsOnly,
+    failing: cmdObj.filterFailing ?? commandLineOptions?.filterFailing,
+    failingOnly: cmdObj.filterFailingOnly ?? commandLineOptions?.filterFailingOnly,
+    metadata: cmdObj.filterMetadata ?? commandLineOptions?.filterMetadata,
+    pattern: cmdObj.filterPattern ?? commandLineOptions?.filterPattern,
+  };
+  const rowSensitiveFilter = hasRowSensitiveScenarioFilter(rowFilterOptions);
   if (Array.isArray(config.scenarios)) {
-    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
-    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
-    const rowFilterOptions: FilterOptions = {
-      errorsOnly: cmdObj.filterErrorsOnly ?? commandLineOptions?.filterErrorsOnly,
-      failing: cmdObj.filterFailing ?? commandLineOptions?.filterFailing,
-      failingOnly: cmdObj.filterFailingOnly ?? commandLineOptions?.filterFailingOnly,
-      metadata: cmdObj.filterMetadata ?? commandLineOptions?.filterMetadata,
-      pattern: cmdObj.filterPattern ?? commandLineOptions?.filterPattern,
-    };
-    const rowSensitiveFilter = hasRowSensitiveScenarioFilter(rowFilterOptions);
-    const filteredScenarios: Scenario[] = [];
-    let scenarioDataOffset = 0;
-    for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
+    const parsedScenarios = config.scenarios as Scenario[];
+    for (const scenario of parsedScenarios) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
@@ -1093,42 +1173,53 @@ export async function resolveConfigs(
         scenario.tests = parsedScenarioTests;
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
-      const scenarioSampleSeed =
-        filterSample === undefined
-          ? undefined
-          : filterSampleSeed === undefined
-            ? rowSensitiveFilter
-              ? Math.floor(Math.random() * 0x1_0000_0000)
-              : undefined
-            : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex);
-      const selectionFilterOptions: FilterOptions = {
-        firstN: cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN,
-        sample: filterSample,
-        sampleSeed: scenarioSampleSeed,
-      };
+    }
 
-      if (rowSensitiveFilter) {
-        filteredScenarios.push(
-          ...(await filterMaterializedScenario(
-            scenario,
-            defaultTest,
-            parsedProviders,
-            parsedPrompts,
-            rowFilterOptions,
-            selectionFilterOptions,
-            scenarioDataOffset,
-          )),
-        );
-      } else {
+    const scenarioSelectionOptions: FilterOptions[] = parsedScenarios.map(
+      (_scenario, scenarioIndex) => {
+        const scenarioSampleSeed =
+          filterSample === undefined
+            ? undefined
+            : filterSampleSeed === undefined
+              ? rowSensitiveFilter
+                ? Math.floor(Math.random() * 0x1_0000_0000)
+                : undefined
+              : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex);
+        return {
+          firstN: cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN,
+          sample: filterSample,
+          sampleSeed: scenarioSampleSeed,
+        };
+      },
+    );
+
+    if (rowSensitiveFilter) {
+      const filtered = await filterMaterializedTests(
+        parsedTests,
+        parsedScenarios,
+        defaultTest,
+        parsedProviders,
+        parsedPrompts,
+        rowFilterOptions,
+        scenarioSelectionOptions,
+      );
+      parsedTests = filtered.tests;
+      config.scenarios = filtered.scenarios;
+      rowFiltersApplied = true;
+    } else {
+      for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
         scenario.tests = await filterTests(
           { ...scenario, defaultTest, providers: parsedProviders, prompts: parsedPrompts },
-          selectionFilterOptions,
+          scenarioSelectionOptions[scenarioIndex],
         );
-        filteredScenarios.push(scenario);
       }
-      scenarioDataOffset += scenario.config?.length ?? 0;
     }
-    config.scenarios = filteredScenarios;
+  } else if (rowSensitiveFilter && parsedTests.length > 0) {
+    parsedTests = await filterTests(
+      { defaultTest, providers: parsedProviders, prompts: parsedPrompts, tests: parsedTests },
+      rowFilterOptions,
+    );
+    rowFiltersApplied = true;
   }
 
   // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
@@ -1210,6 +1301,7 @@ export async function resolveConfigs(
     testSuite,
     basePath,
     commandLineOptions,
+    rowFiltersApplied,
     selectedProviderConfigs: filteredProviderConfigs,
   };
 }
