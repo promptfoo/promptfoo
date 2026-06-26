@@ -19,6 +19,10 @@ export interface WalCheckpointProbeResult {
 
 const logs: WalCheckpointProbeResult['logs'] = [];
 
+if (!process.env.PROMPTFOO_CONFIG_DIR) {
+  throw new Error('PROMPTFOO_CONFIG_DIR is required for the WAL checkpoint probe');
+}
+
 logger.debug = (message, context) => logs.push({ level: 'debug', message, context });
 logger.warn = (message, context) => logs.push({ level: 'warn', message, context });
 

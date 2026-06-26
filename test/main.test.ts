@@ -534,8 +534,12 @@ describe('shutdownGracefully', () => {
   });
 
   it('should continue cleanup when database close times out', async () => {
+    let resolveDbClose!: () => void;
     mockCloseDbIfOpen.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 1_600)),
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDbClose = resolve;
+        }),
     );
 
     const shutdownPromise = shutdownGracefully();
@@ -547,6 +551,7 @@ describe('shutdownGracefully', () => {
     expect(process.exit).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(500);
+    resolveDbClose();
     await shutdownPromise;
     expect(process.exit).not.toHaveBeenCalled();
 
