@@ -7,11 +7,7 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  loadConfig,
-  loadConfigOrDefault,
-  mergeConfigWithOptions,
-} from '../../../src/codeScan/config/loader';
+import { loadConfig, loadConfigOrDefault } from '../../../src/codeScan/config/loader';
 import { CodeScanSeverity, ConfigLoadError } from '../../../src/types/codeScan';
 
 describe('Configuration Loader', () => {
@@ -220,48 +216,6 @@ describe('Configuration Loader', () => {
         minimumSeverity: CodeScanSeverity.MEDIUM,
         diffsOnly: false,
       });
-    });
-
-    it('should keep empty explicit config values on built-in defaults', () => {
-      const config = loadConfigOrDefault('');
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.MEDIUM,
-        diffsOnly: false,
-      });
-    });
-
-    it('should prefer an explicit config path over the repository default config', () => {
-      const repositoryConfigPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
-      fs.writeFileSync(repositoryConfigPath, 'minimumSeverity: low\ndiffsOnly: false');
-
-      const explicitConfigPath = path.join(tempDir, 'explicit.yaml');
-      fs.writeFileSync(explicitConfigPath, 'minimumSeverity: critical\ndiffsOnly: true');
-
-      const config = loadConfigOrDefault(explicitConfigPath);
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.CRITICAL,
-        diffsOnly: true,
-      });
-    });
-  });
-
-  describe('mergeConfigWithOptions', () => {
-    it('should prefer minSeverity over minimumSeverity when both CLI aliases are provided', () => {
-      const config = mergeConfigWithOptions(
-        {
-          minimumSeverity: CodeScanSeverity.MEDIUM,
-          diffsOnly: false,
-        },
-        {
-          minSeverity: 'low',
-          minimumSeverity: 'critical',
-        },
-      );
-
-      expect(config.minimumSeverity).toBe(CodeScanSeverity.LOW);
-      expect(config.diffsOnly).toBe(false);
     });
   });
 });

@@ -10,8 +10,8 @@ import * as path from 'path';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import { prepareComments } from '../../src/codeScan/util/github';
-import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
+import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -23,15 +23,13 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
+import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
 
 interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
-  minimumSeverityInputProvided: boolean;
   configPath: string;
   diffsOnly: boolean;
-  diffsOnlyInputProvided: boolean;
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
@@ -61,11 +59,6 @@ function formatError(error: unknown): string {
 
 const DEFAULT_MINIMUM_SEVERITY = 'medium';
 
-interface MinimumSeverityInput {
-  value: string;
-  provided: boolean;
-}
-
 /**
  * Resolve the effective minimum severity from the two supported inputs.
  *
@@ -79,14 +72,11 @@ interface MinimumSeverityInput {
  *   3. fallback to `DEFAULT_MINIMUM_SEVERITY`
  *
  * If both are set to different values, `min-severity` wins and a warning is
- * emitted so the workflow author can collapse the inputs. The `provided` flag
- * lets callers (e.g. fallback-comment footer) distinguish a user-supplied
- * severity from the default, which matters when `config-path` is set and the
- * scan's effective severity comes from the YAML rather than these inputs.
+ * emitted so the workflow author can collapse the inputs.
  */
-function resolveMinimumSeverityInput(): MinimumSeverityInput {
-  const primary = core.getInput('min-severity').trim();
-  const alias = core.getInput('minimum-severity').trim();
+function resolveMinimumSeverityInput(): string {
+  const primary = core.getInput('min-severity').trim().toLowerCase();
+  const alias = core.getInput('minimum-severity').trim().toLowerCase();
 
   if (primary && alias && primary !== alias) {
     core.warning(
@@ -94,37 +84,42 @@ function resolveMinimumSeverityInput(): MinimumSeverityInput {
     );
   }
 
-  return {
-    value: primary || alias || DEFAULT_MINIMUM_SEVERITY,
-    provided: Boolean(primary || alias),
-  };
+  return primary || alias || DEFAULT_MINIMUM_SEVERITY;
+}
+
+function resolveDiffsOnlyInput(): boolean {
+  return core.getInput('diffs-only').trim() ? core.getBooleanInput('diffs-only') : false;
+}
+
+function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
+  if (!configPath) {
+    return;
+  }
+
+  const ignoredInputs = [
+    'min-severity',
+    'minimum-severity',
+    'diffs-only',
+    'guidance',
+    'guidance-file',
+  ].filter((name) => core.getInput(name).trim());
+
+  if (ignoredInputs.length > 0) {
+    core.warning(
+      `config-path supplies scan policy; ignoring Action input${ignoredInputs.length === 1 ? '' : 's'}: ${ignoredInputs.join(', ')}`,
+    );
+  }
 }
 
 function getActionInputs(): ActionInputs {
-  const minimumSeverity = resolveMinimumSeverityInput();
   const configPath = core.getInput('config-path');
-  // `diffs-only` carries no default in action.yml so we can distinguish
-  // "workflow set it" from "workflow omitted it" (a default would surface
-  // as a non-empty `core.getInput` value and trip warnIgnoredInputsWhenConfigPathSet).
-  // Treat absent as `false` ourselves so getBooleanInput's strict parser
-  // is only invoked on an explicit value.
-  //
-  // When config-path is set the input is documented as ignored — and
-  // resolveConfigPath short-circuits before reading inputs.diffsOnly, so
-  // there's nothing to parse. Skip the strict parser entirely in that
-  // case so a stale or template-expression value (e.g. `diffs-only: 0` /
-  // `'yes'`) cannot fail the action for a setting the scan never reads.
-  // The `diffsOnlyInputProvided` flag still surfaces the divergence via
-  // warnIgnoredInputsWhenConfigPathSet.
-  const diffsOnlyRaw = core.getInput('diffs-only').trim();
+  warnIgnoredInputsWhenConfigPathSet(configPath);
 
   return {
     apiHost: core.getInput('api-host'),
-    minimumSeverity: minimumSeverity.value,
-    minimumSeverityInputProvided: minimumSeverity.provided,
+    minimumSeverity: configPath ? DEFAULT_MINIMUM_SEVERITY : resolveMinimumSeverityInput(),
     configPath,
-    diffsOnly: diffsOnlyRaw && !configPath ? core.getBooleanInput('diffs-only') : false,
-    diffsOnlyInputProvided: Boolean(diffsOnlyRaw),
+    diffsOnly: configPath ? false : resolveDiffsOnlyInput(),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
@@ -170,45 +165,8 @@ function createScanEnv(oidcToken: string | undefined): Record<string, string> {
   return env;
 }
 
-/**
- * Warn when the workflow supplies action inputs that `config-path` will
- * silently ignore. The CLI only receives `--config <path>` (and optionally
- * `--api-host`) when `config-path` is set, so any `diffs-only` /
- * `min-severity` / `minimum-severity` input is dropped on the floor. Surface
- * the divergence so a workflow author notices instead of misreading the
- * scan as honoring those inputs.
- */
-function warnIgnoredInputsWhenConfigPathSet(inputs: ActionInputs): void {
-  if (!inputs.configPath) {
-    return;
-  }
-  const ignored: string[] = [];
-  if (inputs.minimumSeverityInputProvided) {
-    ignored.push('min-severity / minimum-severity');
-  }
-  if (inputs.diffsOnlyInputProvided) {
-    ignored.push('diffs-only');
-  }
-  if (ignored.length === 0) {
-    return;
-  }
-  core.warning(
-    `The following action input(s) are ignored when config-path is set: ${ignored.join(', ')}. The YAML config supplies these settings.`,
-  );
-}
-
 function loadGuidance(inputs: ActionInputs): string | undefined {
-  // When `config-path` is set, action inputs (guidance, guidance-file,
-  // min-severity, diffs-only) are documented as ignored — the YAML config
-  // is authoritative. Skip reading the guidance file so a stale/missing
-  // path on disk does not fail the scan. Warn if the user supplied an
-  // input that will be ignored so the divergence is visible.
   if (inputs.configPath) {
-    if (inputs.guidanceText || inputs.guidanceFile) {
-      core.warning(
-        'guidance and guidance-file inputs are ignored when config-path is set; the YAML config supplies guidance.',
-      );
-    }
     return undefined;
   }
 
@@ -284,24 +242,19 @@ async function authenticateWithOidc(): Promise<string | undefined> {
   }
 }
 
-interface ResolvedConfigPath {
-  path: string;
-  shouldCleanup: boolean;
-}
-
 function resolveConfigPath(
   configPath: string,
   minimumSeverity: string,
+  guidance: string | undefined,
   diffsOnly: boolean,
-  guidance?: string,
-): ResolvedConfigPath {
+): string {
   if (configPath) {
-    return { path: configPath, shouldCleanup: false };
+    return configPath;
   }
 
   const generatedConfigPath = generateConfigFile(minimumSeverity, guidance, diffsOnly);
   core.info(`📝 Generated temporary config at ${generatedConfigPath}`);
-  return { path: generatedConfigPath, shouldCleanup: true };
+  return generatedConfigPath;
 }
 
 async function getBaseBranch(githubToken: string, context: PullRequestContext): Promise<string> {
@@ -469,13 +422,33 @@ function buildCommentBody(comment: Comment): string {
   return body;
 }
 
+function buildGeneralCommentBody(comment: Comment): string {
+  const body = buildCommentBody(comment);
+  const location =
+    comment.file && comment.line
+      ? comment.startLine && comment.startLine !== comment.line
+        ? `${comment.file}:${comment.startLine}-${comment.line}`
+        : `${comment.file}:${comment.line}`
+      : comment.file;
+  return location ? `**${location}**\n\n${body}` : body;
+}
+
 function toReviewComment(comment: Comment) {
+  // GitHub's createReview API requires start_line < line for multi-line comments and
+  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
+  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
+  // caller having run that clamp. The ternary also narrows startLine to `number`,
+  // dropping the null/undefined the API type rejects.
+  const startLine =
+    comment.startLine && comment.line && comment.startLine < comment.line
+      ? comment.startLine
+      : undefined;
   return {
     path: comment.file!,
     line: comment.line || undefined,
-    start_line: comment.startLine || undefined,
+    start_line: startLine,
     side: 'RIGHT' as const,
-    start_side: comment.startLine ? ('RIGHT' as const) : undefined,
+    start_side: startLine ? ('RIGHT' as const) : undefined,
     body: buildCommentBody(comment),
   };
 }
@@ -522,7 +495,7 @@ async function postGeneralComments(
       owner: context.owner,
       repo: context.repo,
       issue_number: context.number,
-      body: buildCommentBody(comment),
+      body: buildGeneralCommentBody(comment),
     });
   }
 
@@ -540,35 +513,25 @@ async function postFallbackComments(
 
   try {
     const octokit = github.getOctokit(githubToken);
-    const { lineComments, generalComments, reviewBody } = prepareComments(
-      comments,
-      review,
-      minimumSeverity,
+    const {
+      lineComments: preparedLineComments,
+      generalComments,
+      reviewBody,
+    } = prepareComments(comments, review, minimumSeverity);
+    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+      githubToken,
+      context,
+      preparedLineComments,
     );
 
     await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, generalComments);
+    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
 
     core.info('✅ All comments posted to PR by action');
   } catch (error) {
     core.error(`Failed to post comments: ${formatError(error)}`);
     core.warning('Comments could not be posted to PR');
   }
-}
-
-function getFallbackMinimumSeverity(
-  inputs: ActionInputs,
-  configPath: ResolvedConfigPath,
-): string | undefined {
-  // Only report the action-input severity when the generated action-input
-  // config actually carried it into the scan. When `config-path` is set the
-  // CLI receives only `--config`, so the effective threshold lives in the
-  // YAML and the input value is not what produced the findings.
-  if (configPath.shouldCleanup) {
-    return inputs.minimumSeverity;
-  }
-
-  return undefined;
 }
 
 // The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
@@ -709,29 +672,44 @@ function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInp
 async function handleScanResponse(
   scanResponse: ScanResponse,
   inputs: ActionInputs,
-  finalConfigPath: ResolvedConfigPath,
   context: PullRequestContext,
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
+  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
+  const hasPrFindings = hasPrPostableFindings(comments);
 
   // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran.
-  if (skipReason) {
+  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
+  // responses still need processing when a finding can be surfaced through SARIF or PR
+  // comments, because those output channels intentionally support different locations.
+  if (skipReason && !hasSarifFindings && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
 
+  if (skipReason) {
+    // Carry the skipReason into the warning: a contradictory response (skip + real
+    // findings) signals a server-side bug, and the reason text is the operator's only
+    // clue to which path produced it.
+    core.warning(
+      `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
+    );
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  emitConfiguredSarifOutput(scanResponse, inputs);
+  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
+  if (!skipReason || hasSarifFindings) {
+    emitConfiguredSarifOutput(scanResponse, inputs);
+  }
 
-  if ((comments.length > 0 || review) && commentsPosted === false) {
+  if ((hasPrFindings || review) && commentsPosted === false) {
     await postFallbackComments(
       inputs.githubToken,
       context,
       comments,
       review,
-      getFallbackMinimumSeverity(inputs, finalConfigPath),
+      inputs.configPath ? undefined : inputs.minimumSeverity,
     );
     return;
   }
@@ -765,9 +743,9 @@ function logActCommentPreview(comments: Comment[]): void {
   });
 }
 
-function cleanupConfig(configPath: ResolvedConfigPath): void {
-  if (configPath.shouldCleanup) {
-    fs.unlinkSync(configPath.path);
+function cleanupConfig(configPath: string, finalConfigPath: string): void {
+  if (!configPath) {
+    fs.unlinkSync(finalConfigPath);
   }
 }
 
@@ -782,7 +760,6 @@ async function runCodeScan(): Promise<void> {
     return;
   }
 
-  warnIgnoredInputsWhenConfigPathSet(inputs);
   const guidance = loadGuidance(inputs);
 
   core.info('🔍 Starting Promptfoo Code Scan...');
@@ -805,21 +782,21 @@ async function runCodeScan(): Promise<void> {
   const finalConfigPath = resolveConfigPath(
     inputs.configPath,
     inputs.minimumSeverity,
-    inputs.diffsOnly,
     guidance,
+    inputs.diffsOnly,
   );
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
     await fetchBaseBranch(baseBranch);
 
-    const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath.path, baseBranch, context);
+    const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken);
 
-    await handleScanResponse(scanResponse, inputs, finalConfigPath, context);
+    await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
   } finally {
-    cleanupConfig(finalConfigPath);
+    cleanupConfig(inputs.configPath, finalConfigPath);
   }
 }
 

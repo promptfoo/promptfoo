@@ -15,6 +15,7 @@ import { type ScanConfig, ScanConfigSchema, validateSeverity } from '../../src/t
  * Generate a temporary YAML config file from action inputs
  * @param minimumSeverity Minimum severity level
  * @param guidance Optional custom guidance text
+ * @param diffsOnly Whether to restrict the scan to changed lines
  * @returns Path to temporary config file
  */
 export function generateConfigFile(

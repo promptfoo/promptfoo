@@ -74,16 +74,12 @@ export function loadConfig(configPath: string): Config {
 
 /**
  * Load configuration with defaults
- * If no config path is provided, fall back to the built-in defaults.
+ * If no config path provided, returns default configuration
  * Returns a clone to prevent mutation of the singleton default
  */
 export function loadConfigOrDefault(configPath?: string): Config {
-  if (configPath === undefined) {
-    return { ...DEFAULT_CONFIG }; // Return clone to prevent singleton mutation
-  }
-
   if (!configPath) {
-    return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_CONFIG }; // Return clone to prevent singleton mutation
   }
 
   return loadConfig(configPath);
