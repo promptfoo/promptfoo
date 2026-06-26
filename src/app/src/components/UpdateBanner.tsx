@@ -88,6 +88,24 @@ function copyCommandWithFallback(command: string): void {
   }
 }
 
+async function copyUpdateCommand(command: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(command);
+    return true;
+  } catch (error) {
+    console.error('Failed to copy to clipboard:', error);
+  }
+
+  try {
+    copyCommandWithFallback(command);
+    return true;
+  } catch (error) {
+    console.error('Fallback copy also failed:', error);
+    alert(`Failed to copy. Command: ${command}`);
+    return false;
+  }
+}
+
 function getCopyStatus(copied: boolean): string {
   return copied ? 'Command copied' : '';
 }
@@ -109,6 +127,34 @@ function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefin
     return 'container';
   }
   return versionInfo?.commandType;
+}
+
+function getBlockedUpdateNotice(
+  versionInfo: VersionInfo | null,
+  activeRuntimeNotice: RuntimeCompatibilityNotice | null,
+  updateDismissed: boolean,
+): RuntimeCompatibilityNotice | null {
+  return activeRuntimeNotice || updateDismissed ? null : (versionInfo?.blockedUpdateNotice ?? null);
+}
+
+function getRuntimeGuidanceHeading(
+  notice: RuntimeCompatibilityNotice,
+  isRuntimeReminder: boolean,
+  runtimeSupportEnded: boolean,
+  latestVersion: string,
+): string {
+  return isRuntimeReminder
+    ? `Node.js 20 support ${runtimeSupportEnded ? 'ended' : 'ends'} ${formatRemovalDate(notice.removalDate)}`
+    : `Promptfoo v${latestVersion} requires a newer Node.js runtime`;
+}
+
+function shouldRenderBanner(
+  loading: boolean,
+  error: Error | null,
+  runtimeGuidance: RuntimeCompatibilityNotice | null,
+  shouldShowUpdate: boolean,
+): boolean {
+  return !loading && !error && (!!runtimeGuidance || shouldShowUpdate);
 }
 
 export default function UpdateBanner() {
@@ -133,15 +179,22 @@ export default function UpdateBanner() {
   const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
+  const blockedUpdateNotice = getBlockedUpdateNotice(
+    versionInfo,
+    activeRuntimeNotice,
+    isUpdateDismissed,
+  );
+  const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
   const runtimeSupportEndDate =
-    runtimeNotice?.removalDate ?? versionInfo?.runtimePolicy?.supportEndDate;
+    activeRuntimeGuidance?.removalDate ??
+    runtimeNotice?.removalDate ??
+    versionInfo?.runtimePolicy?.supportEndDate;
   const runtimeSupportEnded = runtimeSupportEndDate
     ? hasRuntimeSupportEnded(runtimeSupportEndDate, runtimePolicyUpdatedAt)
     : false;
   const updateBlockedByRuntime =
     !!versionInfo?.updateBlockedByRuntime ||
     (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
-  const shouldShowRuntimeNotice = !!activeRuntimeNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
     !isUpdateDismissed &&
@@ -152,7 +205,12 @@ export default function UpdateBanner() {
     versionInfo?.commandType === 'docker' &&
     !!versionInfo.updateAvailable &&
     !updateBlockedByRuntime;
-  const shouldShowBanner = !loading && !error && (shouldShowRuntimeNotice || shouldShowUpdate);
+  const shouldShowBanner = shouldRenderBanner(
+    loading,
+    error,
+    activeRuntimeGuidance,
+    shouldShowUpdate,
+  );
   const dismissLabel = "Don't remind me of this version";
 
   useEffect(() => {
@@ -224,26 +282,8 @@ export default function UpdateBanner() {
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
 
-    if (command) {
-      const onSuccess = () => {
-        setCopied(true);
-      };
-
-      try {
-        await navigator.clipboard.writeText(command);
-        onSuccess();
-      } catch (err) {
-        // Fallback for browsers that don't support clipboard API or when it fails
-        console.error('Failed to copy to clipboard:', err);
-        try {
-          copyCommandWithFallback(command);
-          onSuccess();
-        } catch (fallbackError) {
-          console.error('Fallback copy also failed:', fallbackError);
-          // Show the command in an alert as last resort
-          alert(`Failed to copy. Command: ${command}`);
-        }
-      }
+    if (command && (await copyUpdateCommand(command))) {
+      setCopied(true);
     }
   };
 
@@ -286,32 +326,36 @@ export default function UpdateBanner() {
       ref={bannerRef}
       role="group"
       aria-label={activeRuntimeNotice ? 'Node.js runtime notice' : 'Promptfoo update notice'}
-      variant={activeRuntimeNotice ? 'warning' : 'info'}
+      variant={activeRuntimeGuidance ? 'warning' : 'info'}
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
         'flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         // Use solid background to prevent content showing through the banner
-        activeRuntimeNotice ? 'dark:bg-amber-950' : 'dark:bg-blue-950',
+        activeRuntimeGuidance ? 'dark:bg-amber-950' : 'dark:bg-blue-950',
       )}
     >
       <div
-        role={activeRuntimeNotice && runtimeSupportEnded ? 'alert' : 'status'}
+        role={activeRuntimeGuidance && runtimeSupportEnded ? 'alert' : 'status'}
         aria-atomic="true"
         className="flex items-start gap-3 sm:items-center"
       >
-        {activeRuntimeNotice ? (
+        {activeRuntimeGuidance ? (
           <TriangleAlert className="size-4 shrink-0" />
         ) : (
           <RefreshCw className="size-4 shrink-0" />
         )}
-        {activeRuntimeNotice ? (
+        {activeRuntimeGuidance ? (
           <div className="flex max-w-4xl flex-col gap-0.5">
             <span className="text-sm font-medium">
-              Node.js 20 support {runtimeSupportEnded ? 'ended' : 'ends'}{' '}
-              {formatRemovalDate(activeRuntimeNotice.removalDate)}
+              {getRuntimeGuidanceHeading(
+                activeRuntimeGuidance,
+                !!activeRuntimeNotice,
+                runtimeSupportEnded,
+                versionInfo.latestVersion,
+              )}
             </span>
             <span className="text-sm text-muted-foreground dark:text-amber-200">
-              <RuntimeUpgradeMessage notice={activeRuntimeNotice} commandType={updateMode} />
+              <RuntimeUpgradeMessage notice={activeRuntimeGuidance} commandType={updateMode} />
             </span>
           </div>
         ) : (
@@ -330,10 +374,10 @@ export default function UpdateBanner() {
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {getCopyStatus(copied)}
         </span>
-        {activeRuntimeNotice ? (
+        {activeRuntimeGuidance ? (
           <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
             <a
-              href={activeRuntimeNotice.documentationUrl}
+              href={activeRuntimeGuidance.documentationUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleRuntimeGuideClick}
@@ -354,7 +398,7 @@ export default function UpdateBanner() {
             </a>
           </Button>
         )}
-        {(!activeRuntimeNotice || shouldShowDockerAction) &&
+        {(!activeRuntimeGuidance || shouldShowDockerAction) &&
           versionInfo?.updateCommands?.primary && (
             <Button
               variant="outline"

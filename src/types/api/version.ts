@@ -33,6 +33,7 @@ export const VersionResponseSchema = z.object({
   updateAvailable: z.boolean(),
   updateBlockedByRuntime: z.boolean().optional(),
   runtimeNotice: RuntimeCompatibilityNoticeSchema.nullable().optional(),
+  blockedUpdateNotice: RuntimeCompatibilityNoticeSchema.nullable().optional(),
   runtimePolicy: RuntimeCompatibilityPolicySchema.nullable().optional(),
   selfHosted: z.boolean(),
   isNpx: z.boolean(),

@@ -422,6 +422,60 @@ describe('UpdateBanner', () => {
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
   });
 
+  it('should show blocked update guidance when runtime reminders are disabled', async () => {
+    const user = userEvent.setup();
+    const dismissUpdate = vi.fn();
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: false,
+        updateBlockedByRuntime: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: null,
+        blockedUpdateNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+        runtimePolicy: { supportEndDate: '2026-07-30' },
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      updateDismissed: false,
+      dismissUpdate,
+      runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(
+      screen.getByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to Node.js 22.22.0 or newer/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View upgrade guide/i })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+    );
+    expect(screen.queryByRole('button', { name: /Copy Update Command/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Don't remind me of this version/i }));
+    expect(dismissUpdate).toHaveBeenCalledTimes(1);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
   it('should preserve Docker updates after the cutoff when runtime notices are disabled', () => {
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {

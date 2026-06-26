@@ -29,6 +29,7 @@ export interface VersionInfo {
   updateAvailable: boolean;
   updateBlockedByRuntime?: boolean;
   runtimeNotice?: RuntimeCompatibilityNotice | null;
+  blockedUpdateNotice?: RuntimeCompatibilityNotice | null;
   runtimePolicy?: RuntimeCompatibilityPolicy | null;
   selfHosted?: boolean;
   isNpx?: boolean;

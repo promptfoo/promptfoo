@@ -128,13 +128,18 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     const base = buildBaseVersionFields();
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
+    const latestUpdateAvailable = isUpdateAvailable(resolvedLatestVersion, VERSION);
     const response = {
       ...base,
       latestVersion: resolvedLatestVersion,
       updateAvailable: isUpdateAvailableForRuntime(
-        isUpdateAvailable(resolvedLatestVersion, VERSION),
+        latestUpdateAvailable,
         base.updateBlockedByRuntime,
       ),
+      blockedUpdateNotice:
+        latestUpdateAvailable && base.updateBlockedByRuntime
+          ? getRuntimeNoticeForVersionResponse(process.version)
+          : null,
     };
 
     res.json(VersionSchemas.Response.parse(response));
@@ -145,6 +150,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       error: 'Failed to check version',
       latestVersion: VERSION,
       updateAvailable: false,
+      blockedUpdateNotice: null,
     });
   }
 });

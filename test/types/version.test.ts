@@ -98,6 +98,28 @@ describe('VersionSchemas.Response', () => {
     ).toMatchObject({ currentMajor: 20, removalDate: '2026-07-30' });
   });
 
+  it('accepts additive guidance for an available update blocked by the runtime', () => {
+    expect(
+      VersionSchemas.Response.parse({
+        ...baseResponse,
+        updateAvailable: false,
+        updateBlockedByRuntime: true,
+        runtimeNotice: null,
+        blockedUpdateNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+      }).blockedUpdateNotice,
+    ).toMatchObject({ currentMajor: 20, removalDate: '2026-07-30' });
+  });
+
   it('rejects runtime notices that drift from the announced policy', () => {
     expect(
       VersionSchemas.Response.safeParse({

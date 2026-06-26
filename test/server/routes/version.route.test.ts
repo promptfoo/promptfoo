@@ -97,6 +97,35 @@ describe('Version Route', () => {
     }
   });
 
+  it('should preserve blocked update guidance when runtime reminders are disabled', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-31T00:00:00.000Z'));
+    vi.spyOn(process, 'version', 'get').mockReturnValue('v20.20.0');
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_RUNTIME_WARNINGS: 'true' });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        latestVersion: '99.0.0',
+        updateAvailable: false,
+        updateBlockedByRuntime: true,
+        runtimeNotice: null,
+        blockedUpdateNotice: {
+          currentVersion: 'v20.20.0',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+        },
+      });
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('should include all required fields matching UpdateCommandResult shape', async () => {
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
     mockedGetUpdateCommands.mockReturnValue({
@@ -242,6 +271,7 @@ describe('Version Route', () => {
     expect(dockerResponse.status).toBe(200);
     expect(dockerResponse.body.updateBlockedByRuntime).toBe(false);
     expect(dockerResponse.body.updateAvailable).toBe(true);
+    expect(dockerResponse.body.blockedUpdateNotice).toBeNull();
   });
 
   it('should return 500 with fallback response when schema parse fails', async () => {
