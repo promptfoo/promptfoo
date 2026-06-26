@@ -13,25 +13,40 @@ providers:
 # It's a good practice to have a defaultTest that applies to all test cases.
 defaultTest:
   assert:
-    # We expect the agent to always return a valid JSON object
+    # Validate the complete structured output contract.
     - type: is-json
-    # We expect the output to contain a "candidates" key
-    - type: javascript
-      value: 'output.hasOwnProperty("candidates")'
-    # We expect a summary explaining the recommendations
-    - type: javascript
-      value: 'typeof output.summary === "string" && output.summary.trim().length > 0'
+      value:
+        type: object
+        properties:
+          candidates:
+            type: array
+            minItems: 2
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  pattern: '\S'
+                experience:
+                  type: string
+                  pattern: '\S'
+                skills:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    pattern: '\S'
+              required: ['name', 'experience', 'skills']
+          summary:
+            type: string
+            pattern: '\S'
+        required: ['candidates', 'summary']
 
 tests:
   - description: 'Senior Full-Stack Engineer'
     vars:
       role: 'A Senior Full-Stack Engineer with 8+ years of experience in Python, Django, and React.'
     assert:
-      - type: javascript
-        value: |
-          // Check that there are at least 2 candidates
-          return output.candidates.length >= 2;
-
       - type: python
         value: |
           # Check that all candidates have relevant skills
@@ -46,11 +61,6 @@ tests:
     vars:
       role: 'A Data Scientist with machine learning, Python, and cloud (AWS or GCP) experience.'
     assert:
-      - type: javascript
-        value: |
-          // Check that there are at least 2 candidates
-          return output.candidates.length >= 2;
-
       - type: python
         value: |
           # Check for relevant data science and cloud skills
@@ -65,11 +75,6 @@ tests:
     vars:
       role: 'A junior UX/UI designer with Figma and Adobe Creative Suite experience.'
     assert:
-      - type: javascript
-        value: |
-          // Check that there are at least 2 candidates
-          return output.candidates.length >= 2;
-
       - type: python
         value: |
           # Check for relevant design tool skills

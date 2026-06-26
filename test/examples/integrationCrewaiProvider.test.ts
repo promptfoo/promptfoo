@@ -3,6 +3,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import Ajv from 'ajv';
+import yaml from 'js-yaml';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 describe('integration-crewai example provider', () => {
@@ -116,5 +118,38 @@ print(json.dumps(result))
       error: expect.stringContaining('OpenAI API key not found'),
       raw: '',
     });
+  });
+
+  it('rejects candidate objects that violate the configured output schema', () => {
+    const config = yaml.load(
+      fs.readFileSync(
+        path.join(process.cwd(), 'examples', 'integration-crewai', 'promptfooconfig.yaml'),
+        'utf8',
+      ),
+    ) as {
+      defaultTest: { assert: Array<{ type: string; value?: Record<string, unknown> }> };
+    };
+    const schema = config.defaultTest.assert.find(
+      (assertion) => assertion.type === 'is-json',
+    )?.value;
+    if (!schema) {
+      throw new Error('CrewAI example is missing its is-json schema');
+    }
+
+    const validate = new Ajv().compile(schema);
+    const validCandidate = {
+      name: 'Ada',
+      experience: '8 years',
+      skills: ['Python'],
+    };
+
+    expect(validate({ candidates: [validCandidate, validCandidate], summary: 'Two matches' })).toBe(
+      true,
+    );
+    expect(
+      validate({ candidates: [{ skills: ['Python'] }, { skills: ['Python'] }], summary: 'x' }),
+    ).toBe(false);
+    expect(validate({ candidates: [validCandidate], summary: 'One match' })).toBe(false);
+    expect(validate({ candidates: [validCandidate, validCandidate], summary: '   ' })).toBe(false);
   });
 });
