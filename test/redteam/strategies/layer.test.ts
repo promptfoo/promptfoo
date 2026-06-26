@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MULTI_INPUT_VAR } from '../../../src/redteam/constants/plugins';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
@@ -659,6 +660,53 @@ describe('addLayerTestCases', () => {
           { id: 'base64', config: { someOption: true } },
         ]);
       }
+    });
+
+    it('should respect plugin exclusions for per-turn layers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { [MULTI_INPUT_VAR]: '{"task":"canary task"}' },
+          metadata: {
+            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        MULTI_INPUT_VAR,
+        { steps: ['jailbreak:hydra', 'posterior'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      const provider = result[0].provider;
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra');
+      expect(provider).toEqual(
+        expect.objectContaining({
+          config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+        }),
+      );
+    });
+
+    it('should reject posterior per-turn layers for multi-input targets during generation', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { [MULTI_INPUT_VAR]: '{}' },
+          metadata: { pluginId: 'policy' },
+        },
+      ];
+
+      await expect(
+        addLayerTestCases(
+          testCases,
+          MULTI_INPUT_VAR,
+          { steps: ['jailbreak:hydra', 'posterior'] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
     });
 
     it('should generate correct metric suffix for each attack provider', async () => {

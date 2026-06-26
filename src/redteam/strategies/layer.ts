@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { MULTI_INPUT_VAR } from '../constants/plugins';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { pluginMatchesStrategyTargets } from './util';
 
@@ -73,26 +74,49 @@ export async function addLayerTestCases(
 
       // Collect remaining steps as per-turn layer configs
       const remainingSteps = steps.slice(i + 1);
-      const perTurnLayers: LayerConfig[] = remainingSteps.map((s) =>
-        typeof s === 'string' ? s : { id: s.id, config: s.config },
-      );
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
-      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
 
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,
-        perTurnLayers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+        perTurnLayers: remainingSteps.map((layer) =>
+          typeof layer === 'string' ? layer : layer.id,
+        ),
         testCaseCount: current.length,
       });
 
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
       return current.map((testCase) => {
+        const perTurnLayers: LayerConfig[] = remainingSteps
+          .filter((layer) => {
+            const layerObj = typeof layer === 'string' ? { id: layer } : layer;
+            const layerTargets =
+              (layerObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
+            return pluginMatchesStrategyTargets(
+              testCase,
+              layerObj.id,
+              layerTargets as string[] | undefined,
+            );
+          })
+          .map((layer) =>
+            typeof layer === 'string' ? layer : { id: layer.id, config: layer.config },
+          );
+
+        if (
+          injectVar === MULTI_INPUT_VAR &&
+          perTurnLayers.some((layer) =>
+            typeof layer === 'string' ? layer === 'posterior' : layer.id === 'posterior',
+          )
+        ) {
+          throw new Error('Posterior strategy does not support multi-input targets');
+        }
+
+        const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
         const originalText = String(testCase.vars?.[injectVar] ?? '');
         return {
           ...testCase,

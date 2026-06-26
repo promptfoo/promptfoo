@@ -207,6 +207,54 @@ describe('Strategies', () => {
       expect(screen.getByText('Meta Agent')).toBeInTheDocument();
       expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
     });
+
+    it('disables Posterior Attack for multi-input targets', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: { stateful: false },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+          strategies: [],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByText('Posterior Attack requires a single-input target')).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeDisabled();
+    });
+
+    it('blocks progression but allows removing Posterior Attack after inputs are configured', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: { stateful: false },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+          strategies: [{ id: 'posterior' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      const posteriorButton = screen.getByRole('button', { name: 'Posterior Attack' });
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+      expect(posteriorButton).toBeEnabled();
+
+      await user.click(posteriorButton);
+      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', []);
+    });
   });
 
   describe('Strategy categorization', () => {

@@ -90,6 +90,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
+  const isPosteriorUnavailable = Boolean(
+    config.target?.inputs && Object.keys(config.target.inputs).length > 0,
+  );
+
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
       if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
@@ -98,9 +102,16 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       if (isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId)) {
         return true;
       }
+      if (
+        strategyId === 'posterior' &&
+        isPosteriorUnavailable &&
+        !config.strategies.some((strategy) => getStrategyId(strategy) === strategyId)
+      ) {
+        return true;
+      }
       return false;
     },
-    [isRemoteGenerationDisabled],
+    [config.strategies, isRemoteGenerationDisabled, isPosteriorUnavailable],
   );
 
   /** Whether a strategy is disabled specifically because it's enterprise only */
@@ -164,7 +175,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       // Allow deselection even when disabled, but block selection
       if (isStrategyDisabled(strategyId) && !isSelected) {
-        if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
+        if (strategyId === 'posterior' && isPosteriorUnavailable) {
+          toast.showToast('Posterior Attack supports single-input targets only.', 'error');
+        } else if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
           toast.showToast('This strategy is available in Promptfoo Enterprise.', 'error');
         } else {
           toast.showToast(
@@ -256,6 +269,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       isStrategyDisabled,
       toast,
       setConfigDialog,
+      isPosteriorUnavailable,
     ],
   );
 
@@ -358,12 +372,18 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   // Validation function to check if all selected strategies are properly configured
   const isStrategyConfigValid = useCallback(() => {
+    if (isPosteriorUnavailable && selectedStrategyIds.includes('posterior')) {
+      return false;
+    }
     return config.strategies.every((strategy) =>
       isStrategyConfigured(getStrategyId(strategy), strategy),
     );
-  }, [config.strategies]);
+  }, [config.strategies, isPosteriorUnavailable, selectedStrategyIds]);
 
   const getNextButtonTooltip = useCallback(() => {
+    if (isPosteriorUnavailable && selectedStrategyIds.includes('posterior')) {
+      return 'Posterior Attack supports single-input targets only. Remove it or clear the configured target inputs.';
+    }
     if (!isStrategyConfigValid()) {
       const unconfiguredStrategies = config.strategies
         .filter((strategy) => {
@@ -377,7 +397,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
     }
     return '';
-  }, [config.strategies, isStrategyConfigValid]);
+  }, [config.strategies, isPosteriorUnavailable, isStrategyConfigValid, selectedStrategyIds]);
 
   // ----------------------------------------------
   // Derived states
@@ -449,6 +469,19 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
               enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
               <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
+
+      {isPosteriorUnavailable && (
+        <Alert variant="warning" className="-mx-3 mb-3 rounded-none shadow-sm">
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertTitle>Posterior Attack requires a single-input target</AlertTitle>
+            <AlertDescription>
+              This strategy is unavailable while target inputs are configured. Remove it from the
+              selected strategies or return to Targets and clear the configured inputs.
             </AlertDescription>
           </AlertContent>
         </Alert>
