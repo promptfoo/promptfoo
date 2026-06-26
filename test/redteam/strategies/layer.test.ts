@@ -690,7 +690,42 @@ describe('addLayerTestCases', () => {
       );
     });
 
-    it('should reject posterior per-turn layers for test cases with multi-input metadata', async () => {
+    it('should recursively respect plugin exclusions for nested per-turn layers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { [MULTI_INPUT_VAR]: '{"task":"canary task"}' },
+          metadata: {
+            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        MULTI_INPUT_VAR,
+        {
+          steps: ['jailbreak:hydra', { id: 'layer', config: { steps: ['posterior'] } }],
+        },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra');
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+        }),
+      );
+    });
+
+    it.each([
+      ['directly', ['jailbreak:hydra', 'posterior']],
+      [
+        'inside a nested layer',
+        ['jailbreak:hydra', { id: 'layer', config: { steps: ['posterior'] } }],
+      ],
+    ])('should reject posterior per-turn layers %s for test cases with multi-input metadata', async (_label, steps) => {
       const testCases: TestCaseWithPlugin[] = [
         {
           vars: { [MULTI_INPUT_VAR]: '{}' },
@@ -707,13 +742,7 @@ describe('addLayerTestCases', () => {
       ];
 
       await expect(
-        addLayerTestCases(
-          testCases,
-          MULTI_INPUT_VAR,
-          { steps: ['jailbreak:hydra', 'posterior'] },
-          mockStrategies,
-          mockLoadStrategy,
-        ),
+        addLayerTestCases(testCases, MULTI_INPUT_VAR, { steps }, mockStrategies, mockLoadStrategy),
       ).rejects.toThrow('Posterior strategy does not support multi-input targets');
     });
 

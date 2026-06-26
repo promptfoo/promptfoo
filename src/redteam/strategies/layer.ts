@@ -1,11 +1,42 @@
 import logger from '../../logger';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
-import { assertPosteriorTargetSupported } from './posterior';
+import { assertPosteriorTargetSupported, hasPosteriorStrategy } from './posterior';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy } from './types';
+
+function getApplicablePerTurnLayer(
+  testCase: TestCaseWithPlugin,
+  layer: LayerConfig,
+  inheritedTargets?: string[],
+): LayerConfig | undefined {
+  const layerObj = typeof layer === 'string' ? { id: layer } : layer;
+  const targets = (layerObj.config?.plugins as string[] | undefined) ?? inheritedTargets;
+
+  if (!pluginMatchesStrategyTargets(testCase, layerObj.id, targets)) {
+    return undefined;
+  }
+
+  if (layerObj.id !== 'layer') {
+    return layer;
+  }
+
+  const steps = Array.isArray(layerObj.config?.steps)
+    ? (layerObj.config.steps as LayerConfig[])
+    : [];
+  const applicableSteps = steps
+    .map((step) => getApplicablePerTurnLayer(testCase, step, targets))
+    .filter((step): step is LayerConfig => step !== undefined);
+
+  return applicableSteps.length > 0
+    ? {
+        id: layerObj.id,
+        config: { ...layerObj.config, steps: applicableSteps },
+      }
+    : undefined;
+}
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -92,26 +123,12 @@ export async function addLayerTestCases(
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
       return current.map((testCase) => {
+        const inheritedTargets = config?.plugins as string[] | undefined;
         const perTurnLayers: LayerConfig[] = remainingSteps
-          .filter((layer) => {
-            const layerObj = typeof layer === 'string' ? { id: layer } : layer;
-            const layerTargets =
-              (layerObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
-            return pluginMatchesStrategyTargets(
-              testCase,
-              layerObj.id,
-              layerTargets as string[] | undefined,
-            );
-          })
-          .map((layer) =>
-            typeof layer === 'string' ? layer : { id: layer.id, config: layer.config },
-          );
+          .map((layer) => getApplicablePerTurnLayer(testCase, layer, inheritedTargets))
+          .filter((layer): layer is LayerConfig => layer !== undefined);
 
-        if (
-          perTurnLayers.some((layer) =>
-            typeof layer === 'string' ? layer === 'posterior' : layer.id === 'posterior',
-          )
-        ) {
+        if (hasPosteriorStrategy(perTurnLayers)) {
           assertPosteriorTargetSupported([testCase]);
         }
 

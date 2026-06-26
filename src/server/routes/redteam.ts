@@ -17,11 +17,11 @@ import {
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
-import { Strategies } from '../../redteam/strategies/index';
 import {
-  hasPosteriorStrategy,
-  POSTERIOR_MULTI_INPUT_ERROR,
-} from '../../redteam/strategies/posterior';
+  getStrategyCompatibilityError,
+  isStrategyApplicable,
+  Strategies,
+} from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
@@ -37,6 +37,22 @@ import {
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getLiveConfigCompatibilityError(config: Record<string, unknown>): string | undefined {
+  const redteam = isRecord(config.redteam) ? config.redteam : undefined;
+  const strategies = Array.isArray(redteam?.strategies) ? redteam.strategies : [];
+  const configuredTargets = config.targets ?? config.providers;
+  const target = Array.isArray(configuredTargets) ? configuredTargets[0] : configuredTargets;
+  const targetRecord = isRecord(target) ? target : undefined;
+  const targetConfig = isRecord(targetRecord?.config) ? targetRecord.config : undefined;
+  const inputs = targetRecord?.inputs ?? targetConfig?.inputs;
+
+  return getStrategyCompatibilityError(strategies, inputs);
+}
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -71,8 +87,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const hasMultiInput =
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
     if (hasMultiInput) {
-      if (hasPosteriorStrategy([strategy])) {
-        res.status(400).json({ error: POSTERIOR_MULTI_INPUT_ERROR });
+      const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs);
+      if (compatibilityError) {
+        res.status(400).json({ error: compatibilityError });
         return;
       }
       const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
@@ -123,9 +140,17 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     if (!['basic', 'default'].includes(strategy.id)) {
       try {
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
+        const applicableTestCases = (testCases as TestCaseWithPlugin[]).filter((testCase) =>
+          isStrategyApplicable(testCase, strategy),
+        );
+
+        if (applicableTestCases.length === 0) {
+          res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+          return;
+        }
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as TestCaseWithPlugin[],
+          applicableTestCases,
           injectVar,
           strategy.config || {},
           strategy.id,
@@ -247,6 +272,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const compatibilityError = getLiveConfigCompatibilityError(config);
+  if (compatibilityError) {
+    res.status(400).json({ error: compatibilityError });
+    return;
+  }
+
   // If there's a current job running, abort it
   if (currentJobId) {
     if (currentAbortController) {
@@ -258,7 +290,6 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     });
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
