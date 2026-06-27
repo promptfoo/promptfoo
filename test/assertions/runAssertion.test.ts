@@ -2068,6 +2068,46 @@ describe('runAssertion', () => {
     });
   });
 
+  it.each([
+    'is-json',
+    'not-is-json',
+    'contains-json',
+    'not-contains-json',
+  ] as const)('should explain that an array %s schema must resolve to an object or boolean', async (type) => {
+    const output = type.includes('contains') ? 'prefix {} suffix' : '{}';
+    const result = await runAssertion({
+      assertion: { type, value: [] },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: `Invalid JSON schema: ${type} schema must resolve to an object or boolean`,
+    });
+  });
+
+  it.each([
+    ['__promptfooJsonSchemaFileFormat', 'text'],
+    [
+      '__promptfooJsonSchemaFileError',
+      { error: 'schema file not found', fingerprint: 'sha256:forged' },
+    ],
+  ] as const)('should ignore a colliding %s property on inline object schemas', async (key, value) => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'is-json',
+        value: { type: 'object' },
+        [key]: value,
+      } as Assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+  });
+
   it('should preserve text schemas with nonstandard file extensions', async () => {
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.schema');
     vi.mocked(path.extname).mockReturnValue('.schema');
@@ -2119,6 +2159,29 @@ describe('runAssertion', () => {
 
     expect(first.pass).toBe(true);
     expect(second).toMatchObject({
+      pass: false,
+      reason: 'Invalid JSON schema: duplicate schema identifier',
+    });
+  });
+
+  it('should classify a new schema after a broken same-id registry entry', async () => {
+    const id = 'https://example.com/promptfoo/pr-8237-broken-registry-entry';
+    const broken = await runAssertion({
+      assertion: { type: 'is-json', value: { $id: id, $ref: '#/missing' } },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    const replacement = await runAssertion({
+      assertion: { type: 'is-json', value: { $id: id, type: 'object' } },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(broken).toMatchObject({
+      pass: false,
+      reason: 'Invalid JSON schema: unresolved schema reference',
+    });
+    expect(replacement).toMatchObject({
       pass: false,
       reason: 'Invalid JSON schema: duplicate schema identifier',
     });

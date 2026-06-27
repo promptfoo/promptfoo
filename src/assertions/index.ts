@@ -38,6 +38,7 @@ import {
 import { getJsonSchemaFileSnapshot, getJsonSchemaRenderedFileRef } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { renderEnvOnlyInObject } from '../util/render';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -487,9 +488,10 @@ export async function runAssertion({
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     } else if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = (getJsonSchemaRenderedFileRef(assertion) ?? renderedValue).slice(
-        'file://'.length,
-      );
+      const storedFileRef = getJsonSchemaRenderedFileRef(assertion) ?? renderedValue;
+      const fileRef = (
+        isJsonSchemaAssertion ? renderEnvOnlyInObject(storedFileRef) : storedFileRef
+      ).slice('file://'.length);
       let filePath = fileRef;
       let functionName: string | undefined;
 

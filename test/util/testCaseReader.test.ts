@@ -310,6 +310,22 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read YAML file and return test cases', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      - var1: value1
+        var2: value2
+      - var1: value3
+        var2: value4
+    `);
+    const result = await readStandaloneTestsFile('test.yaml');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.yaml'), 'utf-8');
+    expect(result).toEqual([
+      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
+      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
+    ]);
+  });
+
   it('should preload schema references in standalone JSON tests', async () => {
     const assertion = { type: 'is-json' as const, value: 'file://schema.json' };
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([{ assert: [assertion] }]));
@@ -325,22 +341,6 @@ describe('readStandaloneTestsFile', () => {
       '/config',
     );
     expect(result[0].assert?.[0]).toMatchObject({ value: { type: 'object' } });
-  });
-
-  it('should read YAML file and return test cases', async () => {
-    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
-      - var1: value1
-        var2: value2
-      - var1: value3
-        var2: value4
-    `);
-    const result = await readStandaloneTestsFile('test.yaml');
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.yaml'), 'utf-8');
-    expect(result).toEqual([
-      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
-      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
-    ]);
   });
 
   it('should read Google Sheets and return test cases', async () => {

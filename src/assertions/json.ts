@@ -81,7 +81,14 @@ function getMatchingSchemaIdValidator(
   ) {
     return undefined;
   }
-  const existing = ajv.getSchema(schema.$id);
+  let existing: ValidateFunction | undefined;
+  try {
+    existing = ajv.getSchema(schema.$id);
+  } catch {
+    // A previously registered invalid schema may throw while Ajv resolves it.
+    // Let compile() below classify the current schema instead.
+    return undefined;
+  }
   return existing && isDeepStrictEqual(existing.schema, schema) ? existing : undefined;
 }
 
@@ -143,7 +150,11 @@ function getJsonSchemaValidator({
       }
     }
 
-    if (schema === null || (typeof schema !== 'boolean' && typeof schema !== 'object')) {
+    if (
+      schema === null ||
+      Array.isArray(schema) ||
+      (typeof schema !== 'boolean' && typeof schema !== 'object')
+    ) {
       throw new JsonSchemaConfigurationError(
         `${assertion.type} schema must resolve to an object or boolean`,
       );

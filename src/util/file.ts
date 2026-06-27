@@ -53,11 +53,20 @@ export type JsonSchemaFileSnapshot =
       fingerprint: string;
     };
 
+function isJsonSchemaAssertionRecord(record: Record<PropertyKey, unknown>): boolean {
+  if (typeof record.type !== 'string') {
+    return false;
+  }
+  const baseType = record.type.replace(/^not-/, '');
+  return baseType === 'is-json' || baseType === 'contains-json';
+}
+
 export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSnapshot | undefined {
   if (typeof assertion !== 'object' || assertion === null) {
     return undefined;
   }
   const record = assertion as Record<PropertyKey, unknown>;
+  const isJsonSchemaAssertion = isJsonSchemaAssertionRecord(record);
   const snapshot = record[JSON_SCHEMA_FILE_SNAPSHOT] as JsonSchemaFileSnapshot | undefined;
   if (snapshot) {
     return snapshot;
@@ -66,13 +75,20 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
   if (
     typeof persisted === 'object' &&
     persisted !== null &&
+    isJsonSchemaAssertion &&
+    typeof record.value === 'string' &&
+    record.value.startsWith('file://') &&
     typeof (persisted as PersistedJsonSchemaFileError).error === 'string' &&
     typeof (persisted as PersistedJsonSchemaFileError).fingerprint === 'string'
   ) {
     const { error, fingerprint } = persisted as PersistedJsonSchemaFileError;
     return { source: `persisted:${fingerprint}`, error, fingerprint };
   }
-  if (record[JSON_SCHEMA_FILE_FORMAT] === 'text') {
+  if (
+    record[JSON_SCHEMA_FILE_FORMAT] === 'text' &&
+    isJsonSchemaAssertion &&
+    typeof record.value === 'string'
+  ) {
     return {
       source: 'persisted:text',
       format: 'text',

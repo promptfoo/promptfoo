@@ -529,7 +529,7 @@ describe('Script value resolution', () => {
       expect(result.reason).toContain('Ruby execution error');
     });
 
-    it('should resolve a named Ruby JSON schema generator from an external test config', async () => {
+    it('should resolve a named Ruby JSON schema generator before and after serialization', async () => {
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockResolvedValue({ type: 'object' });
       const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_PATH: '/private/schema/path' });
@@ -555,6 +555,14 @@ describe('Script value resolution', () => {
             tokenUsage: { total: 0, prompt: 0, completion: 0 },
           },
         });
+        const persistedResult = await runAssertion({
+          assertion: JSON.parse(JSON.stringify(assertion)),
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
 
         expect(assertion.value).toContain('{{ env.PR8237_SCHEMA_PATH }}');
         expect(JSON.stringify(assertion)).not.toContain('/private/schema/path');
@@ -563,8 +571,44 @@ describe('Script value resolution', () => {
           'build_schema',
           expect.any(Array),
         );
+        expect(mockRunRuby).toHaveBeenCalledTimes(2);
+        expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+        expect(persistedResult).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should resolve a persisted schema generator from config env', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({ PR8237_CONFIG_SCHEMA_PATH: undefined });
+      const originalConfig = cliState.config;
+      cliState.config = {
+        env: { PR8237_CONFIG_SCHEMA_PATH: '/private/config/schema/path' },
+      };
+
+      try {
+        const result = await runAssertion({
+          assertion: {
+            type: 'is-json',
+            value: 'file://{{ env.PR8237_CONFIG_SCHEMA_PATH }}/schema.rb:build_schema',
+          },
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+
+        expect(mockRunRuby).toHaveBeenCalledWith(
+          '/private/config/schema/path/schema.rb',
+          'build_schema',
+          expect.any(Array),
+        );
         expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
       } finally {
+        cliState.config = originalConfig;
         restoreEnv();
       }
     });
