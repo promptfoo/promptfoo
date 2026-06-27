@@ -945,7 +945,11 @@ export async function resolveConfigs(
 
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
-  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filterOption =
+    cmdObj.filterProviders ??
+    cmdObj.filterTargets ??
+    commandLineOptions?.filterProviders ??
+    commandLineOptions?.filterTargets;
   const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
 
   if (

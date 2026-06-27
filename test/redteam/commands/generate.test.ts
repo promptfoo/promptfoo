@@ -5024,11 +5024,21 @@ describe('target ID extraction for retry strategy', () => {
       options: { write: true },
       outputPath: 'config.yaml',
     },
-  ])('should persist filtered providers in $mode artifacts', async ({
+  ])('should persist $mode filters without rewriting providers', async ({
     providerKey,
     options,
     outputPath,
   }) => {
+    const rawProviderConfigs = [
+      {
+        id: 'selected-provider',
+        config: { apiKey: '{{ env.FILTERED_PROVIDER_API_KEY }}' },
+      },
+      { id: 'excluded-provider' },
+    ];
+    const resolvedSelectedProviders = [
+      { id: 'selected-provider', config: { apiKey: 'resolved-secret' } },
+    ];
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -5037,17 +5047,17 @@ describe('target ID extraction for retry strategy', () => {
         tests: [],
       },
       config: {
-        providers: ['selected-provider'],
+        providers: resolvedSelectedProviders,
         redteam: {
           plugins: ['harmful:hate' as unknown as RedteamPluginObject],
           strategies: [],
         },
       },
-      selectedProviderConfigs: ['selected-provider'],
+      selectedProviderConfigs: resolvedSelectedProviders,
     });
     mockReadFileSync({
       prompts: ['Test prompt'],
-      [providerKey]: ['selected-provider', 'excluded-provider'],
+      [providerKey]: rawProviderConfigs,
     });
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -5075,8 +5085,9 @@ describe('target ID extraction for retry strategy', () => {
       string,
       unknown
     >;
-    expect(writtenConfig[providerKey]).toEqual(['selected-provider']);
+    expect(writtenConfig[providerKey]).toEqual(rawProviderConfigs);
     expect(writtenConfig[providerKey === 'providers' ? 'targets' : 'providers']).toBeUndefined();
+    expect(writtenConfig.commandLineOptions).toEqual({ filterProviders: 'selected-provider' });
     expect(writePromptfooConfig).toHaveBeenLastCalledWith(
       expect.any(Object),
       outputPath,

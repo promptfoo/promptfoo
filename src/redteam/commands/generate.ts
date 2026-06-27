@@ -231,23 +231,19 @@ async function getConfigHash(
   return createHash('md5').update(hashInput).digest('hex');
 }
 
-type WritableRedteamConfig = Partial<UnifiedConfig> & {
-  targets?: Partial<UnifiedConfig>['providers'];
-};
-
-function persistFilteredProviders(
-  config: WritableRedteamConfig,
-  providers: Partial<UnifiedConfig>['providers'],
+function persistProviderFilters(
+  config: Partial<UnifiedConfig>,
   options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
 ): void {
-  if ((!options.filterProviders && !options.filterTargets) || providers === undefined) {
+  const filterProviders = options.filterProviders ?? options.filterTargets;
+  if (filterProviders === undefined) {
     return;
   }
-  if (config.targets === undefined) {
-    config.providers = providers;
-  } else {
-    config.targets = providers;
-  }
+  const { filterTargets: _filterTargets, ...commandLineOptions } = config.commandLineOptions ?? {};
+  config.commandLineOptions = {
+    ...commandLineOptions,
+    filterProviders,
+  };
 }
 
 function createHeaderComments({
@@ -1019,9 +1015,9 @@ async function doGenerateRedteamInternal(
       return {};
     } else if (options.output) {
       const existingYaml = configPath
-        ? (loadYaml(await fs.readFile(configPath, 'utf8')) as WritableRedteamConfig)
+        ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
-      persistFilteredProviders(existingYaml, selectedProviderConfigs, options);
+      persistProviderFilters(existingYaml, options);
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const updatedYaml: Partial<UnifiedConfig> = {
@@ -1082,8 +1078,8 @@ async function doGenerateRedteamInternal(
     } else if (options.write && configPath) {
       const existingConfig = loadYaml(
         await fs.readFile(configPath, 'utf8'),
-      ) as WritableRedteamConfig;
-      persistFilteredProviders(existingConfig, selectedProviderConfigs, options);
+      ) as Partial<UnifiedConfig>;
+      persistProviderFilters(existingConfig, options);
       const existingTests = existingConfig.tests;
       let testsArray: any[] = [];
       if (Array.isArray(existingTests)) {
