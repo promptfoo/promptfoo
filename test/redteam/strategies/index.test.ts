@@ -12,6 +12,7 @@ import {
   loadStrategy,
   validateStrategies,
 } from '../../../src/redteam/strategies/index';
+import { RedteamConfigSchema } from '../../../src/validators/redteam';
 
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
@@ -325,6 +326,27 @@ describe('getStrategyCompatibilityError', () => {
     },
   ])('accounts for plugin applicability with $label', ({ strategies, plugins, expected }) => {
     expect(getStrategyCompatibilityError(strategies, inputs, { plugins })).toBe(expected);
+  });
+
+  it.each([
+    'ecommerce',
+    'telecom',
+    'realestate',
+  ])('matches runtime expansion for the %s collection', (collection) => {
+    const config = {
+      plugins: [collection],
+      strategies: ['posterior'],
+    };
+    const parsed = RedteamConfigSchema.parse(config);
+
+    expect(
+      getStrategyCompatibilityError(config.strategies, inputs, { plugins: config.plugins }),
+    ).toBe('Posterior strategy does not support multi-input targets');
+    expect(
+      getStrategyCompatibilityError(parsed.strategies ?? [], inputs, {
+        plugins: parsed.plugins,
+      }),
+    ).toBe('Posterior strategy does not support multi-input targets');
   });
 
   it('accounts for plugin-level multi-input configuration', () => {

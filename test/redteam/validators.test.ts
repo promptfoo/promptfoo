@@ -13,13 +13,16 @@ vi.mock('../../src/logger', () => ({
 import {
   type BasePlugin,
   COLLECTIONS,
+  ECOMMERCE_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   type PIIPlugin,
+  REALESTATE_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  TELECOM_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   CODING_AGENT_CORE_PLUGINS,
@@ -1078,6 +1081,20 @@ describe('RedteamConfigSchema transform', () => {
       true,
     );
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it.each([
+    ['ecommerce', ECOMMERCE_PLUGINS],
+    ['telecom', TELECOM_PLUGINS],
+    ['realestate', REALESTATE_PLUGINS],
+  ])('should expand the %s collection', (collection, expectedPlugins) => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 2,
+      plugins: [collection],
+    });
+
+    expect(result.plugins?.map((plugin) => plugin.id)).toEqual([...expectedPlugins].sort());
+    expect(result.plugins?.every((plugin) => plugin.numTests === 2)).toBe(true);
   });
 
   it('should expand coding-agent collections correctly', () => {

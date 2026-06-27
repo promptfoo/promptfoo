@@ -7,6 +7,7 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
+  ECOMMERCE_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   FRAMEWORK_COMPLIANCE_IDS,
@@ -16,6 +17,7 @@ import {
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
+  REALESTATE_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
@@ -23,6 +25,7 @@ import {
   Severity,
   SeveritySchema,
   TEEN_SAFETY_PLUGINS,
+  TELECOM_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
@@ -440,8 +443,14 @@ export const RedteamConfigSchema = z
         expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
       } else if (id === 'financial') {
         expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'ecommerce') {
+        expandCollection([...ECOMMERCE_PLUGINS], config, numTests, severity);
+      } else if (id === 'telecom') {
+        expandCollection([...TELECOM_PLUGINS], config, numTests, severity);
       } else if (id === 'teen-safety') {
         expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
+      } else if (id === 'realestate') {
+        expandCollection([...REALESTATE_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
