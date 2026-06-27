@@ -507,8 +507,11 @@ async function resolveConfiguredProviderInputs(
 
 const SIMPLE_ENV_TEMPLATE =
   /\{\{\s*env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(['"])([^'"]+)\2\s*\])(?:\s*\|\s*default\(\s*(['"])([^\r\n]*?)\4\s*(?:,\s*(true|false)\s*)?\))?\s*\}\}/g;
-const SIMPLE_DEFERRED_ENV_FILTER_TEMPLATE =
-  /\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*(['"])[^'"]+\1\s*\])(?:\s*\|\s*[A-Za-z_][A-Za-z0-9_]*)+\s*\}\}/g;
+const SAFE_VALIDATION_FILTER_ARGUMENT = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))`;
+const SIMPLE_DEFERRED_ENV_FILTER_TEMPLATE = new RegExp(
+  String.raw`\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*(['"])[^'"]+\1\s*\])(?:\s*\|\s*[A-Za-z_][A-Za-z0-9_]*(?:\(\s*(?:${SAFE_VALIDATION_FILTER_ARGUMENT}(?:\s*,\s*${SAFE_VALIDATION_FILTER_ARGUMENT})*)?\s*\))?)+\s*\}\}`,
+  'g',
+);
 const NUNJUCKS_TAG = /\{[{%#]/;
 const MAX_PROVIDER_VALIDATION_DEPTH = 1000;
 const MAX_PROVIDER_VALIDATION_NODES = 10_000;

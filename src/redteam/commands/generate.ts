@@ -446,10 +446,11 @@ async function doGenerateRedteamInternal(
         getStrategyCompatibilityError(
           strategies,
           { compatibilityProbe: true },
-          { plugins: compatibilityPlugins },
+          { plugins: compatibilityPlugins, pluginsUseTargetInputs: false },
         ) !== undefined ||
         getStrategyCompatibilityError(strategies, undefined, {
           plugins: compatibilityPlugins,
+          pluginsUseTargetInputs: false,
         }) !== undefined;
       if (requiresResolvedInputs) {
         let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(

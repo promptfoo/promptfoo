@@ -944,6 +944,33 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
     });
 
+    it('rejects later multi-input targets in the single-input-first plugin mode', async () => {
+      const laterInputs = { context: 'Reference context', question: 'User question' };
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
+        inputs: [undefined, laterInputs],
+        hasUnresolved: false,
+      });
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [{ id: 'echo' }, { id: 'echo', inputs: laterInputs }],
+            redteam: {
+              plugins: ['cca'],
+              strategies: [{ id: 'posterior', config: { plugins: ['cca'] } }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+    });
+
     it('should publish a completed redteam eval through the eval job endpoint', async () => {
       const summary = { results: [] };
       mockedDoRedteamRun.mockResolvedValueOnce({

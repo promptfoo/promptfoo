@@ -2956,10 +2956,24 @@ inputs:
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    "{{ env.MISSING_PROVIDER | default('echo') | upper }}",
-    '{{ env.MISSING_PROVIDER | default(env.CANARY.constructor.constructor("return \'echo\'")()) }}',
-  ])('does not execute non-allowlisted default expressions: %s', async (providerId) => {
+  it('defers compound filters with literal arguments until dynamic loading', async () => {
+    const provider = {
+      id: "{{ env.MISSING_PROVIDER | default(' echo ') | trim }}",
+      inputs: { question: 'User question' },
+    };
+
+    const staticInputs = await resolveProviderInputsForValidation([provider]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+
+    await expect(
+      resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('does not execute non-literal default expressions', async () => {
+    const providerId =
+      '{{ env.MISSING_PROVIDER | default(env.CANARY.constructor.constructor("return \'echo\'")()) }}';
     await expect(resolveProviderInputsForValidation([providerId])).rejects.toThrow(
       'Could not identify provider',
     );

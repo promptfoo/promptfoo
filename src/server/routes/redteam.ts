@@ -106,8 +106,18 @@ async function getLiveConfigCompatibilityError(
   }
 
   const requiresResolvedInputs =
-    getStrategyCompatibilityError(strategies, { compatibilityProbe: true }, { plugins }) !==
-      undefined || getStrategyCompatibilityError(strategies, undefined, { plugins }) !== undefined;
+    getStrategyCompatibilityError(
+      strategies,
+      { compatibilityProbe: true },
+      {
+        plugins,
+        pluginsUseTargetInputs: false,
+      },
+    ) !== undefined ||
+    getStrategyCompatibilityError(strategies, undefined, {
+      plugins,
+      pluginsUseTargetInputs: false,
+    }) !== undefined;
   if (!requiresResolvedInputs) {
     return undefined;
   }
