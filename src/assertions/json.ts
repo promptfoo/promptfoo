@@ -1,8 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import yaml from 'js-yaml';
-import { getJsonSchemaFileSnapshot, maybeLoadConfigFromExternalFile } from '../util/file';
+import nunjucks from 'nunjucks';
 import { extractJsonObjects, getAjv } from '../util/json';
+import {
+  getJsonSchemaFileSnapshot,
+  loadJsonSchemaFileReference,
+  resolveJsonSchemaFileReference,
+} from './utils';
 import type { ValidateFunction } from 'ajv';
 
 import type { Assertion, AssertionParams, GradingResult } from '../types/index';
@@ -10,6 +15,10 @@ import type { Assertion, AssertionParams, GradingResult } from '../types/index';
 const staticFileValidatorCache = new WeakMap<
   object,
   WeakMap<Assertion, { source: string; validate: ValidateFunction }>
+>();
+const staticFileSnapshotCache = new WeakMap<
+  Assertion,
+  { source: string; snapshot: ReturnType<typeof loadJsonSchemaFileReference> }
 >();
 
 class JsonSchemaConfigurationError extends Error {}
@@ -95,7 +104,8 @@ function getMatchingSchemaIdValidator(
 function getJsonSchemaValidator({
   renderedValue,
   assertion,
-}: Pick<AssertionParams, 'renderedValue' | 'assertion'>):
+  assertionValueContext,
+}: Pick<AssertionParams, 'renderedValue' | 'assertion' | 'assertionValueContext'>):
   | { validate: ValidateFunction }
   | { failure: GradingResult } {
   try {
@@ -126,13 +136,14 @@ function getJsonSchemaValidator({
       }
     } else if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
-        const loadedAssertion = maybeLoadConfigFromExternalFile(
-          { assert: [{ ...assertion, value: renderedValue }] },
-          'test-config',
-        ).assert[0] as Assertion;
-        const loadedSnapshot = getJsonSchemaFileSnapshot(loadedAssertion);
-        if (!loadedSnapshot) {
-          throw new JsonSchemaConfigurationError('schema file could not be loaded');
+        const source = resolveJsonSchemaFileReference(renderedValue);
+        const cachedSnapshot = staticFileSnapshotCache.get(assertion);
+        const loadedSnapshot =
+          cachedSnapshot?.source === source
+            ? cachedSnapshot.snapshot
+            : loadJsonSchemaFileReference(renderedValue);
+        if (cachedSnapshot?.source !== source && !('error' in loadedSnapshot)) {
+          staticFileSnapshotCache.set(assertion, { source, snapshot: loadedSnapshot });
         }
         if ('error' in loadedSnapshot) {
           throw new JsonSchemaConfigurationError(
@@ -141,10 +152,21 @@ function getJsonSchemaValidator({
               : loadedSnapshot.error,
           );
         }
-        schema =
-          loadedSnapshot.format === 'text'
-            ? yaml.load(String(loadedAssertion.value))
-            : loadedSnapshot.schema;
+        if (loadedSnapshot.format === 'text') {
+          const renderedSchema = nunjucks.renderString(
+            String(loadedSnapshot.schema),
+            assertionValueContext.vars,
+          );
+          schema = yaml.load(renderedSchema);
+          staticSource = `${loadedSnapshot.source}\0${renderedSchema}`;
+        } else {
+          schema = loadedSnapshot.schema;
+          staticSource = loadedSnapshot.source;
+        }
+        const cached = getCachedStaticValidator(ajv, assertion, staticSource);
+        if (cached) {
+          return { validate: cached };
+        }
       } else {
         schema = yaml.load(renderedValue);
       }
@@ -169,7 +191,25 @@ function getJsonSchemaValidator({
       return { validate: cachedBySchemaId };
     }
 
-    const validate = ajv.compile(compilableSchema);
+    let validate: ValidateFunction;
+    try {
+      validate = ajv.compile(compilableSchema);
+    } catch (error) {
+      if (
+        typeof compilableSchema === 'object' &&
+        compilableSchema !== null &&
+        '$id' in compilableSchema &&
+        typeof compilableSchema.$id === 'string' &&
+        !(error instanceof Error && error.message.includes('schema with key or id'))
+      ) {
+        try {
+          ajv.removeSchema(compilableSchema.$id);
+        } catch {
+          // Preserve the original compilation error.
+        }
+      }
+      throw error;
+    }
     if (staticSource) {
       cacheStaticValidator(ajv, assertion, staticSource, validate);
     }
@@ -191,6 +231,7 @@ export function handleIsJson({
   renderedValue,
   inverse,
   assertion,
+  assertionValueContext,
   valueFromScriptResolved,
 }: AssertionParams): GradingResult {
   let parsedJson;
@@ -206,6 +247,7 @@ export function handleIsJson({
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
+      assertionValueContext,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;
@@ -238,6 +280,7 @@ export function handleIsJson({
 
 export function handleContainsJson({
   assertion,
+  assertionValueContext,
   renderedValue,
   outputString,
   inverse,
@@ -252,6 +295,7 @@ export function handleContainsJson({
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
+      assertionValueContext,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;

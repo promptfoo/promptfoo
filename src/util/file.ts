@@ -35,6 +35,14 @@ const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot')
 const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
 const JSON_SCHEMA_FILE_ERROR = '__promptfooJsonSchemaFileError';
 const JSON_SCHEMA_FILE_FORMAT = '__promptfooJsonSchemaFileFormat';
+const JSON_SCHEMA_FILE_ERRORS = new Set([
+  'schema file must contain an object or boolean schema',
+  'schema file not found',
+  'invalid JSON schema file',
+  'invalid YAML schema file',
+  'schema file could not be read',
+]);
+const JSON_SCHEMA_FILE_FINGERPRINT = /^sha256:[a-f0-9]{64}$/;
 
 type PersistedJsonSchemaFileError = {
   error: string;
@@ -67,6 +75,9 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
   }
   const record = assertion as Record<PropertyKey, unknown>;
   const isJsonSchemaAssertion = isJsonSchemaAssertionRecord(record);
+  if (!isJsonSchemaAssertion) {
+    return undefined;
+  }
   const snapshot = record[JSON_SCHEMA_FILE_SNAPSHOT] as JsonSchemaFileSnapshot | undefined;
   if (snapshot) {
     return snapshot;
@@ -75,20 +86,17 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
   if (
     typeof persisted === 'object' &&
     persisted !== null &&
-    isJsonSchemaAssertion &&
     typeof record.value === 'string' &&
     record.value.startsWith('file://') &&
     typeof (persisted as PersistedJsonSchemaFileError).error === 'string' &&
-    typeof (persisted as PersistedJsonSchemaFileError).fingerprint === 'string'
+    JSON_SCHEMA_FILE_ERRORS.has((persisted as PersistedJsonSchemaFileError).error) &&
+    typeof (persisted as PersistedJsonSchemaFileError).fingerprint === 'string' &&
+    JSON_SCHEMA_FILE_FINGERPRINT.test((persisted as PersistedJsonSchemaFileError).fingerprint)
   ) {
     const { error, fingerprint } = persisted as PersistedJsonSchemaFileError;
     return { source: `persisted:${fingerprint}`, error, fingerprint };
   }
-  if (
-    record[JSON_SCHEMA_FILE_FORMAT] === 'text' &&
-    isJsonSchemaAssertion &&
-    typeof record.value === 'string'
-  ) {
+  if (record[JSON_SCHEMA_FILE_FORMAT] === 'text' && typeof record.value === 'string') {
     return {
       source: 'persisted:text',
       format: 'text',
@@ -102,9 +110,15 @@ export function getJsonSchemaRenderedFileRef(assertion: unknown): string | undef
   if (typeof assertion !== 'object' || assertion === null) {
     return undefined;
   }
-  const renderedFileRef = (assertion as Record<PropertyKey, unknown>)[
-    JSON_SCHEMA_RENDERED_FILE_REF
-  ];
+  const record = assertion as Record<PropertyKey, unknown>;
+  if (
+    !isJsonSchemaAssertionRecord(record) ||
+    typeof record.value !== 'string' ||
+    !record.value.startsWith('file://')
+  ) {
+    return undefined;
+  }
+  const renderedFileRef = record[JSON_SCHEMA_RENDERED_FILE_REF];
   return typeof renderedFileRef === 'string' ? renderedFileRef : undefined;
 }
 
@@ -445,12 +459,10 @@ function loadConfigFromExternalFile(
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
-      const isJsonSchemaAssertionFileValue =
+      const isJsonSchemaAssertionValue =
         context === 'assertions' &&
         key === 'value' &&
-        (assertionType === 'is-json' || assertionType === 'contains-json') &&
-        typeof config[key] === 'string' &&
-        config[key].startsWith('file://');
+        (assertionType === 'is-json' || assertionType === 'contains-json');
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
@@ -460,7 +472,7 @@ function loadConfigFromExternalFile(
       const inheritedContext =
         context === 'assertions' || context === 'test-config' ? undefined : context;
 
-      const childContext = isJsonSchemaAssertionFileValue
+      const childContext = isJsonSchemaAssertionValue
         ? 'json-schema-assertion'
         : isAssertionValue
           ? 'assertion'

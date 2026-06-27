@@ -612,5 +612,93 @@ describe('Script value resolution', () => {
         restoreEnv();
       }
     });
+
+    it('should not execute a generator when a persisted schema file error is present', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({
+        PR8237_SWITCHED_SCHEMA_PATH: '/private/switched/schema/path',
+      });
+      const assertion = {
+        type: 'is-json' as const,
+        value: 'file://{{ env.PR8237_SWITCHED_SCHEMA_PATH }}/schema.rb:build_schema',
+        __promptfooJsonSchemaFileError: {
+          error: 'schema file not found',
+          fingerprint: `sha256:${'a'.repeat(64)}`,
+        },
+      };
+
+      try {
+        const result = await runAssertion({
+          assertion,
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+        const lazyResult = await runAssertion({
+          assertion: { ...assertion, type: 'not-contains-json' },
+          test: { vars: {} },
+          providerResponse: {
+            output: 'no JSON here',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+
+        expect(mockRunRuby).not.toHaveBeenCalled();
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Invalid JSON schema: schema file not found',
+        });
+        expect(lazyResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should render live and serialized schema generator paths exactly once', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({
+        PR8237_FIRST_SCHEMA_PATH: '{{ env.PR8237_SECOND_SCHEMA_PATH }}',
+        PR8237_SECOND_SCHEMA_PATH: '/private/second/schema/path',
+      });
+
+      try {
+        const assertion = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: 'file://{{ env.PR8237_FIRST_SCHEMA_PATH }}/schema.rb:build_schema',
+              },
+            ],
+          },
+          'test-config',
+        ).assert[0];
+
+        for (const candidate of [assertion, JSON.parse(JSON.stringify(assertion))]) {
+          const result = await runAssertion({
+            assertion: candidate,
+            test: { vars: {} },
+            providerResponse: {
+              output: '{}',
+              tokenUsage: { total: 0, prompt: 0, completion: 0 },
+            },
+          });
+          expect(result).toMatchObject({ pass: true, reason: 'Assertion passed' });
+        }
+
+        expect(mockRunRuby).toHaveBeenCalledTimes(2);
+        for (const [filePath] of mockRunRuby.mock.calls) {
+          expect(filePath).toContain('{{ env.PR8237_SECOND_SCHEMA_PATH }}');
+          expect(filePath).not.toContain('/private/second/schema/path');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 });

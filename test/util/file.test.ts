@@ -1005,6 +1005,19 @@ describe('file utilities', () => {
         });
       });
 
+      it('should ignore malformed persisted schema error markers', () => {
+        const assertion = {
+          type: 'is-json',
+          value: 'file://schema.json',
+          __promptfooJsonSchemaFileError: {
+            error: 'INJECTED\u001b[2Jreason',
+            fingerprint: 'not-a-sha256',
+          },
+        };
+
+        expect(getJsonSchemaFileSnapshot(assertion)).toBeUndefined();
+      });
+
       it.each([
         '.schema',
         '.jsonschema',
@@ -1124,7 +1137,7 @@ describe('file utilities', () => {
         }
       });
 
-      it('should load nested file references inside inline schema objects', () => {
+      it('should preserve nested file references inside inline schema objects', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('README contents');
 
         const result = maybeLoadConfigFromExternalFile(
@@ -1139,8 +1152,26 @@ describe('file utilities', () => {
           'test-config',
         );
 
-        expect(result.assert[0].value.const).toBe('README contents');
+        expect(result.assert[0].value.const).toBe('file://README.md');
         expect(getJsonSchemaFileSnapshot(result.assert[0])).toBeUndefined();
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        'is-json',
+        'not-is-json',
+        'contains-json',
+        'not-contains-json',
+      ])('should not dereference file-like members of an invalid %s schema array', (type) => {
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [{ type, value: ['file://missing-schema.json'] }],
+          },
+          'test-config',
+        );
+
+        expect(result.assert[0].value).toEqual(['file://missing-schema.json']);
+        expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
       it('should not treat nested test payload assert keys as Promptfoo assertions', () => {

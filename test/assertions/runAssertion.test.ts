@@ -1753,6 +1753,80 @@ describe('runAssertion', () => {
     compileSpy.mockRestore();
   });
 
+  it('should lazily read and cache a raw schema reference from an inline test', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/raw-schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        $id: 'https://example.com/promptfoo/pr-8237-raw-static-schema',
+        type: 'object',
+      }),
+    );
+    const assertion: Assertion = { type: 'is-json', value: 'file://raw-schema.json' };
+    const compileSpy = vi.spyOn(getAjv(), 'compile');
+
+    const first = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    const second = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(first.pass).toBe(true);
+    expect(second.pass).toBe(true);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(compileSpy).toHaveBeenCalledTimes(1);
+    compileSpy.mockRestore();
+  });
+
+  it('should reject unsupported raw schema file types without reading their contents', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/etc/hostname');
+    vi.mocked(path.extname).mockReturnValue('');
+
+    const result = await runAssertion({
+      assertion: { type: 'is-json', value: 'file:///etc/hostname' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Invalid JSON schema: schema file could not be read',
+    });
+  });
+
+  it('should retry a raw schema reference after a transient load error', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/repaired-schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync)
+      .mockImplementationOnce(() => {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      })
+      .mockReturnValueOnce('{"type":"object"}');
+    const assertion: Assertion = { type: 'is-json', value: 'file://repaired-schema.json' };
+
+    const missing = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    const repaired = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(missing.reason).toBe('Invalid JSON schema: schema file not found');
+    expect(repaired).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+  });
+
   it('should render embedded text schemas with assertion variables', async () => {
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
     vi.mocked(path.extname).mockReturnValue('.txt');
@@ -2089,6 +2163,27 @@ describe('runAssertion', () => {
   });
 
   it.each([
+    'is-json',
+    'not-is-json',
+    'contains-json',
+    'not-contains-json',
+  ] as const)('should not dereference file-like members of an invalid %s schema array', async (type) => {
+    const output = type.includes('contains') ? 'prefix {} suffix' : '{}';
+    const result = await runAssertion({
+      assertion: { type, value: ['file://missing-schema.json'] },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: `Invalid JSON schema: ${type} schema must resolve to an object or boolean`,
+    });
+  });
+
+  it.each([
     ['__promptfooJsonSchemaFileFormat', 'text'],
     [
       '__promptfooJsonSchemaFileError',
@@ -2181,10 +2276,32 @@ describe('runAssertion', () => {
       pass: false,
       reason: 'Invalid JSON schema: unresolved schema reference',
     });
-    expect(replacement).toMatchObject({
-      pass: false,
-      reason: 'Invalid JSON schema: duplicate schema identifier',
+    expect(replacement).toMatchObject({ pass: true, reason: 'Assertion passed' });
+  });
+
+  it('should ignore malformed persisted schema error markers', async () => {
+    const injected = 'INJECTED\u001b[2Jreason';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/missing-schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw Object.assign(new Error('private path detail'), { code: 'ENOENT' });
     });
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'is-json',
+        value: 'file://missing-schema.json',
+        __promptfooJsonSchemaFileError: {
+          error: injected,
+          fingerprint: 'not-a-sha256',
+        },
+      } as Assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(result.reason).toBe('Invalid JSON schema: schema file not found');
+    expect(result.reason).not.toContain(injected);
   });
 
   it('should not expose malformed schema contents in errors', async () => {

@@ -23,8 +23,6 @@ import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
 
 import type {
-  Assertion,
-  AssertionOrSet,
   CsvRow,
   ProviderOptions,
   TestCase,
@@ -101,15 +99,11 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
-    return (await fetchHuggingFaceDataset(varsPath)).map((test) =>
-      loadJsonSchemaFileReferencesInTest(test, basePath),
-    );
+    return await fetchHuggingFaceDataset(varsPath);
   }
 
   if (varsPath.startsWith('az://')) {
-    return (await readAzureBlobStandaloneTestsFile(varsPath)).map((test) =>
-      loadJsonSchemaFileReferencesInTest(test, basePath),
-    );
+    return await readAzureBlobStandaloneTestsFile(varsPath);
   }
 
   let rows: CsvRow[];
@@ -124,12 +118,10 @@ export async function readStandaloneTestsFile(
     });
     rows = await fetchCsvFromSharepoint(varsPath);
   } else {
-    return (await readLocalStandaloneTestsFile(varsPath, basePath, finalConfig)).map((test) =>
-      loadJsonSchemaFileReferencesInTest(test, basePath),
-    );
+    return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
   }
 
-  return csvRowsToTestCases(rows).map((test) => loadJsonSchemaFileReferencesInTest(test, basePath));
+  return csvRowsToTestCases(rows);
 }
 
 async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestCase[]> {
@@ -405,57 +397,6 @@ async function loadTestWithVars(
   return ret;
 }
 
-function loadJsonSchemaFileAssertion(assertion: Assertion, basePath: string): Assertion {
-  const baseType = assertion.type.replace(/^not-/, '');
-  if (
-    (baseType !== 'is-json' && baseType !== 'contains-json') ||
-    typeof assertion.value !== 'string' ||
-    !assertion.value.startsWith('file://')
-  ) {
-    return assertion;
-  }
-
-  return maybeLoadConfigFromExternalFile({ assert: [assertion] }, 'test-config', basePath)
-    .assert[0] as Assertion;
-}
-
-function loadJsonSchemaFileAssertions(
-  assertions: AssertionOrSet[] | undefined,
-  basePath: string,
-): AssertionOrSet[] | undefined {
-  if (!assertions) {
-    return assertions;
-  }
-
-  let changed = false;
-  const loaded = assertions.map((assertion) => {
-    if (assertion.type === 'assert-set') {
-      const children = assertion.assert.map((child) =>
-        loadJsonSchemaFileAssertion(child, basePath),
-      );
-      if (children.some((child, index) => child !== assertion.assert[index])) {
-        changed = true;
-        return { ...assertion, assert: children };
-      }
-      return assertion;
-    }
-
-    const loadedAssertion = loadJsonSchemaFileAssertion(assertion, basePath);
-    changed ||= loadedAssertion !== assertion;
-    return loadedAssertion;
-  });
-
-  return changed ? loaded : assertions;
-}
-
-function loadJsonSchemaFileReferencesInTest<T extends TestCaseWithVarsFile>(
-  test: T,
-  basePath: string,
-): T {
-  const loadedAssertions = loadJsonSchemaFileAssertions(test.assert, basePath);
-  return loadedAssertions === test.assert ? test : { ...test, assert: loadedAssertions };
-}
-
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
@@ -475,8 +416,7 @@ export async function readTest(
     ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    const loadedTestCase = loadJsonSchemaFileReferencesInTest(test, basePath);
-    testCase = await loadTestWithVars(loadedTestCase, basePath);
+    testCase = await loadTestWithVars(test, basePath);
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {

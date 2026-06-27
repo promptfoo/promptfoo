@@ -326,21 +326,14 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
-  it('should preload schema references in standalone JSON tests', async () => {
+  it('should preserve schema references in standalone JSON tests for lazy validation', async () => {
     const assertion = { type: 'is-json' as const, value: 'file://schema.json' };
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([{ assert: [assertion] }]));
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({
-      assert: [{ type: 'is-json', value: { type: 'object' } }],
-    });
 
     const result = await readStandaloneTestsFile('test.json', '/config');
 
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
-      { assert: [assertion] },
-      'test-config',
-      '/config',
-    );
-    expect(result[0].assert?.[0]).toMatchObject({ value: { type: 'object' } });
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+    expect(result[0].assert?.[0]).toEqual(assertion);
   });
 
   it('should read Google Sheets and return test cases', async () => {
@@ -813,7 +806,7 @@ describe('readTest', () => {
     expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
   });
 
-  it('loads only external schema values in inline test cases', async () => {
+  it('preserves external values in inline test cases for runtime resolution', async () => {
     const input: TestCase = {
       metadata: { payload: 'file://metadata.json' },
       assert: [
@@ -821,48 +814,24 @@ describe('readTest', () => {
         { type: 'is-json', value: 'file://schema.yaml' },
       ],
     };
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({
-      assert: [{ type: 'is-json', value: { type: 'object' } }],
-    });
-
     const result = await readTest(input, '/config');
 
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
-      { assert: [input.assert![1]] },
-      'test-config',
-      '/config',
-    );
-    expect(result).toMatchObject({
-      metadata: { payload: 'file://metadata.json' },
-      assert: [
-        { type: 'equals', value: 'file://expected.txt' },
-        { type: 'is-json', value: { type: 'object' } },
-      ],
-    });
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+    expect(result).toEqual(input);
   });
 
-  it('does not mutate immutable inline test cases while loading schema errors', async () => {
+  it('does not mutate immutable inline test cases with schema references', async () => {
     const originalAssertion = {
       type: 'is-json' as const,
       value: 'file://schema.json',
     };
     const assertions = Object.freeze([originalAssertion]);
     const input = Object.freeze({ assert: assertions }) as TestCase;
-    const loadedAssertion = {
-      ...originalAssertion,
-      __promptfooJsonSchemaFileError: {
-        error: 'schema file not found',
-        fingerprint: 'sha256:test',
-      },
-    };
-    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({
-      assert: [loadedAssertion],
-    });
-
     const result = await readTest(input, '/config');
 
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
     expect(input.assert?.[0]).toBe(originalAssertion);
-    expect(result.assert?.[0]).toBe(loadedAssertion);
+    expect(result.assert?.[0]).toBe(originalAssertion);
   });
 
   it('readTest with invalid input', async () => {

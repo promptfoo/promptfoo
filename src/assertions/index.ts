@@ -35,7 +35,6 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { getJsonSchemaFileSnapshot, getJsonSchemaRenderedFileRef } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { renderEnvOnlyInObject } from '../util/render';
@@ -98,7 +97,14 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  getJsonSchemaFileSnapshot,
+  getJsonSchemaRenderedFileRef,
+  loadFromJavaScriptFile,
+  processFileReference,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -480,18 +486,20 @@ export async function runAssertion({
     jsonSchemaFileSnapshot &&
     !('error' in jsonSchemaFileSnapshot) &&
     jsonSchemaFileSnapshot.format === 'text';
+  const hasJsonSchemaFileError = jsonSchemaFileSnapshot && 'error' in jsonSchemaFileSnapshot;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   let didResolveValueFromScript = false;
   if (typeof renderedValue === 'string') {
     if (isTextJsonSchemaFile) {
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
-    } else if (renderedValue.startsWith('file://')) {
+    } else if (renderedValue.startsWith('file://') && !hasJsonSchemaFileError) {
       const basePath = cliState.basePath || '';
-      const storedFileRef = getJsonSchemaRenderedFileRef(assertion) ?? renderedValue;
-      const fileRef = (
-        isJsonSchemaAssertion ? renderEnvOnlyInObject(storedFileRef) : storedFileRef
-      ).slice('file://'.length);
+      const privatelyRenderedFileRef = getJsonSchemaRenderedFileRef(assertion);
+      const resolvedFileRef = isJsonSchemaAssertion
+        ? (privatelyRenderedFileRef ?? renderEnvOnlyInObject(renderedValue))
+        : renderedValue;
+      const fileRef = resolvedFileRef.slice('file://'.length);
       let filePath = fileRef;
       let functionName: string | undefined;
 
@@ -562,7 +570,7 @@ export async function runAssertion({
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
+  } else if (renderedValue && Array.isArray(renderedValue) && !isJsonSchemaAssertion) {
     // Process each element in the array
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
