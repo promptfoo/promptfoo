@@ -33,6 +33,32 @@ describe('getGeneratedTestCaseLengthViolation', () => {
     }
   });
 
+  it('counts input_text parts when enforcing the maximum', () => {
+    const prompt = JSON.stringify([
+      {
+        role: 'user',
+        content: [{ type: 'input_text', text: 'too long' }],
+      },
+    ]);
+
+    expect(
+      getGeneratedTestCaseLengthViolation({ prompt }, 'prompt', { maxCharsPerMessage: 5 }),
+    ).toEqual({ kind: 'max', length: 8, limit: 5, path: '[0].content' });
+  });
+
+  it('counts input_text parts when enforcing the minimum', () => {
+    const prompt = JSON.stringify([
+      {
+        role: 'user',
+        content: [{ type: 'input_text', text: 'enough' }],
+      },
+    ]);
+
+    expect(
+      getGeneratedTestCaseLengthViolation({ prompt }, 'prompt', { minCharsPerMessage: 5 }),
+    ).toBeUndefined();
+  });
+
   it('counts only text parts in multimodal user messages', () => {
     const prompt = JSON.stringify([
       {

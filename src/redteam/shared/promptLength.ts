@@ -83,7 +83,8 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
             : message.content
                 .filter(
                   (part: Record<string, unknown>) =>
-                    part.type === 'text' && typeof part.text === 'string',
+                    (part.type === 'text' || part.type === 'input_text') &&
+                    typeof part.text === 'string',
                 )
                 .map((part: Record<string, unknown>) => part.text)
                 .join(''),
