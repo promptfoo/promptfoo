@@ -226,6 +226,19 @@ describe('isPluginCompatibleWithStrategy', () => {
     expect(isPluginCompatibleWithStrategy('coding-agent:secret-env-read', 'posterior')).toBe(false);
   });
 
+  it.each([
+    'crescendo',
+    'goat',
+    'jailbreak:hydra',
+    'custom',
+    'mischievous-user',
+  ])('applies cross-session-leak default exclusion for %s previews', (strategyId) => {
+    expect(isPluginCompatibleWithStrategy('cross-session-leak', strategyId)).toBe(false);
+    expect(isPluginCompatibleWithStrategy('promptfoo:redteam:cross-session-leak', strategyId)).toBe(
+      false,
+    );
+  });
+
   it('excludes sequence-only intent plugins from non-basic strategy previews', () => {
     const sequenceOnlyIntent = {
       id: 'intent',

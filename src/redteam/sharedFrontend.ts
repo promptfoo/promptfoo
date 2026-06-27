@@ -208,6 +208,12 @@ export function pluginConfigMatchesStrategyTargets(
   ) {
     return false;
   }
+  if (
+    normalizedPluginId === 'cross-session-leak' &&
+    MULTI_TURN_STRATEGIES.includes(strategyId as (typeof MULTI_TURN_STRATEGIES)[number])
+  ) {
+    return false;
+  }
 
   const excludedStrategies =
     typeof pluginConfig === 'object' && pluginConfig !== null
