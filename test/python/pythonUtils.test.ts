@@ -617,6 +617,7 @@ describe('Python Utils', () => {
 
     it('redacts schema generator paths from logs and errors when requested', async () => {
       const privatePath = '/private/PR8237_SCHEMA_PATH/schema.py';
+      const privateMethod = 'PR8237_SECRET_PYTHON_METHOD';
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({ type: 'final_result', data: 'result' }),
       );
@@ -628,14 +629,14 @@ describe('Python Utils', () => {
       });
       mockPythonShellInstance.stderr.on.mockImplementation((event: string, callback: any) => {
         if (event === 'data') {
-          callback(Buffer.from(`ERROR: failed at ${privatePath}\n`));
+          callback(Buffer.from(`ERROR: ${privateMethod} failed at ${privatePath}\n`));
         }
       });
       mockPythonShellInstance.end.mockImplementation((callback: any) => {
         callback(null);
       });
 
-      await pythonUtils.runPython(privatePath, 'test_method', [], {
+      await pythonUtils.runPython(privatePath, privateMethod, [], {
         redactScriptPath: true,
       });
 
@@ -645,20 +646,22 @@ describe('Python Utils', () => {
         ...vi.mocked(logger.warn).mock.calls,
       ]);
       expect(logs).not.toContain(privatePath);
+      expect(logs).not.toContain(privateMethod);
       expect(logs).toContain('[redacted script path]');
 
       vi.clearAllMocks();
       pythonUtils.state.cachedPythonPath = 'python';
       mockPythonShellInstance.end.mockImplementation((callback: any) => {
-        callback(new Error(`failed at ${privatePath}`));
+        callback(new Error(`${privateMethod} failed at ${privatePath}`));
       });
 
       const error = await pythonUtils
-        .runPython(privatePath, 'test_method', [], { redactScriptPath: true })
+        .runPython(privatePath, privateMethod, [], { redactScriptPath: true })
         .catch((error: unknown) => error);
       expect(error).toBeInstanceOf(Error);
       if (error instanceof Error) {
         expect(error.message).not.toContain(privatePath);
+        expect(error.message).not.toContain(privateMethod);
         expect(error.message).toContain('[redacted script path]');
       }
     });

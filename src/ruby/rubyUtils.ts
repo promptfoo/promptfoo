@@ -7,7 +7,7 @@ import { getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { redactPathFromText } from '../util/pathUtils';
+import { redactPathsAndIdentifierFromText } from '../util/pathUtils';
 import {
   createSecureTempDirectory,
   removeSecureTempDirectory,
@@ -327,8 +327,19 @@ export async function runRuby<T = unknown>(
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const displayScriptPath = options.redactScriptPath ? '[redacted script path]' : absPath;
-  const sanitizeScriptPath = (value: string): string =>
-    options.redactScriptPath ? redactPathFromText(value, absPath, '[redacted script path]') : value;
+  const displayMethod = options.redactScriptPath ? '[redacted method]' : method;
+  const sanitizeScriptDetails = (value: string): string => {
+    if (!options.redactScriptPath) {
+      return value;
+    }
+    return redactPathsAndIdentifierFromText(
+      value,
+      [absPath],
+      method,
+      '[redacted script path]',
+      '[redacted method]',
+    );
+  };
   const customPath = options.rubyExecutable || getEnvString('PROMPTFOO_RUBY');
   let rubyPath = customPath || 'ruby';
   let tempDirectory: string | undefined;
@@ -345,7 +356,7 @@ export async function runRuby<T = unknown>(
       safeJsonStringify(args) as string,
     );
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
-    logger.debug('[Ruby] Running script', { scriptPath: displayScriptPath, method });
+    logger.debug('[Ruby] Running script', { scriptPath: displayScriptPath, method: displayMethod });
 
     const { stdout, stderr } = await execFileAsync(rubyPath, [
       wrapperPath,
@@ -356,11 +367,11 @@ export async function runRuby<T = unknown>(
     ]);
 
     if (stdout) {
-      logger.debug(sanitizeScriptPath(stdout.trim()));
+      logger.debug(sanitizeScriptDetails(stdout.trim()));
     }
 
     if (stderr) {
-      logStderr(stderr, sanitizeScriptPath);
+      logStderr(stderr, sanitizeScriptDetails);
     }
 
     const output = await fs.readFile(outputPath, 'utf-8');
@@ -382,7 +393,7 @@ export async function runRuby<T = unknown>(
 
     return result.data;
   } catch (error) {
-    const message = sanitizeScriptPath(
+    const message = sanitizeScriptDetails(
       `Error running Ruby script: ${(error as Error).message}\nStack Trace: ${
         (error as Error).stack || 'No Ruby traceback available'
       }`,

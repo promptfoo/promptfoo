@@ -61,40 +61,78 @@ export function safeJoin(...paths: string[]): string {
 }
 
 /**
- * Redacts a file path and its identifying path components from diagnostic text.
+ * Redacts exact path representations from diagnostic text in one pass.
  * Root directories are deliberately excluded so unrelated separators are preserved.
  */
-export function redactPathFromText(
-  text: string,
-  filePath: string,
-  replacement: string = '[redacted path]',
-): string {
+function getPathRedactionCandidates(filePath: string): Array<{ bounded: boolean; value: string }> {
   const normalizedPath = path.normalize(filePath);
-  const candidates = new Set([
-    filePath,
-    normalizedPath,
-    path.dirname(filePath),
-    path.dirname(normalizedPath),
-    path.basename(filePath),
-    path.basename(normalizedPath),
+  const basename = path.basename(filePath);
+  const normalizedBasename = path.basename(normalizedPath);
+  const candidates = new Map<string, boolean>([
+    [filePath, false],
+    [normalizedPath, false],
+    [path.dirname(filePath), false],
+    [path.dirname(normalizedPath), false],
+    ...(basename.length >= 3 ? ([[basename, true]] as const) : []),
+    ...(normalizedBasename.length >= 3 ? ([[normalizedBasename, true]] as const) : []),
   ]);
-  for (const candidatePath of [filePath, normalizedPath]) {
-    let current = path.dirname(candidatePath);
-    const root = path.parse(current).root;
-    while (current && current !== root && current !== '.') {
-      candidates.add(path.basename(current));
-      current = path.dirname(current);
-    }
-  }
   try {
-    candidates.add(pathToFileURL(normalizedPath).toString());
+    candidates.set(pathToFileURL(normalizedPath).toString(), false);
   } catch {
     // Non-standard paths are still covered by the plain and normalized forms.
   }
 
   const roots = new Set([path.parse(filePath).root, path.parse(normalizedPath).root, '.', '']);
   return [...candidates]
-    .filter((candidate) => !roots.has(candidate))
-    .sort((left, right) => right.length - left.length)
-    .reduce((redacted, candidate) => redacted.split(candidate).join(replacement), text);
+    .filter(([candidate]) => !roots.has(candidate))
+    .map(([value, bounded]) => ({ bounded, value }));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function redactPathsAndIdentifierFromText(
+  text: string,
+  filePaths: string[],
+  identifier: string | undefined,
+  pathReplacement: string = '[redacted path]',
+  identifierReplacement: string = '[redacted identifier]',
+): string {
+  const replacements = new Map<string, { bounded: boolean; replacement: string }>();
+  for (const filePath of filePaths) {
+    for (const candidate of getPathRedactionCandidates(filePath)) {
+      if (!replacements.has(candidate.value)) {
+        replacements.set(candidate.value, {
+          bounded: candidate.bounded,
+          replacement: pathReplacement,
+        });
+      }
+    }
+  }
+  if (identifier && !replacements.has(identifier)) {
+    replacements.set(identifier, { bounded: true, replacement: identifierReplacement });
+  }
+
+  const patterns = [...replacements]
+    .sort(([left], [right]) => right.length - left.length)
+    .map(([value, entry]) =>
+      entry.bounded
+        ? `(?<![A-Za-z0-9_$])${escapeRegExp(value)}(?![A-Za-z0-9_$])`
+        : escapeRegExp(value),
+    );
+  return patterns.length === 0
+    ? text
+    : text.replace(
+        new RegExp(patterns.join('|'), 'g'),
+        (match) => replacements.get(match)?.replacement ?? match,
+      );
+}
+
+export function redactPathFromText(
+  text: string,
+  filePath: string,
+  replacement: string = '[redacted path]',
+): string {
+  return redactPathsAndIdentifierFromText(text, [filePath], undefined, replacement);
 }

@@ -639,8 +639,13 @@ describe('Script value resolution', () => {
 
     it('should redact a private JavaScript schema generator path from execution errors', async () => {
       const privatePath = '/private/PR8237_JS_SCHEMA_PATH';
-      vi.mocked(importModule).mockRejectedValue(new Error(`Cannot load ${privatePath}/schema.cjs`));
-      const restoreEnv = mockProcessEnv({ PR8237_JS_SCHEMA_PATH: privatePath });
+      const privateMethod = 'PR8237_SECRET_JS_METHOD';
+      vi.mocked(importModule).mockRejectedValue(
+        new Error(`Cannot load ${privatePath}/schema.cjs:${privateMethod}`),
+      );
+      const restoreEnv = mockProcessEnv({
+        PR8237_JS_SCHEMA_REF: `${privatePath}/schema.cjs:${privateMethod}`,
+      });
 
       try {
         const assertion = maybeLoadConfigFromExternalFile(
@@ -648,7 +653,7 @@ describe('Script value resolution', () => {
             assert: [
               {
                 type: 'is-json',
-                value: 'file://{{ env.PR8237_JS_SCHEMA_PATH }}/schema.cjs:build_schema',
+                value: 'file://{{ env.PR8237_JS_SCHEMA_REF }}',
               },
             ],
           },
@@ -665,10 +670,11 @@ describe('Script value resolution', () => {
           expect(error.message).toContain('Cannot load');
           expect(error.message).toContain('[redacted schema generator path]');
           expect(error.message).not.toContain(privatePath);
+          expect(error.message).not.toContain(privateMethod);
         }
         expect(importModule).toHaveBeenCalledWith(
           path.resolve(privatePath, 'schema.cjs'),
-          'build_schema',
+          privateMethod,
           { redactPath: true },
         );
       } finally {
@@ -681,16 +687,19 @@ describe('Script value resolution', () => {
       ['Ruby', '.rb', runRuby],
     ] as const)('should redact a private %s schema generator path from assertion failures', async (_language, extension, runner) => {
       const privatePath = `/private/PR8237_${extension.slice(1).toUpperCase()}_SCHEMA_PATH`;
+      const privateMethod = `PR8237_SECRET_${extension.slice(1).toUpperCase()}_METHOD`;
       vi.mocked(runner).mockRejectedValue(
-        new Error(`Generator failed at ${privatePath}/schema${extension}`),
+        new Error(`Generator failed at ${privatePath}/schema${extension}:${privateMethod}`),
       );
-      const restoreEnv = mockProcessEnv({ PR8237_LANGUAGE_SCHEMA_PATH: privatePath });
+      const restoreEnv = mockProcessEnv({
+        PR8237_LANGUAGE_SCHEMA_REF: `${privatePath}/schema${extension}:${privateMethod}`,
+      });
 
       try {
         const result = await runAssertion({
           assertion: {
             type: 'is-json',
-            value: `file://{{ env.PR8237_LANGUAGE_SCHEMA_PATH }}/schema${extension}:build_schema`,
+            value: 'file://{{ env.PR8237_LANGUAGE_SCHEMA_REF }}',
           },
           test: { vars: {} },
           providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
@@ -703,9 +712,10 @@ describe('Script value resolution', () => {
         });
         expect(result.reason).toContain('[redacted schema generator path]');
         expect(JSON.stringify(result)).not.toContain(privatePath);
+        expect(JSON.stringify(result)).not.toContain(privateMethod);
         expect(runner).toHaveBeenCalledWith(
           path.resolve(privatePath, `schema${extension}`),
-          'build_schema',
+          privateMethod,
           expect.any(Array),
           { redactScriptPath: true },
         );

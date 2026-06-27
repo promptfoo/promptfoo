@@ -291,6 +291,9 @@ function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(co
   // JSON schema file references are rendered privately by the file loader so paths that
   // contain credentials do not become part of the persisted public assertion value.
   const renderedConfig = renderEnvOnlyInObject(config, filteredConfigEnv);
+  if (renderedConfig === config) {
+    return renderedConfig;
+  }
   return restoreJsonSchemaFileReferences(config, renderedConfig);
 }
 

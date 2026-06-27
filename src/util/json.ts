@@ -41,21 +41,27 @@ function isDataOnlySchema(value: unknown, seen: WeakSet<object> = new WeakSet())
   return true;
 }
 
+export function getDataOnlyJsonSchemaSnapshot(schema: unknown): object | undefined {
+  try {
+    if (typeof schema !== 'object' || schema === null) {
+      return undefined;
+    }
+    return isDataOnlySchema(schema) ? structuredClone(schema) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function getReusableSchemaSnapshot(schema: unknown): object | undefined {
   try {
     if (typeof schema !== 'object' || schema === null) {
       return undefined;
     }
     const idDescriptor = Object.getOwnPropertyDescriptor(schema, '$id');
-    if (
-      !idDescriptor ||
-      !('value' in idDescriptor) ||
-      typeof idDescriptor.value !== 'string' ||
-      !isDataOnlySchema(schema)
-    ) {
+    if (!idDescriptor || !('value' in idDescriptor) || typeof idDescriptor.value !== 'string') {
       return undefined;
     }
-    return structuredClone(schema);
+    return getDataOnlyJsonSchemaSnapshot(schema);
   } catch {
     return undefined;
   }

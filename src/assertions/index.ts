@@ -37,7 +37,7 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { redactPathFromText } from '../util/pathUtils';
+import { redactPathsAndIdentifierFromText } from '../util/pathUtils';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -505,6 +505,15 @@ export async function runAssertion({
       }
 
       filePath = path.resolve(basePath, filePath);
+      const sanitizeJsonSchemaGeneratorError = (error: unknown): string => {
+        return redactPathsAndIdentifierFromText(
+          error instanceof Error ? error.message : String(error),
+          [filePath],
+          functionName,
+          '[redacted schema generator path]',
+          '[redacted schema generator method]',
+        );
+      };
 
       if (isJavascriptFile(filePath)) {
         try {
@@ -521,13 +530,7 @@ export async function runAssertion({
           }
         } catch (error) {
           throw redactJsonSchemaGeneratorPath
-            ? new Error(
-                redactPathFromText(
-                  error instanceof Error ? error.message : String(error),
-                  filePath,
-                  '[redacted schema generator path]',
-                ),
-              )
+            ? new Error(sanitizeJsonSchemaGeneratorError(error))
             : error;
         }
       } else if (filePath.endsWith('.py')) {
@@ -555,11 +558,7 @@ export async function runAssertion({
             pass: false,
             score: 0,
             reason: redactJsonSchemaGeneratorPath
-              ? redactPathFromText(
-                  error instanceof Error ? error.message : String(error),
-                  filePath,
-                  '[redacted schema generator path]',
-                )
+              ? sanitizeJsonSchemaGeneratorError(error)
               : (error as Error).message,
             assertion,
           };
@@ -590,11 +589,7 @@ export async function runAssertion({
             pass: false,
             score: 0,
             reason: redactJsonSchemaGeneratorPath
-              ? redactPathFromText(
-                  error instanceof Error ? error.message : String(error),
-                  filePath,
-                  '[redacted schema generator path]',
-                )
+              ? sanitizeJsonSchemaGeneratorError(error)
               : (error as Error).message,
             assertion,
           };

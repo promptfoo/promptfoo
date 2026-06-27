@@ -5,7 +5,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { isCI } from '../../../src/envars';
+import { getEnvBool, isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
@@ -2003,6 +2003,8 @@ describe('readConfig', () => {
     // Reset mockDereference to pass-through (other tests may have queued mockResolvedValueOnce)
     mockDereference.mockReset();
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvBool).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -2052,6 +2054,28 @@ describe('readConfig', () => {
 
     expect(result).toEqual(mockConfig);
     expect(importModule).toHaveBeenCalledWith('config.js');
+  });
+
+  it.each([
+    ['frozen', (value: object) => Object.freeze(value)],
+    ['non-extensible', (value: object) => Object.preventExtensions(value)],
+  ] as const)('should preserve %s schema assertions when templating is disabled', async (_kind, makeImmutable) => {
+    const assertion = makeImmutable({
+      type: 'is-json',
+      value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.json',
+    });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['test'],
+      tests: [{ assert: [assertion] }],
+    };
+    vi.mocked(getEnvBool).mockImplementation((name) => name === 'PROMPTFOO_DISABLE_TEMPLATING');
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+
+    expect((result.tests as Array<{ assert?: unknown[] }>)[0].assert?.[0]).toBe(assertion);
   });
 
   it('should throw error for unsupported file format', async () => {

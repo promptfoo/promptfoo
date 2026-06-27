@@ -8,7 +8,7 @@ import { getEnvBool, getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { redactPathFromText } from '../util/pathUtils';
+import { redactPathsAndIdentifierFromText } from '../util/pathUtils';
 import {
   createSecureTempDirectory,
   removeSecureTempDirectory,
@@ -309,8 +309,19 @@ export async function runPython<T = unknown>(
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const displayScriptPath = options.redactScriptPath ? '[redacted script path]' : absPath;
-  const sanitizeScriptPath = (value: string): string =>
-    options.redactScriptPath ? redactPathFromText(value, absPath, '[redacted script path]') : value;
+  const displayMethod = options.redactScriptPath ? '[redacted method]' : method;
+  const sanitizeScriptDetails = (value: string): string => {
+    if (!options.redactScriptPath) {
+      return value;
+    }
+    return redactPathsAndIdentifierFromText(
+      value,
+      [absPath],
+      method,
+      '[redacted script path]',
+      '[redacted method]',
+    );
+  };
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
@@ -335,14 +346,17 @@ export async function runPython<T = unknown>(
       ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
     };
 
-    logger.debug('[Python] Running script', { scriptPath: displayScriptPath, method });
+    logger.debug('[Python] Running script', {
+      scriptPath: displayScriptPath,
+      method: displayMethod,
+    });
 
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
         const stderrLogger = new PythonStderrLogger(
           '',
-          options.redactScriptPath ? () => '[redacted script stderr]' : sanitizeScriptPath,
+          options.redactScriptPath ? () => '[redacted script stderr]' : sanitizeScriptDetails,
         );
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
@@ -389,7 +403,7 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
-    const message = sanitizeScriptPath(
+    const message = sanitizeScriptDetails(
       `Error running Python script: ${(error as Error).message}\nStack Trace: ${
         (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
         'No Python traceback available'

@@ -2102,6 +2102,30 @@ describe('runAssertion', () => {
     }
   });
 
+  it('should preserve literal templates in raw text schema references', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue('const: "{{ expected }}"');
+    const assertion: Assertion = { type: 'is-json', value: 'file:///schema.txt' };
+
+    const literal = await runAssertion({
+      assertion,
+      test: { vars: { expected: 'rendered-value' } } as AtomicTestCase,
+      providerResponse: { output: '"{{ expected }}"' },
+    });
+    const rendered = await runAssertion({
+      assertion,
+      test: { vars: { expected: 'rendered-value' } } as AtomicTestCase,
+      providerResponse: { output: '"rendered-value"' },
+    });
+
+    expect(literal).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(rendered).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('JSON does not conform to the provided schema'),
+    });
+  });
+
   it('should not expose process env to embedded text schemas when disabled', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true',
@@ -2436,6 +2460,103 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should repair an anonymous recursive schema after it is mutated', async () => {
+    const schema: Record<string, unknown> = { $ref: '#' };
+    const assertion: Assertion = { type: 'is-json', value: schema };
+
+    const recursive = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    delete schema.$ref;
+    schema.type = 'object';
+    const repaired = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(recursive.reason).toBe('Invalid JSON schema: schema validation failed');
+    expect(repaired).toMatchObject({ pass: true, reason: 'Assertion passed' });
+  });
+
+  it('should repair an anonymous async schema after async mode is removed', async () => {
+    const schema: Record<string, unknown> = { $async: true, type: 'object' };
+    const assertion: Assertion = { type: 'is-json', value: schema };
+
+    const unsupported = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    delete schema.$async;
+    const repaired = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(unsupported.reason).toBe('Invalid JSON schema: async schemas are not supported');
+    expect(repaired).toMatchObject({ pass: true, reason: 'Assertion passed' });
+  });
+
+  it('should contain hostile schema cleanup without evicting another Ajv consumer', async () => {
+    const ajv = getAjv();
+    const ownerId = 'https://example.com/promptfoo/pr-8237-hostile-owner';
+    const victimId = 'https://example.com/promptfoo/pr-8237-hostile-victim';
+    const victim = ajv.compile({ $id: victimId, type: 'string' });
+    let idReads = 0;
+    const schema = { $ref: '#' } as Record<string, unknown>;
+    Object.defineProperty(schema, '$id', {
+      enumerable: true,
+      get: () => (++idReads <= 6 ? ownerId : victimId),
+    });
+
+    try {
+      const result = await runAssertion({
+        assertion: { type: 'is-json', value: schema },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '{}' },
+      });
+
+      expect(result.reason).toBe('Invalid JSON schema: schema validation failed');
+      expect(ajv.getSchema(victimId)).toBe(victim);
+    } finally {
+      ajv.removeSchema(ownerId);
+      ajv.removeSchema(victimId);
+    }
+  });
+
+  it('should contain hostile thrown values while formatting schema errors', async () => {
+    const hostileError = new Proxy(
+      {},
+      {
+        getPrototypeOf: () => {
+          throw new Error('formatter boom');
+        },
+      },
+    );
+    const compileSpy = vi.spyOn(getAjv(), 'compile').mockImplementationOnce(() => {
+      throw hostileError;
+    });
+
+    try {
+      await expect(
+        runAssertion({
+          assertion: { type: 'is-json', value: { type: 'object' } },
+          test: {} as AtomicTestCase,
+          providerResponse: { output: '{}' },
+        }),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: 'Invalid JSON schema: schema compilation failed',
+      });
+    } finally {
+      compileSpy.mockRestore();
+    }
+  });
+
   it.each([
     'is-json',
     'not-is-json',
@@ -2573,6 +2694,29 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({ pass: true, reason: 'Assertion passed' });
   });
 
+  it('should fail closed when another consumer mutates its registered schema object', async () => {
+    const ajv = getAjv();
+    const id = 'https://example.com/promptfoo/pr-8237-external-mutated-schema';
+    const schema: Record<string, unknown> = { $id: id, type: 'string' };
+    ajv.compile(schema);
+    schema.type = 'number';
+
+    try {
+      const result = await runAssertion({
+        assertion: { type: 'is-json', value: schema },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '42' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Invalid JSON schema: duplicate schema identifier',
+      });
+    } finally {
+      ajv.removeSchema(id);
+    }
+  });
+
   it('should not reuse a stale same-id validator after its source schema is mutated', async () => {
     const id = 'https://example.com/promptfoo/pr-8237-mutated-schema';
     const firstSchema: Record<string, unknown> = { $id: id, type: 'string' };
@@ -2596,6 +2740,114 @@ describe('runAssertion', () => {
       pass: false,
       reason: 'Invalid JSON schema: duplicate schema identifier',
     });
+  });
+
+  it('should recompile a same-object identified schema after mutation', async () => {
+    const id = 'https://example.com/promptfoo/pr-8237-same-object-mutation';
+    const schema: Record<string, unknown> = { $id: id, type: 'string' };
+    const assertion: Assertion = { type: 'is-json', value: schema };
+
+    const stringResult = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '"value"' },
+    });
+    schema.type = 'number';
+    const numberResult = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+    schema.type = null;
+    const invalidResult = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+
+    expect(stringResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(numberResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(invalidResult.reason).toBe('Invalid JSON schema: schema compilation failed');
+  });
+
+  it('should recompile a shared anonymous schema object after mutation', async () => {
+    const schema: Record<string, unknown> = { type: 'string' };
+    const firstAssertion: Assertion = { type: 'is-json', value: schema };
+    const secondAssertion: Assertion = { type: 'is-json', value: schema };
+
+    const stringResult = await runAssertion({
+      assertion: firstAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '"value"' },
+    });
+    schema.type = 'number';
+    const secondAssertionResult = await runAssertion({
+      assertion: secondAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+    const firstAssertionResult = await runAssertion({
+      assertion: firstAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+
+    expect(stringResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(secondAssertionResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(firstAssertionResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+  });
+
+  it('should invalidate a cached parsed schema after same-object mutation', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue('{"type":"string"}');
+    const assertion = maybeLoadConfigFromExternalFile(
+      { assert: [{ type: 'is-json', value: 'file://schema.json' }] },
+      'test-config',
+    ).assert[0] as Assertion;
+    const schema = assertion.value as Record<string, unknown>;
+
+    const stringResult = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '"value"' },
+    });
+    schema.type = 'number';
+    const numberResult = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+    schema.type = null;
+    const invalidResult = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+
+    expect(stringResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(numberResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+    expect(invalidResult.reason).toBe('Invalid JSON schema: schema compilation failed');
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not evict an identical shared validator after validation throws', async () => {
+    const ajv = getAjv();
+    const id = 'https://example.com/promptfoo/pr-8237-shared-throwing-validator';
+    const sharedValidator = ajv.compile({ $id: id, $ref: '#' });
+
+    try {
+      const result = await runAssertion({
+        assertion: { type: 'is-json', value: { $id: id, $ref: '#' } },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '{}' },
+      });
+
+      expect(result.reason).toBe('Invalid JSON schema: schema validation failed');
+      expect(ajv.getSchema(id)).toBe(sharedValidator);
+    } finally {
+      ajv.removeSchema(id);
+    }
   });
 
   it('should prefer a dereferenced assertion value over a stale captured snapshot', async () => {

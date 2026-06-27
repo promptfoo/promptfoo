@@ -7,7 +7,7 @@ import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
 import logger from './logger';
-import { redactPathFromText, safeResolve } from './util/pathUtils';
+import { redactPathsAndIdentifierFromText, safeResolve } from './util/pathUtils';
 
 /**
  * Supported wrapper script types for language-specific providers.
@@ -164,6 +164,30 @@ async function ensureTypescriptLoader(modulePath: string): Promise<void> {
   await tsxLoaderPromise;
 }
 
+async function normalizeModuleExtension(modulePath: string): Promise<string> {
+  const extension = path.extname(modulePath);
+  const normalizedExtension = extension.toLowerCase();
+  if (extension === normalizedExtension || !/^\.[cm]?[jt]s$/.test(normalizedExtension)) {
+    return modulePath;
+  }
+
+  const normalizedPath = `${modulePath.slice(0, -extension.length)}${normalizedExtension}`;
+  const [requestedFile, normalizedFile] = await Promise.all([
+    fsPromises.stat(modulePath).catch(() => undefined),
+    fsPromises.stat(normalizedPath).catch(() => undefined),
+  ]);
+  if (!normalizedFile) {
+    return modulePath;
+  }
+  if (!requestedFile) {
+    return normalizedPath;
+  }
+
+  return requestedFile.dev === normalizedFile.dev && requestedFile.ino === normalizedFile.ino
+    ? normalizedPath
+    : modulePath;
+}
+
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds.
  *
@@ -212,11 +236,23 @@ export function getDirectory(): string {
   );
 }
 
-function formatModuleError(value: unknown, modulePath: string, redactPath: boolean): string {
+function formatModuleError(
+  value: unknown,
+  modulePaths: string[],
+  redactPath: boolean,
+  functionName?: string,
+): string {
   const text = String(value);
-  return redactPath
-    ? redactPathFromText(text, safeResolve(modulePath), '[redacted module path]')
-    : text;
+  if (!redactPath) {
+    return text;
+  }
+  return redactPathsAndIdentifierFromText(
+    text,
+    modulePaths.map((modulePath) => safeResolve(modulePath)),
+    functionName,
+    '[redacted module path]',
+    '[redacted module export]',
+  );
 }
 
 function formatModulePath<T>(value: T, redactPath: boolean): T | string {
@@ -233,17 +269,21 @@ export async function importModule(
   options: { redactPath?: boolean } = {},
 ) {
   const redactPath = options.redactPath === true;
+  const loadPath = await normalizeModuleExtension(modulePath);
   const displayModulePath = formatModulePath(modulePath, redactPath);
-  const displayResolvedPath = formatModulePath(safeResolve(modulePath), redactPath);
-  const redactError = (value: unknown) => formatModuleError(value, modulePath, redactPath);
+  const displayResolvedPath = formatModulePath(safeResolve(loadPath), redactPath);
+  const displayFunctionName =
+    redactPath && functionName ? '[redacted module export]' : functionName;
+  const redactError = (value: unknown) =>
+    formatModuleError(value, [modulePath, loadPath], redactPath, functionName);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: displayResolvedPath, moduleId: displayModulePath })}`,
   );
 
   try {
-    await ensureTypescriptLoader(modulePath);
+    await ensureTypescriptLoader(loadPath);
 
-    const resolvedPath = pathToFileURL(safeResolve(modulePath));
+    const resolvedPath = pathToFileURL(safeResolve(loadPath));
     const resolvedPathStr = resolvedPath.toString();
     logger.debug(`Attempting ESM import from: ${formatModulePath(resolvedPathStr, redactPath)}`);
 
@@ -256,7 +296,7 @@ export async function importModule(
     );
 
     if (functionName) {
-      logger.debug(`Returning named export: ${functionName}`);
+      logger.debug(`Returning named export: ${displayFunctionName}`);
       return mod[functionName];
     }
     return mod;
@@ -267,20 +307,20 @@ export async function importModule(
     // Note: createRequire() doesn't work for .js files in "type": "module" packages
     // because Node.js still treats them as ESM based on package.json.
     // We use Node's vm module to execute the code with proper CJS globals.
-    if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
+    if (loadPath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
         `ESM import failed for ${displayModulePath}, attempting vm-based CJS fallback: ${redactError(errorMessage)}`,
       );
 
       try {
-        const resolvedPath = safeResolve(modulePath);
+        const resolvedPath = safeResolve(loadPath);
         const mod = loadCjsModule(resolvedPath);
         logger.debug(
           `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath: formatModulePath(resolvedPath, redactPath), moduleId: displayModulePath })}`,
         );
 
         if (functionName) {
-          logger.debug(`Returning named export: ${functionName}`);
+          logger.debug(`Returning named export: ${displayFunctionName}`);
           return mod[functionName];
         }
         return mod;
@@ -318,7 +358,7 @@ export async function importModule(
     // This provides clearer error messages for users when their files don't exist.
     const nodeError = err as NodeJS.ErrnoException;
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
-      const resolvedModulePath = safeResolve(modulePath);
+      const resolvedModulePath = safeResolve(loadPath);
       try {
         await fsPromises.access(resolvedModulePath);
         // File exists - the error is about a missing dependency, log and preserve original error
@@ -326,11 +366,12 @@ export async function importModule(
       } catch {
         // File doesn't exist - normalize to ENOENT for clearer error message
         // Don't log as error - this is expected during config file discovery
+        const displayedMissingPath = formatModulePath(resolvedModulePath, redactPath);
         const enoentError = new Error(
-          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
+          `ENOENT: no such file or directory, open '${displayedMissingPath}'`,
         ) as NodeJS.ErrnoException;
         enoentError.code = 'ENOENT';
-        enoentError.path = resolvedModulePath;
+        enoentError.path = displayedMissingPath as string;
         throw enoentError;
       }
     } else {

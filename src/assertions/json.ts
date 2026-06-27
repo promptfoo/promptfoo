@@ -5,21 +5,36 @@ import {
   getEffectiveJsonSchemaFileRef,
   getJsonSchemaFileSnapshot,
   loadJsonSchemaFileReference,
-  renderJsonSchemaText,
   resolveJsonSchemaFileReference,
 } from '../util/file';
-import { extractJsonObjects, getAjv, getCompiledJsonSchemaSnapshot } from '../util/json';
+import {
+  extractJsonObjects,
+  getAjv,
+  getCompiledJsonSchemaSnapshot,
+  getDataOnlyJsonSchemaSnapshot,
+} from '../util/json';
 import type { ValidateFunction } from 'ajv';
 
 import type { Assertion, AssertionParams, GradingResult } from '../types/index';
 
-const staticFileValidatorCache = new WeakMap<
+const validatorCache = new WeakMap<
   object,
-  WeakMap<Assertion, { source: string; validate: ValidateFunction }>
+  WeakMap<
+    Assertion,
+    {
+      source?: string;
+      validate: ValidateFunction;
+      snapshot: object | boolean;
+    }
+  >
 >();
 const staticFileSnapshotCache = new WeakMap<
   Assertion,
   { source: string; snapshot: ReturnType<typeof loadJsonSchemaFileReference> }
+>();
+const assertionOwnedValidators = new WeakMap<
+  ValidateFunction,
+  { assertion: Assertion; schema: object | boolean; schemaId?: string }
 >();
 class JsonSchemaConfigurationError extends Error {}
 
@@ -34,25 +49,84 @@ function hasJsonSchema({
 }
 
 function formatJsonSchemaError(error: unknown): string {
-  if (error instanceof JsonSchemaConfigurationError) {
-    return error.message;
-  }
-  if (error instanceof yaml.YAMLException) {
-    const location = error.mark
-      ? ` (line ${error.mark.line + 1}, column ${error.mark.column + 1})`
-      : '';
-    return `invalid YAML syntax${location}`;
-  }
-  if (
-    error instanceof Error &&
-    (error.name === 'MissingRefError' || error.message.includes("can't resolve reference"))
-  ) {
-    return 'unresolved schema reference';
-  }
-  if (error instanceof Error && error.message.includes('schema with key or id')) {
-    return 'duplicate schema identifier';
+  try {
+    if (error instanceof JsonSchemaConfigurationError) {
+      return error.message;
+    }
+    if (error instanceof yaml.YAMLException) {
+      const location = error.mark
+        ? ` (line ${error.mark.line + 1}, column ${error.mark.column + 1})`
+        : '';
+      return `invalid YAML syntax${location}`;
+    }
+    if (
+      error instanceof Error &&
+      (error.name === 'MissingRefError' || error.message.includes("can't resolve reference"))
+    ) {
+      return 'unresolved schema reference';
+    }
+    if (error instanceof Error && error.message.includes('schema with key or id')) {
+      return 'duplicate schema identifier';
+    }
+  } catch {
+    // Hostile thrown values must not escape assertion error classification.
   }
   return 'schema compilation failed';
+}
+
+function getOwnSchemaId(schema: unknown): string | undefined {
+  if (typeof schema !== 'object' || schema === null) {
+    return undefined;
+  }
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(schema, '$id');
+    return descriptor && 'value' in descriptor && typeof descriptor.value === 'string'
+      ? descriptor.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function schemasMatch(left: unknown, right: unknown): boolean {
+  try {
+    return isDeepStrictEqual(left, right);
+  } catch {
+    return false;
+  }
+}
+
+function getSchemaSnapshot(schema: object | boolean): { snapshot: object | boolean } | undefined {
+  if (typeof schema === 'boolean') {
+    return { snapshot: schema };
+  }
+  const snapshot = getDataOnlyJsonSchemaSnapshot(schema);
+  return snapshot ? { snapshot } : undefined;
+}
+
+function removeOwnedValidator(
+  ajv: ReturnType<typeof getAjv>,
+  validate: ValidateFunction,
+  assertion: Assertion,
+): void {
+  const owned = assertionOwnedValidators.get(validate);
+  if (!owned || owned.assertion !== assertion) {
+    return;
+  }
+  assertionOwnedValidators.delete(validate);
+  try {
+    if (owned.schemaId) {
+      ajv.removeSchema(owned.schemaId);
+    } else if (
+      typeof owned.schema === 'object' &&
+      owned.schema !== null &&
+      Object.getOwnPropertyDescriptor(owned.schema, '$id') === undefined
+    ) {
+      ajv.removeSchema(owned.schema);
+    }
+  } catch {
+    // Cleanup must never replace the original schema failure.
+  }
 }
 
 function contextualizeJsonSchemaFileError(type: Assertion['type'], error: string): string {
@@ -61,27 +135,44 @@ function contextualizeJsonSchemaFileError(type: Assertion['type'], error: string
     : error;
 }
 
-function getCachedStaticValidator(
-  ajv: object,
+function getCachedValidator(
+  ajv: ReturnType<typeof getAjv>,
   assertion: Assertion,
-  source: string,
+  source: string | undefined,
+  schema: object | boolean,
 ): ValidateFunction | undefined {
-  const cached = staticFileValidatorCache.get(ajv)?.get(assertion);
-  return cached?.source === source ? cached.validate : undefined;
+  const cached = validatorCache.get(ajv)?.get(assertion);
+  if (cached && cached.source === source && schemasMatch(cached.snapshot, schema)) {
+    return cached.validate;
+  }
+  if (cached) {
+    validatorCache.get(ajv)?.delete(assertion);
+    removeOwnedValidator(ajv, cached.validate, assertion);
+  }
+  return undefined;
 }
 
-function cacheStaticValidator(
+function cacheValidator(
   ajv: object,
   assertion: Assertion,
-  source: string,
+  source: string | undefined,
   validate: ValidateFunction,
+  schema: object | boolean,
 ): void {
-  let assertionCache = staticFileValidatorCache.get(ajv);
+  const schemaSnapshot = getSchemaSnapshot(schema);
+  if (!schemaSnapshot) {
+    return;
+  }
+  let assertionCache = validatorCache.get(ajv);
   if (!assertionCache) {
     assertionCache = new WeakMap();
-    staticFileValidatorCache.set(ajv, assertionCache);
+    validatorCache.set(ajv, assertionCache);
   }
-  assertionCache.set(assertion, { source, validate });
+  assertionCache.set(assertion, {
+    ...(source && { source }),
+    validate,
+    snapshot: schemaSnapshot.snapshot,
+  });
 }
 
 function ensureSynchronousValidator(validate: ValidateFunction): ValidateFunction {
@@ -103,21 +194,10 @@ function executeJsonSchemaValidation(
     }
     return { valid };
   } catch {
-    const schema = validate.schema;
-    if (
-      typeof schema === 'object' &&
-      schema !== null &&
-      '$id' in schema &&
-      typeof schema.$id === 'string'
-    ) {
-      try {
-        getAjv().removeSchema(schema.$id);
-      } catch {
-        // Preserve the safe validation failure below.
-      }
-    }
+    const ajv = getAjv();
+    removeOwnedValidator(ajv, validate, assertion);
     staticFileSnapshotCache.delete(assertion);
-    staticFileValidatorCache.get(getAjv())?.delete(assertion);
+    validatorCache.get(ajv)?.delete(assertion);
     return {
       failure: {
         pass: false,
@@ -132,27 +212,39 @@ function executeJsonSchemaValidation(
 function getMatchingSchemaIdValidator(
   ajv: ReturnType<typeof getAjv>,
   schema: object | boolean,
+  assertion: Assertion,
 ): ValidateFunction | undefined {
-  if (
-    typeof schema !== 'object' ||
-    schema === null ||
-    !('$id' in schema) ||
-    typeof schema.$id !== 'string'
-  ) {
+  const schemaId = getOwnSchemaId(schema);
+  if (!schemaId) {
     return undefined;
   }
   let existing: ValidateFunction | undefined;
   try {
-    existing = ajv.getSchema(schema.$id);
+    existing = ajv.getSchema(schemaId);
   } catch {
     // A previously registered invalid schema may throw while Ajv resolves it.
     // Let compile() below classify the current schema instead.
     return undefined;
   }
   const compiledSnapshot = existing ? getCompiledJsonSchemaSnapshot(existing) : undefined;
-  return existing && compiledSnapshot && isDeepStrictEqual(compiledSnapshot, schema)
-    ? existing
-    : undefined;
+  if (existing && compiledSnapshot && schemasMatch(compiledSnapshot, schema)) {
+    return existing;
+  }
+  if (existing && compiledSnapshot) {
+    let sameSchemaObject = false;
+    try {
+      sameSchemaObject = existing.schema === schema;
+    } catch {
+      // compile() below will safely classify any remaining identity conflict.
+    }
+    if (sameSchemaObject) {
+      if (assertionOwnedValidators.get(existing)?.assertion !== assertion) {
+        throw new JsonSchemaConfigurationError('duplicate schema identifier');
+      }
+      removeOwnedValidator(ajv, existing, assertion);
+    }
+  }
+  return undefined;
 }
 
 export function getJsonSchemaFileRuntimeState(
@@ -173,8 +265,7 @@ export function getJsonSchemaFileRuntimeState(
 function getJsonSchemaValidator({
   renderedValue,
   assertion,
-  assertionValueContext,
-}: Pick<AssertionParams, 'renderedValue' | 'assertion' | 'assertionValueContext'>):
+}: Pick<AssertionParams, 'renderedValue' | 'assertion'>):
   | { validate: ValidateFunction }
   | { failure: GradingResult } {
   let shouldEvictRawSnapshot = false;
@@ -202,12 +293,6 @@ function getJsonSchemaValidator({
         schema = snapshot.schema;
         staticSource = snapshot.source;
       }
-      if (staticSource) {
-        const cached = getCachedStaticValidator(ajv, assertion, staticSource);
-        if (cached) {
-          return { validate: ensureSynchronousValidator(cached) };
-        }
-      }
     } else if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
         const source = resolveJsonSchemaFileReference(renderedValue);
@@ -226,19 +311,12 @@ function getJsonSchemaValidator({
         }
         shouldEvictRawSnapshot = true;
         if (loadedSnapshot.format === 'text') {
-          const renderedSchema = renderJsonSchemaText(
-            String(loadedSnapshot.schema),
-            assertionValueContext.vars,
-          );
-          schema = yaml.load(renderedSchema);
-          staticSource = `${loadedSnapshot.source}\0${renderedSchema}`;
+          const schemaText = String(loadedSnapshot.schema);
+          schema = yaml.load(schemaText);
+          staticSource = `${loadedSnapshot.source}\0${schemaText}`;
         } else {
           schema = loadedSnapshot.schema;
           staticSource = loadedSnapshot.source;
-        }
-        const cached = getCachedStaticValidator(ajv, assertion, staticSource);
-        if (cached) {
-          return { validate: ensureSynchronousValidator(cached) };
         }
       } else {
         schema = yaml.load(renderedValue);
@@ -256,54 +334,56 @@ function getJsonSchemaValidator({
     }
 
     const compilableSchema = schema as object | boolean;
-    const cachedBySchemaId = getMatchingSchemaIdValidator(ajv, compilableSchema);
+    const cached = getCachedValidator(ajv, assertion, staticSource, compilableSchema);
+    if (cached) {
+      return { validate: ensureSynchronousValidator(cached) };
+    }
+    const cachedBySchemaId = getMatchingSchemaIdValidator(ajv, compilableSchema, assertion);
     if (cachedBySchemaId) {
       const validate = ensureSynchronousValidator(cachedBySchemaId);
-      if (staticSource) {
-        cacheStaticValidator(ajv, assertion, staticSource, validate);
-      }
+      cacheValidator(ajv, assertion, staticSource, validate, compilableSchema);
       return { validate };
     }
 
     let validate: ValidateFunction;
+    const schemaId = getOwnSchemaId(compilableSchema);
+    const schemaToCompile =
+      !schemaId && typeof compilableSchema === 'object'
+        ? (getDataOnlyJsonSchemaSnapshot(compilableSchema) ?? compilableSchema)
+        : compilableSchema;
     try {
-      validate = ajv.compile(compilableSchema);
+      validate = ajv.compile(schemaToCompile);
     } catch (error) {
       if (
-        typeof compilableSchema === 'object' &&
-        compilableSchema !== null &&
-        '$id' in compilableSchema &&
-        typeof compilableSchema.$id === 'string' &&
-        !(error instanceof Error && error.message.includes('schema with key or id'))
+        schemaId &&
+        !(() => {
+          try {
+            return error instanceof Error && error.message.includes('schema with key or id');
+          } catch {
+            return false;
+          }
+        })()
       ) {
         try {
-          ajv.removeSchema(compilableSchema.$id);
+          ajv.removeSchema(schemaId);
         } catch {
           // Preserve the original compilation error.
         }
       }
       throw error;
     }
+    assertionOwnedValidators.set(validate, {
+      assertion,
+      schema: schemaToCompile,
+      ...(schemaId && { schemaId }),
+    });
     try {
       validate = ensureSynchronousValidator(validate);
     } catch (error) {
-      if (
-        typeof compilableSchema === 'object' &&
-        compilableSchema !== null &&
-        '$id' in compilableSchema &&
-        typeof compilableSchema.$id === 'string'
-      ) {
-        try {
-          ajv.removeSchema(compilableSchema.$id);
-        } catch {
-          // Preserve the unsupported-validator error.
-        }
-      }
+      removeOwnedValidator(ajv, validate, assertion);
       throw error;
     }
-    if (staticSource) {
-      cacheStaticValidator(ajv, assertion, staticSource, validate);
-    }
+    cacheValidator(ajv, assertion, staticSource, validate, compilableSchema);
     return { validate };
   } catch (error) {
     if (shouldEvictRawSnapshot) {
@@ -325,7 +405,6 @@ export function handleIsJson({
   renderedValue,
   inverse,
   assertion,
-  assertionValueContext,
   valueFromScriptResolved,
 }: AssertionParams): GradingResult {
   let parsedJson;
@@ -341,7 +420,6 @@ export function handleIsJson({
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
-      assertionValueContext,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;
@@ -378,7 +456,6 @@ export function handleIsJson({
 
 export function handleContainsJson({
   assertion,
-  assertionValueContext,
   renderedValue,
   outputString,
   inverse,
@@ -393,7 +470,6 @@ export function handleContainsJson({
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
-      assertionValueContext,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;
