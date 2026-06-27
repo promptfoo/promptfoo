@@ -408,9 +408,6 @@ async function resolveConfiguredProviderInputs(
   const configuredInputs = getConfiguredProviderInputs(renderedOptions);
 
   if (hasOnlyDeferredValidationEnvTemplates(renderedProviderPath)) {
-    if (configuredInputs !== undefined) {
-      return configuredInputs;
-    }
     if (!loadDynamicProviders) {
       return UNRESOLVED_PROVIDER_INPUTS;
     }

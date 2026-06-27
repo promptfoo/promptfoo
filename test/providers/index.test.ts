@@ -2895,9 +2895,16 @@ inputs:
   question: User question
 `);
 
+    const providerPath = 'file://targets/provider.yaml';
+    const options = { basePath: path.join(path.sep, 'workspace') };
+    const staticInputs = await resolveProviderInputsForValidation([providerPath], options);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+
     await expect(
-      resolveProviderInputsForValidation(['file://targets/provider.yaml'], {
-        basePath: path.join(path.sep, 'workspace'),
+      resolveProviderInputsForValidation([providerPath], {
+        ...options,
+        loadDynamicProviders: true,
       }),
     ).resolves.toEqual([{ question: 'User question' }]);
   });
@@ -2911,6 +2918,7 @@ inputs:
     const provider = {
       id: 'file://{{ env.PROVIDER_DIR | lower }}/provider.yaml',
       env: { PROVIDER_DIR: path.join(path.sep, 'WORKSPACE', 'TARGETS') },
+      inputs: { context: 'Outer context', question: 'Outer question' },
     };
 
     const staticInputs = await resolveProviderInputsForValidation([provider]);

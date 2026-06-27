@@ -1036,7 +1036,10 @@ describe('StrategyConfigDialog', () => {
         <StrategyConfigDialog
           open={true}
           strategy="layer"
-          config={{ plugins: ['harmful:hate'] }}
+          config={{
+            plugins: ['harmful:hate'],
+            steps: [{ id: 'base64', config: { plugins: ['policy'] } }],
+          }}
           onClose={mockOnClose}
           onSave={mockOnSave}
           strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
@@ -1048,7 +1051,11 @@ describe('StrategyConfigDialog', () => {
       await user.click(screen.getAllByRole('combobox')[1]);
 
       expect(screen.getByRole('option', { name: 'posterior' })).toBeInTheDocument();
-      expect(isLayerStepUnavailable).toHaveBeenCalledWith('posterior', ['harmful:hate']);
+      expect(isLayerStepUnavailable).toHaveBeenCalledWith(
+        'posterior',
+        ['harmful:hate'],
+        [{ id: 'base64', config: { plugins: ['policy'] } }],
+      );
     });
 
     it('should save layer strategy with all plugins by default', async () => {

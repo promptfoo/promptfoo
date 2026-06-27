@@ -361,10 +361,48 @@ describe('Strategies', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       const dialogProps = mockStrategyConfigDialog.mock.lastCall?.[0] as {
-        isLayerStepUnavailable: (strategyId: string, plugins?: readonly string[]) => boolean;
+        isLayerStepUnavailable: (
+          strategyId: string,
+          plugins?: readonly string[],
+          existingSteps?: readonly unknown[],
+        ) => boolean;
       };
       expect(dialogProps.isLayerStepUnavailable('posterior', ['harmful:hate'])).toBe(false);
       expect(dialogProps.isLayerStepUnavailable('posterior', ['policy'])).toBe(true);
+    });
+
+    it('includes existing Layer steps when checking Posterior availability', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { config: { stateful: false } },
+          strategies: [{ id: 'layer', config: { steps: [] } }],
+          plugins: [
+            'policy',
+            {
+              id: 'harmful:hate',
+              config: { inputs: { context: 'Reference context', question: 'User question' } },
+            },
+          ],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const dialogProps = mockStrategyConfigDialog.mock.lastCall?.[0] as {
+        isLayerStepUnavailable: (
+          strategyId: string,
+          plugins?: readonly string[],
+          existingSteps?: readonly unknown[],
+        ) => boolean;
+      };
+      expect(dialogProps.isLayerStepUnavailable('posterior')).toBe(true);
+      expect(
+        dialogProps.isLayerStepUnavailable('posterior', undefined, [
+          { id: 'base64', config: { plugins: ['policy'] } },
+        ]),
+      ).toBe(false);
     });
 
     it('allows Posterior when plugin-level inputs belong only to an exempt plugin', async () => {
