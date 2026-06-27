@@ -62,7 +62,11 @@ import {
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { getStrategyCompatibilityError, MAX_MAX_CONCURRENCY, synthesize } from '../index';
+import {
+  getStrategyCompatibilityError,
+  MAX_MAX_CONCURRENCY,
+  synthesize as synthesizeWithoutCleanup,
+} from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { resolveRedteamTargetProviderInputMetadata } from '../providers/shared';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
@@ -221,29 +225,14 @@ async function getConfigHash(
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
   const filters = {
-    ...(options.filterProviders === undefined ? {} : { filterProviders: options.filterProviders }),
-    ...(options.filterTargets === undefined ? {} : { filterTargets: options.filterTargets }),
+    ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
+    ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
   };
   const hashInput =
     Object.keys(filters).length > 0
       ? JSON.stringify({ version: VERSION, content, filters })
       : `${VERSION}:${content}`;
   return createHash('md5').update(hashInput).digest('hex');
-}
-
-function persistProviderFilters(
-  config: Partial<UnifiedConfig>,
-  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
-): void {
-  const filterProviders = options.filterProviders ?? options.filterTargets;
-  if (filterProviders === undefined) {
-    return;
-  }
-  const { filterTargets: _filterTargets, ...commandLineOptions } = config.commandLineOptions ?? {};
-  config.commandLineOptions = {
-    ...commandLineOptions,
-    filterProviders,
-  };
 }
 
 function createHeaderComments({
@@ -356,6 +345,27 @@ async function cleanupRedteamProviders(testSuite: TestSuite): Promise<void> {
   }
 }
 
+function hasExplicitEmptyProviderFilter(
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): boolean {
+  return options.filterProviders === '' || options.filterTargets === '';
+}
+
+function persistProviderFilters(
+  config: Partial<UnifiedConfig>,
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): void {
+  const filterProviders = options.filterProviders ?? options.filterTargets;
+  if (filterProviders === undefined) {
+    return;
+  }
+  const { filterTargets: _filterTargets, ...commandLineOptions } = config.commandLineOptions ?? {};
+  config.commandLineOptions = {
+    ...commandLineOptions,
+    filterProviders,
+  };
+}
+
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
@@ -437,7 +447,7 @@ async function doGenerateRedteamInternal(
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = await getConfigHash(configPath, options);
 
-    if (storedHash === currentHash) {
+    if (storedHash === currentHash && !hasExplicitEmptyProviderFilter(options)) {
       cachedRedteamConfig = redteamContent;
     }
   }
@@ -848,25 +858,9 @@ async function doGenerateRedteamInternal(
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
   const cleanupProvider = () => cleanupRedteamProviders(testSuite);
-  const synthesizeWithCleanup = async (effectivePurpose: string) => {
+  const synthesize = async (...args: Parameters<typeof synthesizeWithoutCleanup>) => {
     try {
-      return await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-        synthesize({
-          ...parsedConfig.data,
-          inputs: targetInputs,
-          purpose: effectivePurpose,
-          numTests: config.numTests,
-          prompts: testSuite.prompts.map((prompt) => prompt.raw),
-          maxConcurrency: config.maxConcurrency,
-          delay: config.delay,
-          abortSignal: options.abortSignal,
-          redteamGenerationContext,
-          cloudTargetDatabaseId,
-          targetIds,
-          showProgressBar: options.progressBar !== false,
-          testGenerationInstructions: augmentedTestGenerationInstructions,
-        } as SynthesizeOptions),
-      );
+      return await synthesizeWithoutCleanup(...args);
     } catch (error) {
       await cleanupProvider();
       throw error;
@@ -892,7 +886,26 @@ async function doGenerateRedteamInternal(
         testSuite,
       });
 
-      const contextResult = await synthesizeWithCleanup(contextPurpose);
+      const contextResult = await withGenerationConcurrency(
+        config.maxConcurrency,
+        config.delay,
+        () =>
+          synthesize({
+            ...parsedConfig.data,
+            inputs: targetInputs,
+            purpose: contextPurpose,
+            numTests: config.numTests,
+            prompts: testSuite.prompts.map((prompt) => prompt.raw),
+            maxConcurrency: config.maxConcurrency,
+            delay: config.delay,
+            abortSignal: options.abortSignal,
+            redteamGenerationContext,
+            cloudTargetDatabaseId,
+            targetIds,
+            showProgressBar: options.progressBar !== false,
+            testGenerationInstructions: augmentedTestGenerationInstructions,
+          } as SynthesizeOptions),
+      );
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
@@ -942,7 +955,23 @@ async function doGenerateRedteamInternal(
       rootPurpose,
       testSuite,
     });
-    const result = await synthesizeWithCleanup(effectivePurpose);
+    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+      synthesize({
+        ...parsedConfig.data,
+        inputs: targetInputs,
+        purpose: effectivePurpose,
+        numTests: config.numTests,
+        prompts: testSuite.prompts.map((prompt) => prompt.raw),
+        maxConcurrency: config.maxConcurrency,
+        delay: config.delay,
+        abortSignal: options.abortSignal,
+        redteamGenerationContext,
+        cloudTargetDatabaseId,
+        targetIds,
+        showProgressBar: options.progressBar !== false,
+        testGenerationInstructions: augmentedTestGenerationInstructions,
+      } as SynthesizeOptions),
+    );
 
     redteamTests = result.testCases;
     purpose = result.purpose;
@@ -1024,7 +1053,7 @@ async function doGenerateRedteamInternal(
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
-      if (options.strategies && updatedYaml.metadata) {
+      if ((options.strategies || hasExplicitEmptyProviderFilter(options)) && updatedYaml.metadata) {
         updatedYaml.metadata.configHash = 'force-regenerate';
       }
       const author = getAuthor();
@@ -1090,6 +1119,9 @@ async function doGenerateRedteamInternal(
         ...(existingConfig.metadata || {}),
         configHash: await getConfigHash(configPath, options),
       };
+      if (hasExplicitEmptyProviderFilter(options)) {
+        existingConfig.metadata.configHash = 'force-regenerate';
+      }
       if (options.strategies) {
         existingConfig.metadata.configHash = 'force-regenerate';
       }

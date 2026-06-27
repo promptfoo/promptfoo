@@ -63,6 +63,9 @@ type SynthesizeMockResult = {
 };
 
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
+const providerMocks = vi.hoisted(() => ({
+  isProviderInputMetadataUnresolved: vi.fn().mockReturnValue(false),
+}));
 
 function resetCommonMocks() {
   vi.mocked(fs.existsSync).mockReset();
@@ -307,6 +310,7 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
 vi.mock('../../../src/providers', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    ...providerMocks,
 
     loadApiProviders: vi.fn().mockResolvedValue([
       {
@@ -315,9 +319,6 @@ vi.mock('../../../src/providers', async (importOriginal) => {
         cleanup: vi.fn(),
       },
     ]),
-
-    getProviderIds: vi.fn().mockReturnValue(['test-provider']),
-    isProviderInputMetadataUnresolved: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -1444,6 +1445,18 @@ describe('doGenerateRedteam', () => {
       }
       throw new Error(`Unexpected read: ${String(filePath)}`);
     });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'fresh' },
+          metadata: { pluginId: 'harmful:hate' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
 
     await doGenerateRedteam({
       cache: true,
@@ -1459,6 +1472,9 @@ describe('doGenerateRedteam', () => {
       expect.any(Object),
     );
     expect(synthesize).toHaveBeenCalledOnce();
+    const writtenConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+    expect(writtenConfig?.metadata?.configHash).toBe('force-regenerate');
+    expect(writtenConfig?.commandLineOptions).toEqual({ filterProviders: '' });
   });
 
   it('loads unresolved dynamic inputs before returning a matching cached config', async () => {
