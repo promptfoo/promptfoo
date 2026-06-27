@@ -1013,6 +1013,23 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup!).toHaveBeenCalledWith();
   });
 
+  it('should cleanup provider when synthesis fails', async () => {
+    vi.mocked(synthesize).mockRejectedValueOnce(new Error('Synthesis failed'));
+
+    await expect(
+      doGenerateRedteam({
+        output: 'test-output.json',
+        inRedteamRun: false,
+        cache: false,
+        defaultConfig: {},
+        write: false,
+        config: 'test-config.yaml',
+      }),
+    ).rejects.toThrow('Synthesis failed');
+
+    expect(mockProvider.cleanup).toHaveBeenCalledOnce();
+  });
+
   it('should reject incompatible target inputs before provider inspection and clean up', async () => {
     mockProvider.inputs = {
       context: 'Reference context',

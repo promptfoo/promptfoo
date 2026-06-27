@@ -811,6 +811,87 @@ describe('Redteam Routes', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
     });
 
+    it('preserves a summary-pending job when the newest overlapping replacement is incompatible', async () => {
+      let resolveSummary: ((value: { results: never[] }) => void) | undefined;
+      let resolveFirstDynamicPreflight:
+        | ((value: { inputs: undefined[]; hasUnresolved: boolean }) => void)
+        | undefined;
+      const toEvaluateSummary = vi.fn(
+        () =>
+          new Promise<{ results: never[] }>((resolve) => {
+            resolveSummary = resolve;
+          }),
+      );
+      mockedDoRedteamRun.mockResolvedValueOnce({ id: 'first-eval', toEvaluateSummary } as any);
+      mockedResolveRedteamTargetProviderInputMetadata
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirstDynamicPreflight = resolve;
+            }),
+        )
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({
+          inputs: [{ context: 'Reference context', question: 'User question' }],
+          hasUnresolved: false,
+        });
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+      await vi.waitFor(() => expect(toEvaluateSummary).toHaveBeenCalledOnce());
+
+      const firstReplacementPromise = request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['file:///workspace/first-dynamic-provider.mjs'],
+            redteam: { strategies: ['posterior'] },
+          },
+        })
+        .then((response) => response);
+      await vi.waitFor(() => expect(resolveFirstDynamicPreflight).toBeDefined());
+
+      const newestReplacementPromise = request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['file:///workspace/newest-dynamic-provider.mjs'],
+            redteam: { strategies: ['posterior'] },
+          },
+        })
+        .then((response) => response);
+      await vi.waitFor(() =>
+        expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledTimes(4),
+      );
+
+      resolveFirstDynamicPreflight!({ inputs: [undefined], hasUnresolved: false });
+      const [firstReplacement, newestReplacement] = await Promise.all([
+        firstReplacementPromise,
+        newestReplacementPromise,
+      ]);
+
+      expect(firstReplacement.status).toBe(409);
+      expect(firstReplacement.body.error).toBe('Run request superseded by a newer request');
+      expect(newestReplacement.status).toBe(400);
+      expect(newestReplacement.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      const statusResponse = await request(app).get('/api/redteam/status');
+      expect(statusResponse.body).toMatchObject({
+        hasRunningJob: true,
+        jobId: firstResponse.body.id,
+      });
+
+      resolveSummary!({ results: [] });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+
     it('respects an empty top-level plugin override during compatibility preflight', async () => {
       const response = await request(app)
         .post('/api/redteam/run')

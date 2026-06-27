@@ -374,6 +374,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 let currentRunPromise: Promise<void> | null = null;
+let currentPreflightPromise: Promise<void> | null = null;
 let latestRunRequest = 0;
 let pendingRunRequest: number | null = null;
 let latestRunId: string | null = null;
@@ -456,10 +457,10 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   const passesTrackedDynamicPreflight = async (): Promise<boolean> => {
     const dynamicPreflightPromise = passesCompatibilityPreflight(true);
     const trackedPreflightPromise = dynamicPreflightPromise.then(() => undefined);
-    currentRunPromise = trackedPreflightPromise;
+    currentPreflightPromise = trackedPreflightPromise;
     const compatibilityPassed = await dynamicPreflightPromise;
-    if (currentRunPromise === trackedPreflightPromise) {
-      currentRunPromise = null;
+    if (currentPreflightPromise === trackedPreflightPromise) {
+      currentPreflightPromise = null;
     }
     return compatibilityPassed;
   };
@@ -470,9 +471,25 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const previousRunPromise = currentRunPromise;
+  const previousPreflightPromise = currentPreflightPromise;
+  if (previousPreflightPromise !== null) {
+    const preflightComplete = await waitForRunCleanup(previousPreflightPromise);
+    if (rejectSupersededRequest()) {
+      return;
+    }
+    if (!preflightComplete) {
+      clearPendingRunRequest(runRequest);
+      res.status(409).json({ error: 'Previous run is still validating target compatibility' });
+      return;
+    }
+  }
   // Once execution cleanup is complete, dynamically validate replacements before discarding a
   // predecessor whose result is still being summarized.
-  if (currentJobId && previousRunPromise === null && !(await passesTrackedDynamicPreflight())) {
+  if (
+    previousRunPromise === null &&
+    (currentJobId || previousPreflightPromise !== null) &&
+    !(await passesTrackedDynamicPreflight())
+  ) {
     return;
   }
   // If there's a current job running, abort it and wait for provider cleanup before replacement.
