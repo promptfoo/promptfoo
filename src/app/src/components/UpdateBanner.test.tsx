@@ -71,6 +71,7 @@ describe('UpdateBanner', () => {
   it('should prioritize the Node.js runtime notice over an ordinary update', async () => {
     const user = userEvent.setup();
     const dismiss = vi.fn();
+    const dismissRuntimeNotice = vi.fn();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -109,6 +110,7 @@ describe('UpdateBanner', () => {
       error: null,
       dismissed: false,
       dismiss,
+      dismissRuntimeNotice,
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
@@ -129,7 +131,7 @@ describe('UpdateBanner', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Remind me later' }));
-    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(dismissRuntimeNotice).toHaveBeenCalledTimes(1);
     expect(mockRecordEvent).toHaveBeenCalledWith(
       'feature_used',
       expect.objectContaining({
@@ -589,6 +591,9 @@ describe('UpdateBanner', () => {
       'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
     );
     expect(screen.queryByRole('button', { name: /Copy Update Command/i })).not.toBeInTheDocument();
+    // The blocked-update banner is a runtime warning, so it must be labeled as one (not as a
+    // generic update notice) to match its visible heading, icon, and variant.
+    expect(screen.getByRole('group', { name: 'Node.js runtime notice' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Don't remind me of this version/i }));
     expect(dismissUpdate).toHaveBeenCalledTimes(1);
@@ -861,6 +866,7 @@ describe('UpdateBanner', () => {
   it("should make the don't remind me action clickable", async () => {
     const user = userEvent.setup();
     const dismiss = vi.fn();
+    const dismissUpdate = vi.fn();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -877,6 +883,7 @@ describe('UpdateBanner', () => {
       error: null,
       dismissed: false,
       dismiss,
+      dismissUpdate,
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
@@ -890,7 +897,7 @@ describe('UpdateBanner', () => {
 
     await user.click(dismissButton);
 
-    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(dismissUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('should render correctly in both dark and light modes', () => {

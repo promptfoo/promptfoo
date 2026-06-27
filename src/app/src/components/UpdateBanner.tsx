@@ -157,7 +157,7 @@ function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefin
 
 function getBlockedUpdateNotice(
   versionInfo: VersionInfo | null,
-  updateDismissed: boolean,
+  updateDismissed: boolean | undefined,
   updateBlockedByRuntime: boolean,
 ): RuntimeCompatibilityNotice | null {
   return versionInfo?.runtimeNotice || updateDismissed || !updateBlockedByRuntime
@@ -189,8 +189,6 @@ export default function UpdateBanner() {
     versionInfo,
     loading,
     error,
-    dismissed,
-    dismiss,
     runtimeNoticeDismissed,
     updateDismissed,
     dismissRuntimeNotice,
@@ -203,9 +201,7 @@ export default function UpdateBanner() {
   const recordedRuntimeNoticeRef = useRef<string | null>(null);
   const runtimeNotice = versionInfo?.runtimeNotice ?? null;
   const updateMode = getUpdateMode(versionInfo);
-  const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
-  const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
-  const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
+  const activeRuntimeNotice = runtimeNotice && !runtimeNoticeDismissed ? runtimeNotice : null;
   const runtimeSupportEndDate =
     runtimeNotice?.removalDate ??
     versionInfo?.blockedUpdateNotice?.removalDate ??
@@ -218,15 +214,15 @@ export default function UpdateBanner() {
     (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
   const blockedUpdateNotice = getBlockedUpdateNotice(
     versionInfo,
-    isUpdateDismissed,
+    updateDismissed,
     updateBlockedByRuntime,
   );
   const isBlockedUpdate =
-    !!versionInfo?.blockedUpdateNotice && updateBlockedByRuntime && !isUpdateDismissed;
+    !!versionInfo?.blockedUpdateNotice && updateBlockedByRuntime && !updateDismissed;
   const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
-    !isUpdateDismissed &&
+    !updateDismissed &&
     !!versionInfo?.updateAvailable &&
     !updateBlockedByRuntime;
   const shouldShowDockerAction =
@@ -325,10 +321,10 @@ export default function UpdateBanner() {
         runtimeMajor: activeRuntimeNotice.currentMajor,
         surface: 'webui_banner',
       });
-      (dismissRuntimeNotice ?? dismiss)();
+      dismissRuntimeNotice?.();
       return;
     }
-    (dismissUpdate ?? dismiss)();
+    dismissUpdate?.();
   };
 
   const handleRuntimeGuideClick = () => {
@@ -353,8 +349,12 @@ export default function UpdateBanner() {
   return (
     <Alert
       ref={bannerRef}
+      // `role="group"` intentionally overrides Alert's default `role="alert"` (Alert spreads
+      // {...props} after its own role, so this wins). The live region is the inner div below, which
+      // switches between role="status" and role="alert" by severity. Label off activeRuntimeGuidance
+      // so the blocked-update (runtime) case is announced as a runtime notice like its visible copy.
       role="group"
-      aria-label={activeRuntimeNotice ? 'Node.js runtime notice' : 'Promptfoo update notice'}
+      aria-label={activeRuntimeGuidance ? 'Node.js runtime notice' : 'Promptfoo update notice'}
       variant={activeRuntimeGuidance ? 'warning' : 'info'}
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
