@@ -567,7 +567,7 @@ describe('Script value resolution', () => {
         expect(assertion.value).toContain('{{ env.PR8237_SCHEMA_PATH }}');
         expect(JSON.stringify(assertion)).not.toContain('/private/schema/path');
         expect(mockRunRuby).toHaveBeenCalledWith(
-          '/private/schema/path/schema.rb',
+          path.resolve('/private/schema/path/schema.rb'),
           'build_schema',
           expect.any(Array),
         );
@@ -602,7 +602,7 @@ describe('Script value resolution', () => {
         });
 
         expect(mockRunRuby).toHaveBeenCalledWith(
-          '/private/config/schema/path/schema.rb',
+          path.resolve('/private/config/schema/path/schema.rb'),
           'build_schema',
           expect.any(Array),
         );
@@ -693,8 +693,9 @@ describe('Script value resolution', () => {
 
         expect(mockRunRuby).toHaveBeenCalledTimes(2);
         for (const [filePath] of mockRunRuby.mock.calls) {
-          expect(filePath).toContain('{{ env.PR8237_SECOND_SCHEMA_PATH }}');
-          expect(filePath).not.toContain('/private/second/schema/path');
+          const normalizedFilePath = filePath.replaceAll('\\', '/');
+          expect(normalizedFilePath).toContain('{{ env.PR8237_SECOND_SCHEMA_PATH }}');
+          expect(normalizedFilePath).not.toContain('/private/second/schema/path');
         }
       } finally {
         restoreEnv();
