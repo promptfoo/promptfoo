@@ -89,6 +89,20 @@ describe('runtime notice state', () => {
     expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 
+  it('releases held locks when the transition callback throws', () => {
+    const noticeId = 'node20-removal-2026-07-30';
+
+    expect(() =>
+      withRuntimeNoticeStateLock(noticeId, () => {
+        throw new Error('transition failed');
+      }),
+    ).toThrow('transition failed');
+
+    // The finally block must release both generation locks even when the callback throws, so a
+    // failed transition (e.g. an unreadable config) cannot wedge the notice for the lease window.
+    expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
+  });
+
   it('does not treat lock creation errors as ordinary contention', () => {
     const lockError = Object.assign(new Error('Permission denied'), { code: 'EACCES' });
     const openSpy = vi.spyOn(fs, 'openSync').mockImplementation(() => {
