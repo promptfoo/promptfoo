@@ -2877,6 +2877,52 @@ inputs:
     ).resolves.toEqual([{ question: 'User question' }]);
   });
 
+  it('uses configured inputs from provider files with deferred environment filters', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: '{{ env.TARGET_PROVIDER | lower }}'
+env:
+  TARGET_PROVIDER: ECHO
+inputs:
+  question: User question
+`);
+
+    await expect(
+      resolveProviderInputsForValidation(['file://targets/provider.yaml'], {
+        basePath: path.join(path.sep, 'workspace'),
+      }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('defers filtered environment provider ids until dynamic loading is requested', async () => {
+    const cleanup = vi.fn();
+    class DynamicProvider {
+      inputs = { question: 'User question' };
+      cleanup = cleanup;
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const provider = {
+      id: '{{ env.TARGET_PROVIDER | lower }}',
+      env: { TARGET_PROVIDER: 'file:///workspace/dynamic-provider.mjs' },
+    };
+
+    const staticInputs = await resolveProviderInputsForValidation([provider]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+    expect(importModule).not.toHaveBeenCalled();
+
+    await expect(
+      resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+    expect(importModule).toHaveBeenCalledWith('/workspace/dynamic-provider.mjs');
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it.each([
     "{{ env.MISSING_PROVIDER | default('echo') | upper }}",
     '{{ env.MISSING_PROVIDER | default(env.CANARY.constructor.constructor("return \'echo\'")()) }}',

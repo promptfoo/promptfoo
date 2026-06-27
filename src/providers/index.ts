@@ -371,6 +371,28 @@ export function getConfiguredProviderInputs(
     : undefined;
 }
 
+async function loadConfiguredProviderInputsForValidation(
+  providerPath: string,
+  providerOptions: ProviderOptions,
+  env: EnvOverrides | undefined,
+  basePath: string | undefined,
+): Promise<ProviderOptions['inputs']> {
+  const provider = await loadApiProvider(providerPath, {
+    basePath,
+    env,
+    options: providerOptions,
+  });
+  try {
+    return getConfiguredProviderInputs(provider);
+  } finally {
+    try {
+      await provider.cleanup?.();
+    } catch (error) {
+      logger.warn('[Provider Validation] Error cleaning up provider', { error });
+    }
+  }
+}
+
 async function resolveConfiguredProviderInputs(
   providerPath: string,
   providerOptions: ProviderOptions = {},
@@ -414,6 +436,21 @@ async function resolveConfiguredProviderInputs(
     );
   }
 
+  if (hasOnlyDeferredValidationEnvTemplates(renderedProviderPath)) {
+    if (configuredInputs !== undefined) {
+      return configuredInputs;
+    }
+    if (!loadDynamicProviders) {
+      return UNRESOLVED_PROVIDER_INPUTS;
+    }
+    return loadConfiguredProviderInputsForValidation(
+      renderedProviderPath,
+      renderedOptions,
+      mergedEnv,
+      basePath,
+    );
+  }
+
   if (!isCloudProvider(renderedProviderPath)) {
     for (const factory of await getProviderFactories(renderedProviderPath)) {
       if (factory.test(renderedProviderPath)) {
@@ -425,20 +462,12 @@ async function resolveConfiguredProviderInputs(
           if (!loadDynamicProviders) {
             return UNRESOLVED_PROVIDER_INPUTS;
           }
-          const provider = await loadApiProvider(renderedProviderPath, {
+          return loadConfiguredProviderInputsForValidation(
+            renderedProviderPath,
+            renderedOptions,
+            mergedEnv,
             basePath,
-            env: mergedEnv,
-            options: renderedOptions,
-          });
-          try {
-            return getConfiguredProviderInputs(provider);
-          } finally {
-            try {
-              await provider.cleanup?.();
-            } catch (error) {
-              logger.warn('[Provider Validation] Error cleaning up provider', { error });
-            }
-          }
+          );
         }
         return configuredInputs;
       }
@@ -481,6 +510,9 @@ async function resolveConfiguredProviderInputs(
 
 const SIMPLE_ENV_TEMPLATE =
   /\{\{\s*env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(['"])([^'"]+)\2\s*\])(?:\s*\|\s*default\(\s*(['"])([^\r\n]*?)\4\s*(?:,\s*(true|false)\s*)?\))?\s*\}\}/g;
+const SIMPLE_DEFERRED_ENV_FILTER_TEMPLATE =
+  /\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*(['"])[^'"]+\1\s*\])(?:\s*\|\s*[A-Za-z_][A-Za-z0-9_]*)+\s*\}\}/g;
+const NUNJUCKS_TAG = /\{[{%#]/;
 const MAX_PROVIDER_VALIDATION_DEPTH = 1000;
 const MAX_PROVIDER_VALIDATION_NODES = 10_000;
 const PROVIDER_VALIDATION_COMPLEXITY_ERROR = 'Provider configuration is too complex to validate';
@@ -488,6 +520,15 @@ const UNRESOLVED_PROVIDER_INPUTS = Symbol('unresolved provider inputs');
 
 export function isProviderInputMetadataUnresolved(value: unknown): boolean {
   return value === UNRESOLVED_PROVIDER_INPUTS;
+}
+
+function hasOnlyDeferredValidationEnvTemplates(value: string): boolean {
+  let foundDeferredTemplate = false;
+  const remaining = value.replace(SIMPLE_DEFERRED_ENV_FILTER_TEMPLATE, () => {
+    foundDeferredTemplate = true;
+    return '';
+  });
+  return foundDeferredTemplate && !NUNJUCKS_TAG.test(remaining);
 }
 
 /**
