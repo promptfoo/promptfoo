@@ -7,7 +7,7 @@ import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
 import logger from './logger';
-import { redactPathsAndIdentifierFromText, safeResolve } from './util/pathUtils';
+import { safeResolve } from './util/pathUtils';
 
 /**
  * Supported wrapper script types for language-specific providers.
@@ -236,48 +236,14 @@ export function getDirectory(): string {
   );
 }
 
-function formatModuleError(
-  value: unknown,
-  modulePaths: string[],
-  redactPath: boolean,
-  functionName?: string,
-): string {
-  const text = String(value);
-  if (!redactPath) {
-    return text;
-  }
-  return redactPathsAndIdentifierFromText(
-    text,
-    modulePaths.map((modulePath) => safeResolve(modulePath)),
-    functionName,
-    '[redacted module path]',
-    '[redacted module export]',
-  );
-}
-
-function formatModulePath<T>(value: T, redactPath: boolean): T | string {
-  return redactPath ? '[redacted module path]' : value;
-}
-
 /**
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
  */
-export async function importModule(
-  modulePath: string,
-  functionName?: string,
-  options: { redactPath?: boolean } = {},
-) {
-  const redactPath = options.redactPath === true;
+export async function importModule(modulePath: string, functionName?: string) {
   const loadPath = await normalizeModuleExtension(modulePath);
-  const displayModulePath = formatModulePath(modulePath, redactPath);
-  const displayResolvedPath = formatModulePath(safeResolve(loadPath), redactPath);
-  const displayFunctionName =
-    redactPath && functionName ? '[redacted module export]' : functionName;
-  const redactError = (value: unknown) =>
-    formatModuleError(value, [modulePath, loadPath], redactPath, functionName);
   logger.debug(
-    `Attempting to import module: ${JSON.stringify({ resolvedPath: displayResolvedPath, moduleId: displayModulePath })}`,
+    `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
   );
 
   try {
@@ -285,18 +251,18 @@ export async function importModule(
 
     const resolvedPath = pathToFileURL(safeResolve(loadPath));
     const resolvedPathStr = resolvedPath.toString();
-    logger.debug(`Attempting ESM import from: ${formatModulePath(resolvedPathStr, redactPath)}`);
+    logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
 
     // Native dynamic import - no eval() needed in ESM-only environment
     const importedModule = await import(resolvedPathStr);
 
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
     logger.debug(
-      `Successfully imported module: ${JSON.stringify({ resolvedPath: formatModulePath(resolvedPath, redactPath), moduleId: displayModulePath })}`,
+      `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
     );
 
     if (functionName) {
-      logger.debug(`Returning named export: ${displayFunctionName}`);
+      logger.debug(`Returning named export: ${functionName}`);
       return mod[functionName];
     }
     return mod;
@@ -309,32 +275,32 @@ export async function importModule(
     // We use Node's vm module to execute the code with proper CJS globals.
     if (loadPath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
-        `ESM import failed for ${displayModulePath}, attempting vm-based CJS fallback: ${redactError(errorMessage)}`,
+        `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
       );
 
       try {
         const resolvedPath = safeResolve(loadPath);
         const mod = loadCjsModule(resolvedPath);
         logger.debug(
-          `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath: formatModulePath(resolvedPath, redactPath), moduleId: displayModulePath })}`,
+          `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
         );
 
         if (functionName) {
-          logger.debug(`Returning named export: ${displayFunctionName}`);
+          logger.debug(`Returning named export: ${functionName}`);
           return mod[functionName];
         }
         return mod;
       } catch (cjsErr) {
         // If CJS fallback also fails, throw a combined error with both details
         const cjsErrorMessage = cjsErr instanceof Error ? cjsErr.message : String(cjsErr);
-        logger.error(`ESM import failed for ${displayModulePath}: ${redactError(errorMessage)}`);
-        logger.error(`CJS fallback also failed: ${redactError(cjsErrorMessage)}`);
+        logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
+        logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
 
         // Create a combined error that includes both failure reasons
         const combinedError = new Error(
-          `Failed to load module ${displayModulePath}:\n` +
-            `  ESM import error: ${redactError(errorMessage)}\n` +
-            `  CJS fallback error: ${redactError(cjsErrorMessage)}\n` +
+          `Failed to load module ${modulePath}:\n` +
+            `  ESM import error: ${errorMessage}\n` +
+            `  CJS fallback error: ${cjsErrorMessage}\n` +
             `To fix this, either:\n` +
             `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
             `  2. Convert to ESM syntax (import/export)\n` +
@@ -350,7 +316,7 @@ export async function importModule(
     // Log stack trace for debugging
     const e = err as Error;
     if (e.stack) {
-      logger.debug(redactError(e.stack));
+      logger.debug(e.stack);
     }
 
     // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
@@ -362,21 +328,20 @@ export async function importModule(
       try {
         await fsPromises.access(resolvedModulePath);
         // File exists - the error is about a missing dependency, log and preserve original error
-        logger.error(`ESM import failed: ${redactError(err)}`);
+        logger.error(`ESM import failed: ${err}`);
       } catch {
         // File doesn't exist - normalize to ENOENT for clearer error message
         // Don't log as error - this is expected during config file discovery
-        const displayedMissingPath = formatModulePath(resolvedModulePath, redactPath);
         const enoentError = new Error(
-          `ENOENT: no such file or directory, open '${displayedMissingPath}'`,
+          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
         ) as NodeJS.ErrnoException;
         enoentError.code = 'ENOENT';
-        enoentError.path = displayedMissingPath as string;
+        enoentError.path = resolvedModulePath;
         throw enoentError;
       }
     } else {
       // For all other errors (not file-not-found), log as error
-      logger.error(`ESM import failed: ${redactError(err)}`);
+      logger.error(`ESM import failed: ${err}`);
     }
 
     throw err;

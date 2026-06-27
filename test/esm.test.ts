@@ -264,22 +264,6 @@ describe('ESM utilities', () => {
       );
     });
 
-    it('redacts module paths from import logs when requested', async () => {
-      const modulePath = path.resolve(testDir, '__fixtures__/testModule.js');
-      const privateMethod = 'PR8237_SECRET_MODULE_EXPORT';
-
-      await importModule(modulePath, privateMethod, { redactPath: true });
-
-      const logs = JSON.stringify([
-        ...vi.mocked(logger.debug).mock.calls,
-        ...vi.mocked(logger.error).mock.calls,
-      ]);
-      expect(logs).not.toContain(modulePath);
-      expect(logs).not.toContain(privateMethod);
-      expect(logs).toContain('[redacted module path]');
-      expect(logs).toContain('[redacted module export]');
-    });
-
     it('imports CommonJS modules via ESM', async () => {
       const modulePath = path.resolve(testDir, '__fixtures__/testModule.cjs');
 

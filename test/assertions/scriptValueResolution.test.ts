@@ -675,7 +675,6 @@ describe('Script value resolution', () => {
         expect(importModule).toHaveBeenCalledWith(
           path.resolve(privatePath, 'schema.cjs'),
           privateMethod,
-          { redactPath: true },
         );
       } finally {
         restoreEnv();

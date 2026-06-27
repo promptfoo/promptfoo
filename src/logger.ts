@@ -8,6 +8,7 @@ import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
+import { redactLogMessage } from './util/logRedaction';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
@@ -402,7 +403,7 @@ function createLogMethodWithContext(
     }
 
     if (!context) {
-      internalLogger[level](message);
+      internalLogger[level](redactLogMessage(message));
       return;
     }
 
@@ -410,11 +411,11 @@ function createLogMethodWithContext(
 
     if (useStructuredLogging) {
       // Structured mode: pass object with message field for cloud logging systems
-      internalLogger[level]({ message, ...sanitized });
+      internalLogger[level]({ message: redactLogMessage(message), ...sanitized });
     } else {
       // Default mode: format as string for CLI/console output
       const contextStr = safeJsonStringify(sanitized, true);
-      internalLogger[level](`${message}\n${contextStr}`);
+      internalLogger[level](redactLogMessage(`${message}\n${contextStr}`));
     }
   };
 }

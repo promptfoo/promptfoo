@@ -6,6 +6,8 @@ import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types/index';
+import { withLogRedaction } from '../util/logRedaction';
+import { redactPathsAndIdentifierFromText } from '../util/pathUtils';
 
 const clone = Clone();
 
@@ -43,9 +45,20 @@ export async function loadFromJavaScriptFile(
   options: { redactPath?: boolean } = {},
   // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<any> {
+  const loadModule = () => importModule(filePath, functionName);
   const requiredModule = options.redactPath
-    ? await importModule(filePath, functionName, options)
-    : await importModule(filePath, functionName);
+    ? await withLogRedaction(
+        (message) =>
+          redactPathsAndIdentifierFromText(
+            message,
+            [filePath],
+            functionName,
+            '[redacted module path]',
+            '[redacted module export]',
+          ),
+        loadModule,
+      )
+    : await loadModule();
   if (functionName && typeof requiredModule[functionName] === 'function') {
     return requiredModule[functionName](...args);
   } else if (typeof requiredModule === 'function') {
