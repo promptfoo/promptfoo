@@ -367,15 +367,20 @@ function buildRedteamModifiers({
   minCharsPerMessage,
   pluginConfig,
   testGenerationInstructions,
+  omitMinCharsPerMessage = false,
 }: {
   maxCharsPerMessage?: number;
   minCharsPerMessage?: number;
   pluginConfig?: Record<string, any>;
   testGenerationInstructions?: string;
+  omitMinCharsPerMessage?: boolean;
 }): Record<string, string> {
+  const pluginModifiers = (pluginConfig?.modifiers as Record<string, string> | undefined) ?? {};
+  const { [MIN_CHARS_PER_MESSAGE_MODIFIER_KEY]: _omittedMinimum, ...modifiersWithoutMinimum } =
+    pluginModifiers;
   const modifiers: Record<string, string> = {
     ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-    ...((pluginConfig?.modifiers as Record<string, string> | undefined) ?? {}),
+    ...(omitMinCharsPerMessage ? modifiersWithoutMinimum : pluginModifiers),
   };
   const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue(
     maxCharsPerMessage ?? pluginConfig?.maxCharsPerMessage,
@@ -383,9 +388,9 @@ function buildRedteamModifiers({
   if (maxCharsPerMessageModifier) {
     modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
   }
-  const minCharsPerMessageModifier = getMinCharsPerMessageModifierValue(
-    minCharsPerMessage ?? pluginConfig?.minCharsPerMessage,
-  );
+  const minCharsPerMessageModifier = omitMinCharsPerMessage
+    ? undefined
+    : getMinCharsPerMessageModifierValue(minCharsPerMessage ?? pluginConfig?.minCharsPerMessage);
   if (minCharsPerMessageModifier) {
     modifiers[MIN_CHARS_PER_MESSAGE_MODIFIER_KEY] = minCharsPerMessageModifier;
   }
@@ -1434,6 +1439,7 @@ export async function synthesize({
               minCharsPerMessage: deferPluginMinimum ? undefined : minCharsPerMessage,
               pluginConfig: plugin.config,
               testGenerationInstructions,
+              omitMinCharsPerMessage: deferPluginMinimum,
             }),
           },
         });
@@ -1605,6 +1611,7 @@ export async function synthesize({
               minCharsPerMessage: deferPluginMinimum ? undefined : minCharsPerMessage,
               pluginConfig: resolvedConfig,
               testGenerationInstructions,
+              omitMinCharsPerMessage: deferPluginMinimum,
             }),
           };
           const customPlugin = new CustomPlugin(

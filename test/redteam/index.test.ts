@@ -441,6 +441,15 @@ describe('synthesize', () => {
         expect.any(Object),
         'goat',
       );
+      expect(vi.mocked(Plugins.find).mock.results[0].value.action).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            modifiers: expect.not.objectContaining({
+              minCharsPerMessage: expect.anything(),
+            }),
+          }),
+        }),
+      );
       expect(result.testCases).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ vars: { query: 'long enough final attack' } }),
