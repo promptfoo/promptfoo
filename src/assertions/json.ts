@@ -1,9 +1,14 @@
 import yaml from 'js-yaml';
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
+import { processFileReference } from './utils';
 import type { ValidateFunction } from 'ajv';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+function hasJsonSchema(value: AssertionParams['renderedValue']): boolean {
+  return value !== undefined && value !== null && value !== '';
+}
 
 function getJsonSchemaValidator({
   renderedValue,
@@ -13,25 +18,28 @@ function getJsonSchemaValidator({
   | { validate: ValidateFunction }
   | { failure: GradingResult } {
   try {
+    let schema: unknown = renderedValue;
+
     if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
-        const schema = valueFromScript;
+        schema = valueFromScript ?? processFileReference(renderedValue);
         invariant(
           schema !== undefined && schema !== null,
           `${assertion.type} references a file that does not export a JSON schema`,
         );
-
-        return { validate: getAjv().compile(schema as object | boolean) };
+        if (typeof schema === 'string' && renderedValue.endsWith('.txt')) {
+          schema = yaml.load(schema);
+        }
+      } else {
+        schema = yaml.load(renderedValue);
       }
-
-      return { validate: getAjv().compile(yaml.load(renderedValue) as object | boolean) };
     }
 
-    if (typeof renderedValue === 'boolean' || typeof renderedValue === 'object') {
-      return { validate: getAjv().compile(renderedValue as object | boolean) };
+    if (typeof schema !== 'boolean' && typeof schema !== 'object') {
+      throw new Error(`${assertion.type} assertion must have a string, boolean, or object value`);
     }
 
-    throw new Error(`${assertion.type} assertion must have a string, boolean, or object value`);
+    return { validate: getAjv().compile(schema as object | boolean) };
   } catch (error) {
     return {
       failure: {
@@ -60,7 +68,7 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (parsedJson !== undefined && renderedValue !== undefined && renderedValue !== null) {
+  if (parsedJson !== undefined && hasJsonSchema(renderedValue)) {
     const validatorResult = getJsonSchemaValidator({ renderedValue, valueFromScript, assertion });
     if ('failure' in validatorResult) {
       return validatorResult.failure;
@@ -103,7 +111,7 @@ export function handleContainsJson({
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   let validate: ValidateFunction | undefined;
 
-  if (jsonObjects.length > 0 && renderedValue !== undefined && renderedValue !== null) {
+  if (jsonObjects.length > 0 && hasJsonSchema(renderedValue)) {
     const validatorResult = getJsonSchemaValidator({ renderedValue, valueFromScript, assertion });
     if ('failure' in validatorResult) {
       return validatorResult.failure;

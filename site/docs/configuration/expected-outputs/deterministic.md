@@ -205,10 +205,10 @@ assert:
     value: file://./path/to/schema.json
 ```
 
-JSON Schema boolean forms are supported: `value: true` accepts any contained JSON
-value, while `value: false` rejects every contained JSON value. When schema validation
-is attempted, a malformed schema fails with an `Invalid JSON schema` reason instead
-of aborting the evaluation.
+JSON Schema boolean forms are supported: `value: true` accepts every JSON object found
+in the output, while `value: false` rejects every found object. When schema validation is
+attempted, a malformed schema fails with an `Invalid JSON schema` reason instead of
+aborting the evaluation.
 
 See also: [`is-json`](#is-json)
 
@@ -374,8 +374,9 @@ assert:
     value: file://./path/to/schema.json
 ```
 
-Boolean JSON Schemas and invalid-schema failures behave as described for
-[`contains-json`](#contains-json).
+Boolean JSON Schemas are supported: `value: true` accepts any valid JSON value, while
+`value: false` rejects every valid JSON value. Malformed schemas fail with an
+`Invalid JSON schema` reason instead of aborting the evaluation.
 
 ### Is-XML
 

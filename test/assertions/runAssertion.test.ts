@@ -6,6 +6,7 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { getAjv } from '../../src/util/json';
 import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
@@ -1535,6 +1536,93 @@ describe('runAssertion', () => {
       score: 1,
       reason: 'Assertion passed',
     });
+  });
+
+  it.each([
+    'is-json',
+    'not-is-json',
+    'contains-json',
+    'not-contains-json',
+  ] as const)('should fail gracefully when the %s assertion references malformed schema YAML', async (type) => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.yaml');
+    vi.mocked(path.extname).mockReturnValue('.yaml');
+    vi.mocked(fs.readFileSync).mockReturnValue('type: object\nproperties:\n  foo: [');
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: 'file:///schema.yaml' },
+      test: {} as AtomicTestCase,
+      providerResponse: {
+        output: type.includes('contains') ? 'prefix {"foo":"bar"} suffix' : '{"foo":"bar"}',
+      },
+    });
+
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.yaml', 'utf8');
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Invalid JSON schema:'),
+    });
+  });
+
+  it.each([
+    ['is-json', '{"foo":"bar"}', true],
+    ['not-is-json', '{"foo":"bar"}', false],
+    ['contains-json', 'prefix {"foo":"bar"} suffix', true],
+    ['not-contains-json', 'prefix {"foo":"bar"} suffix', false],
+  ] as const)('should preserve schema-less behavior for %s with an empty value', async (type, output, pass) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: '' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result.pass).toBe(pass);
+    expect(result.reason).not.toContain('Invalid JSON schema:');
+  });
+
+  it.each([
+    ['contains-json', false, 'Expected output to contain valid JSON'],
+    ['not-contains-json', true, 'Assertion passed'],
+  ] as const)('should not load an unused file-backed schema for %s', async (type, pass, reason) => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.yaml');
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: 'file:///schema.yaml' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'here is the answer with no JSON whatsoever' },
+    });
+
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ pass, reason });
+  });
+
+  it('should compile a contains-json schema once for multiple JSON objects', async () => {
+    const compileSpy = vi.spyOn(getAjv(), 'compile');
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'contains-json',
+        value: {
+          type: 'object',
+          required: ['match'],
+          properties: { match: { const: true } },
+        },
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'first {"match":false}, then {"match":true}' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(compileSpy).toHaveBeenCalledTimes(1);
+    compileSpy.mockRestore();
   });
 
   it('should pass when the javascript assertion passes', async () => {

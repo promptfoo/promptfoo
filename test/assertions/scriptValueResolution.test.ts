@@ -270,6 +270,33 @@ describe('Script value resolution', () => {
     });
   });
 
+  describe('JSON schema assertions with file:// scripts', () => {
+    it.each([
+      ['is-json', 'booleanValue', '{"foo":"bar"}', true],
+      ['not-is-json', 'booleanValue', '{"foo":"bar"}', false],
+      ['contains-json', 'booleanValue', 'prefix {"foo":"bar"} suffix', true],
+      ['not-contains-json', 'booleanValue', 'prefix {"foo":"bar"} suffix', false],
+      ['is-json', 'falseValue', '{"foo":"bar"}', false],
+      ['not-is-json', 'falseValue', '{"foo":"bar"}', true],
+      ['contains-json', 'falseValue', 'prefix {"foo":"bar"} suffix', false],
+      ['not-contains-json', 'falseValue', 'prefix {"foo":"bar"} suffix', true],
+    ] as const)('uses the %s boolean schema returned by %s', async (type, exportName, output, pass) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: `file://rubric-generator.cjs:${exportName}`,
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(pass);
+    });
+  });
+
   describe('error handling', () => {
     it('should throw error when script returns function for non-script assertion', async () => {
       await expect(

@@ -34,8 +34,9 @@ module.exports.undefinedValue = () => undefined;
 // Returns a function (should cause error for non-script assertions)
 module.exports.functionValue = () => () => 'nested function';
 
-// Returns a boolean (should cause error for non-script assertions)
+// Returns booleans for script value resolution tests
 module.exports.booleanValue = () => true;
+module.exports.falseValue = () => false;
 
 // Returns a GradingResult (should cause error for non-script assertions)
 module.exports.gradingResultValue = () => ({
