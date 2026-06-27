@@ -311,6 +311,53 @@ describe('useVersionCheck', () => {
     expect(result.current.runtimeNoticeDismissed).toBe(false);
   });
 
+  it('adopts a newer cross-tab dismissal over a stale in-memory one on refresh', async () => {
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-01T00:00:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+    };
+    mockCallApiResponse({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: false,
+      runtimeNotice,
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+
+    // Dismiss in this tab at 07-01; the weekly snooze would otherwise expire at 07-08.
+    act(() => {
+      result.current.dismiss();
+    });
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    // Another tab dismisses more recently, leaving a strictly newer timestamp in localStorage.
+    localStorage.setItem(
+      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
+      '2026-07-03T00:00:00.000Z',
+    );
+
+    // The refresh scheduled at the in-memory dismissal's 07-08 expiry must adopt the newer stored
+    // dismissal, so the notice stays snoozed past 07-08 (a regression that kept `current` would
+    // re-show it here).
+    await act(async () => {
+      await timers.advanceByAsync(7 * 24 * 60 * 60 * 1000);
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+  });
+
   it('applies the daily cadence to persisted dismissals in the final notice phase', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-17T12:00:00.000Z'));
     localStorage.setItem(
