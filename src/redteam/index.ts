@@ -1,10 +1,7 @@
-import * as fs from 'fs';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -37,6 +34,7 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { resolvePluginConfig } from './pluginConfig';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -71,7 +69,7 @@ import type {
   SynthesizeOptions,
 } from './types';
 
-export { getStrategyCompatibilityError };
+export { getStrategyCompatibilityError, resolvePluginConfig };
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 
@@ -321,37 +319,6 @@ function generateReport(
     });
 
   return `\nTest Generation Report:\n${table.toString()}`;
-}
-
-/**
- * Resolves top-level file paths in the plugin configuration.
- * @param config - The plugin configuration to resolve.
- * @returns The resolved plugin configuration.
- */
-export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
-  if (!config) {
-    return {};
-  }
-
-  for (const key in config) {
-    const value = config[key];
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = value.slice('file://'.length);
-
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filePath}`);
-      }
-
-      if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
-      }
-    }
-  }
-  return config;
 }
 
 function resolvePluginConfigWithMaxChars(

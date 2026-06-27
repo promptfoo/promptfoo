@@ -18,37 +18,6 @@ import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:intent';
 
-export function resolvePluginForCompatibility(plugin: unknown): unknown {
-  if (!plugin || typeof plugin !== 'object' || Array.isArray(plugin)) {
-    return plugin;
-  }
-
-  const { config, id } = plugin as { config?: unknown; id?: unknown };
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    return plugin;
-  }
-
-  const resolvedConfig = { ...config } as Record<string, unknown>;
-  let changed = false;
-  const excludeStrategies = resolvedConfig.excludeStrategies;
-  if (typeof excludeStrategies === 'string' && excludeStrategies.startsWith('file://')) {
-    resolvedConfig.excludeStrategies = maybeLoadFromExternalFile(excludeStrategies);
-    changed = true;
-  }
-
-  const intent = resolvedConfig.intent;
-  if (
-    (id === 'intent' || id === PLUGIN_ID) &&
-    typeof intent === 'string' &&
-    intent.startsWith('file://')
-  ) {
-    resolvedConfig.intent = maybeLoadFromExternalFile(intent);
-    changed = true;
-  }
-
-  return changed ? { ...plugin, config: resolvedConfig } : plugin;
-}
-
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;

@@ -44,20 +44,46 @@ function getRuntimeStrategyKey(strategy: RedteamStrategyObject): string {
 }
 
 function stringifyCompatibilityConfig(value: unknown): string {
-  const seen = new WeakMap<object, number>();
-  let nextReference = 0;
-  return (
-    JSON.stringify(value, (_key, current) => {
-      if (current && typeof current === 'object') {
-        const reference = seen.get(current);
-        if (reference !== undefined) {
-          return `[Ref:${reference}]`;
-        }
-        seen.set(current, nextReference++);
-      }
-      return current;
-    }) ?? 'undefined'
-  );
+  const active = new WeakSet<object>();
+  const memoized = new WeakMap<object, string>();
+  const interned = new Map<string, string>();
+  const definitions: string[] = [];
+
+  const encode = (current: unknown, arrayValue = false): string | undefined => {
+    if (!current || typeof current !== 'object') {
+      const primitive = JSON.stringify(current);
+      return primitive === undefined ? (arrayValue ? 'null' : undefined) : `p:${primitive}`;
+    }
+    if (active.has(current)) {
+      throw new TypeError('Circular compatibility config');
+    }
+    const memoizedToken = memoized.get(current);
+    if (memoizedToken) {
+      return memoizedToken;
+    }
+
+    active.add(current);
+    const entries = Array.isArray(current)
+      ? current.map((item) => encode(item, true) ?? 'null')
+      : Object.keys(current).flatMap((key) => {
+          const encoded = encode((current as Record<string, unknown>)[key]);
+          return encoded === undefined ? [] : [`${JSON.stringify(key)}:${encoded}`];
+        });
+    active.delete(current);
+
+    const signature = `${Array.isArray(current) ? 'a' : 'o'}:${entries.join(',')}`;
+    let token = interned.get(signature);
+    if (!token) {
+      token = `#${definitions.length}`;
+      interned.set(signature, token);
+      definitions.push(signature);
+    }
+    memoized.set(current, token);
+    return token;
+  };
+
+  const root = encode(value) ?? 'undefined';
+  return JSON.stringify([root, definitions]);
 }
 
 export function getEffectiveStrategiesForCompatibility(
