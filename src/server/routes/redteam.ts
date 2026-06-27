@@ -377,6 +377,32 @@ let currentRunPromise: Promise<void> | null = null;
 let latestRunRequest = 0;
 let pendingRunRequest: number | null = null;
 let latestRunId: string | null = null;
+const RUN_CLEANUP_TIMEOUT_MS = 10_000;
+
+async function waitForRunCleanup(
+  runPromise: Promise<void>,
+  timeoutMs = RUN_CLEANUP_TIMEOUT_MS,
+): Promise<boolean> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<boolean>((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), timeoutMs);
+    timeoutId.unref?.();
+  });
+
+  try {
+    return await Promise.race([
+      runPromise.then(
+        () => true,
+        () => true,
+      ),
+      timeout,
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 function clearPendingRunRequest(runRequest: number): void {
   if (pendingRunRequest === runRequest) {
@@ -396,29 +422,40 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   const id = crypto.randomUUID();
   latestRunId = id;
   pendingRunRequest = runRequest;
-  let compatibilityError: string | undefined;
-  let preflightError: unknown;
-  try {
-    compatibilityError = await getLiveConfigCompatibilityError(config, {
-      loadDynamicProviders: currentRunPromise !== null,
-    });
-  } catch (error) {
-    preflightError = error;
-  }
-  if (runRequest !== latestRunRequest) {
+  const rejectSupersededRequest = (): boolean => {
+    if (runRequest === latestRunRequest) {
+      return false;
+    }
     clearPendingRunRequest(runRequest);
     res.status(409).json({ error: 'Run request superseded by a newer request' });
-    return;
-  }
-  if (preflightError) {
-    clearPendingRunRequest(runRequest);
-    logger.warn('[Redteam] Failed to resolve target configuration before starting run');
-    res.status(400).json({ error: 'Invalid target provider configuration' });
-    return;
-  }
-  if (compatibilityError) {
-    clearPendingRunRequest(runRequest);
-    res.status(400).json({ error: compatibilityError });
+    return true;
+  };
+  const passesCompatibilityPreflight = async (loadDynamicProviders: boolean): Promise<boolean> => {
+    try {
+      const compatibilityError = await getLiveConfigCompatibilityError(config, {
+        loadDynamicProviders,
+      });
+      if (rejectSupersededRequest()) {
+        return false;
+      }
+      if (!compatibilityError) {
+        return true;
+      }
+      clearPendingRunRequest(runRequest);
+      res.status(400).json({ error: compatibilityError });
+    } catch {
+      if (rejectSupersededRequest()) {
+        return false;
+      }
+      clearPendingRunRequest(runRequest);
+      logger.warn('[Redteam] Failed to resolve target configuration before starting run');
+      res.status(400).json({ error: 'Invalid target provider configuration' });
+    }
+    return false;
+  };
+
+  // Resolve only static metadata while the current provider may still own external resources.
+  if (!(await passesCompatibilityPreflight(false))) {
     return;
   }
 
@@ -437,10 +474,18 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     currentAbortController = null;
   }
   if (previousRunPromise !== null) {
-    await previousRunPromise;
-    if (runRequest !== latestRunRequest) {
+    const cleanupComplete = await waitForRunCleanup(previousRunPromise);
+    if (rejectSupersededRequest()) {
+      return;
+    }
+    if (!cleanupComplete) {
       clearPendingRunRequest(runRequest);
-      res.status(409).json({ error: 'Run request superseded by a newer request' });
+      res.status(409).json({ error: 'Previous run is still shutting down' });
+      return;
+    }
+
+    // Dynamic providers may now be instantiated safely because the predecessor has released them.
+    if (!(await passesCompatibilityPreflight(true))) {
       return;
     }
   }

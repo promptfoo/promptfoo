@@ -380,6 +380,30 @@ describe('doRedteamRun', () => {
       );
     });
 
+    it.each([
+      'filterProviders',
+      'filterTargets',
+    ] as const)('should prefer explicit %s over saved command-line options', async (filterOption) => {
+      await doRedteamRun({
+        liveRedteamConfig: {
+          ...mockConfig,
+          commandLineOptions: { [filterOption]: 'saved-provider' },
+        },
+        loadedFromCloud: true,
+        [filterOption]: 'explicit-provider',
+      });
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.objectContaining({ [filterOption]: 'explicit-provider' }),
+      );
+      expect(doEval).toHaveBeenCalledWith(
+        expect.objectContaining({ [filterOption]: 'explicit-provider' }),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
     it('should log debug information when processing liveRedteamConfig', async () => {
       // Get the mocked logger
       const mockLogger = (await import('../../src/logger')).default;
