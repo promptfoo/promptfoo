@@ -2103,6 +2103,38 @@ describe('resolveConfigs', () => {
     expect(resolved.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
   });
 
+  it.each([
+    { label: 'configured filter', commandOptions: {}, expectedLabel: 'selected' },
+    {
+      label: 'explicit override',
+      commandOptions: { filterTargets: 'excluded' },
+      expectedLabel: 'excluded',
+    },
+  ])('applies $label before provider construction', async ({ commandOptions, expectedLabel }) => {
+    const beforeProviderLoad = vi.fn(async ({ providers }) => {
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(providers).toEqual([{ id: 'echo', label: expectedLabel }]);
+    });
+
+    await resolveConfigs(
+      commandOptions,
+      withResolveConfigsHooks(
+        {
+          prompts: ['{{prompt}}'],
+          providers: [
+            { id: 'echo', label: 'selected' },
+            { id: 'echo', label: 'excluded' },
+          ],
+          commandLineOptions: { filterProviders: 'selected' },
+        },
+        { beforeProviderLoad },
+      ),
+    );
+
+    expect(beforeProviderLoad).toHaveBeenCalledOnce();
+    expect(loadApiProviders).toHaveBeenCalledOnce();
+  });
+
   it('does not construct providers when provider preflight rejects', async () => {
     const originalBasePath = cliState.basePath;
     const originalConfig = cliState.config;
