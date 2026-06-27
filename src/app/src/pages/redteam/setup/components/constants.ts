@@ -1,13 +1,16 @@
 import type { RedteamUITarget } from '../types';
 
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.5';
-export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.5, openai:gpt-5.5-pro, openai:gpt-5.4';
+export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.6-sol, openai:gpt-5.5, openai:gpt-5.4';
 
 export const predefinedTargets: RedteamUITarget[] = [
   { value: '', label: 'Select a target' },
   { value: 'http', label: 'HTTP/HTTPS Endpoint' },
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
+  { value: 'openai:gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol (limited preview)' },
+  { value: 'openai:gpt-5.6-terra', label: 'OpenAI GPT-5.6 Terra (limited preview)' },
+  { value: 'openai:gpt-5.6-luna', label: 'OpenAI GPT-5.6 Luna (limited preview)' },
   { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-5.5' },
   { value: 'openai:gpt-5.5-pro', label: 'OpenAI GPT-5.5 Pro' },
   { value: 'openai:gpt-5.4', label: 'OpenAI GPT-5.4' },
