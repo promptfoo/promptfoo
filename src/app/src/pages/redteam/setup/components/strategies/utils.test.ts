@@ -8,7 +8,7 @@ import {
   isPluginCompatibleWithStrategy,
   isStrategyConfigured,
 } from './utils';
-import type { RedteamStrategy } from '@promptfoo/redteam/types';
+import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
 
@@ -153,6 +153,25 @@ describe('hasPosteriorStrategy', () => {
         { pluginsUseTargetInputs: false },
       ),
     ).toBe(true);
+  });
+
+  it.each([
+    ['intent sequence', { id: 'intent', config: { intent: 'file://intents.json' } }],
+    [
+      'strategy exclusions',
+      { id: 'harmful:hate', config: { excludeStrategies: 'file://exclusions.yaml' } },
+    ],
+    ['input metadata', { id: 'policy', config: { inputs: 'file://inputs.yaml' } }],
+  ])('defers file-backed %s compatibility to backend validation', (_label, plugin) => {
+    expect(
+      hasPosteriorStrategy(
+        [{ id: 'posterior' }] as RedteamStrategy[],
+        [plugin] as RedteamPlugin[],
+        {
+          pluginsUseTargetInputs: true,
+        },
+      ),
+    ).toBe(false);
   });
 });
 

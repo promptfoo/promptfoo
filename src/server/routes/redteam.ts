@@ -507,7 +507,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   cliState.webUI = true;
 
   // Run redteam in background
-  const runPromise = doRedteamRun({
+  const executionPromise = doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
@@ -519,7 +519,19 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     },
     abortSignal: currentAbortController.signal,
-  })
+  });
+  const cleanupBarrier = executionPromise.then(
+    () => undefined,
+    () => undefined,
+  );
+  currentRunPromise = cleanupBarrier;
+  void cleanupBarrier.finally(() => {
+    if (currentRunPromise === cleanupBarrier) {
+      currentRunPromise = null;
+    }
+  });
+
+  void executionPromise
     .then(async (evalResult) => {
       const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
       if (currentJobId === id) {
@@ -545,13 +557,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         currentJobId = null;
         currentAbortController = null;
       }
-    })
-    .finally(() => {
-      if (currentRunPromise === runPromise) {
-        currentRunPromise = null;
-      }
     });
-  currentRunPromise = runPromise;
 
   res.json(RedteamSchemas.Run.Response.parse({ id }));
 });

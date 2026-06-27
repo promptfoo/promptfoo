@@ -277,6 +277,12 @@ describe('Review Component', () => {
       _hasHydrated: true,
     });
 
+    vi.mocked(useEmailVerification).mockReturnValue({
+      checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      saveEmail: vi.fn().mockResolvedValue({}),
+      clearEmail: vi.fn().mockResolvedValue({}),
+    } as any);
+
     // Reset callApi mock to default behavior
     vi.mocked(callApi).mockImplementation(async (url: string) => {
       if (url === '/redteam/status') {
@@ -2068,6 +2074,71 @@ Application Details:
       expect(mockClearJob).not.toHaveBeenCalled();
       expect(mockSetJob).toHaveBeenCalledWith('existing-job');
       expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    });
+
+    it('preserves replacement mode through email verification', async () => {
+      const user = userEvent.setup({ delay: null });
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls === 1
+                ? { hasRunningJob: false }
+                : { hasRunningJob: true, jobId: 'existing-job' },
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'replacement-job' }),
+          } as Response;
+        }
+        if (url === '/eval/job/replacement-job') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: [] }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      const checkEmailStatus = vi
+        .fn()
+        .mockResolvedValueOnce({ canProceed: true })
+        .mockResolvedValueOnce({
+          canProceed: false,
+          needsEmail: true,
+          status: { message: 'Enter your work email' },
+        })
+        .mockResolvedValueOnce({ canProceed: true })
+        .mockResolvedValueOnce({ canProceed: true });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus,
+        saveEmail: vi.fn().mockResolvedValue({}),
+        clearEmail: vi.fn().mockResolvedValue({}),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await user.click(await screen.findByRole('button', { name: /cancel existing & run new/i }));
+      await user.type(await screen.findByLabelText(/work email address/i), 'user@example.com');
+      await user.click(screen.getByRole('button', { name: /verify email/i }));
+
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.any(Object));
+      });
+      expect(statusCalls).toBe(2);
+      expect(checkEmailStatus).toHaveBeenCalledTimes(4);
+      expect(mockSetJob).toHaveBeenCalledWith('replacement-job');
     });
 
     it('should keep a run cancelled when its preflight request is superseded', async () => {

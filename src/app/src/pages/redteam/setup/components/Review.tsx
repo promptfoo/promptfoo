@@ -162,6 +162,7 @@ export default function Review({
   const pollIntervalRef = useRef<number | null>(null);
   const pollGenerationRef = useRef(0);
   const runRequestRef = useRef(0);
+  const pendingEmailReplacementRef = useRef(false);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -682,6 +683,7 @@ export default function Review({
 
     if (!emailResult.canProceed) {
       if (emailResult.needsEmail) {
+        pendingEmailReplacementRef.current = replaceRunningJob;
         setEmailVerificationMessage(
           emailResult.status?.message ||
             'Redteam evals require email verification. Please enter your work email:',
@@ -1487,10 +1489,15 @@ export default function Review({
 
         <EmailVerificationDialog
           open={isEmailDialogOpen}
-          onClose={() => setIsEmailDialogOpen(false)}
-          onSuccess={() => {
+          onClose={() => {
+            pendingEmailReplacementRef.current = false;
             setIsEmailDialogOpen(false);
-            handleRunWithSettings();
+          }}
+          onSuccess={() => {
+            const replaceRunningJob = pendingEmailReplacementRef.current;
+            pendingEmailReplacementRef.current = false;
+            setIsEmailDialogOpen(false);
+            handleRunWithSettings(replaceRunningJob);
           }}
           message={emailVerificationMessage}
         />

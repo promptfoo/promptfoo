@@ -722,6 +722,35 @@ describe('Redteam Routes', () => {
       }
     });
 
+    it('allows replacement after cleanup while the previous summary is pending', async () => {
+      let resolveSummary: ((value: { results: never[] }) => void) | undefined;
+      const toEvaluateSummary = vi.fn(
+        () =>
+          new Promise<{ results: never[] }>((resolve) => {
+            resolveSummary = resolve;
+          }),
+      );
+      mockedDoRedteamRun
+        .mockResolvedValueOnce({ id: 'first-eval', toEvaluateSummary } as any)
+        .mockResolvedValueOnce(undefined as any);
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+      await vi.waitFor(() => expect(toEvaluateSummary).toHaveBeenCalledOnce());
+
+      const replacementResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'replacement' } });
+
+      expect(replacementResponse.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledTimes(2);
+
+      resolveSummary!({ results: [] });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+
     it('respects an empty top-level plugin override during compatibility preflight', async () => {
       const response = await request(app)
         .post('/api/redteam/run')
