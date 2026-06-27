@@ -10,6 +10,7 @@ import {
   getStrategyCompatibilityError,
   isStrategyApplicable,
   loadStrategy,
+  requiresTargetInputResolutionForCompatibility,
   validateStrategies,
 } from '../../../src/redteam/strategies/index';
 import { RedteamConfigSchema } from '../../../src/validators/redteam';
@@ -463,6 +464,46 @@ describe('getStrategyCompatibilityError', () => {
         ],
       }),
     ).toBeUndefined();
+  });
+
+  it('does not resolve compatibility files for plugins skipped by target inputs', () => {
+    expect(
+      getStrategyCompatibilityError([{ id: 'posterior', config: { plugins: ['cca'] } }], inputs, {
+        plugins: [
+          {
+            id: 'cca',
+            config: { inputs: 'file:///missing/posterior-inputs.json' },
+          },
+          { id: 'policy', config: { excludeStrategies: ['posterior'] } },
+        ],
+        pluginsUseTargetInputs: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('defers probe-time file errors until target applicability is known', () => {
+    expect(
+      requiresTargetInputResolutionForCompatibility(
+        [{ id: 'posterior', config: { plugins: ['cca'] } }],
+        [
+          {
+            id: 'cca',
+            config: { excludeStrategies: 'file:///missing/posterior-exclusions.yaml' },
+          },
+        ],
+      ),
+    ).toBe(true);
+
+    expect(() =>
+      getStrategyCompatibilityError(['posterior'], undefined, {
+        plugins: [
+          {
+            id: 'policy',
+            config: { inputs: 'file:///missing/posterior-inputs.json' },
+          },
+        ],
+      }),
+    ).toThrow('File not found');
   });
 
   it('matches runtime raw-text semantics for yml strategy exclusions', () => {

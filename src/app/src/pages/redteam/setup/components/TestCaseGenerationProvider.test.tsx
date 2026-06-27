@@ -324,6 +324,37 @@ describe('TestCaseGenerationProvider', () => {
       expect(requestBody.plugin.config.language).toBe('Spanish');
     });
 
+    it('uses the compatible config when duplicate plugin IDs are available', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              plugins: [
+                'harmful:hate',
+                { id: 'intent', config: { intent: [['first turn', 'second turn']] } },
+                { id: 'intent', config: { intent: ['single goal'] } },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="posterior" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      await user.click(screen.getByTestId('plugin-dropdown'));
+      await user.click(screen.getByRole('option', { name: 'Intent' }));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+      const requestBody = JSON.parse(callApiMock.mock.calls[1][1]?.body as string);
+      expect(requestBody.plugin.config.intent).toEqual(['single goal']);
+    });
+
     it('should use the first configured review language for generated example tests', async () => {
       const user = userEvent.setup();
       render(

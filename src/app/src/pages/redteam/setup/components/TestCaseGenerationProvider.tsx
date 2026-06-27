@@ -591,10 +591,14 @@ export const TestCaseGenerationProvider: React.FC<{
         setTestCaseBatch([]);
         setBatchIndex(0);
 
-        // Look up the plugin config from redTeamConfig.plugins
-        const pluginFromConfig = redTeamConfig.plugins?.find((p) =>
-          typeof p === 'string' ? p === newPluginId : p.id === newPluginId,
-        );
+        // Look up the same compatible plugin entry that made this ID available.
+        const pluginFromConfig = redTeamConfig.plugins?.find((candidate) => {
+          const candidateId = typeof candidate === 'string' ? candidate : candidate.id;
+          return (
+            candidateId === newPluginId &&
+            isPluginCompatibleWithStrategy(candidate, strategy!.id, strategy!.config)
+          );
+        });
         const pluginConfig =
           typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
 

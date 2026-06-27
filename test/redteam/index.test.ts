@@ -4319,17 +4319,17 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'foundation', numTests: 1 }],
         prompts: ['Test {{query}}'],
-        strategies: [{ id: 'posterior', config: { plugins: ['ascii-smuggling'] } }],
+        strategies: [{ id: 'posterior', config: { plugins: ['beavertails'] } }],
         targetIds: ['test-provider'],
         inputs: { query: 'user query', context: 'additional context' },
       });
 
       expect(result.testCases).not.toContainEqual(
         expect.objectContaining({
-          metadata: expect.objectContaining({ pluginId: 'ascii-smuggling' }),
+          metadata: expect.objectContaining({ pluginId: 'beavertails' }),
         }),
       );
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('ascii-smuggling'));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('beavertails'));
     });
 
     it('should NOT exclude plugins when inputs is empty object', async () => {
