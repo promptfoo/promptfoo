@@ -66,7 +66,11 @@ interface StrategyConfigDialogProps {
   selectedPlugins?: string[];
   allStrategies?: Array<string | { id: string; config?: Partial<StrategyConfig> }>;
   unavailableStrategies?: readonly string[];
-  isLayerStepUnavailable?: (strategyId: string, targetPlugins?: readonly string[]) => boolean;
+  isLayerStepUnavailable?: (
+    strategyId: string,
+    targetPlugins?: readonly string[],
+    existingSteps?: readonly StepType[],
+  ) => boolean;
 }
 
 export default function StrategyConfigDialog({
@@ -149,7 +153,7 @@ export default function StrategyConfigDialog({
     const targetAvailableStrategies = LAYER_TRANSFORMABLE_STRATEGIES.filter(
       (strategy) =>
         !unavailableStrategies.includes(strategy) &&
-        !isLayerStepUnavailable?.(strategy, targetPlugins),
+        !isLayerStepUnavailable?.(strategy, targetPlugins, steps),
     );
 
     return targetAvailableStrategies.filter((strategy) => {

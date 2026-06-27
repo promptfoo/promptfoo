@@ -130,17 +130,22 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       pluginsUseTargetInputs: targetHasInputs,
     });
   const isLayerStepUnavailable = useCallback(
-    (strategyId: string, targetPlugins?: readonly string[]) => {
+    (
+      strategyId: string,
+      targetPlugins?: readonly string[],
+      existingSteps: readonly unknown[] = [],
+    ) => {
       if (strategyId !== 'posterior' || !isPosteriorUnavailable) {
         return false;
       }
-      const posterior = {
-        id: 'posterior',
-        ...(targetPlugins && targetPlugins.length > 0
-          ? { config: { plugins: [...targetPlugins] } }
-          : {}),
+      const candidateLayer = {
+        id: 'layer',
+        config: {
+          ...(targetPlugins && targetPlugins.length > 0 ? { plugins: [...targetPlugins] } : {}),
+          steps: [...existingSteps, { id: 'posterior' }],
+        },
       } as RedteamStrategyObject;
-      return hasPosteriorStrategy([posterior], compatibilityPlugins, {
+      return hasPosteriorStrategy([candidateLayer], compatibilityPlugins, {
         pluginsUseTargetInputs: targetHasInputs,
       });
     },
