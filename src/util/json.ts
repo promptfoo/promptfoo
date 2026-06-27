@@ -190,8 +190,19 @@ export function convertSlashCommentsToHash(str: string): string {
 
           case 'doubleQuote':
             result += char;
-            if (char === '"' && prevChar !== '\\') {
-              state = 'normal';
+            if (char === '"') {
+              // Count consecutive backslashes immediately before this quote.
+              // An even count (0, 2, 4, …) means the quote is not escaped and
+              // closes the string; an odd count means the quote is escaped.
+              let numBackslashes = 0;
+              let k = i - 1;
+              while (k >= 0 && line[k] === '\\') {
+                numBackslashes++;
+                k--;
+              }
+              if (numBackslashes % 2 === 0) {
+                state = 'normal';
+              }
             }
             break;
         }
