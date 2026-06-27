@@ -793,6 +793,55 @@ describe('readTest', () => {
     const result = await readTest(input);
 
     expect(result).toEqual(input);
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+  });
+
+  it('loads only external schema values in inline test cases', async () => {
+    const input: TestCase = {
+      metadata: { payload: 'file://metadata.json' },
+      assert: [
+        { type: 'equals', value: 'file://expected.txt' },
+        { type: 'is-json', value: 'file://schema.yaml' },
+      ],
+    };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({
+      assert: [{ type: 'is-json', value: { type: 'object' } }],
+    });
+
+    const result = await readTest(input, '/config');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      { assert: [input.assert![1]] },
+      'test-config',
+      '/config',
+    );
+    expect(result).toMatchObject({
+      metadata: { payload: 'file://metadata.json' },
+      assert: [
+        { type: 'equals', value: 'file://expected.txt' },
+        { type: 'is-json', value: { type: 'object' } },
+      ],
+    });
+  });
+
+  it('copies serializable schema errors back to the public inline config', async () => {
+    const input: TestCase = {
+      assert: [{ type: 'is-json', value: 'file://{{ env.SCHEMA_PATH }}/schema.json' }],
+    };
+    const loadedAssertion = {
+      ...input.assert![0],
+      __promptfooJsonSchemaFileError: {
+        error: 'schema file not found',
+        fingerprint: 'sha256:test',
+      },
+    };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({
+      assert: [loadedAssertion],
+    });
+
+    await readTest(input, '/config');
+
+    expect(input.assert?.[0]).toBe(loadedAssertion);
   });
 
   it('readTest with invalid input', async () => {
@@ -1731,6 +1780,7 @@ describe('loadTestsFromGlob', () => {
     expect(actualFileUtils.getJsonSchemaFileSnapshot(result[0].assert?.[0])).toEqual({
       source: 'file://malformed-schema.yaml',
       error: 'invalid YAML schema file',
+      fingerprint: expect.any(String),
     });
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
@@ -1741,6 +1791,8 @@ describe('loadTestsFromGlob', () => {
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
       actualFileUtils.maybeLoadConfigFromExternalFile,
     );
+    const expectedSchemaPath = path.resolve('/config', 'schema.yaml');
+    const nestedSchemaPath = path.resolve('/config/nested', 'schema.yaml');
     vi.mocked(globSync).mockReturnValue(['/config/nested/tests.yaml']);
     vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath.toString().endsWith('tests.yaml')) {
@@ -1750,7 +1802,7 @@ describe('loadTestsFromGlob', () => {
           },
         ]);
       }
-      if (filePath.toString() === '/config/schema.yaml') {
+      if (filePath.toString() === expectedSchemaPath) {
         return 'type: object';
       }
       throw new Error(`Unexpected file path: ${filePath}`);
@@ -1759,8 +1811,8 @@ describe('loadTestsFromGlob', () => {
     const result = await loadTestsFromGlob('nested/tests.yaml', '/config');
 
     expect(result[0].assert?.[0]).toMatchObject({ value: { type: 'object' } });
-    expect(fs.readFileSync).toHaveBeenCalledWith('/config/schema.yaml', 'utf8');
-    expect(fs.readFileSync).not.toHaveBeenCalledWith('/config/nested/schema.yaml', 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedSchemaPath, 'utf8');
+    expect(fs.readFileSync).not.toHaveBeenCalledWith(nestedSchemaPath, 'utf8');
   });
 
   it('should handle Hugging Face dataset URLs', async () => {

@@ -10,16 +10,18 @@ const staticFileValidatorCache = new WeakMap<
   object,
   WeakMap<Assertion, { source: string; validate: ValidateFunction }>
 >();
+const schemaIdValidatorCache = new WeakMap<
+  object,
+  Map<string, { serializedSchema: string; validate: ValidateFunction }>
+>();
 
 class JsonSchemaConfigurationError extends Error {}
 
 function hasJsonSchema({
   renderedValue,
   valueFromScriptResolved,
-  assertion,
-}: Pick<AssertionParams, 'renderedValue' | 'valueFromScriptResolved' | 'assertion'>): boolean {
+}: Pick<AssertionParams, 'renderedValue' | 'valueFromScriptResolved'>): boolean {
   return (
-    getJsonSchemaFileSnapshot(assertion) !== undefined ||
     valueFromScriptResolved === true ||
     (renderedValue !== undefined && renderedValue !== null && renderedValue !== '')
   );
@@ -68,6 +70,46 @@ function cacheStaticValidator(
     staticFileValidatorCache.set(ajv, assertionCache);
   }
   assertionCache.set(assertion, { source, validate });
+}
+
+function getSchemaIdCacheKey(
+  schema: object | boolean,
+): { id: string; serializedSchema: string } | undefined {
+  if (
+    typeof schema !== 'object' ||
+    schema === null ||
+    !('$id' in schema) ||
+    typeof schema.$id !== 'string'
+  ) {
+    return undefined;
+  }
+  try {
+    const serializedSchema = JSON.stringify(schema);
+    return serializedSchema === undefined ? undefined : { id: schema.$id, serializedSchema };
+  } catch {
+    return undefined;
+  }
+}
+
+function getCachedSchemaIdValidator(
+  ajv: object,
+  schemaKey: { id: string; serializedSchema: string },
+): ValidateFunction | undefined {
+  const cached = schemaIdValidatorCache.get(ajv)?.get(schemaKey.id);
+  return cached?.serializedSchema === schemaKey.serializedSchema ? cached.validate : undefined;
+}
+
+function cacheSchemaIdValidator(
+  ajv: object,
+  schemaKey: { id: string; serializedSchema: string },
+  validate: ValidateFunction,
+): void {
+  let cache = schemaIdValidatorCache.get(ajv);
+  if (!cache) {
+    cache = new Map();
+    schemaIdValidatorCache.set(ajv, cache);
+  }
+  cache.set(schemaKey.id, { serializedSchema: schemaKey.serializedSchema, validate });
 }
 
 function getJsonSchemaValidator({
@@ -139,11 +181,24 @@ function getJsonSchemaValidator({
 
     if (schema === null || (typeof schema !== 'boolean' && typeof schema !== 'object')) {
       throw new JsonSchemaConfigurationError(
-        `${assertion.type} assertion must have a string, boolean, or object value`,
+        `${assertion.type} schema must resolve to an object or boolean`,
       );
     }
 
-    const validate = ajv.compile(schema as object | boolean);
+    const compilableSchema = schema as object | boolean;
+    const schemaKey = getSchemaIdCacheKey(compilableSchema);
+    const cachedBySchemaId = schemaKey ? getCachedSchemaIdValidator(ajv, schemaKey) : undefined;
+    if (cachedBySchemaId) {
+      if (staticSource) {
+        cacheStaticValidator(ajv, assertion, staticSource, cachedBySchemaId);
+      }
+      return { validate: cachedBySchemaId };
+    }
+
+    const validate = ajv.compile(compilableSchema);
+    if (schemaKey) {
+      cacheSchemaIdValidator(ajv, schemaKey, validate);
+    }
     if (staticSource) {
       cacheStaticValidator(ajv, assertion, staticSource, validate);
     }
@@ -176,10 +231,7 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (
-    parsedJson !== undefined &&
-    hasJsonSchema({ renderedValue, valueFromScriptResolved, assertion })
-  ) {
+  if (parsedJson !== undefined && hasJsonSchema({ renderedValue, valueFromScriptResolved })) {
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
@@ -225,10 +277,7 @@ export function handleContainsJson({
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   let validate: ValidateFunction | undefined;
 
-  if (
-    jsonObjects.length > 0 &&
-    hasJsonSchema({ renderedValue, valueFromScriptResolved, assertion })
-  ) {
+  if (jsonObjects.length > 0 && hasJsonSchema({ renderedValue, valueFromScriptResolved })) {
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,

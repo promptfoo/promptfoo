@@ -2625,6 +2625,40 @@ describe('readConfig with environment variable substitution', () => {
     );
   });
 
+  it.each([
+    'is-json',
+    'not-is-json',
+    'contains-json',
+    'not-contains-json',
+  ])('should preserve public schema file templates for %s assertions', async (type) => {
+    mockProcessEnv({ TEST_ASSERTION_PATH: '/private/schema-path' });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          assert: [
+            {
+              type,
+              value: 'file://{{ env.TEST_ASSERTION_PATH }}/schema.json',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.tests as any)[0].assert[0].value).toBe(
+      'file://{{ env.TEST_ASSERTION_PATH }}/schema.json',
+    );
+    expect(
+      (result.tests as any)[0].assert[0][Symbol.for('promptfoo.jsonSchemaRenderedFileRef')],
+    ).toBe('file:///private/schema-path/schema.json');
+  });
+
   it('should preserve runtime templates like {{ vars.x }}', async () => {
     mockProcessEnv({ TEST_PROMPT_PATH: '/custom/prompts' });
     const mockConfig = {

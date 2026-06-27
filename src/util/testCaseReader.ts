@@ -23,6 +23,8 @@ import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
 
 import type {
+  Assertion,
+  AssertionOrSet,
   CsvRow,
   ProviderOptions,
   TestCase,
@@ -397,6 +399,56 @@ async function loadTestWithVars(
   return ret;
 }
 
+function loadJsonSchemaFileAssertion(assertion: Assertion, basePath: string): Assertion {
+  const baseType = assertion.type.replace(/^not-/, '');
+  if (
+    (baseType !== 'is-json' && baseType !== 'contains-json') ||
+    typeof assertion.value !== 'string' ||
+    !assertion.value.startsWith('file://')
+  ) {
+    return assertion;
+  }
+
+  return maybeLoadConfigFromExternalFile({ assert: [assertion] }, 'test-config', basePath)
+    .assert[0] as Assertion;
+}
+
+function loadJsonSchemaFileAssertions(
+  assertions: AssertionOrSet[] | undefined,
+  basePath: string,
+): AssertionOrSet[] | undefined {
+  if (!assertions) {
+    return assertions;
+  }
+
+  let changed = false;
+  const loaded = assertions.map((assertion) => {
+    if (assertion.type === 'assert-set') {
+      const children = assertion.assert.map((child) =>
+        loadJsonSchemaFileAssertion(child, basePath),
+      );
+      if (children.some((child, index) => child !== assertion.assert[index])) {
+        changed = true;
+        return { ...assertion, assert: children };
+      }
+      return assertion;
+    }
+
+    const loadedAssertion = loadJsonSchemaFileAssertion(assertion, basePath);
+    changed ||= loadedAssertion !== assertion;
+    return loadedAssertion;
+  });
+
+  return changed ? loaded : assertions;
+}
+
+function hasPersistedJsonSchemaError(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some((child) => hasPersistedJsonSchemaError(child));
+  }
+  return '__promptfooJsonSchemaFileError' in assertion;
+}
+
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
@@ -416,7 +468,18 @@ export async function readTest(
     ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, basePath);
+    const loadedAssertions = loadJsonSchemaFileAssertions(test.assert, basePath);
+    const loadedTestCase =
+      loadedAssertions === test.assert ? test : { ...test, assert: loadedAssertions };
+    if (Array.isArray(test.assert) && Array.isArray(loadedTestCase.assert)) {
+      for (let index = 0; index < loadedTestCase.assert.length; index++) {
+        const loadedAssertion = loadedTestCase.assert[index];
+        if (hasPersistedJsonSchemaError(loadedAssertion)) {
+          test.assert[index] = loadedTestCase.assert[index];
+        }
+      }
+    }
+    testCase = await loadTestWithVars(loadedTestCase, basePath);
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {

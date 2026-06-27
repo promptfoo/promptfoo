@@ -11,10 +11,11 @@ import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { sha256 } from './createHash';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
-import { renderVarsInObject } from './render';
+import { renderEnvOnlyInObject, renderVarsInObject } from './render';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -31,6 +32,13 @@ type ExternalFileContext =
   | 'vars';
 
 const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot');
+const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
+const JSON_SCHEMA_FILE_ERROR = '__promptfooJsonSchemaFileError';
+
+type PersistedJsonSchemaFileError = {
+  error: string;
+  fingerprint: string;
+};
 
 export type JsonSchemaFileSnapshot =
   | {
@@ -41,15 +49,29 @@ export type JsonSchemaFileSnapshot =
   | {
       source: string;
       error: string;
+      fingerprint: string;
     };
 
 export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSnapshot | undefined {
   if (typeof assertion !== 'object' || assertion === null) {
     return undefined;
   }
-  return (assertion as Record<PropertyKey, unknown>)[JSON_SCHEMA_FILE_SNAPSHOT] as
-    | JsonSchemaFileSnapshot
-    | undefined;
+  const record = assertion as Record<PropertyKey, unknown>;
+  const snapshot = record[JSON_SCHEMA_FILE_SNAPSHOT] as JsonSchemaFileSnapshot | undefined;
+  if (snapshot) {
+    return snapshot;
+  }
+  const persisted = record[JSON_SCHEMA_FILE_ERROR];
+  if (
+    typeof persisted === 'object' &&
+    persisted !== null &&
+    typeof (persisted as PersistedJsonSchemaFileError).error === 'string' &&
+    typeof (persisted as PersistedJsonSchemaFileError).fingerprint === 'string'
+  ) {
+    const { error, fingerprint } = persisted as PersistedJsonSchemaFileError;
+    return { source: `persisted:${fingerprint}`, error, fingerprint };
+  }
+  return undefined;
 }
 
 /**
@@ -120,13 +142,13 @@ export function maybeLoadFromExternalFile(
     return filePath;
   }
 
-  // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
-
   if (context === 'json-schema-assertion') {
     logger.debug('Preserving JSON schema file reference');
-    return renderedFilePath;
+    return filePath;
   }
+
+  // Render the file path using Nunjucks
+  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -266,11 +288,11 @@ export function maybeLoadFromExternalFile(
 }
 
 function captureJsonSchemaFile(
-  fileRef: string,
+  renderedFileRef: string,
+  publicFileRef: string,
   basePath: string | undefined,
   cache: Map<string, JsonSchemaFileSnapshot>,
 ): JsonSchemaFileSnapshot | undefined {
-  const renderedFileRef = getNunjucksEngineForFilePath().renderString(fileRef, {});
   const { filePath: cleanPath } = parseFileUrl(renderedFileRef);
   const isRubyScript = cleanPath.endsWith('.rb') || /\.rb:[^/\\]+$/.test(cleanPath);
   if (isJavascriptFile(cleanPath) || cleanPath.endsWith('.py') || isRubyScript) {
@@ -284,8 +306,10 @@ function captureJsonSchemaFile(
     return cached;
   }
 
+  let fingerprint = `sha256:${sha256(publicFileRef)}`;
   try {
     const contents = fs.readFileSync(resolvedPath, 'utf8');
+    fingerprint = `sha256:${sha256(contents)}`;
     const isParsedSchema = ['.json', '.yaml', '.yml'].includes(extension);
     const schema =
       extension === '.json'
@@ -301,6 +325,7 @@ function captureJsonSchemaFile(
       const snapshot = {
         source: renderedFileRef,
         error: 'schema file must contain an object or boolean schema',
+        fingerprint,
       } as const;
       cache.set(resolvedPath, snapshot);
       return snapshot;
@@ -322,7 +347,7 @@ function captureJsonSchemaFile(
           : error instanceof yaml.YAMLException
             ? 'invalid YAML schema file'
             : 'schema file could not be read';
-    const snapshot = { source: renderedFileRef, error: safeError };
+    const snapshot = { source: renderedFileRef, error: safeError, fingerprint };
     cache.set(resolvedPath, snapshot);
     return snapshot;
   }
@@ -371,6 +396,10 @@ function loadConfigFromExternalFile(
     return config.map((item) => loadConfigFromExternalFile(item, context, basePath, schemaCache));
   }
   if (typeof config === 'object' && config !== null) {
+    if (context === 'assertions' && getJsonSchemaFileSnapshot(config)) {
+      return config;
+    }
+    const privatelyRenderedJsonSchemaFileRef = config[JSON_SCHEMA_RENDERED_FILE_REF];
     const result: Record<string, any> = {};
     const assertionType =
       typeof config.type === 'string' ? config.type.replace(/^not-/, '') : undefined;
@@ -382,19 +411,22 @@ function loadConfigFromExternalFile(
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
-      const isJsonSchemaAssertionValue =
+      const isJsonSchemaAssertionFileValue =
         context === 'assertions' &&
         key === 'value' &&
-        (assertionType === 'is-json' || assertionType === 'contains-json');
+        (assertionType === 'is-json' || assertionType === 'contains-json') &&
+        typeof config[key] === 'string' &&
+        config[key].startsWith('file://');
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
       const isAssertionsField =
         key === 'assert' && (context === 'test-config' || context === 'assertions');
-      const inheritedContext = context === 'assertions' ? undefined : context;
+      const inheritedContext =
+        context === 'assertions' || context === 'test-config' ? undefined : context;
 
-      const childContext = isJsonSchemaAssertionValue
+      const childContext = isJsonSchemaAssertionFileValue
         ? 'json-schema-assertion'
         : isAssertionValue
           ? 'assertion'
@@ -423,24 +455,35 @@ function loadConfigFromExternalFile(
       typeof result.value === 'string' &&
       result.value.startsWith('file://')
     ) {
-      const snapshot = captureJsonSchemaFile(result.value, basePath, schemaCache);
+      const rawFileRef = result.value;
+      const renderedFileRef =
+        typeof privatelyRenderedJsonSchemaFileRef === 'string'
+          ? privatelyRenderedJsonSchemaFileRef
+          : renderEnvOnlyInObject(rawFileRef);
+      const snapshot = captureJsonSchemaFile(renderedFileRef, rawFileRef, basePath, schemaCache);
       if (snapshot) {
         if ('error' in snapshot) {
-          Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
-            value: snapshot,
+          Object.defineProperty(result, JSON_SCHEMA_FILE_ERROR, {
+            value: {
+              error: snapshot.error,
+              fingerprint: snapshot.fingerprint,
+            } satisfies PersistedJsonSchemaFileError,
             enumerable: true,
             configurable: false,
             writable: false,
           });
         } else {
+          delete result[JSON_SCHEMA_FILE_ERROR];
           result.value = snapshot.schema;
-          Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
-            value: snapshot,
-            enumerable: true,
-            configurable: false,
-            writable: false,
-          });
         }
+        Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
+          value: snapshot,
+          enumerable: true,
+          configurable: false,
+          writable: false,
+        });
+      } else {
+        result.value = renderedFileRef;
       }
     }
     return result;

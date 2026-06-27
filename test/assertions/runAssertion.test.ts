@@ -1877,6 +1877,121 @@ describe('runAssertion', () => {
     expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
+  it('should reuse a root schema identifier after file-backed assertions are serialized', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.yaml');
+    vi.mocked(path.extname).mockReturnValue('.yaml');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      '$id: https://example.com/promptfoo/pr-8237-serialized-repeat\ntype: object',
+    );
+    const loaded = maybeLoadConfigFromExternalFile(
+      {
+        assert: [
+          { type: 'is-json', value: 'file:///schema.yaml' },
+          { type: 'contains-json', value: 'file:///schema.yaml' },
+        ],
+      },
+      'test-config',
+    );
+    const assertions = JSON.parse(JSON.stringify(loaded)).assert as Assertion[];
+    const compileSpy = vi.spyOn(getAjv(), 'compile');
+
+    const first = await runAssertion({
+      assertion: assertions[0],
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    const second = await runAssertion({
+      assertion: assertions[1],
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'prefix {} suffix' },
+    });
+
+    expect(first).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+    expect(second).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+    expect(compileSpy).toHaveBeenCalledTimes(1);
+    compileSpy.mockRestore();
+  });
+
+  it('should preserve strict schema file errors after serialization', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue('type: object');
+    const loadedAssertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.json' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+    const assertion = JSON.parse(JSON.stringify(loadedAssertion)) as Assertion;
+    vi.mocked(fs.readFileSync).mockReset();
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Invalid JSON schema: invalid JSON schema file',
+    });
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['is-json', true, '{}'],
+    ['not-is-json', false, '{}'],
+    ['contains-json', true, 'prefix {} suffix'],
+    ['not-contains-json', false, 'prefix {} suffix'],
+  ] as const)('should preserve blank-rendered text schema behavior for %s after serialization', async (type, expectedPass, output) => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue('{{ schema }}');
+    const assertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type, value: 'file:///schema.txt' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+    const serializedAssertion = JSON.parse(JSON.stringify(assertion)) as Assertion;
+
+    const live = await runAssertion({
+      assertion,
+      test: { vars: { schema: '' } } as AtomicTestCase,
+      providerResponse: { output },
+    });
+    const persisted = await runAssertion({
+      assertion: serializedAssertion,
+      test: { vars: { schema: '' } } as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(live.pass).toBe(expectedPass);
+    expect(persisted.pass).toBe(expectedPass);
+    expect(persisted.reason).toBe(live.reason);
+  });
+
+  it.each([
+    'is-json',
+    'not-is-json',
+    'contains-json',
+    'not-contains-json',
+  ] as const)('should explain that a scalar %s schema must resolve to an object or boolean', async (type) => {
+    const output = type.includes('contains') ? 'prefix {} suffix' : '{}';
+    const result = await runAssertion({
+      assertion: { type, value: 'not-a-schema' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: `Invalid JSON schema: ${type} schema must resolve to an object or boolean`,
+    });
+  });
+
   it('should preserve text schemas with nonstandard file extensions', async () => {
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.schema');
     vi.mocked(path.extname).mockReturnValue('.schema');
