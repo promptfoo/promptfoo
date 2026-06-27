@@ -547,7 +547,11 @@ function renderValidationEnvTemplates<T>(value: T, env: EnvOverrides | undefined
       }
 
       let renderedChild: unknown = child;
-      if (typeof child === 'string') {
+      if (key === '_conversation') {
+        // Conversation history may contain untrusted model output. Keep it literal just like the
+        // runtime provider loader instead of treating its contents as configuration templates.
+        renderedChild = child;
+      } else if (typeof child === 'string') {
         renderedChild = renderValidationEnvTemplates(child, env);
       } else if (child && typeof child === 'object') {
         const existing = seen.get(child);
