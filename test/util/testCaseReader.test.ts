@@ -1735,6 +1735,34 @@ describe('loadTestsFromGlob', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
+  it('should resolve external test schemas from the config base path', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(globSync).mockReturnValue(['/config/nested/tests.yaml']);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith('tests.yaml')) {
+        return yaml.dump([
+          {
+            assert: [{ type: 'is-json', value: 'file://schema.yaml' }],
+          },
+        ]);
+      }
+      if (filePath.toString() === '/config/schema.yaml') {
+        return 'type: object';
+      }
+      throw new Error(`Unexpected file path: ${filePath}`);
+    });
+
+    const result = await loadTestsFromGlob('nested/tests.yaml', '/config');
+
+    expect(result[0].assert?.[0]).toMatchObject({ value: { type: 'object' } });
+    expect(fs.readFileSync).toHaveBeenCalledWith('/config/schema.yaml', 'utf8');
+    expect(fs.readFileSync).not.toHaveBeenCalledWith('/config/nested/schema.yaml', 'utf8');
+  });
+
   it('should handle Hugging Face dataset URLs', async () => {
     const mockDataset: TestCase[] = [
       {

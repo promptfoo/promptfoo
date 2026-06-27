@@ -1,5 +1,4 @@
 import yaml from 'js-yaml';
-import nunjucks from 'nunjucks';
 import { getJsonSchemaFileSnapshot } from '../util/file';
 import { extractJsonObjects, getAjv } from '../util/json';
 import { processFileReference } from './utils';
@@ -17,8 +16,10 @@ class JsonSchemaConfigurationError extends Error {}
 function hasJsonSchema({
   renderedValue,
   valueFromScriptResolved,
-}: Pick<AssertionParams, 'renderedValue' | 'valueFromScriptResolved'>): boolean {
+  assertion,
+}: Pick<AssertionParams, 'renderedValue' | 'valueFromScriptResolved' | 'assertion'>): boolean {
   return (
+    getJsonSchemaFileSnapshot(assertion) !== undefined ||
     valueFromScriptResolved === true ||
     (renderedValue !== undefined && renderedValue !== null && renderedValue !== '')
   );
@@ -72,8 +73,7 @@ function cacheStaticValidator(
 function getJsonSchemaValidator({
   renderedValue,
   assertion,
-  assertionValueContext,
-}: Pick<AssertionParams, 'renderedValue' | 'assertion' | 'assertionValueContext'>):
+}: Pick<AssertionParams, 'renderedValue' | 'assertion'>):
   | { validate: ValidateFunction }
   | { failure: GradingResult } {
   try {
@@ -86,12 +86,17 @@ function getJsonSchemaValidator({
       if ('error' in snapshot) {
         throw new JsonSchemaConfigurationError(snapshot.error);
       }
-      schema = snapshot.schema;
-      staticSource = snapshot.source;
       if (snapshot.format === 'text') {
-        const renderedSchema = nunjucks.renderString(String(schema), assertionValueContext.vars);
-        schema = yaml.load(renderedSchema);
-        staticSource = `${staticSource}\0${renderedSchema}`;
+        schema = yaml.load(String(renderedValue));
+        staticSource = `${snapshot.source}\0${String(renderedValue)}`;
+        if (schema === undefined || schema === null) {
+          throw new JsonSchemaConfigurationError(
+            `${assertion.type} schema file must contain an object or boolean schema`,
+          );
+        }
+      } else {
+        schema = snapshot.schema;
+        staticSource = snapshot.source;
       }
       const cached = getCachedStaticValidator(ajv, assertion, staticSource);
       if (cached) {
@@ -160,7 +165,6 @@ export function handleIsJson({
   renderedValue,
   inverse,
   assertion,
-  assertionValueContext,
   valueFromScriptResolved,
 }: AssertionParams): GradingResult {
   let parsedJson;
@@ -172,11 +176,13 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (parsedJson !== undefined && hasJsonSchema({ renderedValue, valueFromScriptResolved })) {
+  if (
+    parsedJson !== undefined &&
+    hasJsonSchema({ renderedValue, valueFromScriptResolved, assertion })
+  ) {
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
-      assertionValueContext,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;
@@ -212,7 +218,6 @@ export function handleContainsJson({
   renderedValue,
   outputString,
   inverse,
-  assertionValueContext,
   valueFromScriptResolved,
 }: AssertionParams): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
@@ -220,11 +225,13 @@ export function handleContainsJson({
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   let validate: ValidateFunction | undefined;
 
-  if (jsonObjects.length > 0 && hasJsonSchema({ renderedValue, valueFromScriptResolved })) {
+  if (
+    jsonObjects.length > 0 &&
+    hasJsonSchema({ renderedValue, valueFromScriptResolved, assertion })
+  ) {
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
-      assertionValueContext,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;

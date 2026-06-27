@@ -9,7 +9,7 @@ import { fetchWithRetries } from '../../src/util/fetch/index';
 import { getJsonSchemaFileSnapshot, maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import { getAjv } from '../../src/util/json';
 import { createMockProvider } from '../factories/provider';
-import { TestGrader } from '../util/utils';
+import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
@@ -1715,9 +1715,16 @@ describe('runAssertion', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       '$id: https://example.com/promptfoo/pr-8237-static-schema\ntype: object',
     );
-    const assertion = maybeLoadConfigFromExternalFile({
-      assert: [{ type: 'is-json', value: 'file:///schema.yaml' }],
-    }).assert[0] as Assertion;
+    const assertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.yaml' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+    expect(assertion.value).toEqual({
+      $id: 'https://example.com/promptfoo/pr-8237-static-schema',
+      type: 'object',
+    });
     expect(getJsonSchemaFileSnapshot(assertion)).toEqual({
       source: 'file:///schema.yaml',
       format: 'parsed',
@@ -1746,15 +1753,19 @@ describe('runAssertion', () => {
     compileSpy.mockRestore();
   });
 
-  it('should render text schema snapshots with assertion variables', async () => {
+  it('should render embedded text schemas with assertion variables', async () => {
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
     vi.mocked(path.extname).mockReturnValue('.txt');
     vi.mocked(fs.readFileSync).mockReturnValue(
       'type: object\nproperties:\n  foo:\n    type: {{ requiredType }}',
     );
-    const assertion = maybeLoadConfigFromExternalFile({
-      assert: [{ type: 'is-json', value: 'file:///schema.txt' }],
-    }).assert[0] as Assertion;
+    const assertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.txt' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+    expect(assertion.value).toBe('type: object\nproperties:\n  foo:\n    type: {{ requiredType }}');
     expect(getJsonSchemaFileSnapshot(assertion)).toEqual({
       source: 'file:///schema.txt',
       format: 'text',
@@ -1769,6 +1780,131 @@ describe('runAssertion', () => {
 
     expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should honor disabled templating for embedded text schemas', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'type: object\nproperties:\n  foo:\n    type: {{ requiredType }}',
+    );
+    const assertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.txt' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+
+    try {
+      vi.resetModules();
+      const { runAssertion: runAssertionWithTemplatingDisabled } = await import(
+        '../../src/assertions/index'
+      );
+      const result = await runAssertionWithTemplatingDisabled({
+        assertion,
+        test: { vars: { requiredType: 'string' } } as AtomicTestCase,
+        providerResponse: { output: '{"foo":"value"}' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Invalid JSON schema: schema compilation failed',
+      });
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should not expose process env to embedded text schemas when disabled', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true',
+      PR8237_SCHEMA_SECRET: 'PR8237_SECRET_SENTINEL',
+    });
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'type: object\nproperties:\n  foo:\n    const: "{{ env.PR8237_SCHEMA_SECRET }}"',
+    );
+    const assertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.txt' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+
+    try {
+      vi.resetModules();
+      const { runAssertion: runAssertionWithoutProcessEnv } = await import(
+        '../../src/assertions/index'
+      );
+      const result = await runAssertionWithoutProcessEnv({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '{"foo":"PR8237_SECRET_SENTINEL"}' },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).not.toContain('PR8237_SECRET_SENTINEL');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should validate a serialized file-backed schema without the source file', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.yaml');
+    vi.mocked(path.extname).mockReturnValue('.yaml');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'type: object\nrequired: [foo]\nproperties:\n  foo:\n    type: string',
+    );
+    const loadedAssertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.yaml' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+    const assertion = JSON.parse(JSON.stringify(loadedAssertion)) as Assertion;
+    vi.mocked(fs.readFileSync).mockReset();
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"value"}' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it('should preserve text schemas with nonstandard file extensions', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.schema');
+    vi.mocked(path.extname).mockReturnValue('.schema');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'type: object\nrequired: [foo]\nproperties:\n  foo:\n    type: string',
+    );
+    const assertion = maybeLoadConfigFromExternalFile(
+      {
+        assert: [{ type: 'is-json', value: 'file:///schema.schema' }],
+      },
+      'test-config',
+    ).assert[0] as Assertion;
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"value"}' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+    expect(assertion.value).toBe(
+      'type: object\nrequired: [foo]\nproperties:\n  foo:\n    type: string',
+    );
+    expect(getJsonSchemaFileSnapshot(assertion)).toEqual({
+      source: 'file:///schema.schema',
+      format: 'text',
+      schema: 'type: object\nrequired: [foo]\nproperties:\n  foo:\n    type: string',
+    });
   });
 
   it('should not expose malformed schema contents in errors', async () => {

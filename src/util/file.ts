@@ -27,6 +27,7 @@ type ExternalFileContext =
   | 'assertions'
   | 'general'
   | 'json-schema-assertion'
+  | 'test-config'
   | 'vars';
 
 const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot');
@@ -123,7 +124,7 @@ export function maybeLoadFromExternalFile(
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
   if (context === 'json-schema-assertion') {
-    logger.debug(`Preserving JSON schema file reference: ${renderedFilePath}`);
+    logger.debug('Preserving JSON schema file reference');
     return renderedFilePath;
   }
 
@@ -271,7 +272,8 @@ function captureJsonSchemaFile(
 ): JsonSchemaFileSnapshot | undefined {
   const renderedFileRef = getNunjucksEngineForFilePath().renderString(fileRef, {});
   const { filePath: cleanPath } = parseFileUrl(renderedFileRef);
-  if (isJavascriptFile(cleanPath) || cleanPath.endsWith('.py') || cleanPath.endsWith('.rb')) {
+  const isRubyScript = cleanPath.endsWith('.rb') || /\.rb:[^/\\]+$/.test(cleanPath);
+  if (isJavascriptFile(cleanPath) || cleanPath.endsWith('.py') || isRubyScript) {
     return undefined;
   }
 
@@ -282,23 +284,30 @@ function captureJsonSchemaFile(
     return cached;
   }
 
-  if (!['.json', '.yaml', '.yml', '.txt'].includes(extension)) {
-    const snapshot = { source: renderedFileRef, error: 'unsupported schema file type' } as const;
-    cache.set(resolvedPath, snapshot);
-    return snapshot;
-  }
-
   try {
     const contents = fs.readFileSync(resolvedPath, 'utf8');
+    const isParsedSchema = ['.json', '.yaml', '.yml'].includes(extension);
     const schema =
       extension === '.json'
         ? JSON.parse(contents)
         : extension === '.yaml' || extension === '.yml'
           ? yaml.load(contents)
           : contents;
+    if (
+      (isParsedSchema &&
+        (schema === null || (typeof schema !== 'boolean' && typeof schema !== 'object'))) ||
+      (!isParsedSchema && /^(?:null|~)?$/i.test(contents.trim()))
+    ) {
+      const snapshot = {
+        source: renderedFileRef,
+        error: 'schema file must contain an object or boolean schema',
+      } as const;
+      cache.set(resolvedPath, snapshot);
+      return snapshot;
+    }
     const snapshot = {
       source: renderedFileRef,
-      format: extension === '.txt' ? 'text' : 'parsed',
+      format: isParsedSchema ? 'parsed' : 'text',
       schema,
     } as const;
     cache.set(resolvedPath, snapshot);
@@ -381,7 +390,8 @@ function loadConfigFromExternalFile(
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
-      const isAssertionsField = key === 'assert';
+      const isAssertionsField =
+        key === 'assert' && (context === 'test-config' || context === 'assertions');
       const inheritedContext = context === 'assertions' ? undefined : context;
 
       const childContext = isJsonSchemaAssertionValue
@@ -415,12 +425,22 @@ function loadConfigFromExternalFile(
     ) {
       const snapshot = captureJsonSchemaFile(result.value, basePath, schemaCache);
       if (snapshot) {
-        Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
-          value: snapshot,
-          enumerable: true,
-          configurable: false,
-          writable: false,
-        });
+        if ('error' in snapshot) {
+          Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
+            value: snapshot,
+            enumerable: true,
+            configurable: false,
+            writable: false,
+          });
+        } else {
+          result.value = snapshot.schema;
+          Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
+            value: snapshot,
+            enumerable: true,
+            configurable: false,
+            writable: false,
+          });
+        }
       }
     }
     return result;
