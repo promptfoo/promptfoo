@@ -1971,6 +1971,47 @@ Application Details:
       expect(callApi).not.toHaveBeenCalledWith('/eval/job/undefined');
     });
 
+    it('should surface an unrecoverable replacement conflict', async () => {
+      const user = userEvent.setup({ delay: null });
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false, hasPendingRun: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: 'Previous run is still shutting down' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          expect.stringContaining('Previous run is still shutting down'),
+          'error',
+        );
+      });
+      expect(mockSetJob).not.toHaveBeenCalled();
+    });
+
     it('should validate a replacement before the server cancels the running job', async () => {
       const user = userEvent.setup({ delay: null });
       let statusCalls = 0;

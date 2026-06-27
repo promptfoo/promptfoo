@@ -1519,6 +1519,72 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('serializes newer runs behind dynamic replacement preflight', async () => {
+      let resolveFirstRun: ((value: undefined) => void) | undefined;
+      let resolveDynamicPreflight:
+        | ((value: { inputs: undefined[]; hasUnresolved: boolean }) => void)
+        | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstRun = resolve;
+        }),
+      );
+      mockedResolveRedteamTargetProviderInputMetadata
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveDynamicPreflight = resolve;
+            }),
+        );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const replacementResponsePromise = request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['file:///workspace/dynamic-provider.mjs'],
+            redteam: { strategies: ['posterior'] },
+          },
+        })
+        .then((response) => response);
+      await vi.waitFor(() => {
+        expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(true);
+      });
+
+      resolveFirstRun!(undefined);
+      await vi.waitFor(() => expect(resolveDynamicPreflight).toBeDefined());
+      const replacementStatus = await request(app).get('/api/redteam/status');
+      const replacementRunId = replacementStatus.body.latestRunId;
+
+      const newerResponsePromise = request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'newer' } })
+        .then((response) => response);
+      await vi.waitFor(async () => {
+        const newerStatus = await request(app).get('/api/redteam/status');
+        expect(newerStatus.body.latestRunId).not.toBe(replacementRunId);
+      });
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+
+      resolveDynamicPreflight!({ inputs: [undefined], hasUnresolved: false });
+      const [replacementResponse, newerResponse] = await Promise.all([
+        replacementResponsePromise,
+        newerResponsePromise,
+      ]);
+
+      expect(replacementResponse.status).toBe(409);
+      expect(replacementResponse.body.error).toBe('Run request superseded by a newer request');
+      expect(newerResponse.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledTimes(2);
+      expect(mockedDoRedteamRun.mock.calls[1][0].liveRedteamConfig).toEqual({ purpose: 'newer' });
+    });
+
     it('rejects known incompatibilities before hydrating unresolved dynamic targets', async () => {
       let resolveRun: ((value: undefined) => void) | undefined;
       mockedDoRedteamRun.mockReturnValueOnce(

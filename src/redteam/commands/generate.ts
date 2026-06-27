@@ -231,6 +231,25 @@ async function getConfigHash(
   return createHash('md5').update(hashInput).digest('hex');
 }
 
+type WritableRedteamConfig = Partial<UnifiedConfig> & {
+  targets?: Partial<UnifiedConfig>['providers'];
+};
+
+function persistFilteredProviders(
+  config: WritableRedteamConfig,
+  providers: Partial<UnifiedConfig>['providers'],
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): void {
+  if ((!options.filterProviders && !options.filterTargets) || providers === undefined) {
+    return;
+  }
+  if (config.targets === undefined) {
+    config.providers = providers;
+  } else {
+    config.targets = providers;
+  }
+}
+
 function createHeaderComments({
   title,
   timestampLabel,
@@ -1000,8 +1019,9 @@ async function doGenerateRedteamInternal(
       return {};
     } else if (options.output) {
       const existingYaml = configPath
-        ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
+        ? (loadYaml(await fs.readFile(configPath, 'utf8')) as WritableRedteamConfig)
         : {};
+      persistFilteredProviders(existingYaml, selectedProviderConfigs, options);
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const updatedYaml: Partial<UnifiedConfig> = {
@@ -1062,7 +1082,8 @@ async function doGenerateRedteamInternal(
     } else if (options.write && configPath) {
       const existingConfig = loadYaml(
         await fs.readFile(configPath, 'utf8'),
-      ) as Partial<UnifiedConfig>;
+      ) as WritableRedteamConfig;
+      persistFilteredProviders(existingConfig, selectedProviderConfigs, options);
       const existingTests = existingConfig.tests;
       let testsArray: any[] = [];
       if (Array.isArray(existingTests)) {
