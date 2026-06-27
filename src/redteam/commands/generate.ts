@@ -221,8 +221,8 @@ async function getConfigHash(
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
   const filters = {
-    ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
-    ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+    ...(options.filterProviders === undefined ? {} : { filterProviders: options.filterProviders }),
+    ...(options.filterTargets === undefined ? {} : { filterTargets: options.filterTargets }),
   };
   const hashInput =
     Object.keys(filters).length > 0

@@ -1368,6 +1368,51 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'filterProviders',
+    'filterTargets',
+  ] as const)('distinguishes an explicit empty $filterOption override from the configured-filter cache', async (filterOption) => {
+    const configPath = 'test-config.yaml';
+    const outputPath = 'redteam.yaml';
+    const configContent = yaml.dump({
+      providers: ['selected-provider', 'other-provider'],
+      commandLineOptions: { filterProviders: 'selected-provider' },
+    });
+    const configuredFilterHash = createHash('md5')
+      .update(`${VERSION}:${configContent}`)
+      .digest('hex');
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) => filePath === configPath || filePath === outputPath,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath === configPath) {
+        return configContent;
+      }
+      if (filePath === outputPath) {
+        return yaml.dump({
+          metadata: { configHash: configuredFilterHash },
+          tests: [{ vars: { input: 'cached' } }],
+        });
+      }
+      throw new Error(`Unexpected read: ${String(filePath)}`);
+    });
+
+    await doGenerateRedteam({
+      cache: true,
+      config: configPath,
+      defaultConfig: {},
+      output: outputPath,
+      write: false,
+      [filterOption]: '',
+    });
+
+    expect(configModule.resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ [filterOption]: '' }),
+      expect.any(Object),
+    );
+    expect(synthesize).toHaveBeenCalledOnce();
+  });
+
   it('loads unresolved dynamic inputs before returning a matching cached config', async () => {
     const configPath = 'test-config.yaml';
     const outputPath = 'redteam.yaml';
