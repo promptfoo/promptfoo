@@ -688,6 +688,40 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalled();
     });
 
+    it('rejects a replacement when predecessor cleanup exceeds the bound', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+      const nativeSetTimeout = globalThis.setTimeout;
+      const timeoutSpy = vi
+        .spyOn(globalThis, 'setTimeout')
+        .mockImplementation((callback, delay, ...args) =>
+          nativeSetTimeout(callback, delay === 10_000 ? 0 : delay, ...args),
+        );
+
+      try {
+        const firstResponse = await request(app)
+          .post('/api/redteam/run')
+          .send({ config: { purpose: 'first' } });
+        expect(firstResponse.status).toBe(200);
+
+        const replacementResponse = await request(app)
+          .post('/api/redteam/run')
+          .send({ config: { purpose: 'replacement' } });
+
+        expect(replacementResponse.status).toBe(409);
+        expect(replacementResponse.body.error).toBe('Previous run is still shutting down');
+        expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      } finally {
+        timeoutSpy.mockRestore();
+        resolveRun!(undefined);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+    });
+
     it('respects an empty top-level plugin override during compatibility preflight', async () => {
       const response = await request(app)
         .post('/api/redteam/run')
@@ -1415,6 +1449,7 @@ describe('Redteam Routes', () => {
 
     it('loads dynamic input metadata before replacing the active job', async () => {
       let resolveRun: ((value: undefined) => void) | undefined;
+      let firstRunSettled = false;
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveRun = resolve;
@@ -1422,9 +1457,13 @@ describe('Redteam Routes', () => {
       );
       mockedResolveRedteamTargetProviderInputMetadata
         .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
-        .mockResolvedValueOnce({
-          inputs: [{ context: 'Reference context', question: 'User question' }],
-          hasUnresolved: false,
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockImplementationOnce(async () => {
+          expect(firstRunSettled).toBe(true);
+          return {
+            inputs: [{ context: 'Reference context', question: 'User question' }],
+            hasUnresolved: false,
+          };
         });
 
       const firstResponse = await request(app)
@@ -1432,14 +1471,24 @@ describe('Redteam Routes', () => {
         .send({ config: { purpose: 'first' } });
       expect(firstResponse.status).toBe(200);
 
-      const replacementResponse = await request(app)
+      const replacementResponsePromise = request(app)
         .post('/api/redteam/run')
         .send({
           config: {
             targets: ['file:///workspace/dynamic-provider.mjs'],
             redteam: { strategies: ['posterior'] },
           },
-        });
+        })
+        .then((response) => response);
+
+      await vi.waitFor(() => {
+        expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(true);
+      });
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledOnce();
+
+      firstRunSettled = true;
+      resolveRun!(undefined);
+      const replacementResponse = await replacementResponsePromise;
 
       expect(replacementResponse.status).toBe(400);
       expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenNthCalledWith(
@@ -1451,7 +1500,7 @@ describe('Redteam Routes', () => {
         { loadDynamicProviders: false },
       );
       expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenNthCalledWith(
-        2,
+        3,
         ['file:///workspace/dynamic-provider.mjs'],
         undefined,
         undefined,
@@ -1459,9 +1508,6 @@ describe('Redteam Routes', () => {
         { loadDynamicProviders: true },
       );
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
-      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
-
-      resolveRun!(undefined);
       await vi.waitFor(async () => {
         const statusResponse = await request(app).get('/api/redteam/status');
         expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });

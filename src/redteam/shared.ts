@@ -110,6 +110,10 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       ...passThroughOptions,
       ...(options.liveRedteamConfig?.commandLineOptions || {}),
       ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
+      ...(options.filterProviders === undefined
+        ? {}
+        : { filterProviders: options.filterProviders }),
+      ...(options.filterTargets === undefined ? {} : { filterTargets: options.filterTargets }),
       config: configPath,
       output: redteamPath,
       force: options.force,
