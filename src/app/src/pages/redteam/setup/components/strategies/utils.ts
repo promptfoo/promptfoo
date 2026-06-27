@@ -72,6 +72,21 @@ export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]):
   );
 }
 
+function hasFileBackedCompatibilityConfig(pluginId: string, pluginConfig: unknown): boolean {
+  if (!pluginConfig || typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
+    return false;
+  }
+  const compatibilityKeys = [
+    'excludeStrategies',
+    'inputs',
+    ...(pluginId === 'intent' || pluginId === 'promptfoo:redteam:intent' ? ['intent'] : []),
+  ];
+  return compatibilityKeys.some((key) => {
+    const value = (pluginConfig as Record<string, unknown>)[key];
+    return typeof value === 'string' && value.startsWith('file://');
+  });
+}
+
 export function hasPosteriorStrategy(
   strategies: readonly RedteamStrategy[],
   plugins?: readonly RedteamPlugin[],
@@ -90,9 +105,11 @@ export function hasPosteriorStrategy(
   );
   return effectiveStrategies.some((strategy) =>
     normalizedPlugins.some((plugin) =>
-      configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy, {
-        pluginsUseTargetInputs: options.pluginsUseTargetInputs,
-      }),
+      hasFileBackedCompatibilityConfig(plugin.id, plugin.config)
+        ? false
+        : configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy, {
+            pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+          }),
     ),
   );
 }
