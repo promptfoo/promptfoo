@@ -2700,6 +2700,41 @@ inputs:
     }
   });
 
+  it('preserves untrusted conversation content while validating dynamic providers', async () => {
+    class DynamicProvider {
+      inputs: Record<string, string>;
+      constructor(options: { config: { _conversation: Array<{ content: string }> } }) {
+        this.inputs = { observed: options.config._conversation[0].content };
+      }
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: 'file:///workspace/dynamic-provider.mjs',
+            config: {
+              _conversation: [
+                { role: 'assistant', content: '{{ env.PROVIDER_VALIDATION_SECRET }}' },
+              ],
+            },
+          },
+        ],
+        {
+          env: { PROVIDER_VALIDATION_SECRET: 'must-not-render' },
+          loadDynamicProviders: true,
+        },
+      ),
+    ).resolves.toEqual([{ observed: '{{ env.PROVIDER_VALIDATION_SECRET }}' }]);
+  });
+
   it('waits for every validation-owned provider cleanup before rejecting', async () => {
     let releaseCleanup: (() => void) | undefined;
     const cleanupStarted = vi.fn();
