@@ -297,9 +297,18 @@ function findTargetCompatibilityError(
   plugins: readonly unknown[],
   inputs: readonly unknown[],
 ): string | undefined {
+  const firstInput = inputs[0];
+  const pluginsUseTargetInputs =
+    isProviderInputMetadataUnresolved(firstInput) ||
+    (firstInput !== null &&
+      typeof firstInput === 'object' &&
+      !Array.isArray(firstInput) &&
+      Object.keys(firstInput).length > 0);
   return inputs
     .filter((input) => !isProviderInputMetadataUnresolved(input))
-    .map((input) => getStrategyCompatibilityError(strategies, input, { plugins }))
+    .map((input) =>
+      getStrategyCompatibilityError(strategies, input, { plugins, pluginsUseTargetInputs }),
+    )
     .find((error) => error !== undefined);
 }
 
@@ -720,11 +729,13 @@ async function doGenerateRedteamInternal(
   const targetInputs = testSuite.providers[0]
     ? getConfiguredProviderInputs(testSuite.providers[0])
     : undefined;
+  const pluginsUseTargetInputs = Boolean(targetInputs && Object.keys(targetInputs).length > 0);
 
   const compatibilityError = testSuite.providers
     .map((provider) =>
       getStrategyCompatibilityError(strategyObjs, getConfiguredProviderInputs(provider), {
         plugins,
+        pluginsUseTargetInputs,
       }),
     )
     .find((error) => error !== undefined);

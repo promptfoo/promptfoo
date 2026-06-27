@@ -457,15 +457,13 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       if (!isPosteriorUnavailable) {
         return undefined;
       }
-      if (strategyId === 'posterior') {
-        return POSTERIOR_UNAVAILABLE_MESSAGE;
-      }
-      const strategy = config.strategies.find((item) => getStrategyId(item) === strategyId);
-      return strategy &&
-        hasPosteriorStrategy([strategy], compatibilityPlugins, {
-          includeDisabledStrategies: true,
-          pluginsUseTargetInputs: targetHasInputs,
-        })
+      const strategy =
+        config.strategies.find((item) => getStrategyId(item) === strategyId) ??
+        ({ id: strategyId } as RedteamStrategyObject);
+      return hasPosteriorStrategy([strategy], compatibilityPlugins, {
+        includeDisabledStrategies: true,
+        pluginsUseTargetInputs: targetHasInputs,
+      })
         ? POSTERIOR_UNAVAILABLE_MESSAGE
         : undefined;
     },
