@@ -2,7 +2,7 @@ import {
   NODE_20_RUNTIME_NOTICE_ID,
   NODE_20_SUPPORT_END_DATE,
   NODE_MINIMUM_UPGRADE_VERSION,
-  NODE_RECOMMENDED_VERSION,
+  NODE_RECOMMENDED_VERSION_LABEL,
   NODE_RUNTIME_UPGRADE_GUIDE_URL,
   type RuntimeCompatibilityNotice,
 } from './types/runtimeCompatibility';
@@ -42,7 +42,7 @@ export function getRuntimeCompatibilityNotice(
     currentMajor: 20,
     removalDate: NODE_20_SUPPORT_END_DATE,
     minimumVersion: NODE_MINIMUM_UPGRADE_VERSION,
-    recommendedVersion: NODE_RECOMMENDED_VERSION,
+    recommendedVersion: NODE_RECOMMENDED_VERSION_LABEL,
     documentationUrl: NODE_RUNTIME_UPGRADE_GUIDE_URL,
   };
 }

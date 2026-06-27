@@ -3,7 +3,7 @@ import {
   NODE_20_RUNTIME_NOTICE_ID,
   NODE_20_SUPPORT_END_DATE,
   NODE_MINIMUM_UPGRADE_VERSION,
-  NODE_RECOMMENDED_VERSION,
+  NODE_RECOMMENDED_VERSION_LABEL,
   NODE_RUNTIME_UPGRADE_GUIDE_URL,
 } from '../runtimeCompatibility';
 
@@ -17,7 +17,7 @@ export const RuntimeCompatibilityNoticeSchema = z.object({
   currentMajor: z.literal(20),
   removalDate: z.literal(NODE_20_SUPPORT_END_DATE),
   minimumVersion: z.literal(NODE_MINIMUM_UPGRADE_VERSION),
-  recommendedVersion: z.literal(NODE_RECOMMENDED_VERSION),
+  recommendedVersion: z.literal(NODE_RECOMMENDED_VERSION_LABEL),
   // Locked to the announced constant so the response can't drift from the published upgrade guide,
   // matching the policy-drift guard on the other notice fields.
   documentationUrl: z.literal(NODE_RUNTIME_UPGRADE_GUIDE_URL),

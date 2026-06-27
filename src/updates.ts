@@ -10,7 +10,7 @@ import { isUpdateBlockedByRuntime } from './runtimeCompatibility';
 import {
   NODE_20_SUPPORT_END_DATE_LABEL,
   NODE_MINIMUM_UPGRADE_VERSION,
-  NODE_RECOMMENDED_VERSION,
+  NODE_RECOMMENDED_VERSION_LABEL,
   NODE_RUNTIME_UPGRADE_GUIDE_URL,
 } from './types/runtimeCompatibility';
 import { getUpdateCommands } from './updates/updateCommands';
@@ -69,8 +69,8 @@ export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Pro
         return true;
       }
       const blockedUpdateInstruction = updateCommands.isCustomContainer
-        ? `Update the Promptfoo source, dependency, or parent image and use Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION} recommended), then rebuild and redeploy the container.`
-        : `Upgrade to Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION} recommended), then update promptfoo.`;
+        ? `Update the Promptfoo source, dependency, or parent image and use Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION_LABEL} recommended), then rebuild and redeploy the container.`
+        : `Upgrade to Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION_LABEL} recommended), then update promptfoo.`;
       logger.warn(
         `\n${border}
 ${chalk.yellow('⚠️')} A newer version of promptfoo is available, but Node.js 20 support ended ${NODE_20_SUPPORT_END_DATE_LABEL}.
