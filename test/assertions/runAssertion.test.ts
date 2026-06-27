@@ -1567,6 +1567,59 @@ describe('runAssertion', () => {
   });
 
   it.each([
+    ['is-json', '{"foo":"bar"}'],
+    ['not-is-json', '{"foo":1}'],
+    ['contains-json', 'prefix {"foo":"bar"} suffix'],
+    ['not-contains-json', 'prefix {"foo":1} suffix'],
+  ] as const)('should preserve text-file schema compatibility for %s', async (type, output) => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'type: object\nrequired: [foo]\nproperties:\n  foo:\n    type: string',
+    );
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: 'file:///schema.txt' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.txt', 'utf8');
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+  });
+
+  it.each([
+    ['is-json', 'empty', '', '{"foo":"bar"}'],
+    ['not-is-json', 'empty', '', '{"foo":"bar"}'],
+    ['contains-json', 'empty', '', 'prefix {"foo":"bar"} suffix'],
+    ['not-contains-json', 'empty', '', 'prefix {"foo":"bar"} suffix'],
+    ['is-json', 'null', 'null', '{"foo":"bar"}'],
+    ['not-is-json', 'null', 'null', '{"foo":"bar"}'],
+    ['contains-json', 'null', 'null', 'prefix {"foo":"bar"} suffix'],
+    ['not-contains-json', 'null', 'null', 'prefix {"foo":"bar"} suffix'],
+  ] as const)('should reject a %s assertion with a %s static schema file', async (type, _schemaKind, fileContent, output) => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.yaml');
+    vi.mocked(path.extname).mockReturnValue('.yaml');
+    vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: 'file:///schema.yaml' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: `Invalid JSON schema: ${type} schema file must contain an object or boolean schema`,
+    });
+  });
+
+  it.each([
     ['is-json', '{"foo":"bar"}', true],
     ['not-is-json', '{"foo":"bar"}', false],
     ['contains-json', 'prefix {"foo":"bar"} suffix', true],
@@ -1585,6 +1638,8 @@ describe('runAssertion', () => {
   });
 
   it.each([
+    ['is-json', false, 'Expected output to be valid JSON'],
+    ['not-is-json', true, 'Assertion passed'],
     ['contains-json', false, 'Expected output to contain valid JSON'],
     ['not-contains-json', true, 'Assertion passed'],
   ] as const)('should not load an unused file-backed schema for %s', async (type, pass, reason) => {

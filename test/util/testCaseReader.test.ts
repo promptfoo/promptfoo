@@ -1703,6 +1703,30 @@ describe('loadTestsFromGlob', () => {
     clearAllMocks();
   });
 
+  it('should preserve JSON schema file references in external YAML tests', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(globSync).mockReturnValue(['tests.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      yaml.dump([
+        {
+          description: 'JSON schema reference',
+          assert: [{ type: 'not-contains-json', value: 'file://malformed-schema.yaml' }],
+        },
+      ]),
+    );
+
+    const result = await loadTestsFromGlob('tests.yaml');
+
+    expect(result[0].assert).toEqual([
+      { type: 'not-contains-json', value: 'file://malformed-schema.yaml' },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle Hugging Face dataset URLs', async () => {
     const mockDataset: TestCase[] = [
       {

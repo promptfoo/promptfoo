@@ -22,6 +22,8 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+type ExternalFileContext = 'assertion' | 'general' | 'json-schema-assertion' | 'vars';
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -74,7 +76,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: ExternalFileContext,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -92,6 +94,11 @@ export function maybeLoadFromExternalFile(
 
   // Render the file path using Nunjucks
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+
+  if (context === 'json-schema-assertion') {
+    logger.debug(`Preserving JSON schema file reference: ${renderedFilePath}`);
+    return renderedFilePath;
+  }
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -255,15 +262,14 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * @param context - Optional context to control file loading behavior
  * @returns The configuration with external file references resolved
  */
-export function maybeLoadConfigFromExternalFile(
-  config: any,
-  context?: 'assertion' | 'general' | 'vars',
-): any {
+export function maybeLoadConfigFromExternalFile(config: any, context?: ExternalFileContext): any {
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
+    const assertionType =
+      typeof config.type === 'string' ? config.type.replace(/^not-/, '') : undefined;
     for (const key of Object.keys(config)) {
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
@@ -272,12 +278,20 @@ export function maybeLoadConfigFromExternalFile(
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
+      const isJsonSchemaAssertionValue =
+        key === 'value' && (assertionType === 'is-json' || assertionType === 'contains-json');
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = isJsonSchemaAssertionValue
+        ? 'json-schema-assertion'
+        : isAssertionValue
+          ? 'assertion'
+          : isVarsField
+            ? 'vars'
+            : context;
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {

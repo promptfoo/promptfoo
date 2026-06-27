@@ -472,6 +472,7 @@ export async function runAssertion({
   const baseType = getAssertionBaseType(assertion);
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  let didResolveValueFromScript = false;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -489,6 +490,7 @@ export async function runAssertion({
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+        didResolveValueFromScript = true;
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
@@ -498,6 +500,7 @@ export async function runAssertion({
             [output, context],
           );
           valueFromScript = pythonScriptOutput;
+          didResolveValueFromScript = true;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           return {
@@ -516,6 +519,7 @@ export async function runAssertion({
             [output, context],
           );
           valueFromScript = rubyScriptOutput;
+          didResolveValueFromScript = true;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           return {
@@ -538,6 +542,7 @@ export async function runAssertion({
       }
 
       valueFromScript = await Promise.resolve(requiredModule(output, context));
+      didResolveValueFromScript = true;
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
@@ -560,7 +565,11 @@ export async function runAssertion({
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
 
-  if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
+  const isJsonSchemaAssertion = baseType === 'is-json' || baseType === 'contains-json';
+  if (
+    (valueFromScript !== undefined || (didResolveValueFromScript && isJsonSchemaAssertion)) &&
+    !SCRIPT_RESULT_ASSERTIONS.has(baseType)
+  ) {
     // Validate the script result type - only javascript/python/ruby can return functions
     if (typeof valueFromScript === 'function') {
       throw new Error(

@@ -295,6 +295,60 @@ describe('Script value resolution', () => {
 
       expect(result.pass).toBe(pass);
     });
+
+    it.each([
+      ['is-json', 'emptyValue', '{"foo":"bar"}'],
+      ['not-is-json', 'emptyValue', '{"foo":"bar"}'],
+      ['contains-json', 'emptyValue', 'prefix {"foo":"bar"} suffix'],
+      ['not-contains-json', 'emptyValue', 'prefix {"foo":"bar"} suffix'],
+      ['is-json', 'nullValue', '{"foo":"bar"}'],
+      ['not-is-json', 'nullValue', '{"foo":"bar"}'],
+      ['contains-json', 'nullValue', 'prefix {"foo":"bar"} suffix'],
+      ['not-contains-json', 'nullValue', 'prefix {"foo":"bar"} suffix'],
+      ['is-json', 'undefinedValue', '{"foo":"bar"}'],
+      ['not-is-json', 'undefinedValue', '{"foo":"bar"}'],
+      ['contains-json', 'undefinedValue', 'prefix {"foo":"bar"} suffix'],
+      ['not-contains-json', 'undefinedValue', 'prefix {"foo":"bar"} suffix'],
+    ] as const)('rejects the %s schema returned by %s', async (type, exportName, output) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: `file://rubric-generator.cjs:${exportName}`,
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Invalid JSON schema:'),
+      });
+    });
+
+    it.each([
+      ['is-json', false, 'Expected output to be valid JSON'],
+      ['not-is-json', true, 'Assertion passed'],
+      ['contains-json', false, 'Expected output to contain valid JSON'],
+      ['not-contains-json', true, 'Assertion passed'],
+    ] as const)('keeps %s lazy when an invalid generated schema is unused', async (type, pass, reason) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: 'file://rubric-generator.cjs:undefinedValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'not JSON',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result).toMatchObject({ pass, reason });
+    });
   });
 
   describe('error handling', () => {

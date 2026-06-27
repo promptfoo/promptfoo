@@ -811,6 +811,12 @@ describe('file utilities', () => {
         expect(fs.readFileSync).toHaveBeenCalled();
       });
 
+      it('should preserve files in JSON schema assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://schema.yaml', 'json-schema-assertion');
+        expect(result).toBe('file://schema.yaml');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should handle Windows paths correctly in assertion context', () => {
         const result = maybeLoadFromExternalFile('file://C:/test/assert.py', 'assertion');
         expect(result).toBe('file://C:/test/assert.py');
@@ -853,6 +859,27 @@ describe('file utilities', () => {
         };
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        'is-json',
+        'not-is-json',
+        'contains-json',
+        'not-contains-json',
+      ])('should preserve %s schema file references', (type) => {
+        const config = {
+          assert: [
+            {
+              type,
+              value: 'file://schema.yaml',
+            },
+          ],
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config);
+
+        expect(result.assert[0].value).toBe('file://schema.yaml');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 

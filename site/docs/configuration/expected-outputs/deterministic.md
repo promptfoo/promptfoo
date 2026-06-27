@@ -36,7 +36,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains](#contains)                                           | output contains substring                                          |
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-json](#contains-json)                                 | output contains a JSON object matching the optional schema         |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
@@ -150,7 +150,7 @@ assert:
 
 ### Contains-JSON
 
-The `contains-json` assertion checks if the LLM output contains a valid JSON structure.
+The `contains-json` assertion checks if the LLM output contains a valid JSON object.
 
 Example:
 
@@ -375,8 +375,9 @@ assert:
 ```
 
 Boolean JSON Schemas are supported: `value: true` accepts any valid JSON value, while
-`value: false` rejects every valid JSON value. Malformed schemas fail with an
-`Invalid JSON schema` reason instead of aborting the evaluation.
+`value: false` rejects every valid JSON value. When schema validation is attempted,
+malformed schemas fail with an `Invalid JSON schema` reason instead of aborting the
+evaluation.
 
 ### Is-XML
 
