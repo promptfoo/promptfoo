@@ -126,6 +126,7 @@ export function getStrategyCompatibilityError(
     hasTargetInputs &&
     hasApplicablePosteriorStrategy(strategies, resolvedPlugins, {
       includeDisabledStrategies: options.includeDisabledStrategies,
+      pluginsUseTargetInputs: options.pluginsUseTargetInputs,
     });
   const pluginsWithConfiguredInputs = hasPluginInputs
     ? resolvedPlugins?.filter(pluginHasConfiguredInputs)
