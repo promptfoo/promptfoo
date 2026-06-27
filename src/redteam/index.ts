@@ -1110,16 +1110,6 @@ export async function synthesize({
     // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
     // with user-defined input variable names
     injectVar = MULTI_INPUT_VAR;
-
-    // Some plugins don't support multi-input mode; skip them
-    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
-    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
-    if (removedPlugins.length > 0) {
-      logger.info(
-        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
-      );
-    }
   }
 
   // Determine injectVar if not explicitly set (only applies to single-input mode)
@@ -1219,6 +1209,20 @@ export async function synthesize({
   // Validate all plugins upfront
   logger.debug('Validating plugins...');
   plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
+
+  // Collections can expand into plugins that do not support multi-input mode.
+  if (hasMultipleInputs) {
+    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+    const removedPlugins = plugins.filter((plugin) =>
+      multiInputExcluded.includes(plugin.id as any),
+    );
+    plugins = plugins.filter((plugin) => !multiInputExcluded.includes(plugin.id as any));
+    if (removedPlugins.length > 0) {
+      logger.info(
+        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((plugin) => plugin.id).join(', ')}`,
+      );
+    }
+  }
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {

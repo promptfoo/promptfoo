@@ -4259,6 +4259,30 @@ describe('Language configuration', () => {
       expect(skipMessage).toContain('cross-session-leak');
     });
 
+    it('should exclude unsupported plugins after collection expansion', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'mock-plugin',
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'foundation', numTests: 1 }],
+        prompts: ['Test {{query}}'],
+        strategies: [{ id: 'posterior', config: { plugins: ['ascii-smuggling'] } }],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      expect(result.testCases).not.toContainEqual(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ pluginId: 'ascii-smuggling' }),
+        }),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('ascii-smuggling'));
+    });
+
     it('should NOT exclude plugins when inputs is empty object', async () => {
       const result = await synthesize({
         language: 'en',
