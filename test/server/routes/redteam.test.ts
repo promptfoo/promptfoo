@@ -756,6 +756,61 @@ describe('Redteam Routes', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
     });
 
+    it('dynamically validates a replacement before discarding a summary-pending job', async () => {
+      let resolveSummary: ((value: { results: never[] }) => void) | undefined;
+      const toEvaluateSummary = vi.fn(
+        () =>
+          new Promise<{ results: never[] }>((resolve) => {
+            resolveSummary = resolve;
+          }),
+      );
+      mockedDoRedteamRun.mockResolvedValueOnce({ id: 'first-eval', toEvaluateSummary } as any);
+      mockedResolveRedteamTargetProviderInputMetadata
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({
+          inputs: [{ context: 'Reference context', question: 'User question' }],
+          hasUnresolved: false,
+        });
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+      await vi.waitFor(() => expect(toEvaluateSummary).toHaveBeenCalledOnce());
+
+      const replacementResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['file:///workspace/dynamic-provider.mjs'],
+            redteam: { strategies: ['posterior'] },
+          },
+        });
+
+      expect(replacementResponse.status).toBe(400);
+      expect(replacementResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenNthCalledWith(
+        3,
+        ['file:///workspace/dynamic-provider.mjs'],
+        undefined,
+        undefined,
+        undefined,
+        { loadDynamicProviders: true },
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      const statusResponse = await request(app).get('/api/redteam/status');
+      expect(statusResponse.body).toMatchObject({
+        hasRunningJob: true,
+        jobId: firstResponse.body.id,
+      });
+
+      resolveSummary!({ results: [] });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+
     it('respects an empty top-level plugin override during compatibility preflight', async () => {
       const response = await request(app)
         .post('/api/redteam/run')
@@ -1756,6 +1811,44 @@ describe('Redteam Routes', () => {
         'selected-single',
         { loadDynamicProviders: false },
       );
+    });
+
+    it('uses canonical filter alias precedence during compatibility validation', async () => {
+      const targets = [
+        { id: 'echo', label: 'selected-single' },
+        {
+          id: 'echo',
+          label: 'excluded-multi',
+          inputs: { context: 'Reference context', question: 'User question' },
+        },
+      ];
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
+      );
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets,
+            redteam: { strategies: ['posterior'] },
+            commandLineOptions: {
+              filterProviders: '',
+              filterTargets: 'selected-single',
+            },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Posterior strategy does not support multi-input targets');
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledWith(
+        targets,
+        undefined,
+        undefined,
+        '',
+        { loadDynamicProviders: false },
+      );
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
     it('should let the newest overlapping run request win after async preflight', async () => {

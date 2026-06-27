@@ -115,7 +115,7 @@ async function getLiveConfigCompatibilityError(
   const env = isRecord(resolvedConfig.env)
     ? (resolvedConfig.env as Record<string, string>)
     : undefined;
-  const configuredFilter = commandLineOptions?.filterProviders || commandLineOptions?.filterTargets;
+  const configuredFilter = commandLineOptions?.filterProviders ?? commandLineOptions?.filterTargets;
   const filter = typeof configuredFilter === 'string' ? configuredFilter : undefined;
   let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
     configuredTargets,
@@ -453,6 +453,16 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
     return false;
   };
+  const passesTrackedDynamicPreflight = async (): Promise<boolean> => {
+    const dynamicPreflightPromise = passesCompatibilityPreflight(true);
+    const trackedPreflightPromise = dynamicPreflightPromise.then(() => undefined);
+    currentRunPromise = trackedPreflightPromise;
+    const compatibilityPassed = await dynamicPreflightPromise;
+    if (currentRunPromise === trackedPreflightPromise) {
+      currentRunPromise = null;
+    }
+    return compatibilityPassed;
+  };
 
   // Resolve only static metadata while the current provider may still own external resources.
   if (!(await passesCompatibilityPreflight(false))) {
@@ -460,6 +470,11 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const previousRunPromise = currentRunPromise;
+  // Once execution cleanup is complete, dynamically validate replacements before discarding a
+  // predecessor whose result is still being summarized.
+  if (currentJobId && previousRunPromise === null && !(await passesTrackedDynamicPreflight())) {
+    return;
+  }
   // If there's a current job running, abort it and wait for provider cleanup before replacement.
   if (currentJobId) {
     if (currentAbortController) {
@@ -485,14 +500,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Dynamic providers may now be instantiated safely because the predecessor has released them.
-    const dynamicPreflightPromise = passesCompatibilityPreflight(true);
-    const trackedPreflightPromise = dynamicPreflightPromise.then(() => undefined);
-    currentRunPromise = trackedPreflightPromise;
-    const compatibilityPassed = await dynamicPreflightPromise;
-    if (currentRunPromise === trackedPreflightPromise) {
-      currentRunPromise = null;
-    }
-    if (!compatibilityPassed) {
+    if (!(await passesTrackedDynamicPreflight())) {
       return;
     }
   }
