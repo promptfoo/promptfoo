@@ -485,7 +485,14 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Dynamic providers may now be instantiated safely because the predecessor has released them.
-    if (!(await passesCompatibilityPreflight(true))) {
+    const dynamicPreflightPromise = passesCompatibilityPreflight(true);
+    const trackedPreflightPromise = dynamicPreflightPromise.then(() => undefined);
+    currentRunPromise = trackedPreflightPromise;
+    const compatibilityPassed = await dynamicPreflightPromise;
+    if (currentRunPromise === trackedPreflightPromise) {
+      currentRunPromise = null;
+    }
+    if (!compatibilityPassed) {
       return;
     }
   }

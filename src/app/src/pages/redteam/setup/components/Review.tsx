@@ -771,10 +771,12 @@ export default function Review({
       if (response.ok === false) {
         if (response.status === 409) {
           const recoveredActiveRun = await reconnectToActiveRun(runRequest);
-          if (isCurrentRequest() && !recoveredActiveRun) {
-            setIsRunning(false);
+          if (!isCurrentRequest()) {
+            return;
           }
-          return;
+          if (recoveredActiveRun) {
+            return;
+          }
         }
         throw new Error(
           typeof data?.error === 'string' ? data.error : `Request failed (${response.status})`,

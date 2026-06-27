@@ -4775,6 +4775,79 @@ describe('target ID extraction for retry strategy', () => {
     );
   });
 
+  it.each([
+    {
+      mode: 'output',
+      providerKey: 'providers' as const,
+      options: { output: 'output.yaml', write: false },
+      outputPath: 'output.yaml',
+    },
+    {
+      mode: 'write',
+      providerKey: 'targets' as const,
+      options: { write: true },
+      outputPath: 'config.yaml',
+    },
+  ])('should persist filtered providers in $mode artifacts', async ({
+    providerKey,
+    options,
+    outputPath,
+  }) => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: ['selected-provider'],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+      selectedProviderConfigs: ['selected-provider'],
+    });
+    mockReadFileSync({
+      prompts: ['Test prompt'],
+      [providerKey]: ['selected-provider', 'excluded-provider'],
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'harmful:hate' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam({
+      config: 'config.yaml',
+      cache: false,
+      defaultConfig: {},
+      filterProviders: 'selected-provider',
+      ...options,
+    });
+
+    const writtenConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(writtenConfig[providerKey]).toEqual(['selected-provider']);
+    expect(writtenConfig[providerKey === 'providers' ? 'targets' : 'providers']).toBeUndefined();
+    expect(writePromptfooConfig).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      outputPath,
+      expect.any(Array),
+    );
+  });
+
   it('should return empty array when no providers configured', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
