@@ -7,6 +7,7 @@ import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderResponse } from '../../src/types/index';
 
@@ -531,28 +532,41 @@ describe('Script value resolution', () => {
     it('should resolve a named Ruby JSON schema generator from an external test config', async () => {
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockResolvedValue({ type: 'object' });
-      const assertion = maybeLoadConfigFromExternalFile(
-        {
-          assert: [{ type: 'is-json', value: 'file://schema.rb:build_schema' }],
-        },
-        'test-config',
-      ).assert[0];
+      const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_PATH: '/private/schema/path' });
 
-      const result = await runAssertion({
-        assertion,
-        test: { vars: {} },
-        providerResponse: {
-          output: '{}',
-          tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        },
-      });
+      try {
+        const assertion = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.rb:build_schema',
+              },
+            ],
+          },
+          'test-config',
+        ).assert[0];
 
-      expect(mockRunRuby).toHaveBeenCalledWith(
-        expect.stringContaining('schema.rb'),
-        'build_schema',
-        expect.any(Array),
-      );
-      expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+        const result = await runAssertion({
+          assertion,
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+
+        expect(assertion.value).toContain('{{ env.PR8237_SCHEMA_PATH }}');
+        expect(JSON.stringify(assertion)).not.toContain('/private/schema/path');
+        expect(mockRunRuby).toHaveBeenCalledWith(
+          '/private/schema/path/schema.rb',
+          'build_schema',
+          expect.any(Array),
+        );
+        expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+      } finally {
+        restoreEnv();
+      }
     });
   });
 });

@@ -1,7 +1,8 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import yaml from 'js-yaml';
-import { getJsonSchemaFileSnapshot } from '../util/file';
+import { getJsonSchemaFileSnapshot, maybeLoadConfigFromExternalFile } from '../util/file';
 import { extractJsonObjects, getAjv } from '../util/json';
-import { processFileReference } from './utils';
 import type { ValidateFunction } from 'ajv';
 
 import type { Assertion, AssertionParams, GradingResult } from '../types/index';
@@ -9,10 +10,6 @@ import type { Assertion, AssertionParams, GradingResult } from '../types/index';
 const staticFileValidatorCache = new WeakMap<
   object,
   WeakMap<Assertion, { source: string; validate: ValidateFunction }>
->();
-const schemaIdValidatorCache = new WeakMap<
-  object,
-  Map<string, { serializedSchema: string; validate: ValidateFunction }>
 >();
 
 class JsonSchemaConfigurationError extends Error {}
@@ -72,9 +69,10 @@ function cacheStaticValidator(
   assertionCache.set(assertion, { source, validate });
 }
 
-function getSchemaIdCacheKey(
+function getMatchingSchemaIdValidator(
+  ajv: ReturnType<typeof getAjv>,
   schema: object | boolean,
-): { id: string; serializedSchema: string } | undefined {
+): ValidateFunction | undefined {
   if (
     typeof schema !== 'object' ||
     schema === null ||
@@ -83,33 +81,8 @@ function getSchemaIdCacheKey(
   ) {
     return undefined;
   }
-  try {
-    const serializedSchema = JSON.stringify(schema);
-    return serializedSchema === undefined ? undefined : { id: schema.$id, serializedSchema };
-  } catch {
-    return undefined;
-  }
-}
-
-function getCachedSchemaIdValidator(
-  ajv: object,
-  schemaKey: { id: string; serializedSchema: string },
-): ValidateFunction | undefined {
-  const cached = schemaIdValidatorCache.get(ajv)?.get(schemaKey.id);
-  return cached?.serializedSchema === schemaKey.serializedSchema ? cached.validate : undefined;
-}
-
-function cacheSchemaIdValidator(
-  ajv: object,
-  schemaKey: { id: string; serializedSchema: string },
-  validate: ValidateFunction,
-): void {
-  let cache = schemaIdValidatorCache.get(ajv);
-  if (!cache) {
-    cache = new Map();
-    schemaIdValidatorCache.set(ajv, cache);
-  }
-  cache.set(schemaKey.id, { serializedSchema: schemaKey.serializedSchema, validate });
+  const existing = ajv.getSchema(schema.$id);
+  return existing && isDeepStrictEqual(existing.schema, schema) ? existing : undefined;
 }
 
 function getJsonSchemaValidator({
@@ -146,34 +119,25 @@ function getJsonSchemaValidator({
       }
     } else if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
-        staticSource = renderedValue;
-        const cached = getCachedStaticValidator(ajv, assertion, staticSource);
-        if (cached) {
-          return { validate: cached };
+        const loadedAssertion = maybeLoadConfigFromExternalFile(
+          { assert: [{ ...assertion, value: renderedValue }] },
+          'test-config',
+        ).assert[0] as Assertion;
+        const loadedSnapshot = getJsonSchemaFileSnapshot(loadedAssertion);
+        if (!loadedSnapshot) {
+          throw new JsonSchemaConfigurationError('schema file could not be loaded');
         }
-        try {
-          schema = processFileReference(renderedValue);
-        } catch (error) {
-          if (error instanceof yaml.YAMLException) {
-            throw error;
-          }
-          const code = (error as NodeJS.ErrnoException).code;
+        if ('error' in loadedSnapshot) {
           throw new JsonSchemaConfigurationError(
-            code === 'ENOENT'
-              ? 'schema file not found'
-              : error instanceof Error && error.message.startsWith('Unsupported file type:')
-                ? 'unsupported schema file type'
-                : 'schema file could not be loaded',
+            loadedSnapshot.error === 'schema file must contain an object or boolean schema'
+              ? `${assertion.type} schema file must contain an object or boolean schema`
+              : loadedSnapshot.error,
           );
         }
-        if (typeof schema === 'string' && renderedValue.endsWith('.txt')) {
-          schema = yaml.load(schema);
-        }
-        if (schema === undefined || schema === null) {
-          throw new JsonSchemaConfigurationError(
-            `${assertion.type} schema file must contain an object or boolean schema`,
-          );
-        }
+        schema =
+          loadedSnapshot.format === 'text'
+            ? yaml.load(String(loadedAssertion.value))
+            : loadedSnapshot.schema;
       } else {
         schema = yaml.load(renderedValue);
       }
@@ -186,8 +150,7 @@ function getJsonSchemaValidator({
     }
 
     const compilableSchema = schema as object | boolean;
-    const schemaKey = getSchemaIdCacheKey(compilableSchema);
-    const cachedBySchemaId = schemaKey ? getCachedSchemaIdValidator(ajv, schemaKey) : undefined;
+    const cachedBySchemaId = getMatchingSchemaIdValidator(ajv, compilableSchema);
     if (cachedBySchemaId) {
       if (staticSource) {
         cacheStaticValidator(ajv, assertion, staticSource, cachedBySchemaId);
@@ -196,9 +159,6 @@ function getJsonSchemaValidator({
     }
 
     const validate = ajv.compile(compilableSchema);
-    if (schemaKey) {
-      cacheSchemaIdValidator(ajv, schemaKey, validate);
-    }
     if (staticSource) {
       cacheStaticValidator(ajv, assertion, staticSource, validate);
     }

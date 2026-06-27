@@ -35,6 +35,7 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
+import { getJsonSchemaFileSnapshot, getJsonSchemaRenderedFileRef } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -470,13 +471,25 @@ export async function runAssertion({
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   const baseType = getAssertionBaseType(assertion);
+  const isJsonSchemaAssertion = baseType === 'is-json' || baseType === 'contains-json';
+  const jsonSchemaFileSnapshot = isJsonSchemaAssertion
+    ? getJsonSchemaFileSnapshot(assertion)
+    : undefined;
+  const isTextJsonSchemaFile =
+    jsonSchemaFileSnapshot &&
+    !('error' in jsonSchemaFileSnapshot) &&
+    jsonSchemaFileSnapshot.format === 'text';
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   let didResolveValueFromScript = false;
   if (typeof renderedValue === 'string') {
-    if (renderedValue.startsWith('file://')) {
+    if (isTextJsonSchemaFile) {
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+    } else if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
+      const fileRef = (getJsonSchemaRenderedFileRef(assertion) ?? renderedValue).slice(
+        'file://'.length,
+      );
       let filePath = fileRef;
       let functionName: string | undefined;
 
@@ -565,7 +578,6 @@ export async function runAssertion({
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
 
-  const isJsonSchemaAssertion = baseType === 'is-json' || baseType === 'contains-json';
   if (
     (valueFromScript !== undefined || (didResolveValueFromScript && isJsonSchemaAssertion)) &&
     !SCRIPT_RESULT_ASSERTIONS.has(baseType)

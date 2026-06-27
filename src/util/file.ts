@@ -34,6 +34,7 @@ type ExternalFileContext =
 const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot');
 const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
 const JSON_SCHEMA_FILE_ERROR = '__promptfooJsonSchemaFileError';
+const JSON_SCHEMA_FILE_FORMAT = '__promptfooJsonSchemaFileFormat';
 
 type PersistedJsonSchemaFileError = {
   error: string;
@@ -71,7 +72,24 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
     const { error, fingerprint } = persisted as PersistedJsonSchemaFileError;
     return { source: `persisted:${fingerprint}`, error, fingerprint };
   }
+  if (record[JSON_SCHEMA_FILE_FORMAT] === 'text') {
+    return {
+      source: 'persisted:text',
+      format: 'text',
+      schema: record.value,
+    };
+  }
   return undefined;
+}
+
+export function getJsonSchemaRenderedFileRef(assertion: unknown): string | undefined {
+  if (typeof assertion !== 'object' || assertion === null) {
+    return undefined;
+  }
+  const renderedFileRef = (assertion as Record<PropertyKey, unknown>)[
+    JSON_SCHEMA_RENDERED_FILE_REF
+  ];
+  return typeof renderedFileRef === 'string' ? renderedFileRef : undefined;
 }
 
 /**
@@ -475,6 +493,14 @@ function loadConfigFromExternalFile(
         } else {
           delete result[JSON_SCHEMA_FILE_ERROR];
           result.value = snapshot.schema;
+          if (snapshot.format === 'text') {
+            Object.defineProperty(result, JSON_SCHEMA_FILE_FORMAT, {
+              value: 'text',
+              enumerable: true,
+              configurable: false,
+              writable: false,
+            });
+          }
         }
         Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
           value: snapshot,
@@ -483,7 +509,13 @@ function loadConfigFromExternalFile(
           writable: false,
         });
       } else {
-        result.value = renderedFileRef;
+        result.value = rawFileRef;
+        Object.defineProperty(result, JSON_SCHEMA_RENDERED_FILE_REF, {
+          value: renderedFileRef,
+          enumerable: false,
+          configurable: false,
+          writable: false,
+        });
       }
     }
     return result;

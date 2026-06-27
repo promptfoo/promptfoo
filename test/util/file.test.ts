@@ -8,6 +8,7 @@ import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import {
   getJsonSchemaFileSnapshot,
+  getJsonSchemaRenderedFileRef,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -1025,6 +1026,11 @@ describe('file utilities', () => {
           format: 'text',
           schema,
         });
+        expect(getJsonSchemaFileSnapshot(JSON.parse(JSON.stringify(result)).assert[0])).toEqual({
+          source: 'persisted:text',
+          format: 'text',
+          schema,
+        });
       });
 
       it.each([
@@ -1088,17 +1094,34 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should leave named Ruby schema generators for runtime resolution', () => {
-        const result = maybeLoadConfigFromExternalFile(
-          {
-            assert: [{ type: 'is-json', value: 'file://schema.rb:build_schema' }],
-          },
-          'test-config',
-        );
+      it('should keep rendered schema generator paths private for runtime resolution', () => {
+        const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_PATH: '/private/schema/path' });
 
-        expect(result.assert[0].value).toBe('file://schema.rb:build_schema');
-        expect(getJsonSchemaFileSnapshot(result.assert[0])).toBeUndefined();
-        expect(fs.readFileSync).not.toHaveBeenCalled();
+        try {
+          const result = maybeLoadConfigFromExternalFile(
+            {
+              assert: [
+                {
+                  type: 'is-json',
+                  value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.rb:build_schema',
+                },
+              ],
+            },
+            'test-config',
+          );
+
+          expect(result.assert[0].value).toBe(
+            'file://{{ env.PR8237_SCHEMA_PATH }}/schema.rb:build_schema',
+          );
+          expect(getJsonSchemaRenderedFileRef(result.assert[0])).toBe(
+            'file:///private/schema/path/schema.rb:build_schema',
+          );
+          expect(JSON.stringify(result)).not.toContain('/private/schema/path');
+          expect(getJsonSchemaFileSnapshot(result.assert[0])).toBeUndefined();
+          expect(fs.readFileSync).not.toHaveBeenCalled();
+        } finally {
+          restoreEnv();
+        }
       });
 
       it('should load nested file references inside inline schema objects', () => {

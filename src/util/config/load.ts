@@ -302,10 +302,67 @@ const JSON_SCHEMA_ASSERTION_TYPES = new Set([
 ]);
 const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
 
-function restoreJsonSchemaFileReferences<T>(original: T, rendered: T): T {
+type JsonSchemaReferenceContext =
+  | 'assertion'
+  | 'assertion-templates'
+  | 'assertions'
+  | 'other'
+  | 'root'
+  | 'scenario'
+  | 'scenarios'
+  | 'test'
+  | 'tests';
+
+function getJsonSchemaReferenceChildContext(
+  context: JsonSchemaReferenceContext,
+  key: string,
+  parent: Record<string, unknown>,
+): JsonSchemaReferenceContext {
+  if (context === 'root') {
+    if (key === 'tests') {
+      return 'tests';
+    }
+    if (key === 'defaultTest') {
+      return 'test';
+    }
+    if (key === 'scenarios') {
+      return 'scenarios';
+    }
+    if (key === 'assertionTemplates') {
+      return 'assertion-templates';
+    }
+  } else if (context === 'test' && key === 'assert') {
+    return 'assertions';
+  } else if (context === 'scenario' && (key === 'config' || key === 'tests')) {
+    return 'tests';
+  } else if (context === 'assertion' && parent.type === 'assert-set' && key === 'assert') {
+    return 'assertions';
+  } else if (context === 'assertion-templates') {
+    return 'assertion';
+  }
+  return 'other';
+}
+
+function restoreJsonSchemaFileReferences<T>(
+  original: T,
+  rendered: T,
+  context: JsonSchemaReferenceContext = 'root',
+): T {
   if (Array.isArray(original) && Array.isArray(rendered)) {
+    const itemContext =
+      context === 'tests'
+        ? 'test'
+        : context === 'scenarios'
+          ? 'scenario'
+          : context === 'assertions'
+            ? 'assertion'
+            : 'other';
     for (let index = 0; index < original.length; index++) {
-      rendered[index] = restoreJsonSchemaFileReferences(original[index], rendered[index]);
+      rendered[index] = restoreJsonSchemaFileReferences(
+        original[index],
+        rendered[index],
+        itemContext,
+      );
     }
     return rendered;
   }
@@ -322,6 +379,7 @@ function restoreJsonSchemaFileReferences<T>(original: T, rendered: T): T {
   const originalRecord = original as Record<string, unknown>;
   const renderedRecord = rendered as Record<string, unknown>;
   const preservesSchemaFileReference =
+    context === 'assertion' &&
     typeof originalRecord.type === 'string' &&
     JSON_SCHEMA_ASSERTION_TYPES.has(originalRecord.type) &&
     typeof originalRecord.value === 'string' &&
@@ -342,6 +400,7 @@ function restoreJsonSchemaFileReferences<T>(original: T, rendered: T): T {
       renderedRecord[key] = restoreJsonSchemaFileReferences(
         originalRecord[key],
         renderedRecord[key],
+        getJsonSchemaReferenceChildContext(context, key, originalRecord),
       );
     }
   }

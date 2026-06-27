@@ -310,6 +310,23 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should preload schema references in standalone JSON tests', async () => {
+    const assertion = { type: 'is-json' as const, value: 'file://schema.json' };
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([{ assert: [assertion] }]));
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({
+      assert: [{ type: 'is-json', value: { type: 'object' } }],
+    });
+
+    const result = await readStandaloneTestsFile('test.json', '/config');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      { assert: [assertion] },
+      'test-config',
+      '/config',
+    );
+    expect(result[0].assert?.[0]).toMatchObject({ value: { type: 'object' } });
+  });
+
   it('should read YAML file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
       - var1: value1
@@ -824,12 +841,15 @@ describe('readTest', () => {
     });
   });
 
-  it('copies serializable schema errors back to the public inline config', async () => {
-    const input: TestCase = {
-      assert: [{ type: 'is-json', value: 'file://{{ env.SCHEMA_PATH }}/schema.json' }],
+  it('does not mutate immutable inline test cases while loading schema errors', async () => {
+    const originalAssertion = {
+      type: 'is-json' as const,
+      value: 'file://schema.json',
     };
+    const assertions = Object.freeze([originalAssertion]);
+    const input = Object.freeze({ assert: assertions }) as TestCase;
     const loadedAssertion = {
-      ...input.assert![0],
+      ...originalAssertion,
       __promptfooJsonSchemaFileError: {
         error: 'schema file not found',
         fingerprint: 'sha256:test',
@@ -839,9 +859,10 @@ describe('readTest', () => {
       assert: [loadedAssertion],
     });
 
-    await readTest(input, '/config');
+    const result = await readTest(input, '/config');
 
-    expect(input.assert?.[0]).toBe(loadedAssertion);
+    expect(input.assert?.[0]).toBe(originalAssertion);
+    expect(result.assert?.[0]).toBe(loadedAssertion);
   });
 
   it('readTest with invalid input', async () => {

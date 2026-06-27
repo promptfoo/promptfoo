@@ -1939,6 +1939,82 @@ describe('runAssertion', () => {
     expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
+  it('should parse uncaptured JSON schema references strictly', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue('type: object');
+
+    const result = await runAssertion({
+      assertion: { type: 'is-json', value: 'file://schema.json' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Invalid JSON schema: invalid JSON schema file',
+    });
+  });
+
+  it('should not cache uncaptured schema references across base paths', async () => {
+    vi.mocked(path.resolve)
+      .mockReturnValueOnce('/first/schema.json')
+      .mockReturnValueOnce('/first/schema.json')
+      .mockReturnValueOnce('/second/schema.json')
+      .mockReturnValueOnce('/second/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce('{"type":"string"}')
+      .mockReturnValueOnce('{"type":"number"}');
+    const assertion: Assertion = { type: 'is-json', value: 'file://schema.json' };
+
+    const first = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '"value"' },
+    });
+    const second = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+
+    expect(first.pass).toBe(true);
+    expect(second.pass).toBe(true);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('should preserve text schema provenance across serialization', async () => {
+    const schemaText =
+      'file://test/fixtures/file-script-assertions/rubric-generator.cjs:booleanValue';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue(schemaText);
+    const loadedAssertion = maybeLoadConfigFromExternalFile(
+      { assert: [{ type: 'is-json', value: 'file://schema.txt' }] },
+      'test-config',
+    ).assert[0] as Assertion;
+    const persistedAssertion = JSON.parse(JSON.stringify(loadedAssertion)) as Assertion;
+
+    const live = await runAssertion({
+      assertion: loadedAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    const persisted = await runAssertion({
+      assertion: persistedAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(live).toMatchObject({
+      pass: false,
+      reason: 'Invalid JSON schema: is-json schema must resolve to an object or boolean',
+    });
+    expect(persisted).toMatchObject({ pass: false, reason: live.reason });
+  });
+
   it.each([
     ['is-json', true, '{}'],
     ['not-is-json', false, '{}'],
@@ -2019,6 +2095,32 @@ describe('runAssertion', () => {
       source: 'file:///schema.schema',
       format: 'text',
       schema: 'type: object\nrequired: [foo]\nproperties:\n  foo:\n    type: string',
+    });
+  });
+
+  it('should not reuse a same-id validator for a different schema with spoofed serialization', async () => {
+    const id = 'https://example.com/promptfoo/pr-8237-spoofed-schema';
+    const firstSchema: Record<string, unknown> = { $id: id, type: 'string' };
+    const secondSchema: Record<string, unknown> = { $id: id, type: 'number' };
+    const toJSON = () => ({ $id: id, shape: 'same' });
+    Object.defineProperty(firstSchema, 'toJSON', { value: toJSON, enumerable: false });
+    Object.defineProperty(secondSchema, 'toJSON', { value: toJSON, enumerable: false });
+
+    const first = await runAssertion({
+      assertion: { type: 'is-json', value: firstSchema },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '"value"' },
+    });
+    const second = await runAssertion({
+      assertion: { type: 'is-json', value: secondSchema },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '42' },
+    });
+
+    expect(first.pass).toBe(true);
+    expect(second).toMatchObject({
+      pass: false,
+      reason: 'Invalid JSON schema: duplicate schema identifier',
     });
   });
 
