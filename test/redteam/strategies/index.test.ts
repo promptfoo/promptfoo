@@ -150,6 +150,24 @@ describe('getStrategyCompatibilityError', () => {
     );
   });
 
+  it('deduplicates aliased and expanded layer steps using the same structural key', () => {
+    const aliasedPosterior = { id: 'posterior' };
+    const strategies = [
+      {
+        id: 'layer',
+        config: { numTests: 0, steps: [aliasedPosterior, aliasedPosterior] },
+      },
+      {
+        id: 'layer',
+        config: { steps: [{ id: 'posterior' }, { id: 'posterior' }] },
+      },
+    ];
+
+    expect(getStrategyCompatibilityError(strategies, inputs, { plugins: ['harmful:hate'] })).toBe(
+      'Posterior strategy does not support multi-input targets',
+    );
+  });
+
   it.each([
     [{ id: 'posterior', config: { numTests: 0 } }],
     [{ id: 'layer', config: { numTests: 0, steps: ['posterior'] } }],
@@ -373,6 +391,56 @@ describe('getStrategyCompatibilityError', () => {
           ],
         }),
       ).toBeUndefined();
+    } finally {
+      fs.rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it('resolves file-backed plugin inputs before compatibility checks', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-posterior-inputs-'));
+    const inputsPath = path.join(tempDir, 'inputs.json');
+    fs.writeFileSync(inputsPath, JSON.stringify(inputs));
+
+    try {
+      expect(
+        getStrategyCompatibilityError(['posterior'], undefined, {
+          plugins: [{ id: 'policy', config: { inputs: `file://${inputsPath}` } }],
+        }),
+      ).toBe('Posterior strategy does not support multi-input targets');
+    } finally {
+      fs.rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it('does not resolve compatibility files when Posterior is not configured', () => {
+    expect(
+      getStrategyCompatibilityError(['basic'], undefined, {
+        plugins: [
+          {
+            id: 'policy',
+            config: { inputs: 'file:///missing/posterior-inputs.json' },
+          },
+        ],
+      }),
+    ).toBeUndefined();
+  });
+
+  it('matches runtime raw-text semantics for yml strategy exclusions', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-posterior-exclusions-'));
+    const exclusionsPath = path.join(tempDir, 'exclusions.yml');
+    fs.writeFileSync(exclusionsPath, '- posterior\n');
+
+    try {
+      expect(
+        getStrategyCompatibilityError(['posterior'], inputs, {
+          plugins: [
+            {
+              id: 'harmful:hate',
+              config: { excludeStrategies: `file://${exclusionsPath}` },
+            },
+          ],
+        }),
+      ).toBe('Posterior strategy does not support multi-input targets');
     } finally {
       fs.rmSync(tempDir, { force: true, recursive: true });
     }

@@ -1004,6 +1004,49 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('rejects plugin-local multi-input replacements before cancelling the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
+      );
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const incompatibleResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [{ id: 'echo' }],
+            redteam: {
+              plugins: [
+                {
+                  id: 'cca',
+                  config: { inputs: { context: 'Plugin context', question: 'Plugin question' } },
+                },
+              ],
+              strategies: ['posterior'],
+            },
+          },
+        });
+
+      expect(incompatibleResponse.status).toBe(400);
+      expect(incompatibleResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+    });
+
     it('allows multi-input runs when Posterior is excluded for every configured plugin', async () => {
       mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
         resolveActualTargetProviderInputs,

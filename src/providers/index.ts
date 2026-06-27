@@ -113,6 +113,8 @@ export async function loadApiProvider(
   const renderedConfig = options.config
     ? renderEnvOnlyInObject(options.config, mergedEnv)
     : undefined;
+  const renderedInputs =
+    options.inputs === undefined ? undefined : renderEnvOnlyInObject(options.inputs, mergedEnv);
   const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
 
   const providerOptions: ProviderOptions = {
@@ -143,6 +145,9 @@ export async function loadApiProvider(
       );
     }
 
+    const localTopLevelInputs = getConfiguredProviderInputs({ inputs: options.inputs });
+    const localConfigInputs = getConfiguredProviderInputs({ config: options.config });
+
     // Merge local config overrides with cloud provider config
     // Local config takes precedence to allow per-eval customization
     const mergedOptions: ProviderOptions = {
@@ -157,8 +162,8 @@ export async function loadApiProvider(
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs:
-        getConfiguredProviderInputs({ inputs: options.inputs, config: renderedConfig }) ??
-        getConfiguredProviderInputs(cloudProvider),
+        localTopLevelInputs ??
+        (localConfigInputs === undefined ? getConfiguredProviderInputs(cloudProvider) : undefined),
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: {
         ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
@@ -221,7 +226,7 @@ export async function loadApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs =
-        getConfiguredProviderInputs({ inputs: options.inputs, config: renderedConfig }) ??
+        getConfiguredProviderInputs({ inputs: renderedInputs, config: renderedConfig }) ??
         ret.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
       return ret;

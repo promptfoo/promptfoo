@@ -2596,6 +2596,24 @@ inputs:
     expect(provider.inputs).toEqual({ question: 'Rendered question' });
   });
 
+  it('renders cloud legacy inputs after merging the cloud environment', async () => {
+    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+    const cloudProvider = {
+      id: 'echo',
+      config: { inputs: { question: '{{ env.OPENAI_BASE_URL }}' } },
+      env: { OPENAI_BASE_URL: 'Rendered cloud question' },
+    };
+    vi.mocked(getProviderFromCloud)
+      .mockResolvedValueOnce(cloudProvider)
+      .mockResolvedValueOnce(cloudProvider);
+
+    const provider = await loadApiProvider(providerId);
+    const preflightInputs = await resolveProviderInputsForValidation(providerId);
+
+    expect(provider.inputs).toEqual({ question: 'Rendered cloud question' });
+    expect(preflightInputs).toEqual([{ question: 'Rendered cloud question' }]);
+  });
+
   it('ignores sequence prompt arrays during provider preflight', async () => {
     await expect(
       resolveProviderInputsForValidation([
