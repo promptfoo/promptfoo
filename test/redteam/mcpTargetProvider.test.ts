@@ -343,6 +343,26 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.callApi).not.toHaveBeenCalled();
   });
 
+  it('does not reject short raw MCP intents when normalized more than once', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({ output: JSON.stringify(searchCompaniesCall) }),
+    });
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const test = { metadata: { pluginConfig: { minCharsPerMessage: 20 } } };
+    const wrapped = maybeWrapMcpProviderForRedteam(target, test);
+    const normalizedAgain = maybeWrapMcpProviderForRedteam(wrapped, test);
+
+    await normalizedAgain.callApi('x', {
+      ...redteamContext('x'),
+      test,
+    });
+
+    expect(normalizedAgain).toBe(wrapped);
+    expect(target.calls).toHaveLength(1);
+    expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
+  });
+
   it('enforces limits after MCP materializes the underlying call', async () => {
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',

@@ -210,8 +210,16 @@ export function maybeWrapMcpProviderForRedteam(
   provider: ApiProvider,
   test: AtomicTestCase | undefined,
 ): ApiProvider {
+  // A previously wrapped MCP provider already materializes the raw intent before
+  // its inner char-limit wrapper sees the final target prompt. Do not add an
+  // outer char-limit wrapper on a later normalization pass, because that would
+  // reject short raw intents before MCP materialization can expand them.
+  if ((provider as McpProviderWithTools)[WRAPPED_MCP_PROVIDER]) {
+    return provider;
+  }
+
   const limitedProvider = maybeWrapTargetProviderForCharLimits(provider, test);
-  if (!isRedteamTest(test) || (limitedProvider as McpProviderWithTools)[WRAPPED_MCP_PROVIDER]) {
+  if (!isRedteamTest(test)) {
     return limitedProvider;
   }
 
