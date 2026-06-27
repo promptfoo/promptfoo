@@ -24,7 +24,6 @@ import { dereferenceLiveRedteamConfig, doRedteamRun } from '../../redteam/shared
 import {
   getStrategyCompatibilityError,
   isStrategyApplicable,
-  requiresTargetInputResolutionForCompatibility,
   Strategies,
 } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
@@ -106,7 +105,19 @@ async function getLiveConfigCompatibilityError(
     return undefined;
   }
 
-  const requiresResolvedInputs = requiresTargetInputResolutionForCompatibility(strategies, plugins);
+  const requiresResolvedInputs =
+    getStrategyCompatibilityError(
+      strategies,
+      { compatibilityProbe: true },
+      {
+        plugins,
+        pluginsUseTargetInputs: false,
+      },
+    ) !== undefined ||
+    getStrategyCompatibilityError(strategies, undefined, {
+      plugins,
+      pluginsUseTargetInputs: false,
+    }) !== undefined;
   if (!requiresResolvedInputs) {
     return undefined;
   }

@@ -113,14 +113,25 @@ export function getStrategyCompatibilityError(
     return undefined;
   }
 
-  const resolvedPlugins = options.plugins?.map((plugin) =>
-    hasApplicablePosteriorStrategy(strategies, [plugin], {
-      includeDisabledStrategies: options.includeDisabledStrategies,
-      pluginsUseTargetInputs: options.pluginsUseTargetInputs,
-    })
-      ? resolvePluginForCompatibility(plugin)
-      : plugin,
-  );
+  let resolvedPlugins: readonly unknown[] | undefined;
+  try {
+    resolvedPlugins = options.plugins?.map((plugin) =>
+      hasApplicablePosteriorStrategy(strategies, [plugin], {
+        includeDisabledStrategies: options.includeDisabledStrategies,
+        pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+      })
+        ? resolvePluginForCompatibility(plugin)
+        : plugin,
+    );
+  } catch (error) {
+    if (
+      isNonEmptyInputRecord(inputs) &&
+      (inputs as Record<string, unknown>).compatibilityProbe === true
+    ) {
+      return POSTERIOR_MULTI_INPUT_ERROR;
+    }
+    throw error;
+  }
   const hasPluginInputs =
     options.pluginsUseTargetInputs === true
       ? false
@@ -148,28 +159,6 @@ export function getStrategyCompatibilityError(
     });
 
   return hasPosterior || pluginInputsHavePosterior ? POSTERIOR_MULTI_INPUT_ERROR : undefined;
-}
-
-export function requiresTargetInputResolutionForCompatibility(
-  strategies: readonly unknown[],
-  plugins: readonly unknown[],
-): boolean {
-  try {
-    return (
-      getStrategyCompatibilityError(
-        strategies,
-        { compatibilityProbe: true },
-        { plugins, pluginsUseTargetInputs: false },
-      ) !== undefined ||
-      getStrategyCompatibilityError(strategies, undefined, {
-        plugins,
-        pluginsUseTargetInputs: false,
-      }) !== undefined
-    );
-  } catch {
-    // Defer file-backed plugin errors until target inputs establish whether the plugin will run.
-    return true;
-  }
 }
 
 export function isStrategyApplicable(

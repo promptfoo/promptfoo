@@ -71,7 +71,6 @@ import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/polic
 import { resolveRedteamTargetProviderInputMetadata } from '../providers/shared';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
-import { requiresTargetInputResolutionForCompatibility } from '../strategies';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
@@ -470,10 +469,16 @@ async function doGenerateRedteamInternal(
         throw new Error(strategyConfigError);
       }
 
-      const requiresResolvedInputs = requiresTargetInputResolutionForCompatibility(
-        strategies,
-        compatibilityPlugins,
-      );
+      const requiresResolvedInputs =
+        getStrategyCompatibilityError(
+          strategies,
+          { compatibilityProbe: true },
+          { plugins: compatibilityPlugins, pluginsUseTargetInputs: false },
+        ) !== undefined ||
+        getStrategyCompatibilityError(strategies, undefined, {
+          plugins: compatibilityPlugins,
+          pluginsUseTargetInputs: false,
+        }) !== undefined;
       if (requiresResolvedInputs) {
         let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
           providers,

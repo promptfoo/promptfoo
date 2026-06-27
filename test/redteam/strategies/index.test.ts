@@ -10,7 +10,6 @@ import {
   getStrategyCompatibilityError,
   isStrategyApplicable,
   loadStrategy,
-  requiresTargetInputResolutionForCompatibility,
   validateStrategies,
 } from '../../../src/redteam/strategies/index';
 import { RedteamConfigSchema } from '../../../src/validators/redteam';
@@ -483,16 +482,20 @@ describe('getStrategyCompatibilityError', () => {
 
   it('defers probe-time file errors until target applicability is known', () => {
     expect(
-      requiresTargetInputResolutionForCompatibility(
+      getStrategyCompatibilityError(
         [{ id: 'posterior', config: { plugins: ['cca'] } }],
-        [
-          {
-            id: 'cca',
-            config: { excludeStrategies: 'file:///missing/posterior-exclusions.yaml' },
-          },
-        ],
+        { compatibilityProbe: true },
+        {
+          plugins: [
+            {
+              id: 'cca',
+              config: { excludeStrategies: 'file:///missing/posterior-exclusions.yaml' },
+            },
+          ],
+          pluginsUseTargetInputs: false,
+        },
       ),
-    ).toBe(true);
+    ).toBe('Posterior strategy does not support multi-input targets');
 
     expect(() =>
       getStrategyCompatibilityError(['posterior'], undefined, {
