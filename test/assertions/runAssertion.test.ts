@@ -6,6 +6,7 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { getJsonSchemaFileSnapshot, maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import { getAjv } from '../../src/util/json';
 import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
@@ -44,6 +45,7 @@ vi.mock('../../src/util/fetch/index.ts', async () => {
 
 vi.mock('glob', () => ({
   globSync: vi.fn(),
+  hasMagic: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('fs', () => {
@@ -1638,6 +1640,33 @@ describe('runAssertion', () => {
   });
 
   it.each([
+    ['is-json', '', true],
+    ['is-json', null, true],
+    ['is-json', undefined, true],
+    ['not-is-json', '', false],
+    ['not-is-json', null, false],
+    ['not-is-json', undefined, false],
+    ['contains-json', '', true],
+    ['contains-json', null, true],
+    ['contains-json', undefined, true],
+    ['not-contains-json', '', false],
+    ['not-contains-json', null, false],
+    ['not-contains-json', undefined, false],
+  ] as const)('should preserve schema-less behavior when %s renders a %s template value', async (type, schema, pass) => {
+    const output = type.includes('contains') ? 'prefix {"foo":"bar"} suffix' : '{"foo":"bar"}';
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: '{{ schema }}' },
+      test: { vars: { schema } } as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result.pass).toBe(pass);
+    expect(result.reason).not.toContain('Invalid JSON schema:');
+  });
+
+  it.each([
     ['is-json', false, 'Expected output to be valid JSON'],
     ['not-is-json', true, 'Assertion passed'],
     ['contains-json', false, 'Expected output to contain valid JSON'],
@@ -1678,6 +1707,95 @@ describe('runAssertion', () => {
     expect(result.pass).toBe(true);
     expect(compileSpy).toHaveBeenCalledTimes(1);
     compileSpy.mockRestore();
+  });
+
+  it('should reuse a static schema validator across repeated assertions', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.yaml');
+    vi.mocked(path.extname).mockReturnValue('.yaml');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      '$id: https://example.com/promptfoo/pr-8237-static-schema\ntype: object',
+    );
+    const assertion = maybeLoadConfigFromExternalFile({
+      assert: [{ type: 'is-json', value: 'file:///schema.yaml' }],
+    }).assert[0] as Assertion;
+    expect(getJsonSchemaFileSnapshot(assertion)).toEqual({
+      source: 'file:///schema.yaml',
+      format: 'parsed',
+      schema: {
+        $id: 'https://example.com/promptfoo/pr-8237-static-schema',
+        type: 'object',
+      },
+    });
+    const compileSpy = vi.spyOn(getAjv(), 'compile');
+
+    const first = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+    const second = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(first.pass).toBe(true);
+    expect(second.pass).toBe(true);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(compileSpy).toHaveBeenCalledTimes(1);
+    compileSpy.mockRestore();
+  });
+
+  it('should render text schema snapshots with assertion variables', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'type: object\nproperties:\n  foo:\n    type: {{ requiredType }}',
+    );
+    const assertion = maybeLoadConfigFromExternalFile({
+      assert: [{ type: 'is-json', value: 'file:///schema.txt' }],
+    }).assert[0] as Assertion;
+    expect(getJsonSchemaFileSnapshot(assertion)).toEqual({
+      source: 'file:///schema.txt',
+      format: 'text',
+      schema: 'type: object\nproperties:\n  foo:\n    type: {{ requiredType }}',
+    });
+
+    const result = await runAssertion({
+      assertion,
+      test: { vars: { requiredType: 'string' } } as AtomicTestCase,
+      providerResponse: { output: '{"foo":"value"}' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not expose malformed schema contents in errors', async () => {
+    const secret = 'PR8237_SECRET_SENTINEL';
+    const result = await runAssertion({
+      assertion: {
+        type: 'is-json',
+        value: `type: object\nproperties:\n  ${secret}: [`,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(result.reason).toMatch(/^Invalid JSON schema: invalid YAML syntax/);
+    expect(result.reason).not.toContain(secret);
+  });
+
+  it('should not expose unresolved schema reference URLs in errors', async () => {
+    const secretRef = 'https://user:PR8237_SECRET@example.invalid/schema.json';
+    const result = await runAssertion({
+      assertion: { type: 'is-json', value: { $ref: secretRef } },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{}' },
+    });
+
+    expect(result.reason).toBe('Invalid JSON schema: unresolved schema reference');
+    expect(result.reason).not.toContain(secretRef);
   });
 
   it('should pass when the javascript assertion passes', async () => {

@@ -6,6 +6,7 @@ import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
+  getJsonSchemaFileSnapshot,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -868,6 +869,7 @@ describe('file utilities', () => {
         'contains-json',
         'not-contains-json',
       ])('should preserve %s schema file references', (type) => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
         const config = {
           assert: [
             {
@@ -880,7 +882,84 @@ describe('file utilities', () => {
         const result = maybeLoadConfigFromExternalFile(config);
 
         expect(result.assert[0].value).toBe('file://schema.yaml');
-        expect(fs.readFileSync).not.toHaveBeenCalled();
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.yaml',
+          format: 'parsed',
+          schema: { type: 'object' },
+        });
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should reuse one schema snapshot for repeated references', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+        const result = maybeLoadConfigFromExternalFile({
+          assert: [
+            { type: 'is-json', value: 'file://schema.yaml' },
+            { type: 'contains-json', value: 'file://schema.yaml' },
+          ],
+        });
+
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toBe(
+          getJsonSchemaFileSnapshot(result.assert[1]),
+        );
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should load lookalike objects outside assertion lists normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        const result = maybeLoadConfigFromExternalFile({
+          body: { type: 'is-json', value: 'file://schema.yaml' },
+        });
+
+        expect(result.body.value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.body)).toBeUndefined();
+      });
+
+      it('should load lookalike objects nested inside assertions normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        const result = maybeLoadConfigFromExternalFile({
+          assert: [
+            {
+              type: 'javascript',
+              value: 'return true',
+              config: { body: { type: 'is-json', value: 'file://schema.yaml' } },
+            },
+          ],
+        });
+
+        expect(result.assert[0].config.body.value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.assert[0].config.body)).toBeUndefined();
+      });
+
+      it('should reject YAML content in JSON schema files', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        const result = maybeLoadConfigFromExternalFile({
+          assert: [{ type: 'is-json', value: 'file://schema.json' }],
+        });
+
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.json',
+          error: 'invalid JSON schema file',
+        });
+      });
+
+      it('should capture malformed schema files without aborting config loading', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(
+          'type: object\nproperties: [',
+        );
+
+        const result = maybeLoadConfigFromExternalFile({
+          assert: [{ type: 'is-json', value: 'file://schema.yaml' }],
+        });
+
+        expect(result.assert[0].value).toBe('file://schema.yaml');
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.yaml',
+          error: 'invalid YAML schema file',
+        });
       });
 
       it('should load non-assertion Python files normally', () => {

@@ -22,7 +22,34 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
-type ExternalFileContext = 'assertion' | 'general' | 'json-schema-assertion' | 'vars';
+type ExternalFileContext =
+  | 'assertion'
+  | 'assertions'
+  | 'general'
+  | 'json-schema-assertion'
+  | 'vars';
+
+const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot');
+
+export type JsonSchemaFileSnapshot =
+  | {
+      source: string;
+      format: 'parsed' | 'text';
+      schema: unknown;
+    }
+  | {
+      source: string;
+      error: string;
+    };
+
+export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSnapshot | undefined {
+  if (typeof assertion !== 'object' || assertion === null) {
+    return undefined;
+  }
+  return (assertion as Record<PropertyKey, unknown>)[JSON_SCHEMA_FILE_SNAPSHOT] as
+    | JsonSchemaFileSnapshot
+    | undefined;
+}
 
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
@@ -237,6 +264,61 @@ export function maybeLoadFromExternalFile(
   return contents;
 }
 
+function captureJsonSchemaFile(
+  fileRef: string,
+  basePath: string | undefined,
+  cache: Map<string, JsonSchemaFileSnapshot>,
+): JsonSchemaFileSnapshot | undefined {
+  const renderedFileRef = getNunjucksEngineForFilePath().renderString(fileRef, {});
+  const { filePath: cleanPath } = parseFileUrl(renderedFileRef);
+  if (isJavascriptFile(cleanPath) || cleanPath.endsWith('.py') || cleanPath.endsWith('.rb')) {
+    return undefined;
+  }
+
+  const extension = path.extname(cleanPath).toLowerCase();
+  const resolvedPath = path.resolve(basePath ?? cliState.basePath ?? '', cleanPath);
+  const cached = cache.get(resolvedPath);
+  if (cached) {
+    return cached;
+  }
+
+  if (!['.json', '.yaml', '.yml', '.txt'].includes(extension)) {
+    const snapshot = { source: renderedFileRef, error: 'unsupported schema file type' } as const;
+    cache.set(resolvedPath, snapshot);
+    return snapshot;
+  }
+
+  try {
+    const contents = fs.readFileSync(resolvedPath, 'utf8');
+    const schema =
+      extension === '.json'
+        ? JSON.parse(contents)
+        : extension === '.yaml' || extension === '.yml'
+          ? yaml.load(contents)
+          : contents;
+    const snapshot = {
+      source: renderedFileRef,
+      format: extension === '.txt' ? 'text' : 'parsed',
+      schema,
+    } as const;
+    cache.set(resolvedPath, snapshot);
+    return snapshot;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    const safeError =
+      code === 'ENOENT'
+        ? 'schema file not found'
+        : error instanceof SyntaxError && extension === '.json'
+          ? 'invalid JSON schema file'
+          : error instanceof yaml.YAMLException
+            ? 'invalid YAML schema file'
+            : 'schema file could not be read';
+    const snapshot = { source: renderedFileRef, error: safeError };
+    cache.set(resolvedPath, snapshot);
+    return snapshot;
+  }
+}
+
 /**
  * Resolves a relative file path with respect to a base path, handling cloud configuration appropriately.
  * When using a cloud configuration, the current working directory is always used instead of the context's base path.
@@ -262,9 +344,22 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * @param context - Optional context to control file loading behavior
  * @returns The configuration with external file references resolved
  */
-export function maybeLoadConfigFromExternalFile(config: any, context?: ExternalFileContext): any {
+export function maybeLoadConfigFromExternalFile(
+  config: any,
+  context?: ExternalFileContext,
+  basePath?: string,
+): any {
+  return loadConfigFromExternalFile(config, context, basePath, new Map());
+}
+
+function loadConfigFromExternalFile(
+  config: any,
+  context: ExternalFileContext | undefined,
+  basePath: string | undefined,
+  schemaCache: Map<string, JsonSchemaFileSnapshot>,
+): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
+    return config.map((item) => loadConfigFromExternalFile(item, context, basePath, schemaCache));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
@@ -279,11 +374,15 @@ export function maybeLoadConfigFromExternalFile(config: any, context?: ExternalF
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
       const isJsonSchemaAssertionValue =
-        key === 'value' && (assertionType === 'is-json' || assertionType === 'contains-json');
+        context === 'assertions' &&
+        key === 'value' &&
+        (assertionType === 'is-json' || assertionType === 'contains-json');
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
+      const isAssertionsField = key === 'assert';
+      const inheritedContext = context === 'assertions' ? undefined : context;
 
       const childContext = isJsonSchemaAssertionValue
         ? 'json-schema-assertion'
@@ -291,8 +390,10 @@ export function maybeLoadConfigFromExternalFile(config: any, context?: ExternalF
           ? 'assertion'
           : isVarsField
             ? 'vars'
-            : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+            : isAssertionsField
+              ? 'assertions'
+              : inheritedContext;
+      const value = loadConfigFromExternalFile(config[key], childContext, basePath, schemaCache);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -303,6 +404,23 @@ export function maybeLoadConfigFromExternalFile(config: any, context?: ExternalF
         });
       } else {
         result[key] = value;
+      }
+    }
+
+    if (
+      context === 'assertions' &&
+      (assertionType === 'is-json' || assertionType === 'contains-json') &&
+      typeof result.value === 'string' &&
+      result.value.startsWith('file://')
+    ) {
+      const snapshot = captureJsonSchemaFile(result.value, basePath, schemaCache);
+      if (snapshot) {
+        Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
+          value: snapshot,
+          enumerable: true,
+          configurable: false,
+          writable: false,
+        });
       }
     }
     return result;

@@ -1710,21 +1710,29 @@ describe('loadTestsFromGlob', () => {
       actualFileUtils.maybeLoadConfigFromExternalFile,
     );
     vi.mocked(globSync).mockReturnValue(['tests.yaml']);
-    vi.mocked(fs.readFileSync).mockReturnValue(
-      yaml.dump([
-        {
-          description: 'JSON schema reference',
-          assert: [{ type: 'not-contains-json', value: 'file://malformed-schema.yaml' }],
-        },
-      ]),
-    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith('tests.yaml')) {
+        return yaml.dump([
+          {
+            description: 'JSON schema reference',
+            assert: [{ type: 'not-contains-json', value: 'file://malformed-schema.yaml' }],
+          },
+        ]);
+      }
+      return 'type: object\nproperties: [';
+    });
 
     const result = await loadTestsFromGlob('tests.yaml');
 
-    expect(result[0].assert).toEqual([
-      { type: 'not-contains-json', value: 'file://malformed-schema.yaml' },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result[0].assert?.[0]).toMatchObject({
+      type: 'not-contains-json',
+      value: 'file://malformed-schema.yaml',
+    });
+    expect(actualFileUtils.getJsonSchemaFileSnapshot(result[0].assert?.[0])).toEqual({
+      source: 'file://malformed-schema.yaml',
+      error: 'invalid YAML schema file',
+    });
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('should handle Hugging Face dataset URLs', async () => {

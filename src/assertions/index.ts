@@ -645,6 +645,7 @@ export async function runAssertion({
     renderedValue,
     test: finalTest,
     valueFromScript,
+    valueFromScriptResolved: didResolveValueFromScript,
   };
 
   // Check for redteam assertions first

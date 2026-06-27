@@ -773,6 +773,7 @@ export interface AssertionParams {
   renderedValue?: AssertionValue;
   test: AtomicTestCase;
   valueFromScript?: string | boolean | number | GradingResult | object;
+  valueFromScriptResolved?: boolean;
 }
 
 // Used when building prompts index from files.
