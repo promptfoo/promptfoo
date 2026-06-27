@@ -340,6 +340,15 @@ describe('getStrategyCompatibilityError', () => {
     ).toBe('Posterior strategy does not support multi-input targets');
   });
 
+  it('ignores plugin-local inputs when generation uses the first target inputs', () => {
+    expect(
+      getStrategyCompatibilityError(['posterior'], undefined, {
+        plugins: [{ id: 'cca', config: { inputs } }],
+        pluginsUseTargetInputs: true,
+      }),
+    ).toBeUndefined();
+  });
+
   it('does not apply target-wide plugin exclusions to plugin-level inputs', () => {
     expect(
       getStrategyCompatibilityError(['posterior'], undefined, {

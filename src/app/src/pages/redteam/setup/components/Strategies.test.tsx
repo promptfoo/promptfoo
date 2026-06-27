@@ -286,6 +286,35 @@ describe('Strategies', () => {
       ).toBeVisible();
     });
 
+    it('allows a targeted Posterior preview when only an unrelated plugin has inputs', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { config: { stateful: false } },
+          strategies: [{ id: 'posterior', config: { plugins: ['harmful:hate'] } }],
+          plugins: [
+            {
+              id: 'policy',
+              config: { inputs: { context: 'Reference context', question: 'User question' } },
+            },
+            'harmful:hate',
+          ],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+      expect(
+        screen.getByRole('button', {
+          name: 'Generate an example test case using the Posterior Attack Strategy.',
+        }),
+      ).toBeEnabled();
+    });
+
     it('blocks progression for selected Posterior with plugin-level inputs', () => {
       (useRedTeamConfig as any).mockReturnValue({
         config: {

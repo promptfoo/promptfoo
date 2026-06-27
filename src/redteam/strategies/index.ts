@@ -94,7 +94,11 @@ function pluginHasConfiguredInputs(plugin: unknown): boolean {
 export function getStrategyCompatibilityError(
   strategies: readonly unknown[],
   inputs: unknown,
-  options: { includeDisabledStrategies?: boolean; plugins?: readonly unknown[] } = {},
+  options: {
+    includeDisabledStrategies?: boolean;
+    plugins?: readonly unknown[];
+    pluginsUseTargetInputs?: boolean;
+  } = {},
 ): string | undefined {
   if (strategies.some((strategy) => hasUserConfiguredPerTurnLayers(strategy))) {
     return INTERNAL_PER_TURN_LAYERS_ERROR;
@@ -110,7 +114,10 @@ export function getStrategyCompatibilityError(
   }
 
   const resolvedPlugins = options.plugins?.map(resolvePluginForCompatibility);
-  const hasPluginInputs = resolvedPlugins?.some(pluginHasConfiguredInputs) ?? false;
+  const hasPluginInputs =
+    options.pluginsUseTargetInputs === true
+      ? false
+      : (resolvedPlugins?.some(pluginHasConfiguredInputs) ?? false);
   if (!hasTargetInputs && !hasPluginInputs) {
     return undefined;
   }

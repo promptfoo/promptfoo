@@ -688,6 +688,63 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalled();
     });
 
+    it('respects an empty top-level plugin override during compatibility preflight', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [{ id: 'echo' }],
+            plugins: [],
+            redteam: {
+              plugins: [
+                {
+                  id: 'policy',
+                  config: { inputs: { context: 'Plugin context', question: 'Plugin question' } },
+                },
+              ],
+              strategies: ['posterior'],
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledOnce();
+    });
+
+    it('uses the first target to select plugin-local input mode during preflight', async () => {
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
+        inputs: [{ context: 'Target context', question: 'Target question' }, undefined],
+        hasUnresolved: false,
+      });
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              {
+                id: 'echo',
+                inputs: { context: 'Target context', question: 'Target question' },
+              },
+              { id: 'echo' },
+            ],
+            redteam: {
+              plugins: [
+                {
+                  id: 'cca',
+                  config: { inputs: { context: 'Plugin context', question: 'Plugin question' } },
+                },
+              ],
+              strategies: [{ id: 'posterior', config: { plugins: ['cca'] } }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+    });
+
     it('should publish a completed redteam eval through the eval job endpoint', async () => {
       const summary = { results: [] };
       mockedDoRedteamRun.mockResolvedValueOnce({

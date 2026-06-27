@@ -46,6 +46,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// Input metadata resolution emits a private Symbol while a dynamic provider is unresolved.
+function isUnresolvedProviderInput(value: unknown): boolean {
+  return typeof value === 'symbol';
+}
+
+function findTargetCompatibilityError(
+  strategies: readonly unknown[],
+  plugins: readonly unknown[],
+  inputs: readonly unknown[],
+): string | undefined {
+  const firstInput = inputs[0];
+  const pluginsUseTargetInputs =
+    isUnresolvedProviderInput(firstInput) ||
+    (isRecord(firstInput) && Object.keys(firstInput).length > 0);
+  return inputs
+    .filter((input) => !isUnresolvedProviderInput(input))
+    .map((input) =>
+      getStrategyCompatibilityError(strategies, input, { plugins, pluginsUseTargetInputs }),
+    )
+    .find((error) => error !== undefined);
+}
+
 async function getLiveConfigCompatibilityError(
   config: Record<string, unknown>,
   options: { loadDynamicProviders?: boolean } = {},
@@ -62,14 +84,18 @@ async function getLiveConfigCompatibilityError(
       : Array.isArray(redteam?.strategies)
         ? redteam.strategies
         : [];
-  const plugins =
+  const configuredPlugins =
     Array.isArray(commandLineOptions?.plugins) && commandLineOptions.plugins.length > 0
       ? commandLineOptions.plugins
-      : Array.isArray(resolvedConfig.plugins) && resolvedConfig.plugins.length > 0
+      : Array.isArray(resolvedConfig.plugins)
         ? resolvedConfig.plugins
-        : Array.isArray(redteam?.plugins) && redteam.plugins.length > 0
+        : Array.isArray(redteam?.plugins)
           ? redteam.plugins
-          : Array.from(REDTEAM_DEFAULT_PLUGINS);
+          : undefined;
+  const plugins =
+    configuredPlugins && configuredPlugins.length > 0
+      ? configuredPlugins
+      : Array.from(REDTEAM_DEFAULT_PLUGINS);
   const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
   if (strategyConfigError) {
     return strategyConfigError;
@@ -98,9 +124,7 @@ async function getLiveConfigCompatibilityError(
     filter,
     { loadDynamicProviders: false },
   );
-  let compatibilityError = resolvedInputs.inputs
-    .map((inputs) => getStrategyCompatibilityError(strategies, inputs, { plugins }))
-    .find((error) => error !== undefined);
+  let compatibilityError = findTargetCompatibilityError(strategies, plugins, resolvedInputs.inputs);
   if (!compatibilityError && options.loadDynamicProviders && resolvedInputs.hasUnresolved) {
     resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
       configuredTargets,
@@ -109,9 +133,7 @@ async function getLiveConfigCompatibilityError(
       filter,
       { loadDynamicProviders: true },
     );
-    compatibilityError = resolvedInputs.inputs
-      .map((inputs) => getStrategyCompatibilityError(strategies, inputs, { plugins }))
-      .find((error) => error !== undefined);
+    compatibilityError = findTargetCompatibilityError(strategies, plugins, resolvedInputs.inputs);
   }
   return compatibilityError;
 }
