@@ -407,6 +407,21 @@ async function resolveConfiguredProviderInputs(
   const renderedOptions = renderValidationEnvTemplates(providerOptions, mergedEnv);
   const configuredInputs = getConfiguredProviderInputs(renderedOptions);
 
+  if (hasOnlyDeferredValidationEnvTemplates(renderedProviderPath)) {
+    if (configuredInputs !== undefined) {
+      return configuredInputs;
+    }
+    if (!loadDynamicProviders) {
+      return UNRESOLVED_PROVIDER_INPUTS;
+    }
+    return loadConfiguredProviderInputsForValidation(
+      renderedProviderPath,
+      renderedOptions,
+      mergedEnv,
+      basePath,
+    );
+  }
+
   if (isProviderConfigFileReference(renderedProviderPath)) {
     if (visitedProviderFiles.has(renderedProviderPath)) {
       throw new Error('Circular provider config file reference');
@@ -433,21 +448,6 @@ async function resolveConfiguredProviderInputs(
       basePath,
       nextVisitedProviderFiles,
       loadDynamicProviders,
-    );
-  }
-
-  if (hasOnlyDeferredValidationEnvTemplates(renderedProviderPath)) {
-    if (configuredInputs !== undefined) {
-      return configuredInputs;
-    }
-    if (!loadDynamicProviders) {
-      return UNRESOLVED_PROVIDER_INPUTS;
-    }
-    return loadConfiguredProviderInputsForValidation(
-      renderedProviderPath,
-      renderedOptions,
-      mergedEnv,
-      basePath,
     );
   }
 

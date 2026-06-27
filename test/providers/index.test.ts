@@ -2893,6 +2893,31 @@ inputs:
     ).resolves.toEqual([{ question: 'User question' }]);
   });
 
+  it('defers filtered environment provider file paths until dynamic loading is requested', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  question: User question
+`);
+    const provider = {
+      id: 'file://{{ env.PROVIDER_DIR | lower }}/provider.yaml',
+      env: { PROVIDER_DIR: path.join(path.sep, 'WORKSPACE', 'TARGETS') },
+    };
+
+    const staticInputs = await resolveProviderInputsForValidation([provider]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+    expect(mockFsReadFileSync).not.toHaveBeenCalled();
+
+    await expect(
+      resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(path.sep, 'workspace', 'targets', 'provider.yaml'),
+      'utf8',
+    );
+  });
+
   it('defers filtered environment provider ids until dynamic loading is requested', async () => {
     const cleanup = vi.fn();
     class DynamicProvider {
