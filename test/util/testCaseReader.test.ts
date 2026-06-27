@@ -24,6 +24,7 @@ import {
   readTests,
 } from '../../src/util/testCaseReader';
 import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from './utils';
 
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
@@ -326,11 +327,58 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
-  it('should preserve schema references in standalone JSON tests for lazy validation', async () => {
+  it('should capture schema references in trusted local standalone JSON tests', async () => {
     const assertion = { type: 'is-json' as const, value: 'file://schema.json' };
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([{ assert: [assertion] }]));
 
     const result = await readStandaloneTestsFile('test.json', '/config');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      { assert: [assertion] },
+      'test-config',
+      '/config',
+    );
+    expect(result[0].assert?.[0]).toEqual(assertion);
+  });
+
+  it('should persist nonstandard schema files from trusted local standalone tests', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith('test.json')) {
+        return JSON.stringify([{ assert: [{ type: 'is-json', value: 'file://schema.schema' }] }]);
+      }
+      if (filePath.toString().endsWith('schema.schema')) {
+        return 'type: object';
+      }
+      throw new Error(`Unexpected file path: ${filePath}`);
+    });
+
+    const result = await readStandaloneTestsFile('test.json', '/config');
+    const persisted = JSON.parse(JSON.stringify(result));
+
+    expect(result[0].assert?.[0]).toMatchObject({
+      type: 'is-json',
+      value: 'type: object',
+    });
+    expect(persisted[0].assert[0]).toMatchObject({
+      type: 'is-json',
+      value: 'type: object',
+      __promptfooJsonSchemaFileFormat: {
+        format: 'text',
+        valueFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      },
+    });
+  });
+
+  it('should keep remote Azure schema references lazy', async () => {
+    const assertion = { type: 'is-json' as const, value: 'file:///etc/hostname' };
+    vi.mocked(readAzureBlobText).mockResolvedValue(JSON.stringify([{ assert: [assertion] }]));
+
+    const result = await readStandaloneTestsFile('az://account/container/tests.json', '/config');
 
     expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
     expect(result[0].assert?.[0]).toEqual(assertion);
@@ -927,6 +975,39 @@ describe('readTest', () => {
     expect(result.vars).toBeUndefined();
   });
 
+  it('should preload and serialize schema references from a default test', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString() === path.resolve('/config', 'schema.schema')) {
+        return 'type: object';
+      }
+      throw new Error(`Unexpected file path: ${filePath}`);
+    });
+
+    const result = await readTest(
+      { assert: [{ type: 'is-json', value: 'file://schema.schema' }] },
+      '/config',
+      true,
+    );
+    const assertion = result.assert?.[0];
+    const persisted = JSON.parse(JSON.stringify(assertion));
+
+    expect(assertion).toMatchObject({ type: 'is-json', value: 'type: object' });
+    expect(actualFileUtils.getJsonSchemaFileSnapshot(assertion)).toMatchObject({
+      source: 'file://schema.schema',
+      format: 'text',
+    });
+    expect(actualFileUtils.getJsonSchemaFileSnapshot(persisted)).toMatchObject({
+      source: 'persisted:text',
+      format: 'text',
+      schema: 'type: object',
+    });
+  });
+
   it('should skip validation for defaultTest with model-graded eval provider', async () => {
     const defaultTestInput = {
       options: {
@@ -1200,6 +1281,157 @@ describe('readTests', () => {
     const result = await readTests(input);
 
     expect(result).toEqual(input);
+  });
+
+  it('should capture schema references in trusted inline config tests', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue('{"type":"object"}');
+    const input: TestCase[] = [{ assert: [{ type: 'is-json', value: 'file://schema.json' }] }];
+
+    const result = await readTests(input, '/config');
+
+    expect(result[0].assert?.[0]).toMatchObject({
+      type: 'is-json',
+      value: { type: 'object' },
+    });
+  });
+
+  it('should batch repeated trusted schema references without loading unrelated fields', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith('schema.json')) {
+        return '{"type":"object"}';
+      }
+      throw new Error(`Unexpected file read: ${filePath}`);
+    });
+    const input: TestCase[] = [
+      {
+        assert: [
+          {
+            type: 'is-json',
+            value: 'file://schema.json',
+            transform: 'file://transform.js',
+          },
+          { type: 'contains-json', value: 'file://schema.json' },
+        ],
+      },
+    ];
+
+    const result = await readTests(input, '/config');
+
+    expect(result[0].assert?.[0]).toMatchObject({
+      type: 'is-json',
+      value: { type: 'object' },
+      transform: 'file://transform.js',
+    });
+    expect(result[0].assert?.[1]).toMatchObject({
+      type: 'contains-json',
+      value: { type: 'object' },
+    });
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should batch schema references inside assertion sets while preserving child order', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue('{"type":"object"}');
+    const input: TestCase[] = [
+      {
+        assert: [
+          {
+            type: 'assert-set',
+            metric: 'schema-set',
+            assert: [
+              { type: 'is-json', value: 'file://schema.json' },
+              { type: 'equals', value: 'file://expected.txt' },
+              { type: 'contains-json', value: 'file://schema.json' },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const result = await readTests(input, '/config');
+    const assertionSet = result[0].assert?.[0];
+
+    expect(assertionSet).toMatchObject({ type: 'assert-set', metric: 'schema-set' });
+    if (assertionSet?.type === 'assert-set') {
+      expect(assertionSet.assert).toEqual([
+        expect.objectContaining({ type: 'is-json', value: { type: 'object' } }),
+        { type: 'equals', value: 'file://expected.txt' },
+        expect.objectContaining({ type: 'contains-json', value: { type: 'object' } }),
+      ]);
+    }
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should preserve the privately resolved schema path while batching trusted tests', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_PATH: '/private/process-env' });
+    const assertion = {
+      type: 'is-json' as const,
+      value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.json',
+    };
+    actualFileUtils.setJsonSchemaRenderedFileRef(
+      assertion,
+      'file:///private/config-env/schema.json',
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString() === '/private/config-env/schema.json') {
+        return '{"type":"string"}';
+      }
+      throw new Error(`Unexpected file read: ${filePath}`);
+    });
+
+    try {
+      const result = await readTests([{ assert: [assertion] }], '/config');
+
+      expect(result[0].assert?.[0]).toMatchObject({ value: { type: 'string' } });
+      expect(fs.readFileSync).toHaveBeenCalledWith('/private/config-env/schema.json', 'utf8');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should preserve immutable trusted schema assertions while loading their values', async () => {
+    const actualFileUtils =
+      await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      actualFileUtils.maybeLoadConfigFromExternalFile,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue('{"type":"object"}');
+    const assertion = Object.freeze({ type: 'is-json' as const, value: 'file://schema.json' });
+    const input = [Object.freeze({ assert: Object.freeze([assertion]) })] as unknown as TestCase[];
+
+    const result = await readTests(input, '/config');
+    const loadedAssertion = result[0].assert?.[0] as Record<string, unknown>;
+
+    expect(loadedAssertion.value).toEqual({ type: 'object' });
+    expect(Object.getOwnPropertyDescriptor(loadedAssertion, 'value')?.writable).toBe(false);
+    expect(assertion.value).toBe('file://schema.json');
+  });
+
+  it.each([
+    [{ assert: [{}] }],
+    [{ assert: {} }],
+    [{ assert: [{ type: 'assert-set', assert: {} }] }],
+  ])('should leave malformed inline test shapes for canonical validation: %j', async (input) => {
+    await expect(readTests(input as any, '/config')).resolves.toBeDefined();
   });
 
   it('readTests with string array input (paths to test configs)', async () => {

@@ -3,16 +3,74 @@ import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
+import type { AnySchema, ValidateFunction } from 'ajv';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
 let ajvInstance: Ajv | null = null;
+let compiledSchemaSnapshots = new WeakMap<ValidateFunction, object>();
+
+function isDataOnlySchema(value: unknown, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (
+    value === null ||
+    value === undefined ||
+    ['boolean', 'number', 'string'].includes(typeof value)
+  ) {
+    return true;
+  }
+  if (typeof value !== 'object') {
+    return false;
+  }
+  if (seen.has(value)) {
+    return true;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) {
+    return false;
+  }
+  seen.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key === 'symbol') {
+      return false;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor) || !isDataOnlySchema(descriptor.value, seen)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getReusableSchemaSnapshot(schema: unknown): object | undefined {
+  try {
+    if (typeof schema !== 'object' || schema === null) {
+      return undefined;
+    }
+    const idDescriptor = Object.getOwnPropertyDescriptor(schema, '$id');
+    if (
+      !idDescriptor ||
+      !('value' in idDescriptor) ||
+      typeof idDescriptor.value !== 'string' ||
+      !isDataOnlySchema(schema)
+    ) {
+      return undefined;
+    }
+    return structuredClone(schema);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getCompiledJsonSchemaSnapshot(validate: ValidateFunction): object | undefined {
+  return compiledSchemaSnapshots.get(validate);
+}
 
 export function resetAjv(): void {
   if (getEnvString('NODE_ENV') !== 'test') {
     throw new Error('resetAjv can only be called in test environment');
   }
   ajvInstance = null;
+  compiledSchemaSnapshots = new WeakMap();
 }
 
 export function getAjv(): Ajv {
@@ -22,6 +80,15 @@ export function getAjv(): Ajv {
     };
     ajvInstance = new Ajv(ajvOptions);
     addFormats(ajvInstance);
+    const compile = ajvInstance.compile.bind(ajvInstance);
+    ajvInstance.compile = ((schema: AnySchema) => {
+      const snapshot = getReusableSchemaSnapshot(schema);
+      const validate = compile(schema);
+      if (snapshot && !compiledSchemaSnapshots.has(validate)) {
+        compiledSchemaSnapshots.set(validate, snapshot);
+      }
+      return validate;
+    }) as typeof ajvInstance.compile;
   }
   return ajvInstance;
 }

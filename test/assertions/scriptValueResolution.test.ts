@@ -5,7 +5,9 @@ import { runAssertion } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
+import { runPython } from '../../src/python/pythonUtils';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
+import { sha256 } from '../../src/util/createHash';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import { mockProcessEnv } from '../util/utils';
 
@@ -45,6 +47,10 @@ vi.mock('../../src/database', () => ({
 
 vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
+}));
+
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
 }));
 
 vi.mock('../../src/matchers/llmGrading', async () => {
@@ -296,6 +302,22 @@ describe('Script value resolution', () => {
       });
 
       expect(result.pass).toBe(pass);
+    });
+
+    it('preserves rendered assertion metadata for string schema generators', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'is-json',
+          value: 'file://rubric-generator.cjs:knownValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: '{}',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBe('SCRIPT_OUTPUT_12345');
     });
 
     it.each([
@@ -570,6 +592,7 @@ describe('Script value resolution', () => {
           path.resolve('/private/schema/path/schema.rb'),
           'build_schema',
           expect.any(Array),
+          { redactScriptPath: true },
         );
         expect(mockRunRuby).toHaveBeenCalledTimes(2);
         expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
@@ -605,12 +628,127 @@ describe('Script value resolution', () => {
           path.resolve('/private/config/schema/path/schema.rb'),
           'build_schema',
           expect.any(Array),
+          { redactScriptPath: true },
         );
         expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
       } finally {
         cliState.config = originalConfig;
         restoreEnv();
       }
+    });
+
+    it('should redact a private JavaScript schema generator path from execution errors', async () => {
+      const privatePath = '/private/PR8237_JS_SCHEMA_PATH';
+      vi.mocked(importModule).mockRejectedValue(new Error(`Cannot load ${privatePath}/schema.cjs`));
+      const restoreEnv = mockProcessEnv({ PR8237_JS_SCHEMA_PATH: privatePath });
+
+      try {
+        const assertion = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: 'file://{{ env.PR8237_JS_SCHEMA_PATH }}/schema.cjs:build_schema',
+              },
+            ],
+          },
+          'test-config',
+        ).assert[0];
+
+        const error = await runAssertion({
+          assertion,
+          test: { vars: {} },
+          providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+        }).catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(Error);
+        if (error instanceof Error) {
+          expect(error.message).toContain('Cannot load');
+          expect(error.message).toContain('[redacted schema generator path]');
+          expect(error.message).not.toContain(privatePath);
+        }
+        expect(importModule).toHaveBeenCalledWith(
+          path.resolve(privatePath, 'schema.cjs'),
+          'build_schema',
+          { redactPath: true },
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      ['Python', '.py', runPython],
+      ['Ruby', '.rb', runRuby],
+    ] as const)('should redact a private %s schema generator path from assertion failures', async (_language, extension, runner) => {
+      const privatePath = `/private/PR8237_${extension.slice(1).toUpperCase()}_SCHEMA_PATH`;
+      vi.mocked(runner).mockRejectedValue(
+        new Error(`Generator failed at ${privatePath}/schema${extension}`),
+      );
+      const restoreEnv = mockProcessEnv({ PR8237_LANGUAGE_SCHEMA_PATH: privatePath });
+
+      try {
+        const result = await runAssertion({
+          assertion: {
+            type: 'is-json',
+            value: `file://{{ env.PR8237_LANGUAGE_SCHEMA_PATH }}/schema${extension}:build_schema`,
+          },
+          test: { vars: {} },
+          providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+        });
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('Generator failed at'),
+        });
+        expect(result.reason).toContain('[redacted schema generator path]');
+        expect(JSON.stringify(result)).not.toContain(privatePath);
+        expect(runner).toHaveBeenCalledWith(
+          path.resolve(privatePath, `schema${extension}`),
+          'build_schema',
+          expect.any(Array),
+          { redactScriptPath: true },
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves JavaScript generator diagnostics for public schema paths', async () => {
+      vi.mocked(importModule).mockRejectedValue(new Error('Public JavaScript generator error'));
+
+      await expect(
+        runAssertion({
+          assertion: { type: 'is-json', value: 'file://schema.cjs:build_schema' },
+          test: { vars: {} },
+          providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+        }),
+      ).rejects.toThrow('Public JavaScript generator error');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve(cliState.basePath || '', 'schema.cjs'),
+        'build_schema',
+      );
+    });
+
+    it.each([
+      ['Python', '.py', runPython],
+      ['Ruby', '.rb', runRuby],
+    ] as const)('preserves %s generator diagnostics for public schema paths', async (language, extension, runner) => {
+      const diagnostic = `Public ${language} generator error`;
+      vi.mocked(runner).mockRejectedValue(new Error(diagnostic));
+
+      const result = await runAssertion({
+        assertion: { type: 'is-json', value: `file://schema${extension}:build_schema` },
+        test: { vars: {} },
+        providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+      });
+
+      expect(result.reason).toBe(diagnostic);
+      expect(runner).toHaveBeenCalledWith(
+        path.resolve(cliState.basePath || '', `schema${extension}`),
+        'build_schema',
+        expect.any(Array),
+      );
     });
 
     it('should not execute a generator when a persisted schema file error is present', async () => {
@@ -625,6 +763,9 @@ describe('Script value resolution', () => {
         __promptfooJsonSchemaFileError: {
           error: 'schema file not found',
           fingerprint: `sha256:${'a'.repeat(64)}`,
+          valueFingerprint: `sha256:${sha256(
+            'file://{{ env.PR8237_SWITCHED_SCHEMA_PATH }}/schema.rb:build_schema',
+          )}`,
         },
       };
 

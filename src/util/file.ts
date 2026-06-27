@@ -16,6 +16,7 @@ import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderEnvOnlyInObject, renderVarsInObject } from './render';
+import { getNunjucksEngine } from './templates';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -33,6 +34,9 @@ type ExternalFileContext =
 
 const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot');
 const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
+const JSON_SCHEMA_RENDERED_FILE_REF_SOURCE = Symbol.for(
+  'promptfoo.jsonSchemaRenderedFileRefSource',
+);
 const JSON_SCHEMA_FILE_ERROR = '__promptfooJsonSchemaFileError';
 const JSON_SCHEMA_FILE_FORMAT = '__promptfooJsonSchemaFileFormat';
 const JSON_SCHEMA_FILE_ERRORS = new Set([
@@ -43,10 +47,17 @@ const JSON_SCHEMA_FILE_ERRORS = new Set([
   'schema file could not be read',
 ]);
 const JSON_SCHEMA_FILE_FINGERPRINT = /^sha256:[a-f0-9]{64}$/;
+const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
 
 type PersistedJsonSchemaFileError = {
   error: string;
   fingerprint: string;
+  valueFingerprint: string;
+};
+
+type PersistedJsonSchemaFileFormat = {
+  format: 'text';
+  valueFingerprint: string;
 };
 
 export type JsonSchemaFileSnapshot =
@@ -80,7 +91,11 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
   }
   const snapshot = record[JSON_SCHEMA_FILE_SNAPSHOT] as JsonSchemaFileSnapshot | undefined;
   if (snapshot) {
-    return snapshot;
+    const matchesCurrentValue =
+      'error' in snapshot ? record.value === snapshot.source : record.value === snapshot.schema;
+    if (matchesCurrentValue) {
+      return snapshot;
+    }
   }
   const persisted = record[JSON_SCHEMA_FILE_ERROR];
   if (
@@ -91,12 +106,28 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
     typeof (persisted as PersistedJsonSchemaFileError).error === 'string' &&
     JSON_SCHEMA_FILE_ERRORS.has((persisted as PersistedJsonSchemaFileError).error) &&
     typeof (persisted as PersistedJsonSchemaFileError).fingerprint === 'string' &&
-    JSON_SCHEMA_FILE_FINGERPRINT.test((persisted as PersistedJsonSchemaFileError).fingerprint)
+    JSON_SCHEMA_FILE_FINGERPRINT.test((persisted as PersistedJsonSchemaFileError).fingerprint) &&
+    typeof (persisted as PersistedJsonSchemaFileError).valueFingerprint === 'string' &&
+    JSON_SCHEMA_FILE_FINGERPRINT.test(
+      (persisted as PersistedJsonSchemaFileError).valueFingerprint,
+    ) &&
+    (persisted as PersistedJsonSchemaFileError).valueFingerprint ===
+      `sha256:${sha256(record.value)}`
   ) {
     const { error, fingerprint } = persisted as PersistedJsonSchemaFileError;
     return { source: `persisted:${fingerprint}`, error, fingerprint };
   }
-  if (record[JSON_SCHEMA_FILE_FORMAT] === 'text' && typeof record.value === 'string') {
+  const persistedFormat = record[JSON_SCHEMA_FILE_FORMAT] as
+    | PersistedJsonSchemaFileFormat
+    | undefined;
+  const isCurrentPersistedText =
+    typeof record.value === 'string' &&
+    typeof persistedFormat === 'object' &&
+    persistedFormat !== null &&
+    persistedFormat.format === 'text' &&
+    JSON_SCHEMA_FILE_FINGERPRINT.test(persistedFormat.valueFingerprint) &&
+    persistedFormat.valueFingerprint === `sha256:${sha256(record.value)}`;
+  if (isCurrentPersistedText) {
     return {
       source: 'persisted:text',
       format: 'text',
@@ -106,7 +137,10 @@ export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSna
   return undefined;
 }
 
-export function getJsonSchemaRenderedFileRef(assertion: unknown): string | undefined {
+export function getJsonSchemaRenderedFileRef(
+  assertion: unknown,
+  publicFileRef?: string,
+): string | undefined {
   if (typeof assertion !== 'object' || assertion === null) {
     return undefined;
   }
@@ -118,8 +152,106 @@ export function getJsonSchemaRenderedFileRef(assertion: unknown): string | undef
   ) {
     return undefined;
   }
+  const renderedFileRefSource = record[JSON_SCHEMA_RENDERED_FILE_REF_SOURCE];
+  if (
+    typeof renderedFileRefSource === 'string' &&
+    renderedFileRefSource !== (publicFileRef ?? record.value)
+  ) {
+    return undefined;
+  }
   const renderedFileRef = record[JSON_SCHEMA_RENDERED_FILE_REF];
   return typeof renderedFileRef === 'string' ? renderedFileRef : undefined;
+}
+
+export function setJsonSchemaRenderedFileRef(
+  assertion: Record<PropertyKey, unknown>,
+  renderedFileRef: string,
+  publicFileRef: string | undefined = typeof assertion.value === 'string'
+    ? assertion.value
+    : undefined,
+): void {
+  Object.defineProperty(assertion, JSON_SCHEMA_RENDERED_FILE_REF, {
+    value: renderedFileRef,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  if (publicFileRef) {
+    Object.defineProperty(assertion, JSON_SCHEMA_RENDERED_FILE_REF_SOURCE, {
+      value: publicFileRef,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
+}
+
+export function getEffectiveJsonSchemaFileRef(assertion: unknown, publicFileRef: string): string {
+  return (
+    getJsonSchemaRenderedFileRef(assertion, publicFileRef) ?? renderEnvOnlyInObject(publicFileRef)
+  );
+}
+
+export function resolveJsonSchemaFileReference(fileRef: string): string {
+  let relativePath = fileRef.slice('file://'.length);
+  if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(relativePath)) {
+    relativePath = relativePath.slice(1);
+  }
+  return path.resolve(cliState.basePath || '', relativePath);
+}
+
+export function loadJsonSchemaFileReference(fileRef: string): JsonSchemaFileSnapshot {
+  const filePath = resolveJsonSchemaFileReference(fileRef);
+  const extension = path.extname(filePath).toLowerCase();
+  if (!['.json', '.yaml', '.yml', '.txt'].includes(extension)) {
+    return {
+      source: filePath,
+      error: 'schema file could not be read',
+      fingerprint: '',
+    };
+  }
+
+  try {
+    const contents = fs.readFileSync(filePath, 'utf8');
+    const isParsedSchema = extension !== '.txt';
+    const schema =
+      extension === '.json'
+        ? JSON.parse(contents)
+        : extension === '.yaml' || extension === '.yml'
+          ? yaml.load(contents)
+          : contents.trim();
+    if (
+      (isParsedSchema &&
+        (schema === null || (typeof schema !== 'boolean' && typeof schema !== 'object'))) ||
+      (!isParsedSchema && /^(?:null|~)?$/i.test(String(schema)))
+    ) {
+      return {
+        source: filePath,
+        error: 'schema file must contain an object or boolean schema',
+        fingerprint: '',
+      };
+    }
+    return {
+      source: filePath,
+      format: isParsedSchema ? 'parsed' : 'text',
+      schema,
+    };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    const safeError =
+      code === 'ENOENT'
+        ? 'schema file not found'
+        : error instanceof SyntaxError && extension === '.json'
+          ? 'invalid JSON schema file'
+          : error instanceof yaml.YAMLException
+            ? 'invalid YAML schema file'
+            : 'schema file could not be read';
+    return { source: filePath, error: safeError, fingerprint: '' };
+  }
+}
+
+export function renderJsonSchemaText(schema: string, vars: Record<string, VarValue>): string {
+  return getNunjucksEngine().renderString(schema, vars);
 }
 
 /**
@@ -351,7 +483,7 @@ function captureJsonSchemaFile(
   const resolvedPath = path.resolve(basePath ?? cliState.basePath ?? '', cleanPath);
   const cached = cache.get(resolvedPath);
   if (cached) {
-    return cached;
+    return cached.source === publicFileRef ? cached : { ...cached, source: publicFileRef };
   }
 
   let fingerprint = `sha256:${sha256(publicFileRef)}`;
@@ -371,7 +503,7 @@ function captureJsonSchemaFile(
       (!isParsedSchema && /^(?:null|~)?$/i.test(contents.trim()))
     ) {
       const snapshot = {
-        source: renderedFileRef,
+        source: publicFileRef,
         error: 'schema file must contain an object or boolean schema',
         fingerprint,
       } as const;
@@ -379,7 +511,7 @@ function captureJsonSchemaFile(
       return snapshot;
     }
     const snapshot = {
-      source: renderedFileRef,
+      source: publicFileRef,
       format: isParsedSchema ? 'parsed' : 'text',
       schema,
     } as const;
@@ -395,7 +527,7 @@ function captureJsonSchemaFile(
           : error instanceof yaml.YAMLException
             ? 'invalid YAML schema file'
             : 'schema file could not be read';
-    const snapshot = { source: renderedFileRef, error: safeError, fingerprint };
+    const snapshot = { source: publicFileRef, error: safeError, fingerprint };
     cache.set(resolvedPath, snapshot);
     return snapshot;
   }
@@ -513,6 +645,7 @@ function loadConfigFromExternalFile(
             value: {
               error: snapshot.error,
               fingerprint: snapshot.fingerprint,
+              valueFingerprint: `sha256:${sha256(rawFileRef)}`,
             } satisfies PersistedJsonSchemaFileError,
             enumerable: true,
             configurable: false,
@@ -523,7 +656,10 @@ function loadConfigFromExternalFile(
           result.value = snapshot.schema;
           if (snapshot.format === 'text') {
             Object.defineProperty(result, JSON_SCHEMA_FILE_FORMAT, {
-              value: 'text',
+              value: {
+                format: 'text',
+                valueFingerprint: `sha256:${sha256(String(snapshot.schema))}`,
+              } satisfies PersistedJsonSchemaFileFormat,
               enumerable: true,
               configurable: false,
               writable: false,
@@ -538,12 +674,7 @@ function loadConfigFromExternalFile(
         });
       } else {
         result.value = rawFileRef;
-        Object.defineProperty(result, JSON_SCHEMA_RENDERED_FILE_REF, {
-          value: renderedFileRef,
-          enumerable: false,
-          configurable: false,
-          writable: false,
-        });
+        setJsonSchemaRenderedFileRef(result, renderedFileRef);
       }
     }
     return result;

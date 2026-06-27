@@ -1,13 +1,14 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import yaml from 'js-yaml';
-import nunjucks from 'nunjucks';
-import { extractJsonObjects, getAjv } from '../util/json';
 import {
+  getEffectiveJsonSchemaFileRef,
   getJsonSchemaFileSnapshot,
   loadJsonSchemaFileReference,
+  renderJsonSchemaText,
   resolveJsonSchemaFileReference,
-} from './utils';
+} from '../util/file';
+import { extractJsonObjects, getAjv, getCompiledJsonSchemaSnapshot } from '../util/json';
 import type { ValidateFunction } from 'ajv';
 
 import type { Assertion, AssertionParams, GradingResult } from '../types/index';
@@ -20,7 +21,6 @@ const staticFileSnapshotCache = new WeakMap<
   Assertion,
   { source: string; snapshot: ReturnType<typeof loadJsonSchemaFileReference> }
 >();
-
 class JsonSchemaConfigurationError extends Error {}
 
 function hasJsonSchema({
@@ -55,6 +55,12 @@ function formatJsonSchemaError(error: unknown): string {
   return 'schema compilation failed';
 }
 
+function contextualizeJsonSchemaFileError(type: Assertion['type'], error: string): string {
+  return error === 'schema file must contain an object or boolean schema'
+    ? `${type} schema file must contain an object or boolean schema`
+    : error;
+}
+
 function getCachedStaticValidator(
   ajv: object,
   assertion: Assertion,
@@ -78,6 +84,51 @@ function cacheStaticValidator(
   assertionCache.set(assertion, { source, validate });
 }
 
+function ensureSynchronousValidator(validate: ValidateFunction): ValidateFunction {
+  if ((validate as ValidateFunction & { $async?: boolean }).$async) {
+    throw new JsonSchemaConfigurationError('async schemas are not supported');
+  }
+  return validate;
+}
+
+function executeJsonSchemaValidation(
+  validate: ValidateFunction,
+  value: unknown,
+  assertion: Assertion,
+): { valid: boolean } | { failure: GradingResult } {
+  try {
+    const valid = validate(value);
+    if (typeof valid !== 'boolean') {
+      throw new Error('JSON schema validator did not return a boolean');
+    }
+    return { valid };
+  } catch {
+    const schema = validate.schema;
+    if (
+      typeof schema === 'object' &&
+      schema !== null &&
+      '$id' in schema &&
+      typeof schema.$id === 'string'
+    ) {
+      try {
+        getAjv().removeSchema(schema.$id);
+      } catch {
+        // Preserve the safe validation failure below.
+      }
+    }
+    staticFileSnapshotCache.delete(assertion);
+    staticFileValidatorCache.get(getAjv())?.delete(assertion);
+    return {
+      failure: {
+        pass: false,
+        score: 0,
+        reason: 'Invalid JSON schema: schema validation failed',
+        assertion,
+      },
+    };
+  }
+}
+
 function getMatchingSchemaIdValidator(
   ajv: ReturnType<typeof getAjv>,
   schema: object | boolean,
@@ -98,7 +149,25 @@ function getMatchingSchemaIdValidator(
     // Let compile() below classify the current schema instead.
     return undefined;
   }
-  return existing && isDeepStrictEqual(existing.schema, schema) ? existing : undefined;
+  const compiledSnapshot = existing ? getCompiledJsonSchemaSnapshot(existing) : undefined;
+  return existing && compiledSnapshot && isDeepStrictEqual(compiledSnapshot, schema)
+    ? existing
+    : undefined;
+}
+
+export function getJsonSchemaFileRuntimeState(
+  assertion: Assertion,
+  value: unknown,
+): {
+  effectiveFileRef?: string;
+  snapshot: ReturnType<typeof getJsonSchemaFileSnapshot>;
+} {
+  return {
+    snapshot: getJsonSchemaFileSnapshot(assertion),
+    ...(typeof value === 'string' && value.startsWith('file://')
+      ? { effectiveFileRef: getEffectiveJsonSchemaFileRef(assertion, value) }
+      : {}),
+  };
 }
 
 function getJsonSchemaValidator({
@@ -108,6 +177,7 @@ function getJsonSchemaValidator({
 }: Pick<AssertionParams, 'renderedValue' | 'assertion' | 'assertionValueContext'>):
   | { validate: ValidateFunction }
   | { failure: GradingResult } {
+  let shouldEvictRawSnapshot = false;
   try {
     const ajv = getAjv();
     const snapshot = getJsonSchemaFileSnapshot(assertion);
@@ -116,7 +186,9 @@ function getJsonSchemaValidator({
 
     if (snapshot) {
       if ('error' in snapshot) {
-        throw new JsonSchemaConfigurationError(snapshot.error);
+        throw new JsonSchemaConfigurationError(
+          contextualizeJsonSchemaFileError(assertion.type, snapshot.error),
+        );
       }
       if (snapshot.format === 'text') {
         schema = yaml.load(String(renderedValue));
@@ -126,13 +198,15 @@ function getJsonSchemaValidator({
             `${assertion.type} schema file must contain an object or boolean schema`,
           );
         }
-      } else {
+      } else if (assertion.value === snapshot.schema) {
         schema = snapshot.schema;
         staticSource = snapshot.source;
       }
-      const cached = getCachedStaticValidator(ajv, assertion, staticSource);
-      if (cached) {
-        return { validate: cached };
+      if (staticSource) {
+        const cached = getCachedStaticValidator(ajv, assertion, staticSource);
+        if (cached) {
+          return { validate: ensureSynchronousValidator(cached) };
+        }
       }
     } else if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
@@ -147,13 +221,12 @@ function getJsonSchemaValidator({
         }
         if ('error' in loadedSnapshot) {
           throw new JsonSchemaConfigurationError(
-            loadedSnapshot.error === 'schema file must contain an object or boolean schema'
-              ? `${assertion.type} schema file must contain an object or boolean schema`
-              : loadedSnapshot.error,
+            contextualizeJsonSchemaFileError(assertion.type, loadedSnapshot.error),
           );
         }
+        shouldEvictRawSnapshot = true;
         if (loadedSnapshot.format === 'text') {
-          const renderedSchema = nunjucks.renderString(
+          const renderedSchema = renderJsonSchemaText(
             String(loadedSnapshot.schema),
             assertionValueContext.vars,
           );
@@ -165,7 +238,7 @@ function getJsonSchemaValidator({
         }
         const cached = getCachedStaticValidator(ajv, assertion, staticSource);
         if (cached) {
-          return { validate: cached };
+          return { validate: ensureSynchronousValidator(cached) };
         }
       } else {
         schema = yaml.load(renderedValue);
@@ -185,10 +258,11 @@ function getJsonSchemaValidator({
     const compilableSchema = schema as object | boolean;
     const cachedBySchemaId = getMatchingSchemaIdValidator(ajv, compilableSchema);
     if (cachedBySchemaId) {
+      const validate = ensureSynchronousValidator(cachedBySchemaId);
       if (staticSource) {
-        cacheStaticValidator(ajv, assertion, staticSource, cachedBySchemaId);
+        cacheStaticValidator(ajv, assertion, staticSource, validate);
       }
-      return { validate: cachedBySchemaId };
+      return { validate };
     }
 
     let validate: ValidateFunction;
@@ -210,11 +284,31 @@ function getJsonSchemaValidator({
       }
       throw error;
     }
+    try {
+      validate = ensureSynchronousValidator(validate);
+    } catch (error) {
+      if (
+        typeof compilableSchema === 'object' &&
+        compilableSchema !== null &&
+        '$id' in compilableSchema &&
+        typeof compilableSchema.$id === 'string'
+      ) {
+        try {
+          ajv.removeSchema(compilableSchema.$id);
+        } catch {
+          // Preserve the unsupported-validator error.
+        }
+      }
+      throw error;
+    }
     if (staticSource) {
       cacheStaticValidator(ajv, assertion, staticSource, validate);
     }
     return { validate };
   } catch (error) {
+    if (shouldEvictRawSnapshot) {
+      staticFileSnapshotCache.delete(assertion);
+    }
     return {
       failure: {
         pass: false,
@@ -254,7 +348,11 @@ export function handleIsJson({
     }
 
     const { validate } = validatorResult;
-    const valid = validate(parsedJson);
+    const validationResult = executeJsonSchemaValidation(validate, parsedJson, assertion);
+    if ('failure' in validationResult) {
+      return validationResult.failure;
+    }
+    const { valid } = validationResult;
     pass = inverse ? !valid : valid;
     if (!pass) {
       return {
@@ -306,7 +404,11 @@ export function handleContainsJson({
 
   for (const jsonObject of jsonObjects) {
     if (validate) {
-      const valid = validate(jsonObject);
+      const validationResult = executeJsonSchemaValidation(validate, jsonObject, assertion);
+      if ('failure' in validationResult) {
+        return validationResult.failure;
+      }
+      const { valid } = validationResult;
       pass = inverse ? !valid : valid;
       if (valid) {
         if (inverse) {

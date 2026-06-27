@@ -37,7 +37,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadFromExternalFile, setJsonSchemaRenderedFileRef } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -300,7 +300,6 @@ const JSON_SCHEMA_ASSERTION_TYPES = new Set([
   'contains-json',
   'not-contains-json',
 ]);
-const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
 
 type JsonSchemaReferenceContext =
   | 'assertion'
@@ -388,12 +387,11 @@ function restoreJsonSchemaFileReferences<T>(
   for (const key of Object.keys(originalRecord)) {
     if (key === 'value' && preservesSchemaFileReference) {
       if (typeof renderedRecord[key] === 'string') {
-        Object.defineProperty(renderedRecord, JSON_SCHEMA_RENDERED_FILE_REF, {
-          value: renderedRecord[key],
-          enumerable: false,
-          configurable: false,
-          writable: false,
-        });
+        setJsonSchemaRenderedFileRef(
+          renderedRecord,
+          renderedRecord[key],
+          originalRecord[key] as string,
+        );
       }
       renderedRecord[key] = originalRecord[key];
     } else {

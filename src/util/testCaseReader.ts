@@ -23,6 +23,8 @@ import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
 
 import type {
+  Assertion,
+  AssertionOrSet,
   CsvRow,
   ProviderOptions,
   TestCase,
@@ -118,7 +120,9 @@ export async function readStandaloneTestsFile(
     });
     rows = await fetchCsvFromSharepoint(varsPath);
   } else {
-    return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
+    return (await readLocalStandaloneTestsFile(varsPath, basePath, finalConfig)).map((test) =>
+      loadJsonSchemaFileReferencesInTest(test, basePath),
+    );
   }
 
   return csvRowsToTestCases(rows);
@@ -397,6 +401,148 @@ async function loadTestWithVars(
   return ret;
 }
 
+function isAssertion(assertion: unknown): assertion is Assertion {
+  return (
+    typeof assertion === 'object' &&
+    assertion !== null &&
+    typeof (assertion as { type?: unknown }).type === 'string' &&
+    (assertion as { type: string }).type !== 'assert-set'
+  );
+}
+
+type AssertionSet = Extract<AssertionOrSet, { type: 'assert-set' }>;
+
+function isAssertionSet(assertion: unknown): assertion is AssertionSet {
+  return (
+    typeof assertion === 'object' &&
+    assertion !== null &&
+    (assertion as { type?: unknown }).type === 'assert-set' &&
+    Array.isArray((assertion as { assert?: unknown }).assert)
+  );
+}
+
+function isJsonSchemaFileAssertion(assertion: unknown): assertion is Assertion {
+  if (!isAssertion(assertion)) {
+    return false;
+  }
+  const baseType = assertion.type.replace(/^not-/, '');
+  return (
+    (baseType === 'is-json' || baseType === 'contains-json') &&
+    typeof assertion.value === 'string' &&
+    assertion.value.startsWith('file://')
+  );
+}
+
+function mergeLoadedJsonSchemaAssertion(original: Assertion, loaded: Assertion): Assertion {
+  const loadedKeys = new Set(Reflect.ownKeys(loaded).filter((key) => key !== 'type'));
+  const originalDescriptors = Object.fromEntries(
+    Reflect.ownKeys(original)
+      .filter((key) => !loadedKeys.has(key))
+      .map((key) => [key, Object.getOwnPropertyDescriptor(original, key)!]),
+  );
+  const merged = Object.create(Object.getPrototypeOf(original), originalDescriptors) as Assertion;
+  for (const key of Reflect.ownKeys(loaded)) {
+    if (key === 'type') {
+      continue;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(loaded, key);
+    if (descriptor) {
+      const originalDescriptor = Object.getOwnPropertyDescriptor(original, key);
+      Object.defineProperty(merged, key, {
+        ...descriptor,
+        ...(originalDescriptor
+          ? {
+              configurable: originalDescriptor.configurable,
+              enumerable: originalDescriptor.enumerable,
+              ...('writable' in originalDescriptor
+                ? { writable: originalDescriptor.writable }
+                : {}),
+            }
+          : {}),
+      });
+    }
+  }
+  return merged;
+}
+
+function getJsonSchemaLoaderInput(assertion: Assertion): Assertion {
+  const input = { type: assertion.type, value: assertion.value } as Assertion;
+  for (const key of Reflect.ownKeys(assertion)) {
+    if (
+      key === 'type' ||
+      key === 'value' ||
+      (typeof key === 'string' && !key.startsWith('__promptfooJsonSchemaFile'))
+    ) {
+      continue;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(assertion, key);
+    if (descriptor) {
+      Object.defineProperty(input, key, descriptor);
+    }
+  }
+  return input;
+}
+
+function loadJsonSchemaFileAssertions(
+  assertions: AssertionOrSet[] | undefined,
+  basePath: string,
+): AssertionOrSet[] | undefined {
+  if (!assertions) {
+    return assertions;
+  }
+  if (!Array.isArray(assertions)) {
+    return assertions;
+  }
+
+  const schemaAssertions = assertions.flatMap((assertion) => {
+    if (isAssertionSet(assertion)) {
+      return assertion.assert.filter(isJsonSchemaFileAssertion);
+    }
+    return isJsonSchemaFileAssertion(assertion) ? [assertion] : [];
+  });
+  if (schemaAssertions.length === 0) {
+    return assertions;
+  }
+
+  const loadedAssertions = maybeLoadConfigFromExternalFile(
+    {
+      assert: schemaAssertions.map(getJsonSchemaLoaderInput),
+    },
+    'test-config',
+    basePath,
+  ).assert as Assertion[];
+  let nextLoadedAssertion = 0;
+  return assertions.map((assertion) => {
+    if (isAssertionSet(assertion)) {
+      if (!assertion.assert.some(isJsonSchemaFileAssertion)) {
+        return assertion;
+      }
+      return {
+        ...assertion,
+        assert: assertion.assert.map((child) =>
+          isJsonSchemaFileAssertion(child)
+            ? mergeLoadedJsonSchemaAssertion(child, loadedAssertions[nextLoadedAssertion++])
+            : child,
+        ),
+      };
+    }
+    return isJsonSchemaFileAssertion(assertion)
+      ? mergeLoadedJsonSchemaAssertion(assertion, loadedAssertions[nextLoadedAssertion++])
+      : assertion;
+  });
+}
+
+function loadJsonSchemaFileReferencesInTest<T extends TestCaseWithVarsFile>(
+  test: T,
+  basePath: string,
+): T {
+  if (typeof test !== 'object' || test === null) {
+    return test;
+  }
+  const loadedAssertions = loadJsonSchemaFileAssertions(test.assert, basePath);
+  return loadedAssertions === test.assert ? test : { ...test, assert: loadedAssertions };
+}
+
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
@@ -416,7 +562,8 @@ export async function readTest(
     ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, basePath);
+    const trustedTest = isDefaultTest ? loadJsonSchemaFileReferencesInTest(test, basePath) : test;
+    testCase = await loadTestWithVars(trustedTest, basePath);
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
@@ -615,7 +762,11 @@ export async function readTests(
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
+        const test = loadJsonSchemaFileReferencesInTest(
+          globOrTest as TestCaseWithVarsFile,
+          basePath,
+        );
+        ret.push(await readTest(test, basePath));
       }
     }
   } else if (tests !== undefined && tests !== null) {

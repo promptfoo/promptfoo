@@ -615,6 +615,54 @@ describe('Python Utils', () => {
       expect(debugMessages).not.toContain('secret-result');
     });
 
+    it('redacts schema generator paths from logs and errors when requested', async () => {
+      const privatePath = '/private/PR8237_SCHEMA_PATH/schema.py';
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'result' }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.stdout.on.mockImplementation((event: string, callback: any) => {
+        if (event === 'data') {
+          callback(Buffer.from('Importing module schema from /private/PR8237_SCHEMA_PATH'));
+        }
+      });
+      mockPythonShellInstance.stderr.on.mockImplementation((event: string, callback: any) => {
+        if (event === 'data') {
+          callback(Buffer.from(`ERROR: failed at ${privatePath}\n`));
+        }
+      });
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      await pythonUtils.runPython(privatePath, 'test_method', [], {
+        redactScriptPath: true,
+      });
+
+      const logs = JSON.stringify([
+        ...vi.mocked(logger.debug).mock.calls,
+        ...vi.mocked(logger.error).mock.calls,
+        ...vi.mocked(logger.warn).mock.calls,
+      ]);
+      expect(logs).not.toContain(privatePath);
+      expect(logs).toContain('[redacted script path]');
+
+      vi.clearAllMocks();
+      pythonUtils.state.cachedPythonPath = 'python';
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(new Error(`failed at ${privatePath}`));
+      });
+
+      const error = await pythonUtils
+        .runPython(privatePath, 'test_method', [], { redactScriptPath: true })
+        .catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(Error);
+      if (error instanceof Error) {
+        expect(error.message).not.toContain(privatePath);
+        expect(error.message).toContain('[redacted script path]');
+      }
+    });
+
     it('classifies routine stderr without reporting Python logging as errors', async () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({ type: 'final_result', data: 'result' }),

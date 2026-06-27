@@ -8,6 +8,7 @@ import { getEnvBool, getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import { redactPathFromText } from '../util/pathUtils';
 import {
   createSecureTempDirectory,
   removeSecureTempDirectory,
@@ -296,6 +297,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @param args - An array of arguments to pass to the Python script.
  * @param options - Optional settings for running the Python script.
  * @param options.pythonExecutable - Optional path to the Python executable.
+ * @param options.redactScriptPath - Redact the script path from logs and thrown errors.
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
@@ -303,9 +305,12 @@ export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; redactScriptPath?: boolean } = {},
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
+  const displayScriptPath = options.redactScriptPath ? '[redacted script path]' : absPath;
+  const sanitizeScriptPath = (value: string): string =>
+    options.redactScriptPath ? redactPathFromText(value, absPath, '[redacted script path]') : value;
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
@@ -330,15 +335,22 @@ export async function runPython<T = unknown>(
       ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
     };
 
-    logger.debug('[Python] Running script', { scriptPath: absPath, method });
+    logger.debug('[Python] Running script', { scriptPath: displayScriptPath, method });
 
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
-        const stderrLogger = new PythonStderrLogger();
+        const stderrLogger = new PythonStderrLogger(
+          '',
+          options.redactScriptPath ? () => '[redacted script stderr]' : sanitizeScriptPath,
+        );
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
-          logger.debug(chunk.toString('utf-8').trim());
+          if (options.redactScriptPath) {
+            logger.debug('[Python] Script emitted stdout');
+          } else {
+            logger.debug(chunk.toString('utf-8').trim());
+          }
         });
 
         pyshell.stderr?.on('data', (chunk: Buffer) => {
@@ -359,7 +371,7 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug('[Python] Script returned a result', { scriptPath: absPath });
+    logger.debug('[Python] Script returned a result', { scriptPath: displayScriptPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
@@ -377,10 +389,12 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
-    const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-      (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-      'No Python traceback available'
-    }`;
+    const message = sanitizeScriptPath(
+      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+        'No Python traceback available'
+      }`,
+    );
     logger.error(message);
     throw new Error(message);
   } finally {

@@ -911,6 +911,29 @@ describe('file utilities', () => {
         expect(fs.readFileSync).toHaveBeenCalledTimes(1);
       });
 
+      it('should preserve each public reference when failed aliases share a cached file', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: [');
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              { type: 'is-json', value: 'file://schema.yaml' },
+              { type: 'contains-json', value: 'file:///test/schema.yaml' },
+            ],
+          },
+          'test-config',
+        );
+
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toMatchObject({
+          source: 'file://schema.yaml',
+          error: 'invalid YAML schema file',
+        });
+        expect(getJsonSchemaFileSnapshot(result.assert[1])).toMatchObject({
+          source: 'file:///test/schema.yaml',
+          error: 'invalid YAML schema file',
+        });
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
       it('should keep embedded schemas after serialization', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
         const result = maybeLoadConfigFromExternalFile(
@@ -1206,7 +1229,7 @@ describe('file utilities', () => {
           );
 
           expect(getJsonSchemaFileSnapshot(result.assert[0])).toMatchObject({
-            source: 'file://{{ env.PR8237_SECOND }}',
+            source: 'file://{{ env.PR8237_FIRST }}',
           });
           expect(fs.readFileSync).toHaveBeenCalledWith(
             expect.stringContaining('{{ env.PR8237_SECOND }}'),

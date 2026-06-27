@@ -37,7 +37,7 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { renderEnvOnlyInObject } from '../util/render';
+import { redactPathFromText } from '../util/pathUtils';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -66,7 +66,7 @@ import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
-import { handleContainsJson, handleIsJson } from './json';
+import { getJsonSchemaFileRuntimeState, handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
@@ -97,14 +97,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import {
-  coerceString,
-  getFinalTest,
-  getJsonSchemaFileSnapshot,
-  getJsonSchemaRenderedFileRef,
-  loadFromJavaScriptFile,
-  processFileReference,
-} from './utils';
+import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -479,9 +472,10 @@ export async function runAssertion({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   const baseType = getAssertionBaseType(assertion);
   const isJsonSchemaAssertion = baseType === 'is-json' || baseType === 'contains-json';
-  const jsonSchemaFileSnapshot = isJsonSchemaAssertion
-    ? getJsonSchemaFileSnapshot(assertion)
+  const jsonSchemaFileState = isJsonSchemaAssertion
+    ? getJsonSchemaFileRuntimeState(assertion, assertion.value)
     : undefined;
+  const jsonSchemaFileSnapshot = jsonSchemaFileState?.snapshot;
   const isTextJsonSchemaFile =
     jsonSchemaFileSnapshot &&
     !('error' in jsonSchemaFileSnapshot) &&
@@ -495,10 +489,11 @@ export async function runAssertion({
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     } else if (renderedValue.startsWith('file://') && !hasJsonSchemaFileError) {
       const basePath = cliState.basePath || '';
-      const privatelyRenderedFileRef = getJsonSchemaRenderedFileRef(assertion);
       const resolvedFileRef = isJsonSchemaAssertion
-        ? (privatelyRenderedFileRef ?? renderEnvOnlyInObject(renderedValue))
+        ? (jsonSchemaFileState?.effectiveFileRef ?? renderedValue)
         : renderedValue;
+      const redactJsonSchemaGeneratorPath =
+        isJsonSchemaAssertion && resolvedFileRef !== renderedValue;
       const fileRef = resolvedFileRef.slice('file://'.length);
       let filePath = fileRef;
       let functionName: string | undefined;
@@ -512,48 +507,102 @@ export async function runAssertion({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        didResolveValueFromScript = true;
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        try {
+          valueFromScript = redactJsonSchemaGeneratorPath
+            ? await loadFromJavaScriptFile(filePath, functionName, [output, context], {
+                redactPath: true,
+              })
+            : await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+          didResolveValueFromScript = true;
+          if (redactJsonSchemaGeneratorPath) {
+            logger.debug('JSON schema generator returned a result');
+          } else {
+            logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+          }
+        } catch (error) {
+          throw redactJsonSchemaGeneratorPath
+            ? new Error(
+                redactPathFromText(
+                  error instanceof Error ? error.message : String(error),
+                  filePath,
+                  '[redacted schema generator path]',
+                ),
+              )
+            : error;
+        }
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
+          const pythonScriptOutput = redactJsonSchemaGeneratorPath
+            ? await runPython<ValueFromScriptType>(
+                filePath,
+                functionName || 'get_assert',
+                [output, context],
+                { redactScriptPath: true },
+              )
+            : await runPython<ValueFromScriptType>(filePath, functionName || 'get_assert', [
+                output,
+                context,
+              ]);
           valueFromScript = pythonScriptOutput;
           didResolveValueFromScript = true;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+          if (redactJsonSchemaGeneratorPath) {
+            logger.debug('JSON schema generator returned a result');
+          } else {
+            logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+          }
         } catch (error) {
           return {
             pass: false,
             score: 0,
-            reason: (error as Error).message,
+            reason: redactJsonSchemaGeneratorPath
+              ? redactPathFromText(
+                  error instanceof Error ? error.message : String(error),
+                  filePath,
+                  '[redacted schema generator path]',
+                )
+              : (error as Error).message,
             assertion,
           };
         }
       } else if (filePath.endsWith('.rb')) {
         try {
           const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
+          const rubyScriptOutput = redactJsonSchemaGeneratorPath
+            ? await runRuby<ValueFromScriptType>(
+                filePath,
+                functionName || 'get_assert',
+                [output, context],
+                { redactScriptPath: true },
+              )
+            : await runRuby<ValueFromScriptType>(filePath, functionName || 'get_assert', [
+                output,
+                context,
+              ]);
           valueFromScript = rubyScriptOutput;
           didResolveValueFromScript = true;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+          if (redactJsonSchemaGeneratorPath) {
+            logger.debug('JSON schema generator returned a result');
+          } else {
+            logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+          }
         } catch (error) {
           return {
             pass: false,
             score: 0,
-            reason: (error as Error).message,
+            reason: redactJsonSchemaGeneratorPath
+              ? redactPathFromText(
+                  error instanceof Error ? error.message : String(error),
+                  filePath,
+                  '[redacted schema generator path]',
+                )
+              : (error as Error).message,
             assertion,
           };
         }
       } else if (baseType !== 'is-json' && baseType !== 'contains-json') {
         renderedValue = processFileReference(renderedValue);
+      } else {
+        renderedValue = resolvedFileRef;
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -684,7 +733,13 @@ export async function runAssertion({
     if (
       renderedValue !== undefined &&
       renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
+      typeof renderedValue === 'string' &&
+      !(
+        isJsonSchemaAssertion &&
+        !didResolveValueFromScript &&
+        typeof assertion.value === 'string' &&
+        assertion.value.startsWith('file://')
+      )
     ) {
       result.metadata = result.metadata || {};
       result.metadata.renderedAssertionValue = renderedValue;

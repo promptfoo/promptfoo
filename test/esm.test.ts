@@ -214,6 +214,19 @@ describe('ESM utilities', () => {
       );
     });
 
+    it('redacts module paths from import logs when requested', async () => {
+      const modulePath = path.resolve(testDir, '__fixtures__/testModule.js');
+
+      await importModule(modulePath, undefined, { redactPath: true });
+
+      const logs = JSON.stringify([
+        ...vi.mocked(logger.debug).mock.calls,
+        ...vi.mocked(logger.error).mock.calls,
+      ]);
+      expect(logs).not.toContain(modulePath);
+      expect(logs).toContain('[redacted module path]');
+    });
+
     it('imports CommonJS modules via ESM', async () => {
       const modulePath = path.resolve(testDir, '__fixtures__/testModule.cjs');
 

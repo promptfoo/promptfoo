@@ -7,7 +7,7 @@ import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
 import logger from './logger';
-import { safeResolve } from './util/pathUtils';
+import { redactPathFromText, safeResolve } from './util/pathUtils';
 
 /**
  * Supported wrapper script types for language-specific providers.
@@ -212,13 +212,32 @@ export function getDirectory(): string {
   );
 }
 
+function formatModuleError(value: unknown, modulePath: string, redactPath: boolean): string {
+  const text = String(value);
+  return redactPath
+    ? redactPathFromText(text, safeResolve(modulePath), '[redacted module path]')
+    : text;
+}
+
+function formatModulePath<T>(value: T, redactPath: boolean): T | string {
+  return redactPath ? '[redacted module path]' : value;
+}
+
 /**
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
  */
-export async function importModule(modulePath: string, functionName?: string) {
+export async function importModule(
+  modulePath: string,
+  functionName?: string,
+  options: { redactPath?: boolean } = {},
+) {
+  const redactPath = options.redactPath === true;
+  const displayModulePath = formatModulePath(modulePath, redactPath);
+  const displayResolvedPath = formatModulePath(safeResolve(modulePath), redactPath);
+  const redactError = (value: unknown) => formatModuleError(value, modulePath, redactPath);
   logger.debug(
-    `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
+    `Attempting to import module: ${JSON.stringify({ resolvedPath: displayResolvedPath, moduleId: displayModulePath })}`,
   );
 
   try {
@@ -226,14 +245,14 @@ export async function importModule(modulePath: string, functionName?: string) {
 
     const resolvedPath = pathToFileURL(safeResolve(modulePath));
     const resolvedPathStr = resolvedPath.toString();
-    logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
+    logger.debug(`Attempting ESM import from: ${formatModulePath(resolvedPathStr, redactPath)}`);
 
     // Native dynamic import - no eval() needed in ESM-only environment
     const importedModule = await import(resolvedPathStr);
 
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
     logger.debug(
-      `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
+      `Successfully imported module: ${JSON.stringify({ resolvedPath: formatModulePath(resolvedPath, redactPath), moduleId: displayModulePath })}`,
     );
 
     if (functionName) {
@@ -250,14 +269,14 @@ export async function importModule(modulePath: string, functionName?: string) {
     // We use Node's vm module to execute the code with proper CJS globals.
     if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
-        `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
+        `ESM import failed for ${displayModulePath}, attempting vm-based CJS fallback: ${redactError(errorMessage)}`,
       );
 
       try {
         const resolvedPath = safeResolve(modulePath);
         const mod = loadCjsModule(resolvedPath);
         logger.debug(
-          `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
+          `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath: formatModulePath(resolvedPath, redactPath), moduleId: displayModulePath })}`,
         );
 
         if (functionName) {
@@ -268,14 +287,14 @@ export async function importModule(modulePath: string, functionName?: string) {
       } catch (cjsErr) {
         // If CJS fallback also fails, throw a combined error with both details
         const cjsErrorMessage = cjsErr instanceof Error ? cjsErr.message : String(cjsErr);
-        logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
-        logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
+        logger.error(`ESM import failed for ${displayModulePath}: ${redactError(errorMessage)}`);
+        logger.error(`CJS fallback also failed: ${redactError(cjsErrorMessage)}`);
 
         // Create a combined error that includes both failure reasons
         const combinedError = new Error(
-          `Failed to load module ${modulePath}:\n` +
-            `  ESM import error: ${errorMessage}\n` +
-            `  CJS fallback error: ${cjsErrorMessage}\n` +
+          `Failed to load module ${displayModulePath}:\n` +
+            `  ESM import error: ${redactError(errorMessage)}\n` +
+            `  CJS fallback error: ${redactError(cjsErrorMessage)}\n` +
             `To fix this, either:\n` +
             `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
             `  2. Convert to ESM syntax (import/export)\n` +
@@ -291,7 +310,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     // Log stack trace for debugging
     const e = err as Error;
     if (e.stack) {
-      logger.debug(e.stack);
+      logger.debug(redactError(e.stack));
     }
 
     // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
@@ -303,7 +322,7 @@ export async function importModule(modulePath: string, functionName?: string) {
       try {
         await fsPromises.access(resolvedModulePath);
         // File exists - the error is about a missing dependency, log and preserve original error
-        logger.error(`ESM import failed: ${err}`);
+        logger.error(`ESM import failed: ${redactError(err)}`);
       } catch {
         // File doesn't exist - normalize to ENOENT for clearer error message
         // Don't log as error - this is expected during config file discovery
@@ -316,7 +335,7 @@ export async function importModule(modulePath: string, functionName?: string) {
       }
     } else {
       // For all other errors (not file-not-found), log as error
-      logger.error(`ESM import failed: ${err}`);
+      logger.error(`ESM import failed: ${redactError(err)}`);
     }
 
     throw err;

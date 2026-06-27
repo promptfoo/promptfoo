@@ -7,6 +7,7 @@ import { getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import { redactPathFromText } from '../util/pathUtils';
 import {
   createSecureTempDirectory,
   removeSecureTempDirectory,
@@ -15,9 +16,10 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-function logStderr(stderr: string): void {
+function logStderr(stderr: string, sanitize: (line: string) => string = (line) => line): void {
   for (const line of stderr.split(/\r?\n/)) {
-    const message = line.trim();
+    const safeLine = sanitize(line);
+    const message = safeLine.trim();
     if (!message) {
       continue;
     }
@@ -26,17 +28,17 @@ function logStderr(stderr: string): void {
     if (levelMatch) {
       switch (levelMatch[1].toUpperCase()) {
         case 'DEBUG':
-          logger.debug(line);
+          logger.debug(safeLine);
           continue;
         case 'INFO':
-          logger.info(line);
+          logger.info(safeLine);
           continue;
         case 'WARN':
         case 'WARNING':
-          logger.warn(line);
+          logger.warn(safeLine);
           continue;
         default:
-          logger.error(line);
+          logger.error(safeLine);
           continue;
       }
     }
@@ -46,9 +48,9 @@ function logStderr(stderr: string): void {
       /(?:Error|Exception)\b/.test(message) ||
       /^from\s.+:\d+/.test(message)
     ) {
-      logger.error(line);
+      logger.error(safeLine);
     } else {
-      logger.warn(line);
+      logger.warn(safeLine);
     }
   }
 }
@@ -313,6 +315,7 @@ export async function validateRubyPath(rubyPath: string, isExplicit: boolean): P
  * @param args - An array of arguments to pass to the Ruby script.
  * @param options - Optional settings for running the Ruby script.
  * @param options.rubyExecutable - Optional path to the Ruby executable.
+ * @param options.redactScriptPath - Redact the script path from logs and thrown errors.
  * @returns A promise that resolves to the output of the Ruby script.
  * @throws An error if there's an issue running the Ruby script or parsing its output.
  */
@@ -320,9 +323,12 @@ export async function runRuby<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { rubyExecutable?: string } = {},
+  options: { rubyExecutable?: string; redactScriptPath?: boolean } = {},
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
+  const displayScriptPath = options.redactScriptPath ? '[redacted script path]' : absPath;
+  const sanitizeScriptPath = (value: string): string =>
+    options.redactScriptPath ? redactPathFromText(value, absPath, '[redacted script path]') : value;
   const customPath = options.rubyExecutable || getEnvString('PROMPTFOO_RUBY');
   let rubyPath = customPath || 'ruby';
   let tempDirectory: string | undefined;
@@ -339,7 +345,7 @@ export async function runRuby<T = unknown>(
       safeJsonStringify(args) as string,
     );
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
-    logger.debug('[Ruby] Running script', { scriptPath: absPath, method });
+    logger.debug('[Ruby] Running script', { scriptPath: displayScriptPath, method });
 
     const { stdout, stderr } = await execFileAsync(rubyPath, [
       wrapperPath,
@@ -350,15 +356,15 @@ export async function runRuby<T = unknown>(
     ]);
 
     if (stdout) {
-      logger.debug(stdout.trim());
+      logger.debug(sanitizeScriptPath(stdout.trim()));
     }
 
     if (stderr) {
-      logStderr(stderr);
+      logStderr(stderr, sanitizeScriptPath);
     }
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug('[Ruby] Script returned a result', { scriptPath: absPath });
+    logger.debug('[Ruby] Script returned a result', { scriptPath: displayScriptPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
@@ -376,16 +382,13 @@ export async function runRuby<T = unknown>(
 
     return result.data;
   } catch (error) {
-    logger.error(
+    const message = sanitizeScriptPath(
       `Error running Ruby script: ${(error as Error).message}\nStack Trace: ${
         (error as Error).stack || 'No Ruby traceback available'
       }`,
     );
-    throw new Error(
-      `Error running Ruby script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack || 'No Ruby traceback available'
-      }`,
-    );
+    logger.error(message);
+    throw new Error(message);
   } finally {
     if (tempDirectory) {
       try {

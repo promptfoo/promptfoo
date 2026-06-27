@@ -1,7 +1,7 @@
 /**
  * Path resolution utilities that work with both regular paths and file:// URLs
  */
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'path';
 
 /**
@@ -58,4 +58,43 @@ export function safeJoin(...paths: string[]): string {
     return lastPath;
   }
   return path.join(...paths);
+}
+
+/**
+ * Redacts a file path and its identifying path components from diagnostic text.
+ * Root directories are deliberately excluded so unrelated separators are preserved.
+ */
+export function redactPathFromText(
+  text: string,
+  filePath: string,
+  replacement: string = '[redacted path]',
+): string {
+  const normalizedPath = path.normalize(filePath);
+  const candidates = new Set([
+    filePath,
+    normalizedPath,
+    path.dirname(filePath),
+    path.dirname(normalizedPath),
+    path.basename(filePath),
+    path.basename(normalizedPath),
+  ]);
+  for (const candidatePath of [filePath, normalizedPath]) {
+    let current = path.dirname(candidatePath);
+    const root = path.parse(current).root;
+    while (current && current !== root && current !== '.') {
+      candidates.add(path.basename(current));
+      current = path.dirname(current);
+    }
+  }
+  try {
+    candidates.add(pathToFileURL(normalizedPath).toString());
+  } catch {
+    // Non-standard paths are still covered by the plain and normalized forms.
+  }
+
+  const roots = new Set([path.parse(filePath).root, path.parse(normalizedPath).root, '.', '']);
+  return [...candidates]
+    .filter((candidate) => !roots.has(candidate))
+    .sort((left, right) => right.length - left.length)
+    .reduce((redacted, candidate) => redacted.split(candidate).join(replacement), text);
 }

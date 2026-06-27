@@ -1,7 +1,8 @@
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 import { describe, expect, it } from 'vitest';
-import { safeJoin, safeResolve } from '../../src/util/pathUtils';
+import { redactPathFromText, safeJoin, safeResolve } from '../../src/util/pathUtils';
 
 /**
  * Helper to create file:// URLs in a cross-platform way
@@ -90,6 +91,36 @@ describe('pathUtils', () => {
     it('handles empty input', () => {
       expect(safeJoin()).toBe(path.join());
       expect(safeJoin('')).toBe(path.join(''));
+    });
+  });
+
+  describe('redactPathFromText', () => {
+    it('redacts absolute, directory, basename, and file URL path forms', () => {
+      const filePath = path.resolve('/private/PR8237_SECRET/schema.py');
+      const directory = path.dirname(filePath);
+      const basename = path.basename(filePath);
+      const fileUrl = pathToFileURL(filePath).toString();
+      const text = [
+        `absolute=${filePath}`,
+        `directory=${directory}`,
+        `component=${path.basename(directory)}`,
+        `basename=${basename}`,
+        `url=${fileUrl}:12`,
+        'neighbor=/public/other.py',
+      ].join('\n');
+
+      const redacted = redactPathFromText(text, filePath, '[private path]');
+
+      expect(redacted).not.toContain('PR8237_SECRET');
+      expect(redacted).not.toContain(basename);
+      expect(redacted).toContain('[private path]');
+      expect(redacted).toContain('neighbor=/public/other.py');
+    });
+
+    it('does not replace root separators or unrelated text', () => {
+      expect(redactPathFromText('safe / neighboring text', '/schema.py')).toBe(
+        'safe / neighboring text',
+      );
     });
   });
 });

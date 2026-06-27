@@ -11,7 +11,10 @@ export class PythonStderrLogger {
   private decoder = new StringDecoder('utf8');
   private inTraceback = false;
 
-  constructor(private readonly prefix = '') {}
+  constructor(
+    private readonly prefix = '',
+    private readonly sanitize: (line: string) => string = (line) => line,
+  ) {}
 
   handleData(data: Buffer | string): void {
     const text = typeof data === 'string' ? data : this.decoder.write(data);
@@ -110,6 +113,6 @@ export class PythonStderrLogger {
   }
 
   private writeLog(level: StderrLevel, line: string): void {
-    logger[level](`${this.prefix}${line}`);
+    logger[level](`${this.prefix}${this.sanitize(line)}`);
   }
 }
