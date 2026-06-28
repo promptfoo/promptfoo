@@ -124,6 +124,19 @@ describe('matchesCitationFaithfulness', () => {
     expect((result as any).metadata?.graderError).toBe(true);
   });
 
+  it('tags an unrecognized verdict as graderError (not a real unfaithful result)', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'unknown', reasoning: 'n/a' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'A claim [1].', context, 1);
+
+    expect(result.pass).toBe(false);
+    expect((result as any).metadata?.graderError).toBe(true);
+  });
+
   it('fails when the grading provider returns an error', async () => {
     const mockCallApi = vi.fn().mockResolvedValue({
       error: 'rate limited',

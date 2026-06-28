@@ -545,6 +545,14 @@ export async function matchesCitationFaithfulness(
   }
 
   const verdict = parsed.verdict.trim().toLowerCase();
+  if (verdict !== 'faithful' && verdict !== 'unfaithful') {
+    // An unrecognized verdict is a grader failure, not a real "unfaithful" result;
+    // tag it so the inverse assertion does not invert it into a pass.
+    return {
+      ...fail('citation-faithfulness grader returned an unrecognized verdict.', tokensUsed),
+      metadata: { graderError: true },
+    };
+  }
   const faithful = verdict === 'faithful';
   const score = faithful ? 1 : 0;
   const pass = score >= threshold - Number.EPSILON;

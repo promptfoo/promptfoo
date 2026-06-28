@@ -1,4 +1,5 @@
 ---
+title: Citation faithfulness
 sidebar_position: 50
 description: 'Check citation attribution in RAG answers: does each [N] marker point to a passage that actually supports its claim?'
 ---
