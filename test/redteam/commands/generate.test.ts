@@ -322,6 +322,18 @@ vi.mock('../../../src/providers', async (importOriginal) => {
   };
 });
 
+// `getStrategyCompatibilityError` is a shared module mock that several suites
+// reconfigure with a persistent `mockImplementation` (e.g. the posterior
+// compatibility tests). A suite that only calls `vi.clearAllMocks()` in its
+// `beforeEach` clears call history but NOT implementations, so that implementation
+// can leak into a later suite under random test ordering and spuriously throw
+// "Posterior strategy does not support multi-input targets". Reset it before every
+// test so no suite inherits another's implementation; per-test setups re-configure
+// it in their own bodies afterwards.
+beforeEach(() => {
+  vi.mocked(getStrategyCompatibilityError).mockReset().mockReturnValue(undefined);
+});
+
 describe('doGenerateRedteam', () => {
   let mockProvider: ApiProvider;
 
