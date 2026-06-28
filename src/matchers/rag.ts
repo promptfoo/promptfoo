@@ -488,20 +488,23 @@ export async function matchesCitationFaithfulness(
       'rubricPrompt must be a string or array',
     );
   }
-  const rawPrompt = Array.isArray(grading?.rubricPrompt)
-    ? typeof grading?.rubricPrompt?.[0] === 'string'
-      ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0]?.content
-    : grading?.rubricPrompt;
-  const citationPrompt = await loadRubricPrompt(rawPrompt, CITATION_FAITHFULNESS_PROMPT);
+  // Pass the rubricPrompt through as-is (string or ChatMessage[]); loadRubricPrompt
+  // handles both. Selecting element 0 would drop the user message carrying the
+  // {{question}}/{{context}}/{{answer}} placeholders from a custom chat rubric.
+  const citationPrompt = await loadRubricPrompt(
+    grading?.rubricPrompt,
+    CITATION_FAITHFULNESS_PROMPT,
+  );
 
   const numberedContext = numberCitationPassages(context);
 
+  // Spread caller vars first so the explicit numbered context (and question/answer)
+  // win: a `vars.context` array must not overwrite the numbered [1]..[N] passages.
   const promptVars = {
+    ...(vars || {}),
     question: query,
     answer: tryParse(output),
     context: numberedContext,
-    ...(vars || {}),
   };
   const promptText = await renderLlmRubricPrompt(citationPrompt, promptVars);
 

@@ -71,6 +71,35 @@ describe('handleCitationFaithfulness', () => {
     expect(result.reason).toContain('passage [1]');
   });
 
+  it('inverts the verdict for not-citation-faithfulness (inverse: true)', async () => {
+    // A correctly-attributed answer (matcher passes) must FAIL the inverse assertion.
+    vi.mocked(matchers.matchesCitationFaithfulness).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Citations are correctly attributed.',
+    });
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue(['p1', 'p2']);
+
+    const result = await handleCitationFaithfulness(baseParams({ inverse: true }));
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('inverse passes a misattributed answer', async () => {
+    vi.mocked(matchers.matchesCitationFaithfulness).mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Misattributed.',
+    });
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue(['p1', 'p2']);
+
+    const result = await handleCitationFaithfulness(baseParams({ inverse: true }));
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
   it('throws when test.vars is undefined', async () => {
     await expect(
       handleCitationFaithfulness(baseParams({ test: { vars: undefined, options: {} } })),

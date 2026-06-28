@@ -63,7 +63,10 @@ For RAG systems that return their retrieved passages alongside the answer:
 # Provider returns { answer: "...", passages: ["...", "..."] }
 assert:
   - type: citation-faithfulness
-    contextTransform: 'output.passages' # Extract the passage array
+    # Select the answer string for grading (the check requires string output)...
+    transform: 'output.answer'
+    # ...while contextTransform reads the passages from the original response.
+    contextTransform: 'output.passages'
 ```
 
 ### Custom grading

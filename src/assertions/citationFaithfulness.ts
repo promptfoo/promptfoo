@@ -26,6 +26,7 @@ export async function handleCitationFaithfulness({
   test,
   output,
   prompt,
+  inverse,
   providerResponse,
   providerCallContext,
 }: AssertionParams): Promise<GradingResult> {
@@ -48,17 +49,26 @@ export async function handleCitationFaithfulness({
     providerResponse,
   );
 
+  const result = await matchesCitationFaithfulness(
+    test.vars.query,
+    output,
+    context,
+    assertion.threshold ?? 1,
+    test.options,
+    test.vars,
+    providerCallContext,
+  );
+
+  // For `not-citation-faithfulness`, invert the verdict: it should pass when the
+  // answer IS misattributed and fail when every citation is faithful.
+  if (inverse) {
+    result.pass = !result.pass;
+    result.score = 1 - result.score;
+  }
+
   return {
     assertion,
-    ...(await matchesCitationFaithfulness(
-      test.vars.query,
-      output,
-      context,
-      assertion.threshold ?? 1,
-      test.options,
-      test.vars,
-      providerCallContext,
-    )),
+    ...result,
     metadata: {
       context,
     },

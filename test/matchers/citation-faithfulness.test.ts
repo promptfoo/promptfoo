@@ -156,6 +156,25 @@ describe('matchesCitationFaithfulness', () => {
     expect(renderedPrompt).toContain('The Eiffel Tower stands 330 metres tall in Paris.');
   });
 
+  it('keeps the numbered context even when vars carries an unnumbered context', async () => {
+    const output = 'The Eiffel Tower is 330 metres tall [1].';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'faithful', reasoning: 'ok' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    const spy = vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    // The grader receives `vars` including an unnumbered `context`; the numbered
+    // passages must still win so [N] markers resolve.
+    await matchesCitationFaithfulness(query, output, context, 1, undefined, {
+      context: ['The Eiffel Tower stands 330 metres tall in Paris.'],
+    });
+
+    const renderedPrompt = spy.mock.calls[0][0] as string;
+    expect(renderedPrompt).toContain('[1] The Eiffel Tower stands 330 metres tall');
+    expect(renderedPrompt).toContain('[2] The Eiffel Tower was completed in 1889');
+  });
+
   it('accepts a rubricPrompt provided as an array of message strings', async () => {
     const mockCallApi = vi.fn().mockResolvedValue({
       output: JSON.stringify({ verdict: 'faithful', reasoning: 'ok' }),
