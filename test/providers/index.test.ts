@@ -2929,10 +2929,11 @@ inputs:
     await expect(
       resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
     ).resolves.toEqual([{ question: 'User question' }]);
-    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+    const [resolvedPath, encoding] = mockFsReadFileSync.mock.calls[0];
+    expect(path.normalize(resolvedPath)).toBe(
       path.join(path.sep, 'workspace', 'targets', 'provider.yaml'),
-      'utf8',
     );
+    expect(encoding).toBe('utf8');
   });
 
   it('defers filtered environment provider ids until dynamic loading is requested', async () => {
