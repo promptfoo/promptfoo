@@ -530,11 +530,12 @@ export async function matchesCitationFaithfulness(
     return { ...fail(resp.error || 'No output', tokensUsed), metadata: { graderError: true } };
   }
 
-  invariant(typeof resp.output === 'string', 'citation-faithfulness produced malformed response');
-
-  const parsed = extractJsonObjects(resp.output)[0] as
-    | { verdict?: string; reasoning?: string }
-    | undefined;
+  // Accept either a JSON string (default LLM grader) or an already-parsed object
+  // (a custom JS/Python/HTTP grading provider can return one directly), matching
+  // the other JSON grading paths instead of throwing on non-string output.
+  const parsed = (
+    typeof resp.output === 'string' ? extractJsonObjects(resp.output)[0] : resp.output
+  ) as { verdict?: string; reasoning?: string } | undefined;
   if (!parsed || typeof parsed.verdict !== 'string') {
     // Do not echo the raw grader output in the reason: it can contain the
     // candidate answer and the retrieved passages.

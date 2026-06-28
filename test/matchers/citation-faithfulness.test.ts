@@ -137,6 +137,21 @@ describe('matchesCitationFaithfulness', () => {
     expect((result as any).metadata?.graderError).toBe(true);
   });
 
+  it('accepts an already-parsed object verdict from a custom grader', async () => {
+    // A custom JS/Python/HTTP grading provider may return a parsed object instead
+    // of a JSON string; it should grade rather than error.
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: { verdict: 'faithful', reasoning: 'ok' },
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'A claim [1].', context, 1);
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
   it('fails when the grading provider returns an error', async () => {
     const mockCallApi = vi.fn().mockResolvedValue({
       error: 'rate limited',
