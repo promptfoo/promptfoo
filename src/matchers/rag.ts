@@ -482,6 +482,13 @@ export async function matchesCitationFaithfulness(
 
   const tokensUsed = normalizeMatcherTokenUsage(undefined);
 
+  // Deterministic precheck: an answer with no [N] citation markers has nothing to
+  // attribute, so it cannot be citation-faithful. Fail it directly rather than
+  // letting the grader pass it vacuously (and save an API call).
+  if (!/\[\d+\]/.test(output)) {
+    return fail('Answer contains no [N] citation markers to evaluate.', tokensUsed);
+  }
+
   if (grading?.rubricPrompt) {
     invariant(
       typeof grading.rubricPrompt === 'string' || Array.isArray(grading.rubricPrompt),
@@ -516,8 +523,11 @@ export async function matchesCitationFaithfulness(
     providerCallContext,
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  // Hard grader failures are tagged graderError so callers (e.g. the inverse
+  // not-citation-faithfulness assertion) can avoid treating an outage or parse
+  // failure as a meaningful verdict.
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return { ...fail(resp.error || 'No output', tokensUsed), metadata: { graderError: true } };
   }
 
   invariant(typeof resp.output === 'string', 'citation-faithfulness produced malformed response');
@@ -526,10 +536,12 @@ export async function matchesCitationFaithfulness(
     | { verdict?: string; reasoning?: string }
     | undefined;
   if (!parsed || typeof parsed.verdict !== 'string') {
-    return fail(
-      `citation-faithfulness grader did not return a valid verdict. Raw output: ${resp.output}`,
-      tokensUsed,
-    );
+    // Do not echo the raw grader output in the reason: it can contain the
+    // candidate answer and the retrieved passages.
+    return {
+      ...fail('citation-faithfulness grader did not return a valid verdict.', tokensUsed),
+      metadata: { graderError: true },
+    };
   }
 
   const verdict = parsed.verdict.trim().toLowerCase();

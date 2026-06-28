@@ -100,6 +100,22 @@ describe('handleCitationFaithfulness', () => {
     expect(result.score).toBe(1);
   });
 
+  it('does not invert a hard grader failure for inverse', async () => {
+    // A grader outage/parse error must NOT satisfy not-citation-faithfulness.
+    vi.mocked(matchers.matchesCitationFaithfulness).mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      metadata: { graderError: true },
+    } as any);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue(['p1', 'p2']);
+
+    const result = await handleCitationFaithfulness(baseParams({ inverse: true }));
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
   it('throws when test.vars is undefined', async () => {
     await expect(
       handleCitationFaithfulness(baseParams({ test: { vars: undefined, options: {} } })),

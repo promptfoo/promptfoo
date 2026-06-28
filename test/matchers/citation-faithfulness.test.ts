@@ -96,6 +96,34 @@ describe('matchesCitationFaithfulness', () => {
     expect(result.reason).toContain('valid verdict');
   });
 
+  it('fails an answer with no [N] citation markers without calling the grader', async () => {
+    const spy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    const result = await matchesCitationFaithfulness(
+      query,
+      'The Eiffel Tower is tall and old.',
+      context,
+      1,
+    );
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('no [N] citation markers');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('tags a malformed grader response as graderError without echoing raw output', async () => {
+    const secret = 'SENSITIVE PASSAGE TEXT';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: secret, // not valid JSON
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'A claim [1].', context, 1);
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).not.toContain(secret); // raw grader output not leaked
+    expect((result as any).metadata?.graderError).toBe(true);
+  });
+
   it('fails when the grading provider returns an error', async () => {
     const mockCallApi = vi.fn().mockResolvedValue({
       error: 'rate limited',

@@ -60,8 +60,10 @@ export async function handleCitationFaithfulness({
   );
 
   // For `not-citation-faithfulness`, invert the verdict: it should pass when the
-  // answer IS misattributed and fail when every citation is faithful.
-  if (inverse) {
+  // answer IS misattributed and fail when every citation is faithful. Do NOT
+  // invert hard grader failures (outage/parse error) — those should fail either
+  // polarity rather than letting an error satisfy the negative assertion.
+  if (inverse && !result.metadata?.graderError) {
     result.pass = !result.pass;
     result.score = 1 - result.score;
   }
@@ -70,6 +72,7 @@ export async function handleCitationFaithfulness({
     assertion,
     ...result,
     metadata: {
+      ...result.metadata,
       context,
     },
   };
