@@ -269,12 +269,66 @@ describe('handleContextFaithfulness', () => {
       'test query',
       'raw',
       'from-transform',
-      0,
+      0.7,
       {},
       expect.any(Object),
       undefined,
     );
     expect(result.metadata).toBeDefined();
     expect(result.metadata!.context).toBe('from-transform');
+  });
+
+  it('should use a default threshold of 0.7 when none is specified', async () => {
+    const mockResult = { pass: true, score: 0.9, reason: 'Content is faithful to context' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    await handleContextFaithfulness({
+      assertion: {
+        type: 'context-faithfulness',
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        test: {
+          vars: {
+            query: 'What is the capital of France?',
+            context: 'Paris is the capital of France.',
+          },
+          options: {},
+        },
+        logProbs: null,
+        tokenUsage: null,
+        cached: false,
+        provider: null,
+        providerResponse: null,
+      },
+      inverse: false,
+      outputString: 'The capital of France is Paris.',
+      providerResponse: null,
+    } as any);
+
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'The capital of France is Paris.',
+      'test context',
+      0.7,
+      {},
+      expect.any(Object),
+      undefined,
+    );
   });
 });
