@@ -47,7 +47,7 @@ export async function handleContextFaithfulness({
       test.vars.query,
       output,
       context,
-      assertion.threshold ?? 0,
+      assertion.threshold ?? 0.7,
       test.options,
       test.vars,
       providerCallContext,
