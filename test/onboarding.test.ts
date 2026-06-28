@@ -308,15 +308,18 @@ describe('initializeProject', () => {
 
     const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
 
-    await initializeProject(null, true);
+    try {
+      await initializeProject(null, true);
 
-    const messages = infoSpy.mock.calls.map((call) => String(call[0]));
+      const messages = infoSpy.mock.calls.map((call) => String(call[0]));
 
-    // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
-    // output interpolated `undefined` into the path and `cd` command.
-    expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
-    expect(messages.some((msg) => msg.includes('cd undefined'))).toBe(false);
-
-    infoSpy.mockRestore();
+      // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
+      // output interpolated `undefined` into the path and `cd` command.
+      expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
+      expect(messages.some((msg) => msg.includes('cd undefined'))).toBe(false);
+    } finally {
+      // Restore in `finally` so a failing assertion can't leak the spy into other tests.
+      infoSpy.mockRestore();
+    }
   });
 });
