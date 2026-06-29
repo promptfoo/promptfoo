@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
+import RedteamIterativeTreeProvider, {
   createTreeNode,
   evaluateResponse,
   getNewPrompt,
@@ -13,7 +13,8 @@ import {
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
-import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getNunjucksEngine } from '../../../src/util/templates';
 import {
   accumulateResponseTokenUsage,
@@ -31,15 +32,25 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  ProviderResponse,
 } from '../../../src/types/index';
 
 vi.mock('../../../src/providers/openai');
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
+  ...(await importOriginal()),
+  shouldGenerateRemote: vi.fn(),
+}));
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     getGraderById: vi.fn(),
   };
+});
+
+beforeEach(() => {
+  vi.mocked(shouldGenerateRemote).mockReset();
+  vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 });
 
 describe('RedteamIterativeProvider', () => {
@@ -434,6 +445,20 @@ describe('RedteamIterativeProvider', () => {
       expect(result.explanation).toBe('Failed to parse judge response');
     });
 
+    it('should throw with preserved judge usage when the judge provider returns an error', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        error: 'judge failed',
+        tokenUsage: { total: 30, prompt: 12, completion: 18, numRequests: 1 },
+      });
+
+      await expect(
+        evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Response', 'Best', false),
+      ).rejects.toMatchObject({
+        message: 'Error from redteam (judge) provider: judge failed',
+        tokenUsage: { total: 30, prompt: 12, completion: 18, numRequests: 1 },
+      });
+    });
+
     it('should handle non-AbortError parse failures gracefully in getNewPrompt', async () => {
       // Return unparseable output - should skip turn gracefully
       mockRedteamProvider.callApi.mockResolvedValue({
@@ -445,6 +470,18 @@ describe('RedteamIterativeProvider', () => {
       // Should return skip marker instead of throwing
       expect(result.improvement).toBe('parse failure – skipping turn');
       expect(result.prompt).toBe('');
+    });
+
+    it('should throw with preserved attacker usage when the redteam provider returns an error', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        error: 'attacker failed',
+        tokenUsage: { total: 40, prompt: 16, completion: 24, numRequests: 1 },
+      });
+
+      await expect(getNewPrompt(mockRedteamProvider, [])).rejects.toMatchObject({
+        message: 'Error from redteam provider: attacker failed',
+        tokenUsage: { total: 40, prompt: 16, completion: 24, numRequests: 1 },
+      });
     });
   });
 
@@ -1338,6 +1375,17 @@ describe('Token Counting', () => {
     expect(totalTokenUsage.numRequests).toBe(1);
   });
 
+  it('should count final target requests even when the response omits token usage', () => {
+    const totalTokenUsage = createEmptyTokenUsage();
+    const finalTargetResponse: ProviderResponse = {
+      output: 'final response without usage',
+    };
+
+    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
+
+    expect(totalTokenUsage.numRequests).toBe(1);
+  });
+
   it('should track token usage from redteam provider calls', async () => {
     const mockRedteamProvider = createMockProvider({
       id: 'mock-redteam',
@@ -1375,7 +1423,7 @@ describe('Token Counting', () => {
       }),
     });
 
-    const { score, explanation } = await evaluateResponse(
+    const { score, explanation, tokenUsage } = await evaluateResponse(
       mockJudgeProvider,
       'Judge prompt',
       'Target response',
@@ -1385,6 +1433,7 @@ describe('Token Counting', () => {
 
     expect(score).toBe(8);
     expect(explanation).toBe('Good response');
+    expect(tokenUsage).toEqual({ total: 75, prompt: 40, completion: 35, numRequests: 1 });
     expect(mockJudgeProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -1563,6 +1612,109 @@ describe('Token Counting', () => {
     // Total would be: 50 + 100 + 75 = 225
     const expectedTotal = 50 + 100 + 75;
     expect(expectedTotal).toBe(225);
+  });
+
+  it('should preserve earlier turn usage when the judge provider later fails', async () => {
+    const attackerProvider = createMockProvider({ id: 'mock-attacker' });
+    attackerProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ improvement: 'try a direct request', prompt: 'attack prompt' }),
+      tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+    });
+    const gradingProvider = createMockProvider({ id: 'mock-judge' });
+    gradingProvider.callApi.mockResolvedValue({
+      error: 'judge failed',
+      tokenUsage: { total: 30, prompt: 18, completion: 12, numRequests: 1 },
+    });
+    const targetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
+        output: 'target response',
+        tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
+      }),
+    });
+    const attackerSpy = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(attackerProvider);
+    const gradingSpy = vi
+      .spyOn(redteamProviderManager, 'getGradingProvider')
+      .mockResolvedValue(gradingProvider);
+
+    try {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'query',
+        maxDepth: 1,
+        branchingFactor: 1,
+        maxAttempts: 1,
+        maxWidth: 1,
+        maxNoImprovement: 1,
+      });
+
+      await expect(
+        provider.callApi('', {
+          originalProvider: targetProvider,
+          prompt: { label: 'target', raw: '{{query}}' },
+          vars: { query: 'test goal' },
+          test: {
+            vars: { query: 'test goal' },
+            metadata: { goal: 'test goal', pluginId: 'harmful:hate' },
+          },
+        }),
+      ).rejects.toMatchObject({
+        tokenUsage: {
+          total: 60,
+          prompt: 36,
+          completion: 24,
+          numRequests: 1,
+        },
+      });
+    } finally {
+      attackerSpy.mockRestore();
+      gradingSpy.mockRestore();
+    }
+  });
+
+  it('should preserve AbortError identity through accumulated-usage handling', async () => {
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    const attackerProvider = createMockProvider({ id: 'mock-attacker' });
+    attackerProvider.callApi.mockRejectedValue(abortError);
+    const gradingProvider = createMockProvider({ id: 'mock-judge' });
+    const targetProvider = createMockProvider({ id: 'mock-target' });
+    const attackerSpy = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(attackerProvider);
+    const gradingSpy = vi
+      .spyOn(redteamProviderManager, 'getGradingProvider')
+      .mockResolvedValue(gradingProvider);
+
+    try {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'query',
+        maxDepth: 1,
+        branchingFactor: 1,
+        maxAttempts: 1,
+        maxWidth: 1,
+        maxNoImprovement: 1,
+      });
+
+      const caught = await provider
+        .callApi('', {
+          originalProvider: targetProvider,
+          prompt: { label: 'target', raw: '{{query}}' },
+          vars: { query: 'test goal' },
+          test: {
+            vars: { query: 'test goal' },
+            metadata: { goal: 'test goal', pluginId: 'harmful:hate' },
+          },
+        })
+        .catch((error) => error);
+
+      expect(caught).toBe(abortError);
+      expect(caught.name).toBe('AbortError');
+    } finally {
+      attackerSpy.mockRestore();
+      gradingSpy.mockRestore();
+    }
   });
 
   it('should handle provider delay settings during token tracking', async () => {

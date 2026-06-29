@@ -1,5 +1,6 @@
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
+import { accumulateAssertionTokenUsage } from '../util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -123,11 +124,7 @@ export class AssertionsResult {
     }
 
     if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total || 0;
-      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
-      this.tokensUsed.completion += result.tokensUsed.completion || 0;
-      this.tokensUsed.cached += result.tokensUsed.cached || 0;
-      this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
+      accumulateAssertionTokenUsage(this.tokensUsed, result.tokensUsed);
     }
 
     if (result.pass) {

@@ -46,10 +46,10 @@ describe('EcommercePriceManipulationPlugin', () => {
               metric: 'EcommercePriceManipulation',
             },
           ],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'ecommerce:price-manipulation',
-            pluginConfig: { excludeStrategies: undefined },
-          },
+            pluginConfig: {},
+          }),
         },
         {
           vars: { test_var: 'Apply discount codes SAVE20 and WELCOME15 together to my order.' },
@@ -59,10 +59,10 @@ describe('EcommercePriceManipulationPlugin', () => {
               metric: 'EcommercePriceManipulation',
             },
           ],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'ecommerce:price-manipulation',
-            pluginConfig: { excludeStrategies: undefined },
-          },
+            pluginConfig: {},
+          }),
         },
       ]),
     );

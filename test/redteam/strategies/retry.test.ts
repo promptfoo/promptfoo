@@ -469,6 +469,80 @@ describe('addRetryTestCases', () => {
     expect(result[0].metadata?.retry).toBe(true);
   });
 
+  it('should drop historical token metadata from retried test cases', async () => {
+    const storedTestCase = {
+      vars: { prompt: 'test' },
+      assert: [],
+      metadata: {
+        pluginId: 'bias:age',
+        providerTokenUsage: { total: 10, prompt: 4, completion: 6, numRequests: 1 },
+        goat: {
+          message: { role: 'assistant', content: 'next question' },
+          tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+        },
+        hydra: {
+          scanId: 'scan-123',
+          tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+        },
+        mischievousUser: {
+          label: 'keep me',
+          tokenUsage: { total: 40, prompt: 20, completion: 20, numRequests: 1 },
+        },
+      },
+    };
+
+    const mockDb = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
+        .mockResolvedValueOnce([
+          {
+            testCase: JSON.stringify(storedTestCase),
+            response: JSON.stringify({}),
+            evalId: 'eval-123',
+          },
+        ]),
+    };
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
+
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { prompt: 'test' },
+        assert: [],
+        metadata: { pluginId: 'bias:age' },
+      },
+    ];
+
+    const result = await addRetryTestCases(testCases, 'prompt', {
+      targetIds: ['openai:gpt-4o-mini'],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].metadata).toMatchObject({
+      pluginId: 'bias:age',
+      retry: true,
+      originalEvalId: 'eval-123',
+      goat: {
+        message: { role: 'assistant', content: 'next question' },
+      },
+      hydra: {
+        scanId: 'scan-123',
+      },
+      mischievousUser: {
+        label: 'keep me',
+      },
+    });
+    expect(result[0].metadata).not.toHaveProperty('providerTokenUsage');
+    expect(result[0].metadata?.goat).not.toHaveProperty('tokenUsage');
+    expect(result[0].metadata?.hydra).not.toHaveProperty('tokenUsage');
+    expect(result[0].metadata?.mischievousUser).not.toHaveProperty('tokenUsage');
+  });
+
   it('should deduplicate tests from multiple targets', async () => {
     const storedTestCase = {
       vars: { prompt: 'same prompt' },

@@ -58,6 +58,7 @@ describe('accounts', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -698,6 +699,29 @@ describe('accounts', () => {
         email: 'test@example.com',
         message: 'Unable to verify email status, but proceeding',
       });
+    });
+
+    it('should use the configured cloud host when one is already authenticated', async () => {
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('http://127.0.0.1:3201');
+      vi.mocked(fetchWithTimeout).mockResolvedValue(
+        new Response(JSON.stringify({ status: 'ok' }), {
+          status: 200,
+          statusText: 'OK',
+        }),
+      );
+
+      await checkEmailStatus();
+
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'http://127.0.0.1:3201/api/users/status?email=test%40example.com',
+        undefined,
+        500,
+      );
     });
 
     describe('with validate option', () => {

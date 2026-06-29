@@ -28,6 +28,13 @@ describe('matchesSelectBest', () => {
       reason: 'Output selected as the best: choose the best output',
     });
     expect(result.filter((item) => item.pass)).toHaveLength(1);
+    expect(result[0].tokensUsed).toMatchObject({
+      total: 7,
+      prompt: 3,
+      completion: 4,
+      numRequests: 1,
+    });
+    expect(result.slice(1).every((item) => item.tokensUsed === undefined)).toBe(true);
   });
 
   it('should return independent failure results for invalid verdicts', async () => {
@@ -45,7 +52,9 @@ describe('matchesSelectBest', () => {
         total: 7,
         prompt: 3,
         completion: 4,
+        numRequests: 1,
       },
     });
+    expect(result[1].tokensUsed).toMatchObject({ numRequests: 0, total: 0 });
   });
 });

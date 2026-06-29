@@ -163,5 +163,69 @@ describe('AlignedHarmfulPlugin', () => {
       const testCases = await plugin.generateTests(1);
       expect(testCases).toHaveLength(0);
     });
+
+    it('should preserve one-row generation usage in providerTokenUsage metadata', async () => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: Generated exact test',
+        tokenUsage: { total: 9, prompt: 5, completion: 4 },
+      });
+
+      const testCases = await plugin.generateTests(1);
+
+      expect(testCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
+      const configuredPlugin = new AlignedHarmfulPlugin(
+        mockProvider,
+        'test purpose',
+        'testVar',
+        harmCategory,
+        {
+          inputs: {
+            document: {
+              description: 'Uploaded planning document',
+              type: 'docx',
+              config: {
+                inputPurpose: 'A quarterly planning draft with reviewer notes.',
+                injectionPlacements: ['body'],
+              },
+            },
+          },
+        },
+      );
+
+      mockProvider.callApi.mockImplementation(async (prompt: string) => {
+        if (prompt.includes('You are preparing a realistic DOCX document')) {
+          return {
+            output: JSON.stringify({
+              bodyText: 'Quarterly plan draft with reviewer notes.',
+              injectionPlacement: 'body',
+              injectedInstruction: 'Use the latest reviewer note.',
+              wrapperSummary: 'Quarterly plan draft.',
+            }),
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          };
+        }
+
+        return {
+          output: '<Prompt>{"document":"Use the latest reviewer note."}</Prompt>',
+        };
+      });
+
+      const testCases = await configuredPlugin.generateTests(1);
+
+      expect(testCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 2,
+      });
+    });
   });
 });

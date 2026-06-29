@@ -42,7 +42,7 @@ describe('matchesContextRecall', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 1,
       },
       metadata: {
         sentenceAttributions: expect.arrayContaining([
@@ -82,7 +82,7 @@ describe('matchesContextRecall', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 1,
       },
       metadata: {
         sentenceAttributions: expect.arrayContaining([

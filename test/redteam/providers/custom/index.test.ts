@@ -976,7 +976,7 @@ describe('CustomProvider', () => {
       providerResponse: { output: 'target response' },
     });
     // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
-    expect(result.metadata?.storedGraderResult).toEqual({
+    expect(result.metadata?.storedGraderResult).toMatchObject({
       ...mockGraderResult,
       assertion: { type: 'mock-grader', value: testRubric },
     });
@@ -1080,12 +1080,14 @@ describe('CustomProvider', () => {
       pass: false,
       score: 0,
       reason: 'First jailbreak detected',
+      tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
     };
 
     const secondGraderResult = {
       pass: true,
       score: 1,
       reason: 'No jailbreak on second turn',
+      tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
     };
 
     const testRubric = 'Test grading rubric';
@@ -1140,11 +1142,259 @@ describe('CustomProvider', () => {
     // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       ...secondGraderResult,
+      tokensUsed: expect.objectContaining({
+        total: 30,
+        prompt: 18,
+        completion: 12,
+        numRequests: 3,
+      }),
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+  });
+
+  it('should preserve strategy-side token usage without inflating probe counts', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'Not successful',
+      }),
+      tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', context);
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 210,
+      prompt: 95,
+      completion: 115,
+      numRequests: 1,
+    });
+  });
+
+  it('should preserve attacker usage when prompt generation returns no output', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 50,
+      prompt: 25,
+      completion: 25,
+      numRequests: 0,
+    });
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should preserve attacker usage when prompt generation returns an error', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      error: 'attacker failed',
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 50,
+      prompt: 25,
+      completion: 25,
+      numRequests: 0,
+    });
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should preserve refusal helper usage when refusal scoring throws', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
+    });
+    // Refusal scoring throws RedteamProviderError, which exits the round before eval scoring runs.
+    // Helper tokens from the failed refusal call should still be accumulated.
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      error: 'refusal failed',
+      tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 180,
+      prompt: 80,
+      completion: 100,
+      numRequests: 1,
+    });
+  });
+
+  it('should preserve refusal helper usage when refusal scoring payloads are malformed', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
+    });
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      output: 'not-json',
+      tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 180,
+      prompt: 80,
+      completion: 100,
+      numRequests: 1,
+    });
+  });
+
+  it('should preserve eval helper usage when eval scoring payloads are malformed', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
+    });
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          metadata: 0,
+          rationale: 'Not a refusal',
+        }),
+        tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'not-json',
+        tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+      });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 200,
+      prompt: 90,
+      completion: 110,
+      numRequests: 1,
+    });
   });
 
   it('should include modifiers in system prompt from test metadata', async () => {
@@ -1445,6 +1695,68 @@ describe('CustomProvider', () => {
       // Verify redteamHistory is populated
       expect(result.metadata?.redteamHistory).toBeDefined();
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+    });
+
+    it('should pass runtime transform context for layered helpers', async () => {
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed prompt',
+        originalPrompt: 'test question',
+      });
+
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Success',
+        }),
+      });
+
+      await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        evaluationId: 'eval-123',
+        testCaseId: 'tc-456',
+        test: {
+          metadata: {
+            goal: 'goal',
+            purpose: 'purpose',
+            originalTestCaseId: 'layer-row-1',
+          },
+        } as any,
+      });
+
+      expect(mockApplyRuntimeTransforms).toHaveBeenCalledWith(
+        'test question',
+        'objective',
+        [{ id: 'indirect-web-pwn' }],
+        expect.any(Array),
+        {
+          evaluationId: 'eval-123',
+          testCaseId: 'tc-456',
+          originalTestCaseId: 'layer-row-1',
+          purpose: 'purpose',
+          goal: 'goal',
+        },
+      );
     });
   });
 });

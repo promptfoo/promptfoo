@@ -19,10 +19,16 @@ import {
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { TestCaseWithPlugin } from '../../types';
+import { TestCase, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
@@ -30,9 +36,57 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
+import type { ApiProvider } from '../../types/providers';
+import type { TokenUsage } from '../../types/shared';
+
 export const redteamRouter = Router();
+
+function createUsageTrackingProvider(provider: ApiProvider): {
+  provider: ApiProvider;
+  getTokenUsage: () => TokenUsage | undefined;
+} {
+  const tokenUsage = createEmptyTokenUsage();
+  let hasTokenUsage = false;
+  const trackedProvider = Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+    callApi: async (...args: Parameters<ApiProvider['callApi']>) => {
+      const response = await provider.callApi(...args);
+      accumulateResponseTokenUsage(tokenUsage, response);
+      hasTokenUsage = true;
+      return response;
+    },
+  }) as ApiProvider;
+
+  return {
+    provider: trackedProvider,
+    getTokenUsage: () => (hasTokenUsage ? tokenUsage : undefined),
+  };
+}
+
+function mergeTokenUsage(...usages: Array<TokenUsage | undefined>): TokenUsage | undefined {
+  const definedUsages = usages.filter((usage): usage is TokenUsage => Boolean(usage));
+  if (definedUsages.length === 0) {
+    return undefined;
+  }
+
+  const totalTokenUsage = createEmptyTokenUsage();
+  for (const usage of definedUsages) {
+    accumulateTokenUsage(totalTokenUsage, usage, true);
+  }
+  return totalTokenUsage;
+}
+
+function withPluginMetadata(testCase: TestCase, pluginId: string): TestCaseWithPlugin {
+  return {
+    ...testCase,
+    metadata: {
+      ...(testCase.metadata ?? {}),
+      pluginId: testCase.metadata?.pluginId ?? pluginId,
+    },
+  };
+}
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -89,23 +143,58 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 
     // Get the red team provider
     const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
+    const trackedRedteamProvider = createUsageTrackingProvider(redteamProvider);
 
-    const testCases = await pluginFactory.action({
-      provider: redteamProvider,
-      purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
-      injectVar,
-      n: effectiveCount, // Generate requested number of test cases
-      delayMs: 0,
-      config: {
-        ...plugin.config,
-        language: plugin.config.language ?? 'en',
-        __nonce: Math.floor(Math.random() * 1000000), // Use a nonce to prevent caching
-      },
-    });
+    let testCases: TestCaseWithPlugin[];
+    try {
+      const generatedTestCases = await pluginFactory.action({
+        provider: trackedRedteamProvider.provider,
+        purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
+        injectVar,
+        n: effectiveCount, // Generate requested number of test cases
+        delayMs: 0,
+        config: {
+          ...plugin.config,
+          language: plugin.config.language ?? 'en',
+          __nonce: Math.floor(Math.random() * 1000000), // Use a nonce to prevent caching
+        },
+      });
+      testCases = generatedTestCases.map((testCase) => withPluginMetadata(testCase, plugin.id));
+    } catch (error) {
+      const tokenUsage = mergeTokenUsage(
+        trackedRedteamProvider.getTokenUsage(),
+        getErrorTokenUsage(error),
+      );
+      sendError(res, 500, 'Failed to generate test case', error, tokenUsage ? { tokenUsage } : {});
+      return;
+    }
 
     if (testCases.length === 0) {
-      res.status(500).json({ error: 'Failed to generate test case' });
+      const tokenUsage = trackedRedteamProvider.getTokenUsage();
+      sendError(
+        res,
+        500,
+        'Failed to generate test case',
+        undefined,
+        tokenUsage ? { tokenUsage } : {},
+      );
       return;
+    }
+
+    const generationTokenUsage = trackedRedteamProvider.getTokenUsage();
+    if (effectiveCount === 1 && testCases.length === 1 && generationTokenUsage) {
+      const [testCase] = testCases;
+      testCases = [
+        {
+          ...testCase,
+          metadata: {
+            ...(testCase.metadata ?? {}),
+            // This request-level total already includes any helper usage surfaced
+            // on the generated row, so keep it authoritative for the one-row case.
+            providerTokenUsage: generationTokenUsage,
+          },
+        },
+      ];
     }
 
     // Apply strategy to test case
@@ -117,20 +206,29 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as TestCaseWithPlugin[],
+          testCases,
           injectVar,
           strategy.config || {},
           strategy.id,
         );
 
         if (strategyTestCases && strategyTestCases.length > 0) {
-          finalTestCases = strategyTestCases;
+          finalTestCases = strategyTestCases.map((testCase) =>
+            withPluginMetadata(testCase, plugin.id),
+          );
         }
       } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}`, { error });
-        res.status(500).json({
-          error: `Failed to apply strategy ${strategy.id}`,
-        });
+        const tokenUsage = mergeTokenUsage(
+          trackedRedteamProvider.getTokenUsage(),
+          getErrorTokenUsage(error),
+        );
+        sendError(
+          res,
+          500,
+          `Failed to apply strategy ${strategy.id}`,
+          error,
+          tokenUsage ? { tokenUsage } : {},
+        );
         return;
       }
     }
@@ -178,13 +276,17 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           return;
         }
 
-        logger.error('[Multi-turn] Error generating prompt', {
-          message: error instanceof Error ? error.message : String(error),
-          strategy: strategy.id,
-        });
-        res.status(500).json({
-          error: 'Failed to generate multi-turn prompt',
-        });
+        const tokenUsage = mergeTokenUsage(
+          trackedRedteamProvider.getTokenUsage(),
+          getErrorTokenUsage(error),
+        );
+        sendError(
+          res,
+          500,
+          'Failed to generate multi-turn prompt',
+          error,
+          tokenUsage ? { tokenUsage } : {},
+        );
         return;
       }
     }
@@ -197,11 +299,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
         return { prompt, context, metadata };
       });
+      const tokenUsage = trackedRedteamProvider.getTokenUsage();
 
       res.json(
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: batchResults,
           count: batchResults.length,
+          ...(tokenUsage ? { tokenUsage } : {}),
         }),
       );
       return;
@@ -221,10 +325,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }),
     );
   } catch (error) {
-    logger.error('Error generating test case', { error });
-    res.status(500).json({
-      error: 'Failed to generate test case',
-    });
+    sendError(res, 500, 'Failed to generate test case', error);
   }
 });
 
@@ -379,16 +480,23 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     });
 
     if (!response.ok) {
-      logger.error(`Cloud function responded with status ${response.status}`);
-      throw new Error(`Cloud function responded with status ${response.status}`);
+      const errorBody: unknown = await response.json().catch(() => undefined);
+      const tokenUsage = getErrorTokenUsage(errorBody);
+      sendError(
+        res,
+        500,
+        `Failed to process ${taskId} task`,
+        new Error(`Cloud function responded with status ${response.status}`),
+        tokenUsage ? { tokenUsage } : {},
+      );
+      return;
     }
 
     const data = await response.json();
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
     res.json(RedteamSchemas.Task.Response.parse(data));
   } catch (error) {
-    logger.error(`Error in ${taskId} task: ${error}`);
-    res.status(500).json({ error: `Failed to process ${taskId} task` });
+    sendError(res, 500, `Failed to process ${taskId} task`, error);
   }
 });
 

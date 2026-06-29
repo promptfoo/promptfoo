@@ -49,6 +49,14 @@ describe('matchesConversationRelevance', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      },
     });
   });
 
@@ -162,6 +170,7 @@ describe('matchesConversationRelevance', () => {
       prompt: 5,
       completion: 0,
       cached: 0,
+      numRequests: 1,
     });
   });
 

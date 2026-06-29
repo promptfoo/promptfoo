@@ -40,6 +40,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  mergeStoredGraderResultTokenUsage,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -311,6 +312,7 @@ export async function runMetaAgentRedteam({
         targetId,
         evaluationId: context?.evaluationId,
         testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
+        originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
         purpose: test?.metadata?.purpose as string | undefined,
         goal: test?.metadata?.goal as string | undefined,
       };
@@ -321,6 +323,11 @@ export async function runMetaAgentRedteam({
         perTurnLayers,
         Strategies,
         transformContext,
+      );
+      accumulateResponseTokenUsage(
+        totalTokenUsage,
+        { tokenUsage: lastTransformResult.tokenUsage },
+        { countAsRequest: false },
       );
 
       if (lastTransformResult.error) {
@@ -396,6 +403,9 @@ export async function runMetaAgentRedteam({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
+        accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
+          countAsRequest: false,
+        });
       }
     }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
@@ -603,7 +613,8 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = graderResult;
+        storedGraderResult = mergeStoredGraderResultTokenUsage(graderResult, storedGraderResult);
+        graderResult = storedGraderResult;
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,

@@ -51,10 +51,16 @@ describe('MemoryPoisoningProvider', () => {
     ).rejects.toThrow('Expected purpose to be set');
   });
 
-  it('should throw error if scenario generation fails', async () => {
+  it('should preserve helper usage if scenario generation fails after the server spent tokens', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       statusText: 'Failed',
+      json: () =>
+        Promise.resolve({
+          error: 'Warning',
+          message: 'Skipping generation',
+          tokenUsage: { prompt: 7, completion: 3, total: 10, numRequests: 1 },
+        }),
     } as Response);
 
     const context: CallApiContextParams = {
@@ -68,9 +74,15 @@ describe('MemoryPoisoningProvider', () => {
       },
     };
 
-    await expect(provider.callApi('test', context)).rejects.toThrow(
-      'Failed to generate scenario: Failed',
-    );
+    await expect(provider.callApi('test', context)).resolves.toMatchObject({
+      error: 'Failed to generate scenario: Failed',
+      tokenUsage: {
+        prompt: 7,
+        completion: 3,
+        total: 10,
+        numRequests: 0,
+      },
+    });
   });
 
   it('should execute memory poisoning flow successfully', async () => {
@@ -156,6 +168,7 @@ describe('MemoryPoisoningProvider', () => {
     const scenario = {
       memory: 'memory text',
       followUp: 'follow up text',
+      tokenUsage: { prompt: 7, completion: 3, total: 10, numRequests: 1 },
     };
 
     mockFetch.mockResolvedValueOnce({
@@ -192,9 +205,9 @@ describe('MemoryPoisoningProvider', () => {
 
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBe(3);
-    expect(result.tokenUsage?.prompt).toBe(45); // 10+20+15
-    expect(result.tokenUsage?.completion).toBe(23); // 5+10+8
-    expect(result.tokenUsage?.total).toBe(68); // 15+30+23
+    expect(result.tokenUsage?.prompt).toBe(52); // 7+10+20+15
+    expect(result.tokenUsage?.completion).toBe(26); // 3+5+10+8
+    expect(result.tokenUsage?.total).toBe(78); // 10+15+30+23
   });
 
   it('should handle errors during execution', async () => {

@@ -228,4 +228,50 @@ describe('handleConversationRelevance with reason generation', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
   });
+
+  it('should preserve request-only token usage', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ verdict: 'yes' }),
+      }),
+    };
+
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const result = await handleConversationRelevance({
+      baseType: 'conversation-relevance',
+      assertion: { type: 'conversation-relevance' },
+      assertionValueContext: {
+        vars: {},
+        test: {} as AtomicTestCase,
+        prompt: 'Hello',
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: { output: 'Hi there!' },
+      },
+      output: 'Hi there!',
+      outputString: 'Hi there!',
+      providerResponse: { output: 'Hi there!' },
+      prompt: 'Hello',
+      test: {
+        vars: {},
+        options: { provider: mockProvider },
+      } as AtomicTestCase,
+      inverse: false,
+    });
+
+    expect(result.tokensUsed).toMatchObject({
+      total: 0,
+      numRequests: 1,
+    });
+  });
 });

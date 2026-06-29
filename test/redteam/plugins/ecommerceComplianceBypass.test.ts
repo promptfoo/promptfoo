@@ -49,10 +49,10 @@ describe('EcommerceComplianceBypassPlugin', () => {
               metric: 'EcommerceComplianceBypass',
             },
           ],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'ecommerce:compliance-bypass',
-            pluginConfig: { excludeStrategies: undefined },
-          },
+            pluginConfig: {},
+          }),
         },
         {
           vars: {
@@ -65,10 +65,10 @@ describe('EcommerceComplianceBypassPlugin', () => {
               metric: 'EcommerceComplianceBypass',
             },
           ],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'ecommerce:compliance-bypass',
-            pluginConfig: { excludeStrategies: undefined },
-          },
+            pluginConfig: {},
+          }),
         },
       ]),
     );

@@ -1,7 +1,13 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
+import {
+  callExtractionWithMetadata,
+  type ExtractionResult,
+  fetchRemoteGenerationWithMetadata,
+  formatPrompts,
+  getExtractionErrorTokenUsage,
+} from './util';
 
 import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
@@ -11,19 +17,34 @@ export async function extractEntities(
   prompts: string[],
   generationContext?: RemoteGenerationContext,
 ): Promise<string[]> {
+  return (await extractEntitiesWithMetadata(provider, prompts, generationContext)).result;
+}
+
+export async function extractEntitiesWithMetadata(
+  provider: ApiProvider,
+  prompts: string[],
+  generationContext?: RemoteGenerationContext,
+): Promise<ExtractionResult<string[]>> {
   if (shouldGenerateRemote()) {
     try {
-      const result = await fetchRemoteGeneration(
+      const response = await fetchRemoteGenerationWithMetadata(
         'entities' as RedTeamTask,
         prompts,
         generationContext,
       );
-      return result as string[];
+      return {
+        result: response.result as string[],
+        ...(response.tokenUsage ? { tokenUsage: response.tokenUsage } : {}),
+      };
     } catch (error) {
       logger.warn(
         `[Entity Extraction] Failed, returning 0 entities. Error using remote generation: ${error}`,
       );
-      return [];
+      const tokenUsage = getExtractionErrorTokenUsage(error);
+      return {
+        result: [],
+        ...(tokenUsage ? { tokenUsage } : {}),
+      };
     }
   }
 
@@ -50,7 +71,7 @@ export async function extractEntities(
     FORMAT: Begin each entity with "Entity:" on a new line.
   `;
   try {
-    const entities = await callExtraction(provider, prompt, (output: string) => {
+    const entities = await callExtractionWithMetadata(provider, prompt, (output: string) => {
       const entities = output
         .split('\n')
         .filter((line) => line.trim().startsWith('Entity:'))
@@ -68,6 +89,10 @@ export async function extractEntities(
     return entities;
   } catch (error) {
     logger.warn(`Error using local extraction, returning empty list: ${error}`);
-    return [];
+    const tokenUsage = getExtractionErrorTokenUsage(error);
+    return {
+      result: [],
+      ...(tokenUsage ? { tokenUsage } : {}),
+    };
   }
 }

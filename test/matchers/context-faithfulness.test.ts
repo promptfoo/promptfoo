@@ -62,7 +62,7 @@ describe('matchesContextFaithfulness', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -102,7 +102,7 @@ describe('matchesContextFaithfulness', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -121,7 +121,7 @@ describe('matchesContextFaithfulness', () => {
       completion: 10,
       cached: 0,
       completionDetails: expect.any(Object),
-      numRequests: 0,
+      numRequests: 2,
     });
   });
 
@@ -161,7 +161,7 @@ describe('matchesContextFaithfulness', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -201,7 +201,7 @@ describe('matchesContextFaithfulness', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });

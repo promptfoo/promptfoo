@@ -1,3 +1,5 @@
+import { createEmptyCompletionDetails } from '../util/tokenUsageUtils';
+
 import type { GradingResult, TokenUsage } from '../types/index';
 
 /**
@@ -15,12 +17,22 @@ export function normalizeMatcherTokenUsage(
     completion: tokenUsage?.completion || 0,
     cached: tokenUsage?.cached || 0,
     numRequests: tokenUsage?.numRequests || 0,
-    completionDetails: tokenUsage?.completionDetails || {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
+    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
   };
+}
+
+/**
+ * Normalize token usage from a provider response while preserving the shared
+ * "response exists but numRequests is omitted" request-counting contract.
+ */
+export function normalizeMatcherResponseTokenUsage(
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+): TokenUsage {
+  const tokensUsed = normalizeMatcherTokenUsage(response?.tokenUsage);
+  if (response && response.tokenUsage?.numRequests === undefined) {
+    tokensUsed.numRequests = 1;
+  }
+  return tokensUsed;
 }
 
 export function fail(

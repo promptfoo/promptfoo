@@ -19,7 +19,7 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { CallApiContextParams, ProviderResponse } from '../types/index';
+import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -349,9 +349,19 @@ export async function extractGoalFromPrompt(
   policy?: string,
   targetId?: string,
 ): Promise<string | null> {
+  return (await extractGoalFromPromptWithUsage(prompt, purpose, pluginId, policy, targetId)).goal;
+}
+
+export async function extractGoalFromPromptWithUsage(
+  prompt: string,
+  purpose: string,
+  pluginId?: string,
+  policy?: string,
+  targetId?: string,
+): Promise<{ goal: string | null; tokenUsage?: TokenUsage }> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
-    return null;
+    return { goal: null };
   }
 
   // Skip goal extraction for dataset plugins since they use static datasets with pre-defined goals
@@ -359,7 +369,7 @@ export async function extractGoalFromPrompt(
     const shortPluginId = getShortPluginId(pluginId);
     if (DATASET_PLUGINS.includes(shortPluginId as any)) {
       logger.debug(`Skipping goal extraction for dataset plugin: ${shortPluginId}`);
-      return null;
+      return { goal: null };
     }
   }
 
@@ -380,6 +390,7 @@ export async function extractGoalFromPrompt(
 
   interface ExtractIntentResponse {
     intent?: string;
+    tokenUsage?: TokenUsage;
   }
 
   try {
@@ -401,18 +412,27 @@ export async function extractGoalFromPrompt(
       logger.warn(
         `Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}, Response Data: ${JSON.stringify(data)}`,
       );
-      return null;
+      return {
+        goal: null,
+        ...(data?.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+      };
     }
 
     if (!data?.intent) {
       logger.warn(`No intent returned from extraction API. Response Data: ${JSON.stringify(data)}`);
-      return null;
+      return {
+        goal: null,
+        ...(data?.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+      };
     }
 
-    return data.intent;
+    return {
+      goal: data.intent,
+      ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+    };
   } catch (error) {
     logger.warn(`Error extracting goal: ${error}`);
-    return null;
+    return { goal: null };
   }
 }
 

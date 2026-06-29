@@ -58,6 +58,10 @@ export class SimulatedUser implements ApiProvider {
    */
   readonly taskId: string = 'tau';
 
+  protected shouldCountUserProviderRequests(): boolean {
+    return true;
+  }
+
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
@@ -204,6 +208,7 @@ export class SimulatedUser implements ApiProvider {
       return {
         messages,
         error: response.error,
+        tokenUsage: response.tokenUsage,
       };
     }
 
@@ -307,6 +312,7 @@ export class SimulatedUser implements ApiProvider {
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
       agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -317,7 +323,6 @@ export class SimulatedUser implements ApiProvider {
       }
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
     for (let i = 0; i < maxTurns; i++) {
@@ -325,6 +330,12 @@ export class SimulatedUser implements ApiProvider {
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
       const userResult = await this.sendMessageToUser(messages, userProvider);
+      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
+      accumulateResponseTokenUsage(
+        tokenUsage,
+        { tokenUsage: userTokenUsage },
+        { countAsRequest: this.shouldCountUserProviderRequests() },
+      );
 
       // Check for errors from remote generation disable
       if (userResult.error) {
@@ -334,8 +345,6 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
-      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.
@@ -355,6 +364,7 @@ export class SimulatedUser implements ApiProvider {
         targetProvider,
         context,
       );
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -365,8 +375,6 @@ export class SimulatedUser implements ApiProvider {
       }
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
-
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
     return this.serializeOutput(

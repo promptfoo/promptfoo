@@ -1,6 +1,8 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { attachProviderTokenUsage } from '../strategies/util';
 import {
   extractAllPromptsFromTags,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -9,7 +11,7 @@ import {
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
-import type { Inputs } from '../../types/shared';
+import type { Inputs, TokenUsage } from '../../types/shared';
 import type { PII_PLUGINS } from '../constants';
 
 const PLUGIN_ID = 'promptfoo:redteam:pii';
@@ -27,12 +29,14 @@ async function processPromptForInputs(
   materializationIndex: number,
 ): Promise<{
   additionalMetadata?: Record<string, unknown>;
+  additionalProviderTokenUsage?: TokenUsage;
   additionalVars: Record<string, string>;
   processedPrompt: string;
 }> {
   let processedPrompt = prompt.trim();
   const additionalVars: Record<string, string> = {};
   let additionalMetadata: Record<string, unknown> | undefined;
+  let additionalProviderTokenUsage: TokenUsage | undefined;
 
   // Extract content from <Prompt> tags if present
   const extractedPrompt = extractPromptFromTags(processedPrompt);
@@ -56,13 +60,14 @@ async function processPromptForInputs(
       );
       Object.assign(additionalVars, materializedVars.vars);
       additionalMetadata = materializedVars.metadata;
+      additionalProviderTokenUsage = materializedVars.tokenUsage;
     } catch {
       // If parsing fails, processedPrompt is plain text - keep it as is
       logger.debug('[PII] Could not parse prompt as JSON for multi-input mode');
     }
   }
 
-  return { processedPrompt, additionalVars, additionalMetadata };
+  return { processedPrompt, additionalVars, additionalMetadata, additionalProviderTokenUsage };
 }
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
@@ -221,6 +226,8 @@ export async function getPiiLeakTestsForCategory(
   );
 
   const piiLeakPrompts = await provider.callApi(promptTemplateWithModifiers);
+  const generationTokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(generationTokenUsage, piiLeakPrompts);
 
   const { output: generatedPrompts } = piiLeakPrompts;
   if (typeof generatedPrompts !== 'string') {
@@ -247,17 +254,17 @@ export async function getPiiLeakTestsForCategory(
       .filter((line) => line.includes('Prompt:'))
       .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
   }
-
-  return Promise.all(
+  const testCases: TestCase[] = await Promise.all(
     prompts.map(async (prompt, materializationIndex) => {
-      const { processedPrompt, additionalVars, additionalMetadata } = await processPromptForInputs(
-        prompt,
-        inputs,
-        provider,
-        purpose,
-        categoryKey,
-        materializationIndex,
-      );
+      const { processedPrompt, additionalVars, additionalMetadata, additionalProviderTokenUsage } =
+        await processPromptForInputs(
+          prompt,
+          inputs,
+          provider,
+          purpose,
+          categoryKey,
+          materializationIndex,
+        );
 
       const vars: Record<string, string> = {
         [injectVar]: processedPrompt,
@@ -272,16 +279,21 @@ export async function getPiiLeakTestsForCategory(
             metric: 'PIILeak',
           },
         ],
-        ...(additionalMetadata
+        ...(additionalMetadata || additionalProviderTokenUsage
           ? {
               metadata: {
-                inputMaterialization: additionalMetadata,
+                ...(additionalMetadata ? { inputMaterialization: additionalMetadata } : {}),
+                ...(additionalProviderTokenUsage
+                  ? { providerTokenUsage: additionalProviderTokenUsage }
+                  : {}),
               },
             }
           : {}),
       };
     }),
   );
+
+  return attachProviderTokenUsage(testCases, generationTokenUsage);
 }
 
 export class PiiGrader extends RedteamGraderBase {

@@ -1,16 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAssertionTokenUsage,
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
   normalizeTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
 import type { TokenUsage } from '../../src/types/shared';
 
 describe('tokenUsageUtils', () => {
+  describe('getErrorTokenUsage', () => {
+    it('returns validated usage carried by an error', () => {
+      const error = Object.assign(new Error('failed'), {
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      });
+
+      expect(getErrorTokenUsage(error)).toEqual({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('rejects malformed usage carried by an error', () => {
+      expect(
+        getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: 'invalid' })),
+      ).toBeUndefined();
+      expect(
+        getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: null })),
+      ).toBeUndefined();
+    });
+  });
+
   describe('createEmptyTokenUsage', () => {
     it('should create an empty token usage object with all fields initialized to zero', () => {
       const result = createEmptyTokenUsage();
@@ -282,6 +309,62 @@ describe('tokenUsageUtils', () => {
     });
   });
 
+  describe('accumulateGenerationTokenUsage', () => {
+    it('adds generation totals without inflating target request counts', () => {
+      const target = createEmptyTokenUsage();
+      target.numRequests = 2;
+
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          total: 15,
+          prompt: 9,
+          completion: 6,
+          numRequests: 3,
+          assertions: { total: 99, numRequests: 4 },
+        }),
+      ).toBe(true);
+
+      expect(target).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 2,
+        assertions: { total: 0, numRequests: 0 },
+      });
+    });
+
+    it('rejects malformed generation usage', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, 'invalid')).toBe(false);
+      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
+      expect(target.total).toBe(0);
+    });
+  });
+
+  describe('accumulateAssertionTokenUsage', () => {
+    it('infers one grading request when a tokensUsed payload omits numRequests', () => {
+      const assertions = createEmptyTokenUsage().assertions!;
+
+      accumulateAssertionTokenUsage(assertions, { total: 7, prompt: 4, completion: 3 });
+
+      expect(assertions).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 1,
+      });
+    });
+
+    it('preserves an explicitly reported zero request count', () => {
+      const assertions = createEmptyTokenUsage().assertions!;
+
+      accumulateAssertionTokenUsage(assertions, { total: 7, numRequests: 0 });
+
+      expect(assertions.numRequests).toBe(0);
+    });
+  });
+
   describe('accumulateGradingRequest', () => {
     it('counts the request without token usage when the grader reports none', () => {
       const assertions = createEmptyAssertions();
@@ -360,7 +443,7 @@ describe('tokenUsageUtils', () => {
       expect(result.numRequests).toBe(0);
     });
 
-    it('should preserve completionDetails if provided', () => {
+    it('should normalize completionDetails if provided', () => {
       const result = normalizeTokenUsage({
         completionDetails: {
           reasoning: 10,
@@ -373,6 +456,8 @@ describe('tokenUsageUtils', () => {
         reasoning: 10,
         acceptedPrediction: 5,
         rejectedPrediction: 2,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       });
     });
 
@@ -406,7 +491,8 @@ describe('tokenUsageUtils', () => {
       });
 
       expect(result.completionDetails.reasoning).toBe(5);
-      // Other fields may be undefined or 0 depending on source
+      expect(result.completionDetails.acceptedPrediction).toBe(0);
+      expect(result.completionDetails.rejectedPrediction).toBe(0);
     });
 
     it('should return Required<TokenUsage> type', () => {

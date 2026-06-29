@@ -457,6 +457,52 @@ describe('addLayerTestCases', () => {
       expect(result[0].metadata?.strategyId).toContain('hydra');
     });
 
+    it('should assign stable per-row ids for layered attack providers without test ids', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'first' },
+          metadata: { pluginId: 'test-plugin' },
+        },
+        {
+          vars: { input: 'second' },
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:hydra', 'indirect-web-pwn'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.originalTestCaseId).toEqual(expect.any(String));
+      expect(result[1].metadata?.originalTestCaseId).toEqual(expect.any(String));
+      expect(result[0].metadata?.originalTestCaseId).not.toBe(
+        result[1].metadata?.originalTestCaseId,
+      );
+    });
+
+    it('should preserve an existing test id as the layered fallback id', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'test' },
+          metadata: { pluginId: 'test-plugin', testCaseId: 'existing-case' },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:meta', 'indirect-web-pwn'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.originalTestCaseId).toBe('existing-case');
+    });
+
     it('should detect crescendo as attack provider', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {

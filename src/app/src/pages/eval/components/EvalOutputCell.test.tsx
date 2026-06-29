@@ -51,6 +51,7 @@ const defaultResultsViewSettings = {
 
 const defaultTableStoreState = {
   shouldHighlightSearchText: false,
+  config: undefined as { redteam?: Record<string, unknown> } | undefined,
 };
 
 const mockResultsViewSettings = {
@@ -1028,6 +1029,81 @@ describe('EvalOutputCell', () => {
     const cachedSuffix = screen.getByText('(cached)');
     expect(cachedSuffix).toBeInTheDocument();
     expect(cachedSuffix).toHaveClass('italic');
+  });
+
+  it('labels red-team token stats explicitly', () => {
+    mockTableStoreState.config = { redteam: {} };
+
+    const propsWithStandardTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 11,
+          completion: 22,
+          total: 33,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
+
+    expect(screen.getByText('Probes:')).toBeInTheDocument();
+    expect(screen.getByText('Non-grading tokens:')).toBeInTheDocument();
+    expect(screen.getByText('Non-grading tokens/sec:')).toBeInTheDocument();
+  });
+
+  it('shows zero probes for a red-team provider error without usage data', () => {
+    mockTableStoreState.config = { redteam: {} };
+
+    const propsWithProviderError: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        error: 'Provider request failed',
+        failureReason: ResultFailureReason.ERROR,
+        tokenUsage: {},
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithProviderError} />);
+
+    expect(screen.getByText('Probes:').parentElement).toHaveTextContent('Probes: 0');
+  });
+
+  it('shows grading tokens from grading results for red-team rows', () => {
+    mockTableStoreState.config = { redteam: {} };
+
+    const propsWithGradingTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 11,
+          completion: 22,
+          total: 33,
+          assertions: {
+            total: 0,
+          },
+        },
+        gradingResult: {
+          ...defaultProps.output.gradingResult,
+          pass: defaultProps.output.gradingResult?.pass ?? true,
+          score: defaultProps.output.gradingResult?.score ?? 0.8,
+          reason: defaultProps.output.gradingResult?.reason ?? 'Test reason',
+          tokensUsed: {
+            prompt: 4,
+            completion: 3,
+            total: 7,
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithGradingTokens} />);
+
+    expect(screen.getByText('Grading tokens:')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
   });
 
   it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {

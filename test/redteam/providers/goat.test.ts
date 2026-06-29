@@ -1174,12 +1174,14 @@ describe('RedteamGoatProvider', () => {
       pass: false,
       score: 0,
       reason: 'Jailbreak detected',
+      tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
     };
 
     const secondGraderResult = {
       pass: true,
       score: 1,
       reason: 'No jailbreak detected',
+      tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
     };
 
     // Mock grader to fail on first turn, pass on second turn
@@ -1218,7 +1220,17 @@ describe('RedteamGoatProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toMatchObject(secondGraderResult);
+    expect(result.metadata?.storedGraderResult).toMatchObject({
+      pass: secondGraderResult.pass,
+      score: secondGraderResult.score,
+      reason: secondGraderResult.reason,
+    });
+    expect(result.metadata?.storedGraderResult?.tokensUsed).toMatchObject({
+      total: 30,
+      prompt: 18,
+      completion: 12,
+      numRequests: 3,
+    });
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
     expect(result.metadata?.stopReason).toBe('Max turns reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
@@ -1303,6 +1315,39 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.prompt).toBe(60);
       expect(result.tokenUsage?.completion).toBe(40);
       expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should preserve remote GOAT generation usage without inflating probe counts', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({
+          materializationHandled: true,
+          message: { role: 'assistant', content: 'test response' },
+          tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+        }),
+        ok: true,
+      });
+
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('target response', {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 1,
+      });
+
+      const context = createMockContext(targetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 140,
+        prompt: 85,
+        completion: 55,
+        numRequests: 1,
+      });
     });
 
     it('should accumulate token usage across multiple turns', async () => {

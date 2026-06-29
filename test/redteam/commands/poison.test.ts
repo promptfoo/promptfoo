@@ -153,6 +153,7 @@ describe('poison command', () => {
             poisonedDocument: 'poisoned content',
             intendedResult: 'result',
             task: 'poison-document',
+            tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
           }),
         headers: new Headers(),
         redirected: false,
@@ -186,6 +187,7 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       });
     });
 
@@ -234,6 +236,7 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {
@@ -255,6 +258,7 @@ describe('poison command', () => {
         originalPath: 'test.txt',
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       });
     });
 
@@ -269,6 +273,7 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {
@@ -289,6 +294,7 @@ describe('poison command', () => {
       expect(result).toEqual({
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       });
     });
 
@@ -365,6 +371,7 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {
@@ -383,7 +390,10 @@ describe('poison command', () => {
       await doPoisonDocuments(options);
 
       expect(fs.mkdirSync).toHaveBeenCalledWith('output-dir', { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', expect.any(String));
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        'output.yaml',
+        expect.stringContaining('tokenUsage:'),
+      );
     });
 
     it('should handle directory input', async () => {
@@ -424,6 +434,7 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
+        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {

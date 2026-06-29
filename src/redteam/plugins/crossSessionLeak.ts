@@ -2,8 +2,10 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
+import { attachProviderTokenUsage } from '../strategies/util';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -108,7 +110,10 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       jsonOnly: true,
     });
 
-    const { output, error } = await provider.callApi(finalTemplate);
+    const response = await provider.callApi(finalTemplate);
+    const generationTokenUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(generationTokenUsage, response);
+    const { output, error } = response;
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
       return [];
@@ -122,6 +127,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 
     const prompts = extractJsonObjects(output);
     const tests: TestCase[] = [];
+
     for (const prompt of prompts) {
       const { userA, userB, match } = prompt as { userA: string; userB: string; match: string };
       if (!userA || !userB || !match) {
@@ -150,7 +156,14 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       });
     }
 
-    return tests;
+    const usageTargetIndex = tests.findIndex(
+      (testCase) => testCase.metadata?.crossSessionLeakMatch,
+    );
+    return attachProviderTokenUsage(
+      tests,
+      generationTokenUsage,
+      usageTargetIndex >= 0 ? usageTargetIndex : 0,
+    );
   }
 }
 

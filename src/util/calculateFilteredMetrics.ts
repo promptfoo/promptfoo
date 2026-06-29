@@ -126,12 +126,40 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
-      -- Token usage aggregation (token usage is inside response JSON)
-      SUM(CAST(json_extract(response, '$.tokenUsage.total') AS INTEGER)) as total_tokens,
-      SUM(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER)) as prompt_tokens,
-      SUM(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER)) as completion_tokens,
-      SUM(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER)) as cached_tokens,
-      COUNT(CASE WHEN json_extract(response, '$.tokenUsage') IS NOT NULL THEN 1 END) as num_requests_with_tokens
+      -- Target usage lives on the response; generation usage is carried on the first test.
+      -- Count it once on the canonical first result, without inflating redteam probes.
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.total') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.total') AS INTEGER), 0) ELSE 0 END) as total_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.prompt') AS INTEGER), 0) ELSE 0 END) as prompt_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completion') AS INTEGER), 0) ELSE 0 END) as completion_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.cached') AS INTEGER), 0) ELSE 0 END) as cached_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.reasoning') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.reasoning') AS INTEGER), 0) ELSE 0 END) as completion_details_reasoning,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_accepted_prediction,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_rejected_prediction,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_read_input_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_creation_input_tokens,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.total') AS INTEGER)) as assertion_total_tokens,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.prompt') AS INTEGER)) as assertion_prompt_tokens,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completion') AS INTEGER)) as assertion_completion_tokens,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.cached') AS INTEGER)) as assertion_cached_tokens,
+      SUM(
+        CASE
+          WHEN json_extract(grading_result, '$.tokensUsed') IS NOT NULL
+          THEN COALESCE(CAST(json_extract(grading_result, '$.tokensUsed.numRequests') AS INTEGER), 1)
+          ELSE 0
+        END
+      ) as assertion_num_requests,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.reasoning') AS INTEGER)) as assertion_completion_details_reasoning,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.acceptedPrediction') AS INTEGER)) as assertion_completion_details_accepted_prediction,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.rejectedPrediction') AS INTEGER)) as assertion_completion_details_rejected_prediction,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.cacheReadInputTokens') AS INTEGER)) as assertion_completion_details_cache_read_input_tokens,
+      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.cacheCreationInputTokens') AS INTEGER)) as assertion_completion_details_cache_creation_input_tokens,
+      SUM(
+        CASE
+          WHEN json_extract(response, '$.tokenUsage') IS NOT NULL
+          THEN COALESCE(CAST(json_extract(response, '$.tokenUsage.numRequests') AS INTEGER), 1)
+          ELSE 0
+        END
+      ) as num_requests
     FROM eval_results
     WHERE ${whereSql}
     GROUP BY prompt_idx
@@ -151,7 +179,22 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     prompt_tokens: number | null;
     completion_tokens: number | null;
     cached_tokens: number | null;
-    num_requests_with_tokens: number;
+    completion_details_reasoning: number | null;
+    completion_details_accepted_prediction: number | null;
+    completion_details_rejected_prediction: number | null;
+    completion_details_cache_read_input_tokens: number | null;
+    completion_details_cache_creation_input_tokens: number | null;
+    assertion_total_tokens: number | null;
+    assertion_prompt_tokens: number | null;
+    assertion_completion_tokens: number | null;
+    assertion_cached_tokens: number | null;
+    assertion_num_requests: number | null;
+    assertion_completion_details_reasoning: number | null;
+    assertion_completion_details_accepted_prediction: number | null;
+    assertion_completion_details_rejected_prediction: number | null;
+    assertion_completion_details_cache_read_input_tokens: number | null;
+    assertion_completion_details_cache_creation_input_tokens: number | null;
+    num_requests: number | null;
   }>;
 
   // Populate basic metrics
@@ -174,7 +217,29 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
         prompt: row.prompt_tokens || 0,
         completion: row.completion_tokens || 0,
         cached: row.cached_tokens || 0,
-        numRequests: row.num_requests_with_tokens || 0,
+        numRequests: row.num_requests || 0,
+        completionDetails: {
+          reasoning: row.completion_details_reasoning || 0,
+          acceptedPrediction: row.completion_details_accepted_prediction || 0,
+          rejectedPrediction: row.completion_details_rejected_prediction || 0,
+          cacheReadInputTokens: row.completion_details_cache_read_input_tokens || 0,
+          cacheCreationInputTokens: row.completion_details_cache_creation_input_tokens || 0,
+        },
+        assertions: {
+          total: row.assertion_total_tokens || 0,
+          prompt: row.assertion_prompt_tokens || 0,
+          completion: row.assertion_completion_tokens || 0,
+          cached: row.assertion_cached_tokens || 0,
+          numRequests: row.assertion_num_requests || 0,
+          completionDetails: {
+            reasoning: row.assertion_completion_details_reasoning || 0,
+            acceptedPrediction: row.assertion_completion_details_accepted_prediction || 0,
+            rejectedPrediction: row.assertion_completion_details_rejected_prediction || 0,
+            cacheReadInputTokens: row.assertion_completion_details_cache_read_input_tokens || 0,
+            cacheCreationInputTokens:
+              row.assertion_completion_details_cache_creation_input_tokens || 0,
+          },
+        },
       },
       namedScores: {},
       namedScoresCount: {},
@@ -362,6 +427,27 @@ function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
       completion: 0,
       cached: 0,
       numRequests: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+        },
+      },
     },
     namedScores: {},
     namedScoresCount: {},

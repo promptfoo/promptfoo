@@ -33,7 +33,15 @@ class FakeMcpProvider extends MCPProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     this.calls.push({ prompt, context, options });
-    return { output: 'ok' };
+    return {
+      output: 'ok',
+      tokenUsage: {
+        prompt: 20,
+        completion: 5,
+        total: 25,
+        numRequests: 1,
+      },
+    };
   }
 
   async cleanup(): Promise<void> {
@@ -95,17 +103,147 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       id: () => 'openai:test',
       callApi: async () => ({
         output: JSON.stringify(searchCompaniesCall),
+        tokenUsage: {
+          prompt: 10,
+          completion: 4,
+          total: 14,
+          numRequests: 1,
+        },
       }),
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
     const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+      tokenUsage: {
+        prompt: 30,
+        completion: 9,
+        total: 39,
+        numRequests: 1,
+      },
+    });
 
     expect(target.calls).toHaveLength(1);
     expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
     expect(parseToolCall(target.calls[0].context?.vars.prompt)).toEqual(searchCompaniesCall);
+  });
+
+  it('keeps target request counts target-only when MCP repair is required', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output:
+          '{"tool":"search_companies","args":{"query":"Find clean energy companies.","limit":10}}',
+        tokenUsage: {
+          prompt: 10,
+          completion: 4,
+          total: 14,
+          numRequests: 7,
+        },
+      }),
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'harmful:hate',
+        purpose: 'Search companies',
+      },
+    });
+
+    await expect(
+      wrapped.callApi('Find clean energy companies.', {
+        prompt: {
+          raw: '{{prompt}}',
+          label: 'prompt',
+        },
+        vars: { prompt: 'Find clean energy companies.' },
+        test: {
+          metadata: {
+            pluginId: 'harmful:hate',
+            purpose: 'Search companies',
+          },
+        },
+      } as unknown as CallApiContextParams),
+    ).resolves.toMatchObject({
+      tokenUsage: {
+        prompt: 30,
+        completion: 9,
+        total: 39,
+        numRequests: 1,
+      },
+    });
+  });
+
+  it('preserves MCP repair tokens when materialization fails after the LLM call', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output: '{"tool":"search_companies","args":{"limit":10}}',
+        tokenUsage: {
+          prompt: 10,
+          completion: 4,
+          total: 14,
+          numRequests: 1,
+        },
+      }),
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'harmful:hate',
+        purpose: 'Search companies',
+      },
+    });
+
+    await expect(
+      wrapped.callApi('Find clean energy companies.', {
+        prompt: {
+          raw: '{{prompt}}',
+          label: 'prompt',
+        },
+        vars: { prompt: 'Find clean energy companies.' },
+        test: {
+          metadata: {
+            pluginId: 'harmful:hate',
+            purpose: 'Search companies',
+          },
+        },
+      } as unknown as CallApiContextParams),
+    ).resolves.toEqual({
+      error: expect.stringContaining('Failed to materialize MCP target prompt'),
+      tokenUsage: {
+        prompt: 10,
+        completion: 4,
+        cached: 0,
+        total: 14,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+        },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
+        },
+      },
+    });
+    expect(target.calls).toHaveLength(0);
   });
 
   it('does not request inference when the prompt is already valid MCP JSON', async () => {
@@ -138,7 +276,15 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
     const response = await wrapped.callApi('Plain prompt', undefined, options);
 
-    expect(response).toEqual({ output: 'ok' });
+    expect(response).toEqual({
+      output: 'ok',
+      tokenUsage: {
+        prompt: 20,
+        completion: 5,
+        total: 25,
+        numRequests: 1,
+      },
+    });
     expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
     expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined, options }]);
   });
@@ -216,11 +362,21 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
-    vi.spyOn(target, 'callApi').mockRejectedValueOnce(new Error('Target provider failed'));
+    vi.spyOn(target, 'callApi').mockRejectedValueOnce(
+      Object.assign(new Error('Target provider failed'), {
+        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      }),
+    );
     const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
       error: expect.stringContaining('Target provider failed'),
+      tokenUsage: {
+        total: 9,
+        prompt: 6,
+        completion: 3,
+        numRequests: 1,
+      },
     });
   });
 

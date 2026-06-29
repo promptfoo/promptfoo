@@ -42,6 +42,7 @@ import {
   buildGraderResultAssertion,
   getGraderAssertionValue,
   getLastMessageContent,
+  mergeStoredGraderResultTokenUsage,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -97,6 +98,7 @@ interface GoatResponse extends ProviderResponse {
 export interface ExtractAttackFailureResponse {
   message: string;
   task: string;
+  tokenUsage?: TokenUsage;
 }
 
 interface GoatConfig {
@@ -282,6 +284,9 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
             targetId: this.config.targetId,
           });
+          accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
+            countAsRequest: false,
+          });
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -305,10 +310,20 @@ export default class GoatProvider implements ApiProvider {
                 {
                   targetId: this.config.targetId,
                   evaluationId: context?.evaluationId,
-                  testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+                  testCaseId:
+                    context?.testCaseId ||
+                    (context?.test?.metadata?.testCaseId as string | undefined),
+                  originalTestCaseId: context?.test?.metadata?.originalTestCaseId as
+                    | string
+                    | undefined,
                   purpose: context?.test?.metadata?.purpose as string | undefined,
                   goal: context?.test?.metadata?.goal as string | undefined,
                 },
+              );
+              accumulateResponseTokenUsage(
+                totalTokenUsage,
+                { tokenUsage: transformResult.tokenUsage },
+                { countAsRequest: false },
               );
               if (transformResult.error) {
                 logger.warn('[GOAT] Transform failed for unblocking prompt', {
@@ -373,6 +388,7 @@ export default class GoatProvider implements ApiProvider {
             options?.abortSignal,
           );
           const data = (await response.json()) as ExtractAttackFailureResponse;
+          accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
 
           if (!data.message) {
             logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -414,6 +430,7 @@ export default class GoatProvider implements ApiProvider {
           options?.abortSignal,
         );
         const data = await response.json();
+        accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
           continue;
@@ -513,10 +530,17 @@ export default class GoatProvider implements ApiProvider {
             {
               targetId: this.config.targetId,
               evaluationId: context?.evaluationId,
-              testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+              testCaseId:
+                context?.testCaseId || (context?.test?.metadata?.testCaseId as string | undefined),
+              originalTestCaseId: context?.test?.metadata?.originalTestCaseId as string | undefined,
               purpose: context?.test?.metadata?.purpose as string | undefined,
               goal: context?.test?.metadata?.goal as string | undefined,
             },
+          );
+          accumulateResponseTokenUsage(
+            totalTokenUsage,
+            { tokenUsage: lastTransformResult.tokenUsage },
+            { countAsRequest: false },
           );
 
           // Skip turn if transform failed
@@ -790,10 +814,13 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = mergeStoredGraderResultTokenUsage(
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            storedGraderResult,
+          );
         }
 
         if (graderPassed === false) {

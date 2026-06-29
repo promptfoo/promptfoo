@@ -1,7 +1,14 @@
-import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
+import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../../types/index';
+import { accumulateTokenUsage, getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
+import type { TokenUsage } from '../../types/shared';
 import type { RedteamStrategyObject } from '../types';
+
+export function getGenerationErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  const tokenUsage = getErrorTokenUsage(error);
+  return tokenUsage ? { ...tokenUsage, numRequests: tokenUsage.numRequests ?? 1 } : undefined;
+}
 
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
@@ -50,4 +57,95 @@ export function pluginMatchesStrategyTargets(
 
     return false;
   });
+}
+
+/**
+ * Merge generation-time provider usage across layered strategies without mutating prior metadata.
+ */
+function cloneTokenUsage(tokenUsage: TokenUsage): TokenUsage {
+  return {
+    ...tokenUsage,
+    ...(tokenUsage.completionDetails && {
+      completionDetails: { ...tokenUsage.completionDetails },
+    }),
+    ...(tokenUsage.assertions && {
+      assertions: {
+        ...tokenUsage.assertions,
+        ...(tokenUsage.assertions.completionDetails && {
+          completionDetails: { ...tokenUsage.assertions.completionDetails },
+        }),
+      },
+    }),
+  };
+}
+
+export function mergeProviderTokenUsage(
+  existing: TokenUsage | undefined,
+  update: TokenUsage | undefined,
+): TokenUsage | undefined {
+  if (!existing) {
+    return update ? cloneTokenUsage(update) : undefined;
+  }
+  if (!update) {
+    return cloneTokenUsage(existing);
+  }
+
+  const merged = cloneTokenUsage(existing);
+  accumulateTokenUsage(merged, update);
+  return merged;
+}
+
+export function detachProviderTokenUsage<T extends TestCase>(
+  testCases: T[],
+): {
+  testCases: T[];
+  tokenUsage: TokenUsage | undefined;
+} {
+  let tokenUsage: TokenUsage | undefined;
+
+  return {
+    testCases: testCases.map((testCase) => {
+      if (!testCase.metadata || !('providerTokenUsage' in testCase.metadata)) {
+        return testCase;
+      }
+      const providerTokenUsage = getGenerationErrorTokenUsage({
+        tokenUsage: testCase.metadata.providerTokenUsage,
+      });
+      if (providerTokenUsage) {
+        tokenUsage = mergeProviderTokenUsage(tokenUsage, providerTokenUsage);
+      }
+
+      const { providerTokenUsage: _providerTokenUsage, ...metadata } = testCase.metadata;
+      return { ...testCase, metadata } as T;
+    }),
+    tokenUsage,
+  };
+}
+
+/**
+ * Attach request-level generation usage to exactly one emitted row.
+ */
+export function attachProviderTokenUsage<T extends TestCase>(
+  testCases: T[],
+  tokenUsage: TokenUsage | undefined,
+  targetIndex = 0,
+): T[] {
+  if (!tokenUsage || testCases.length === 0) {
+    return testCases;
+  }
+
+  return testCases.map((testCase, index) =>
+    index === targetIndex
+      ? ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            providerTokenUsage: mergeProviderTokenUsage(
+              testCase.metadata?.providerTokenUsage,
+              tokenUsage,
+            ),
+          },
+        } as T)
+      : testCase,
+  );
 }

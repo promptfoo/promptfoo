@@ -93,8 +93,12 @@ export async function addLayerTestCases(
 
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
-      return current.map((testCase) => {
+      return current.map((testCase, index) => {
         const originalText = String(testCase.vars?.[injectVar] ?? '');
+        const originalTestCaseId =
+          (testCase.metadata?.testCaseId as string | undefined) ||
+          (testCase.metadata?.originalTestCaseId as string | undefined) ||
+          `layer-${scanId}-${index}`;
         return {
           ...testCase,
           provider: {
@@ -118,6 +122,7 @@ export async function addLayerTestCases(
             ...testCase.metadata,
             strategyId,
             originalText,
+            originalTestCaseId,
           },
         };
       });

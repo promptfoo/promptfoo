@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { tryParse } from './shared';
+import { normalizeMatcherResponseTokenUsage, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -95,7 +95,7 @@ export async function matchesSearchRubric(
       pass: false,
       score: 0,
       reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-      tokensUsed: resp.tokenUsage,
+      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
       assertion,
     };
   }
@@ -120,7 +120,7 @@ export async function matchesSearchRubric(
       pass,
       score,
       reason: result.reason || 'No reason provided',
-      tokensUsed: resp.tokenUsage,
+      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
       assertion,
       metadata: {
         searchResults: result.searchResults || [],
@@ -139,7 +139,7 @@ export async function matchesSearchRubric(
       pass,
       score: pass ? 1 : 0,
       reason: resp.output as string,
-      tokensUsed: resp.tokenUsage,
+      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
       assertion,
     };
   }

@@ -47,19 +47,60 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   return fetchWithRetries;
 }
 
-async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['strategyId']) {
+function mockRemoteGenerationResponse({
+  body,
+  status,
+  statusText,
+}: {
+  body: unknown;
+  status: number;
+  statusText: string;
+}) {
+  const fetchWithRetries = vi.fn().mockResolvedValueOnce(
+    new Response(JSON.stringify(body), {
+      status,
+      statusText,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+
+  vi.doMock('../../../src/util/fetch/index', () => ({
+    fetchWithRetries,
+  }));
+  vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
+    getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+    getRemoteGenerationHeaders: vi.fn((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    })),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+  }));
+  vi.doMock('../../../src/providers/shared', () => ({
+    getRequestTimeoutMs: () => TEST_REQUEST_TIMEOUT_MS,
+  }));
+  vi.doMock('../../../src/constants', () => ({
+    VERSION: '0.0.0-test',
+  }));
+
+  return fetchWithRetries;
+}
+
+async function generatePromptForStrategy(
+  strategyId: MultiTurnPromptParams['strategyId'],
+  baseMetadata: Record<string, unknown> = { pluginConfig: {} },
+) {
   const { generateMultiTurnPrompt } = await import(
     '../../../src/server/services/redteamTestCaseGenerationService'
   );
 
-  await generateMultiTurnPrompt({
+  return generateMultiTurnPrompt({
     pluginId: 'harmful:hate',
     strategyId,
     strategyConfigRecord: {},
     history: [],
     turn: 0,
     maxTurns: 5,
-    baseMetadata: { pluginConfig: {} },
+    baseMetadata,
     generatedPrompt: 'initial prompt',
     purpose: 'test purpose',
   });
@@ -112,6 +153,28 @@ describe('redteamTestCaseGenerationService', () => {
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      'goat',
+      'jailbreak:hydra',
+      'mischievous-user',
+      'crescendo',
+    ] as const)('should preserve helper usage when %s remote generation fails', async (strategyId) => {
+      mockRemoteGenerationResponse({
+        status: 400,
+        statusText: 'Bad Request',
+        body: {
+          error: 'Warning',
+          message: 'Skipping generation',
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+      });
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({
+        name: 'MultiTurnGenerationError',
+        tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+      });
+    });
+
     it('should call fetchWithRetries with correct parameters for Crescendo strategy', async () => {
       const fetchWithRetries = mockRemoteGeneration({
         result: {
@@ -144,6 +207,163 @@ describe('redteamTestCaseGenerationService', () => {
       await generatePromptForStrategy('mischievous-user');
 
       await expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
+    });
+
+    it.each([
+      {
+        strategyId: 'goat' as const,
+        responseBody: {
+          message: { content: 'goat prompt' },
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'jailbreak:hydra' as const,
+        responseBody: {
+          result: { prompt: 'hydra prompt' },
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'mischievous-user' as const,
+        responseBody: {
+          result: 'mischievous prompt',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+      },
+    ])('should preserve $strategyId generation usage in metadata.providerTokenUsage', async ({
+      strategyId,
+      responseBody,
+    }) => {
+      mockRemoteGeneration(responseBody);
+
+      const result = await generatePromptForStrategy(strategyId);
+
+      expect(result.metadata.providerTokenUsage).toEqual(responseBody.tokenUsage);
+    });
+
+    it.each([
+      {
+        strategyId: 'goat' as const,
+        responseBody: {
+          message: { content: 'goat prompt' },
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+        nestedKey: 'goat' as const,
+      },
+      {
+        strategyId: 'jailbreak:hydra' as const,
+        responseBody: {
+          result: { prompt: 'hydra prompt' },
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+        nestedKey: 'hydra' as const,
+      },
+      {
+        strategyId: 'mischievous-user' as const,
+        responseBody: {
+          result: 'mischievous prompt',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        nestedKey: 'mischievousUser' as const,
+      },
+    ])('should accumulate prior $strategyId generation usage across turns', async ({
+      strategyId,
+      responseBody,
+      nestedKey,
+    }) => {
+      mockRemoteGeneration(responseBody);
+
+      const result = await generatePromptForStrategy(strategyId, {
+        pluginConfig: {},
+        providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        [nestedKey]: {
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        },
+      });
+
+      expect(result.metadata.providerTokenUsage).toEqual({
+        total: responseBody.tokenUsage.total + 5,
+        prompt: responseBody.tokenUsage.prompt + 3,
+        completion: responseBody.tokenUsage.completion + 2,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect((result.metadata[nestedKey] as { tokenUsage: unknown }).tokenUsage).toEqual({
+        total: responseBody.tokenUsage.total + 5,
+        prompt: responseBody.tokenUsage.prompt + 3,
+        completion: responseBody.tokenUsage.completion + 2,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it.each([
+      'crescendo',
+      'custom',
+    ] as const)('should accumulate prior %s generation usage across turns', async (strategyId) => {
+      mockRemoteGeneration({
+        result: {
+          generatedQuestion: 'test question',
+          lastResponseSummary: 'summary',
+          rationaleBehindJailbreak: 'rationale',
+        },
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      });
+
+      const result = await generatePromptForStrategy(strategyId, {
+        pluginConfig: {},
+        providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+      });
+
+      expect(result.metadata.providerTokenUsage).toEqual({
+        total: 24,
+        prompt: 15,
+        completion: 9,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it.each([
+      {
+        strategyId: 'goat' as const,
+        responseBody: {
+          message: {},
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'jailbreak:hydra' as const,
+        responseBody: {
+          result: {},
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'mischievous-user' as const,
+        responseBody: {
+          result: '',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'crescendo' as const,
+        responseBody: {
+          result: {},
+          tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+        },
+      },
+    ])('should preserve $strategyId helper usage when the response is malformed', async ({
+      strategyId,
+      responseBody,
+    }) => {
+      mockRemoteGeneration(responseBody);
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({
+        name: 'MultiTurnGenerationError',
+        tokenUsage: responseBody.tokenUsage,
+      });
     });
   });
 });

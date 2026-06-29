@@ -24,6 +24,7 @@ import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -989,6 +990,9 @@ export default class EvalResult {
     const tokenUsage = createEmptyTokenUsage();
     if (this.response) {
       accumulateResponseTokenUsage(tokenUsage, this.response);
+    }
+    if (this.testIdx === 0 && this.promptIdx === 0) {
+      accumulateGenerationTokenUsage(tokenUsage, this.testCase.metadata?.providerTokenUsage);
     }
     if (this.gradingResult) {
       accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed);

@@ -1,7 +1,7 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { getAndCheckProvider, getRemoteGradingContext, shouldUseRemoteGrading } from './providers';
 import {
   cosineSimilarity,
@@ -105,7 +105,7 @@ async function calculateProviderSimilarity(
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
-    accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
+    accumulateResponseTokenUsage(tokensUsed, similarityResp);
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
     }
@@ -136,8 +136,8 @@ async function calculateProviderSimilarity(
   ]);
 
   const mergedUsage = normalizeMatcherTokenUsage(undefined);
-  accumulateTokenUsage(mergedUsage, expectedEmbedding.tokenUsage);
-  accumulateTokenUsage(mergedUsage, outputEmbedding.tokenUsage);
+  accumulateResponseTokenUsage(mergedUsage, expectedEmbedding);
+  accumulateResponseTokenUsage(mergedUsage, outputEmbedding);
   accumulateTokenUsage(tokensUsed, mergedUsage);
 
   if (expectedEmbedding.error || outputEmbedding.error) {

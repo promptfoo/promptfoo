@@ -21,7 +21,7 @@ import { Severity } from '../../../src/redteam/constants';
 import { extractA2AAgentCardInfo } from '../../../src/redteam/extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
@@ -58,6 +58,17 @@ type SynthesizeMockResult = {
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
+  fsMocks.existsSync.mockReset();
+  fsMocks.readFileSync.mockReset();
+  vi.mocked(synthesize).mockReset().mockResolvedValue({
+    testCases: [],
+    purpose: '',
+    entities: [],
+    injectVar: 'input',
+    failedPlugins: [],
+  });
+  vi.mocked(shouldGenerateRemote).mockReset().mockReturnValue(false);
+  vi.mocked(neverGenerateRemote).mockReset().mockReturnValue(false);
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
   vi.mocked(getCloudDatabaseId).mockReset();
@@ -324,6 +335,14 @@ describe('doGenerateRedteam', () => {
     });
   });
 
+  afterEach(() => {
+    fsMocks.existsSync.mockReset();
+    fsMocks.readFileSync.mockReset();
+    vi.mocked(synthesize).mockReset();
+    vi.mocked(shouldGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReset();
+  });
+
   it('should generate redteam tests and write to output file', async () => {
     vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {
@@ -508,6 +527,116 @@ describe('doGenerateRedteam', () => {
       'config.yaml',
       expect.any(Array),
     );
+  });
+
+  it('should preserve generation usage when appending to existing tests', async () => {
+    const existingTest = {
+      vars: { input: 'Existing input' },
+      metadata: { source: 'existing' },
+    };
+    mockReadFileSync({ tests: [existingTest] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Generated input' },
+          metadata: {
+            pluginId: 'redteam',
+            providerTokenUsage: {
+              total: 10,
+              prompt: 6,
+              completion: 4,
+              numRequests: 1,
+            },
+          },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam({
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    });
+
+    const writtenTests = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].tests;
+    expect(writtenTests).toHaveLength(2);
+    if (!Array.isArray(writtenTests)) {
+      throw new Error('Expected tests array');
+    }
+    expect(writtenTests[0]).toEqual(existingTest);
+    expect((writtenTests[1] as TestCaseWithPlugin).metadata).not.toHaveProperty(
+      'providerTokenUsage',
+    );
+    const writtenDefaultTest = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].defaultTest;
+    if (!writtenDefaultTest || typeof writtenDefaultTest === 'string') {
+      throw new Error('Expected object defaultTest');
+    }
+    expect(writtenDefaultTest.metadata?.providerTokenUsage).toMatchObject({
+      total: 10,
+      prompt: 6,
+      completion: 4,
+      numRequests: 1,
+    });
+  });
+
+  it.each([
+    ['file reference', 'file://existing-tests.yaml'],
+    ['test generator', { path: 'file://generate-tests.mjs', config: { count: 2 } }],
+  ])('should preserve generation usage when appending after a %s', async (_label, existingTests) => {
+    mockReadFileSync({ tests: existingTests });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Generated input' },
+          metadata: {
+            pluginId: 'redteam',
+            providerTokenUsage: {
+              total: 10,
+              prompt: 6,
+              completion: 4,
+              numRequests: 1,
+            },
+          },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam({
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    });
+
+    const writtenConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+    if (!Array.isArray(writtenConfig?.tests)) {
+      throw new Error('Expected tests array');
+    }
+    expect(writtenConfig.tests[0]).toEqual(existingTests);
+    expect(writtenConfig.tests[1]).toMatchObject({ metadata: { pluginId: 'redteam' } });
+    expect((writtenConfig.tests[1] as TestCaseWithPlugin).metadata).not.toHaveProperty(
+      'providerTokenUsage',
+    );
+    const defaultTest = writtenConfig.defaultTest;
+    expect(defaultTest).toBeTypeOf('object');
+    if (!defaultTest || typeof defaultTest === 'string') {
+      throw new Error('Expected object defaultTest');
+    }
+    expect(defaultTest.metadata?.providerTokenUsage).toMatchObject({
+      total: 10,
+      prompt: 6,
+      completion: 4,
+      numRequests: 1,
+    });
   });
 
   it('should write description to output file when description option is provided', async () => {
@@ -2960,7 +3089,15 @@ describe('doGenerateRedteam', () => {
           {
             vars: { input: 'Test input' },
             assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'harmful:hate' },
+            metadata: {
+              pluginId: 'harmful:hate',
+              providerTokenUsage: {
+                total: 10,
+                prompt: 6,
+                completion: 4,
+                numRequests: 1,
+              },
+            },
           },
         ],
         purpose: 'Test purpose',
@@ -2997,6 +3134,122 @@ describe('doGenerateRedteam', () => {
           purpose: expect.stringContaining('Context 2 purpose'),
         }),
       );
+
+      const writtenConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+      const writtenTests = writtenConfig?.tests;
+      expect(writtenTests).toHaveLength(2);
+      if (!Array.isArray(writtenTests)) {
+        throw new Error('Expected tests array');
+      }
+      expect((writtenTests[0] as TestCaseWithPlugin).metadata).not.toHaveProperty(
+        'providerTokenUsage',
+      );
+      expect((writtenTests[1] as TestCaseWithPlugin).metadata).not.toHaveProperty(
+        'providerTokenUsage',
+      );
+      const defaultTest = writtenConfig?.defaultTest;
+      if (!defaultTest || typeof defaultTest === 'string') {
+        throw new Error('Expected object defaultTest');
+      }
+      expect(defaultTest.metadata?.providerTokenUsage).toMatchObject({
+        total: 20,
+        prompt: 12,
+        completion: 8,
+        numRequests: 2,
+      });
+    });
+
+    it.each([
+      [
+        'token-bearing error',
+        Object.assign(new Error('second context failed'), {
+          tokenUsage: { total: 7, prompt: 4, completion: 3 },
+        }),
+        { total: 17, prompt: 10, completion: 7, numRequests: 2 },
+      ],
+      [
+        'AbortError',
+        Object.assign(new Error('cancelled'), { name: 'AbortError' }),
+        { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      ],
+      [
+        'malformed token usage',
+        Object.assign(new Error('malformed usage'), { tokenUsage: { total: 'invalid' } }),
+        { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      ],
+      [
+        'primitive error',
+        'second context failed as a string',
+        { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      ],
+    ])('should preserve earlier context usage on a later %s', async (_label, error, expectedUsage) => {
+      const contextProvider = createMockProvider({
+        response: { output: 'test output' },
+        cleanup: true,
+      });
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [contextProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'context1', purpose: 'Context 1 purpose' },
+              { id: 'context2', purpose: 'Context 2 purpose' },
+            ],
+          },
+        },
+      });
+      vi.mocked(synthesize)
+        .mockResolvedValueOnce({
+          testCases: [
+            {
+              vars: { input: 'Test input' },
+              metadata: {
+                pluginId: 'harmful:hate',
+                providerTokenUsage: {
+                  total: 10,
+                  prompt: 6,
+                  completion: 4,
+                  numRequests: 1,
+                },
+              },
+            },
+          ],
+          purpose: 'Context 1 purpose',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+        })
+        .mockRejectedValueOnce(error);
+
+      let thrown: unknown;
+      try {
+        await doGenerateRedteam({
+          output: 'output.yaml',
+          config: 'config.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: true,
+        });
+      } catch (caught) {
+        thrown = caught;
+      }
+
+      if (error && typeof error === 'object') {
+        expect(thrown).toBe(error);
+      } else {
+        expect(thrown).toBeInstanceOf(Error);
+        expect((thrown as Error).message).toBe(String(error));
+      }
+      expect((thrown as Error & { tokenUsage?: unknown }).tokenUsage).toMatchObject(expectedUsage);
+      expect(contextProvider.cleanup).toHaveBeenCalledTimes(1);
     });
 
     it('should inherit root purpose for omitted or blank context purposes and render merged vars', async () => {
@@ -3923,6 +4176,7 @@ describe('redteam generate command with target option', () => {
   });
 
   it('should not log an unexpected error for recoverable email validation failures', async () => {
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(checkEmailStatusAndMaybeExit).mockImplementationOnce(async () => {
       const message = 'Please verify your email address and try again.';
       logger.error(message);

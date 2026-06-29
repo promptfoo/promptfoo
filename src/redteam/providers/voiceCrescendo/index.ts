@@ -20,7 +20,12 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
@@ -308,6 +313,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     emotionalTone: string;
     escalationLevel: string;
     tokenUsage?: TokenUsage;
+    error?: string;
   }> {
     const redTeamProvider = await this.getRedTeamProvider();
 
@@ -319,27 +325,54 @@ export class VoiceCrescendoProvider implements ApiProvider {
         this.memory.getConversationAsText(this.conversationId) || 'No previous conversation',
     });
 
-    const response = await redTeamProvider.callApi(
-      JSON.stringify([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: 'Generate the next voice prompt.' },
-      ]),
-    );
+    let response: ProviderResponse;
+    try {
+      response = await redTeamProvider.callApi(
+        JSON.stringify([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Generate the next voice prompt.' },
+        ]),
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      return {
+        voicePrompt: '',
+        emotionalTone: 'neutral',
+        escalationLevel: 'medium',
+        tokenUsage: getErrorTokenUsage(error),
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
 
-    TokenUsageTracker.getInstance().trackUsage(redTeamProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redTeamProvider.id(), response);
 
     if (response.error) {
-      throw new Error(`Failed to generate voice prompt: ${response.error}`);
+      return {
+        voicePrompt: '',
+        emotionalTone: 'neutral',
+        escalationLevel: 'medium',
+        tokenUsage: response.tokenUsage,
+        error: response.error,
+      };
     }
 
     const output =
       typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
 
-    const parsed = extractFirstJsonObject<{
-      voicePrompt: string;
-      emotionalTone: string;
-      escalationLevel: string;
-    }>(output);
+    let parsed:
+      | {
+          voicePrompt: string;
+          emotionalTone: string;
+          escalationLevel: string;
+        }
+      | undefined;
+    try {
+      parsed = extractFirstJsonObject(output);
+    } catch (error) {
+      logger.warn(`[VoiceCrescendo] Failed to parse voice prompt, using raw output: ${error}`);
+    }
 
     if (!parsed || !parsed.voicePrompt) {
       logger.warn('[VoiceCrescendo] Failed to parse voice prompt, using raw output');
@@ -415,14 +448,28 @@ export class VoiceCrescendoProvider implements ApiProvider {
       response,
     });
 
-    const evalResponse = await scoringProvider.callApi(
-      JSON.stringify([
-        { role: 'system', content: evalPrompt },
-        { role: 'user', content: 'Evaluate the response.' },
-      ]),
-    );
+    let evalResponse: ProviderResponse;
+    try {
+      evalResponse = await scoringProvider.callApi(
+        JSON.stringify([
+          { role: 'system', content: evalPrompt },
+          { role: 'user', content: 'Evaluate the response.' },
+        ]),
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      return {
+        objectiveAchieved: false,
+        confidence: 0,
+        reason: `Evaluation error: ${error instanceof Error ? error.message : String(error)}`,
+        partialSuccess: false,
+        tokenUsage: getErrorTokenUsage(error),
+      };
+    }
 
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
 
     if (evalResponse.error) {
       logger.warn(`[VoiceCrescendo] Evaluation error: ${evalResponse.error}`);
@@ -440,12 +487,19 @@ export class VoiceCrescendoProvider implements ApiProvider {
         ? evalResponse.output
         : JSON.stringify(evalResponse.output);
 
-    const parsed = extractFirstJsonObject<{
-      objectiveAchieved: boolean;
-      confidence: number;
-      reason: string;
-      partialSuccess: boolean;
-    }>(output);
+    let parsed:
+      | {
+          objectiveAchieved: boolean;
+          confidence: number;
+          reason: string;
+          partialSuccess: boolean;
+        }
+      | undefined;
+    try {
+      parsed = extractFirstJsonObject(output);
+    } catch (error) {
+      logger.warn(`[VoiceCrescendo] Failed to parse evaluation response: ${error}`);
+    }
 
     if (!parsed) {
       return {
@@ -504,6 +558,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           emotionalTone,
           escalationLevel,
           tokenUsage: redteamTokenUsage,
+          error: redteamError,
         } = await this.generateNextVoicePrompt(currentTurn);
         // Redteam generation calls are internal and should not count as target probes.
         accumulateResponseTokenUsage(
@@ -511,6 +566,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
           { tokenUsage: redteamTokenUsage },
           { countAsRequest: false },
         );
+        if (redteamError) {
+          throw new Error(`Failed to generate voice prompt: ${redteamError}`);
+        }
         lastPrompt = voicePrompt;
 
         logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
@@ -523,6 +581,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
           audioPrompt = await this.textToAudio(voicePrompt);
           audioGenerated = true;
         } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw error;
+          }
           logger.warn(`[VoiceCrescendo] Audio generation failed, using text: ${error}`);
           audioPrompt = voicePrompt;
         }
@@ -625,6 +686,16 @@ export class VoiceCrescendoProvider implements ApiProvider {
           await sleep(this.delayBetweenTurns);
         }
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          const abortTokenUsage = createEmptyTokenUsage();
+          accumulateTokenUsage(abortTokenUsage, totalTokenUsage);
+          accumulateResponseTokenUsage(
+            abortTokenUsage,
+            { tokenUsage: getErrorTokenUsage(error) },
+            { countAsRequest: false },
+          );
+          throw Object.assign(error, { tokenUsage: abortTokenUsage });
+        }
         logger.error(`[VoiceCrescendo] Error in turn ${currentTurn}: ${error}`);
         if (backtrackCount < this.maxBacktracks) {
           backtrackCount++;

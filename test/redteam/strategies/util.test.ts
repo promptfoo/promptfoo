@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { pluginMatchesStrategyTargets } from '../../../src/redteam/strategies/util';
+import {
+  detachProviderTokenUsage,
+  mergeProviderTokenUsage,
+  pluginMatchesStrategyTargets,
+} from '../../../src/redteam/strategies/util';
 
 import type { TestCaseWithPlugin } from '../../../src/types/index';
 
@@ -338,5 +342,79 @@ describe('pluginMatchesStrategyTargets', () => {
       };
       expect(pluginMatchesStrategyTargets(mismatchCase, 'base64', ['harmful'])).toBe(false);
     });
+  });
+});
+
+describe('mergeProviderTokenUsage', () => {
+  it('clones usage when only an update is provided', () => {
+    const update = {
+      total: 3,
+      completionDetails: { reasoning: 2 },
+      assertions: {
+        total: 1,
+        completionDetails: { reasoning: 1 },
+      },
+    };
+
+    const merged = mergeProviderTokenUsage(undefined, update);
+
+    expect(merged).toEqual(update);
+    expect(merged).not.toBe(update);
+    expect(merged?.completionDetails).not.toBe(update.completionDetails);
+    expect(merged?.assertions).not.toBe(update.assertions);
+    expect(merged?.assertions?.completionDetails).not.toBe(update.assertions.completionDetails);
+  });
+
+  it('clones usage when only existing usage is provided', () => {
+    const existing = {
+      total: 3,
+      completionDetails: { reasoning: 2 },
+      assertions: {
+        total: 1,
+        completionDetails: { reasoning: 1 },
+      },
+    };
+
+    const merged = mergeProviderTokenUsage(existing, undefined);
+
+    expect(merged).toEqual(existing);
+    expect(merged).not.toBe(existing);
+    expect(merged?.completionDetails).not.toBe(existing.completionDetails);
+    expect(merged?.assertions).not.toBe(existing.assertions);
+    expect(merged?.assertions?.completionDetails).not.toBe(existing.assertions.completionDetails);
+  });
+});
+
+describe('detachProviderTokenUsage', () => {
+  it('normalizes a valid carrier and strips it from the test row', () => {
+    const result = detachProviderTokenUsage([
+      {
+        metadata: { providerTokenUsage: { total: 5, prompt: 3, completion: 2 } },
+        vars: { input: 'test' },
+      },
+    ]);
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 5,
+      prompt: 3,
+      completion: 2,
+      numRequests: 1,
+    });
+    expect(result.testCases[0]?.metadata).not.toHaveProperty('providerTokenUsage');
+  });
+
+  it('strips a malformed carrier without corrupting the aggregate', () => {
+    const result = detachProviderTokenUsage([
+      {
+        metadata: {
+          pluginId: 'test-plugin',
+          providerTokenUsage: { total: 'invalid' } as any,
+        },
+        vars: { input: 'test' },
+      },
+    ]);
+
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.testCases[0]?.metadata).not.toHaveProperty('providerTokenUsage');
   });
 });

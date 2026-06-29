@@ -1107,12 +1107,35 @@ describe('SimulatedUser', () => {
   });
 
   describe('error handling', () => {
+    it('should preserve simulated-user usage when the user provider returns an error', async () => {
+      mockUserProviderCallApi.mockResolvedValueOnce({
+        error: 'remote generation failed',
+        tokenUsage: { total: 15, prompt: 10, completion: 5 },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('remote generation failed');
+      expect(result.tokenUsage).toMatchObject({
+        total: 15,
+        prompt: 10,
+        completion: 5,
+        numRequests: 1,
+      });
+      expect(originalProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('should return error when agent provider returns error in main loop', async () => {
       const errorProvider = createMockProvider({
         id: 'error-agent',
         response: createProviderResponse({
           error: 'Model not found: invalid-model',
           output: undefined,
+          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         }),
       });
 
@@ -1123,7 +1146,12 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('Model not found: invalid-model');
-      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage).toMatchObject({
+        total: 20,
+        prompt: 12,
+        completion: 8,
+        numRequests: 2,
+      });
     });
 
     it('should return error when agent provider returns error with initial messages ending in user', async () => {
@@ -1132,6 +1160,7 @@ describe('SimulatedUser', () => {
         response: createProviderResponse({
           error: 'API rate limit exceeded',
           output: undefined,
+          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         }),
       });
 
@@ -1147,7 +1176,12 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('API rate limit exceeded');
-      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage).toMatchObject({
+        total: 20,
+        prompt: 12,
+        completion: 8,
+        numRequests: 1,
+      });
     });
 
     it('should return error on first turn failure and not continue conversation', async () => {
@@ -1156,6 +1190,7 @@ describe('SimulatedUser', () => {
         response: createProviderResponse({
           error: 'Connection timeout',
           output: undefined,
+          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         }),
       });
 
@@ -1173,6 +1208,12 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('Connection timeout');
+      expect(result.tokenUsage).toMatchObject({
+        total: 20,
+        prompt: 12,
+        completion: 8,
+        numRequests: 2,
+      });
       // Should only call once before returning error
       expect(errorProvider.callApi).toHaveBeenCalledTimes(1);
     });
@@ -1188,6 +1229,7 @@ describe('SimulatedUser', () => {
         .mockResolvedValueOnce({
           error: 'Rate limit exceeded',
           output: undefined,
+          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         });
 
       const result = await simulatedUser.callApi('test prompt', {
@@ -1197,6 +1239,12 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('Rate limit exceeded');
+      expect(result.tokenUsage).toMatchObject({
+        total: 20,
+        prompt: 12,
+        completion: 8,
+        numRequests: 4,
+      });
       expect(partialErrorProvider.callApi).toHaveBeenCalledTimes(2);
     });
   });

@@ -149,6 +149,10 @@ redteam:
 
 On each turn, the page content is updated and the embedding location is rotated to evade detection.
 
+Page creation and update calls that use an LLM are included in non-grading token usage. If a page
+update fails after reporting usage, Promptfoo retains that usage, invalidates the stale page state,
+and creates a fresh page on the next turn.
+
 ## Example: Generated Web Page
 
 The strategy dynamically generates realistic-looking websites tailored to your target's purpose. The prompt injection payload is embedded as hidden text within the page — invisible to the user but readable by the agent when it fetches the page content.

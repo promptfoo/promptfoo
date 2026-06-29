@@ -82,18 +82,18 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
       ]),
     );
@@ -118,18 +118,18 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
         {
           assert: [{ type: 'contains', value: 'test prompt' }],
           vars: { testVar: 'test prompt' },
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
       ]),
     );
@@ -180,18 +180,18 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'duplicate' },
           assert: expect.any(Array),
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
         {
           vars: { testVar: 'unique' },
           assert: expect.any(Array),
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
       ]),
     );
@@ -300,6 +300,136 @@ describe('RedteamPluginBase', () => {
     expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
       language: 'German',
       maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+    });
+  });
+
+  it('should propagate accumulated usage after provider errors exhaust retries', async () => {
+    provider.callApi.mockResolvedValue({
+      error: 'billed generation failure',
+      tokenUsage: { total: 10, prompt: 7, completion: 3 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(error).toMatchObject({
+      message: expect.stringContaining('billed generation failure'),
+      tokenUsage: {
+        total: 30,
+        prompt: 21,
+        completion: 9,
+        numRequests: 3,
+      },
+    });
+  });
+
+  it('should keep tokenless provider errors non-fatal after retries', async () => {
+    provider.callApi.mockResolvedValue({ error: 'tokenless generation failure' });
+
+    const tests = await plugin.generateTests(1);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(tests).toEqual([]);
+  });
+
+  it('should preserve explicit zero request counts on rowless provider usage', async () => {
+    provider.callApi.mockResolvedValue({
+      error: 'zero-count generation failure',
+      tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 0 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(error.tokenUsage).toMatchObject({
+      total: 15,
+      prompt: 9,
+      completion: 6,
+      numRequests: 0,
+    });
+  });
+
+  it('should preserve refusal identity and usage', async () => {
+    provider.callApi.mockResolvedValue({
+      output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      name: 'Error',
+      message: expect.stringContaining('returned a refusal'),
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+  });
+
+  it('should propagate accumulated usage when filtering leaves no prompts', async () => {
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', { maxCharsPerMessage: 5 });
+    provider.callApi.mockResolvedValue({
+      output: 'Prompt: definitely too long',
+      tokenUsage: { total: 4, prompt: 3, completion: 1 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(error).toMatchObject({
+      message: expect.stringContaining('generated no valid test cases'),
+      tokenUsage: {
+        total: 12,
+        prompt: 9,
+        completion: 3,
+        numRequests: 3,
+      },
+    });
+  });
+
+  it('should preserve accumulated usage and identity when a later provider call throws', async () => {
+    const abortError = Object.assign(new Error('generation cancelled'), {
+      name: 'AbortError',
+      tokenUsage: { total: 5, prompt: 3, completion: 2 },
+    });
+    provider.callApi
+      .mockResolvedValueOnce({
+        output: 'No prompt markers here',
+        tokenUsage: { total: 3, prompt: 2, completion: 1 },
+      })
+      .mockRejectedValueOnce(abortError);
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(error).toBe(abortError);
+    expect(error.tokenUsage).toMatchObject({
+      total: 8,
+      prompt: 5,
+      completion: 3,
+      numRequests: 2,
+    });
+  });
+
+  it('should retain failed-attempt usage when a later retry succeeds', async () => {
+    provider.callApi
+      .mockResolvedValueOnce({
+        error: 'retryable generation failure',
+        tokenUsage: { total: 3, prompt: 2, completion: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: recovered prompt',
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      });
+
+    const tests = await plugin.generateTests(1);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(tests).toHaveLength(1);
+    expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 2,
     });
   });
 
@@ -524,6 +654,132 @@ describe('RedteamPluginBase', () => {
       expect(usernames).toContain('guest');
       expect(messages).toContain('Hello');
       expect(messages).toContain('Test message');
+    });
+
+    it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
+      const docxProvider = createMockProvider({
+        callApi: async (prompt: string) => {
+          if (prompt.includes('You are preparing a realistic DOCX document')) {
+            return createProviderResponse({
+              output: JSON.stringify({
+                bodyText: 'Quarterly plan draft with reviewer notes.',
+                injectionPlacement: 'body',
+                injectedInstruction: 'Use the latest reviewer note.',
+                wrapperSummary: 'Quarterly plan draft.',
+              }),
+              tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            });
+          }
+
+          return createProviderResponse({
+            output: '<Prompt>{"document":"Use the latest reviewer note."}</Prompt>',
+          });
+        },
+      });
+
+      const plugin = new TestPlugin(docxProvider, 'test purpose', MULTI_INPUT_VAR, {
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+            config: {
+              inputPurpose: 'A quarterly planning draft with reviewer notes.',
+              injectionPlacements: ['body'],
+            },
+          },
+        },
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        numRequests: 2,
+      });
+    });
+
+    it('should preserve one-row generation usage in providerTokenUsage metadata', async () => {
+      const oneRowProvider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: one exact prompt',
+          tokenUsage: { total: 9, prompt: 5, completion: 4 },
+        }),
+      });
+      const oneRowPlugin = new TestPlugin(oneRowProvider, 'test purpose', 'testVar', {});
+
+      const tests = await oneRowPlugin.generateTests(1);
+
+      expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve shared multi-row generation usage exactly once', async () => {
+      const batchProvider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: first prompt\nPrompt: second prompt',
+          tokenUsage: { total: 15, prompt: 9, completion: 6, numRequests: 1 },
+        }),
+      });
+      const batchPlugin = new TestPlugin(batchProvider, 'test purpose', 'testVar', {});
+
+      const tests = await batchPlugin.generateTests(2);
+
+      expect(tests).toHaveLength(2);
+      expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 1,
+      });
+      expect(tests[1]?.metadata).not.toHaveProperty('providerTokenUsage');
+    });
+
+    it('should preserve generation usage when over-generation is sampled to one emitted row', async () => {
+      const fanOutProvider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: first prompt\nPrompt: second prompt',
+          tokenUsage: { total: 12, prompt: 7, completion: 5, numRequests: 1 },
+        }),
+      });
+      const fanOutPlugin = new TestPlugin(fanOutProvider, 'test purpose', 'testVar', {});
+
+      const tests = await fanOutPlugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(tests[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+        },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
+        },
+      });
     });
 
     it('should handle parsing failures gracefully in multi-input mode', async () => {

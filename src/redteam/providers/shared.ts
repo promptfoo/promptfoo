@@ -15,6 +15,7 @@ import {
   type CallApiContextParams,
   type CallApiOptionsParams,
   type EvaluateResult,
+  type GradingResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
@@ -27,10 +28,25 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+
+export class RedteamProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'RedteamProviderError';
+  }
+}
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -80,6 +96,24 @@ export function setRedteamProviderLoader(loader: RedteamProviderLoader): () => v
 
 export function resetRedteamProviderLoader(): void {
   redteamProviderLoader = defaultRedteamProviderLoader;
+}
+
+export function mergeStoredGraderResultTokenUsage(
+  latestResult: GradingResult,
+  previousResult?: GradingResult,
+): GradingResult {
+  if (!latestResult.tokensUsed && !previousResult?.tokensUsed) {
+    return latestResult;
+  }
+
+  const tokensUsed = createEmptyTokenUsage();
+  accumulateTokenUsage(tokensUsed, previousResult?.tokensUsed, true);
+  accumulateTokenUsage(tokensUsed, latestResult.tokensUsed, true);
+
+  return {
+    ...latestResult,
+    tokensUsed,
+  };
 }
 
 async function loadRedteamProvider({
@@ -345,12 +379,15 @@ export async function getTargetResponse(
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
+    const errorTokenUsage = getErrorTokenUsage(error);
     return {
       output: '',
       error: (error as Error).message,
       tokenUsage: {
+        ...errorTokenUsage,
         numRequests:
-          error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
+          errorTokenUsage?.numRequests ??
+          (error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1),
       },
     };
   }
@@ -633,6 +670,7 @@ export async function tryUnblocking({
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
+  tokenUsage?: TokenUsage;
 }> {
   try {
     // Unblocking is disabled by default, enable via environment variable
@@ -688,11 +726,11 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false };
+      return { success: false, tokenUsage: response.tokenUsage };
     }
 
     const parsed = response.output as any;
@@ -705,11 +743,13 @@ export async function tryUnblocking({
       return {
         success: true,
         unblockingPrompt: parsed.unblockingAnswer,
+        tokenUsage: response.tokenUsage,
       };
     } else {
       logger.debug('[Unblocking] No blocking question detected');
       return {
         success: false,
+        tokenUsage: response.tokenUsage,
       };
     }
   } catch (error) {
@@ -718,7 +758,8 @@ export async function tryUnblocking({
       throw error;
     }
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
-    return { success: false };
+    const tokenUsage = getErrorTokenUsage(error);
+    return { success: false, ...(tokenUsage ? { tokenUsage } : {}) };
   }
 }
 

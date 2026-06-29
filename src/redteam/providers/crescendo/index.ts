@@ -50,6 +50,8 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
+  mergeStoredGraderResultTokenUsage,
+  RedteamProviderError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
@@ -115,6 +117,7 @@ type CrescendoAttackPromptResponse = {
   inputMaterialization?: Record<string, unknown>;
   materializationHandled?: boolean;
   materializedVars?: Record<string, string>;
+  tokenUsage?: TokenUsage;
 };
 
 interface CrescendoConfig {
@@ -420,6 +423,7 @@ export class CrescendoProvider implements ApiProvider {
           inputMaterialization,
           materializationHandled,
           materializedVars,
+          tokenUsage: attackTokenUsage,
         } = await this.getAttackPrompt(
           roundNum,
           evalFlag,
@@ -429,6 +433,14 @@ export class CrescendoProvider implements ApiProvider {
           context,
           tracingOptions,
           options,
+        );
+
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: attackTokenUsage },
+          {
+            countAsRequest: false,
+          },
         );
 
         if (!attackPrompt) {
@@ -455,6 +467,7 @@ export class CrescendoProvider implements ApiProvider {
           shouldFetchTrace,
           traceSnapshots,
           { inputMaterialization, materializationHandled, materializedVars },
+          totalTokenUsage,
         );
         lastResponse = response;
         lastTransformResult = transformResult;
@@ -501,6 +514,9 @@ export class CrescendoProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
+        accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
+          countAsRequest: false,
+        });
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -520,6 +536,8 @@ export class CrescendoProvider implements ApiProvider {
             tracingOptions,
             shouldFetchTrace,
             traceSnapshots,
+            undefined,
+            totalTokenUsage,
           );
 
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
@@ -544,10 +562,17 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
+        const [isRefusal, refusalRationale, refusalTokenUsage] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
           options,
+        );
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: refusalTokenUsage },
+          {
+            countAsRequest: false,
+          },
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -673,10 +698,13 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            storedGraderResult = mergeStoredGraderResultTokenUsage(
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              storedGraderResult,
+            );
           }
         }
 
@@ -717,7 +745,14 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output, options);
+        const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output, options);
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: evalTokenUsage },
+          {
+            countAsRequest: false,
+          },
+        );
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -739,6 +774,13 @@ export class CrescendoProvider implements ApiProvider {
         }
         if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
+        }
+        if (error instanceof RedteamProviderError && error.tokenUsage) {
+          accumulateResponseTokenUsage(
+            totalTokenUsage,
+            { tokenUsage: error.tokenUsage },
+            { countAsRequest: false },
+          );
         }
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
@@ -872,26 +914,32 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
 
-    TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
 
     if (redTeamingChat.delay) {
       logger.debug(`[Crescendo] Sleeping for ${redTeamingChat.delay}ms`);
       await sleep(redTeamingChat.delay);
     }
     if (response.error) {
-      throw new Error(`Error from redteam provider: ${response.error}`);
+      logger.debug('[Crescendo] Redteam provider returned an error', { response });
+      return {
+        generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
+      };
     }
     // Check if the attack model refused to generate the prompt
     if (response.isRefusal) {
       logger.debug('[Crescendo] Attack model refused to generate prompt', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
     if (!response.output) {
       logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
 
@@ -948,6 +996,7 @@ export class CrescendoProvider implements ApiProvider {
       inputMaterialization: response.inputMaterialization,
       materializationHandled: response.materializationHandled,
       materializedVars: response.materializedVars,
+      tokenUsage: response.tokenUsage,
     };
   }
 
@@ -967,6 +1016,7 @@ export class CrescendoProvider implements ApiProvider {
       CrescendoAttackPromptResponse,
       'inputMaterialization' | 'materializationHandled' | 'materializedVars'
     >,
+    totalTokenUsage: TokenUsage = createEmptyTokenUsage(),
   ): Promise<{
     response: TargetResponse;
     transformResult?: TransformResult;
@@ -1013,6 +1063,9 @@ export class CrescendoProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose as string | undefined,
           },
         );
+        accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
+          countAsRequest: false,
+        });
       }
     }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
@@ -1103,10 +1156,17 @@ export class CrescendoProvider implements ApiProvider {
         {
           targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
           evaluationId: context?.evaluationId,
-          testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+          testCaseId:
+            context?.testCaseId || (context?.test?.metadata?.testCaseId as string | undefined),
+          originalTestCaseId: context?.test?.metadata?.originalTestCaseId as string | undefined,
           purpose: context?.test?.metadata?.purpose as string | undefined,
           goal: context?.test?.metadata?.goal as string | undefined,
         },
+      );
+      accumulateResponseTokenUsage(
+        totalTokenUsage,
+        { tokenUsage: lastTransformResult.tokenUsage },
+        { countAsRequest: false },
       );
 
       // Skip turn if transform failed
@@ -1241,14 +1301,14 @@ export class CrescendoProvider implements ApiProvider {
     attackPrompt: string,
     lastResponse: string,
     options?: CallApiOptionsParams,
-  ): Promise<[boolean, string]> {
+  ): Promise<[boolean, string, TokenUsage | undefined]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
     if (isBasicRefusal(lastResponse)) {
       logger.debug(
         '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
       );
-      return [true, 'The output contains a standard refusal.'];
+      return [true, 'The output contains a standard refusal.', undefined];
     }
 
     // Otherwise, use the scoring chat to grade the refusal
@@ -1278,37 +1338,54 @@ export class CrescendoProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
     }
     if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
+      throw new RedteamProviderError(
+        `Error from redteam (refusal) provider: ${refusalResponse.error}`,
+        refusalResponse.tokenUsage,
+      );
     }
 
     logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
 
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
+    try {
+      const parsed =
+        typeof refusalResponse.output === 'string'
+          ? extractFirstJsonObject<{
+              value: boolean;
+              metadata: number;
+              rationale: string;
+            }>(refusalResponse.output)
+          : refusalResponse.output;
 
-    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
+      logger.debug('[Crescendo] Refusal score parsed response', { parsed });
+      invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
+      invariant(
+        typeof parsed.metadata === 'number',
+        'Expected refusal grader metadata to be a number',
+      );
 
-    return [parsed.value, parsed.rationale];
+      return [parsed.value, parsed.rationale, refusalResponse.tokenUsage];
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      logger.warn('[Crescendo] Failed to parse refusal score response', { error });
+      throw new RedteamProviderError(
+        'Failed to parse refusal score response',
+        refusalResponse.tokenUsage,
+      );
+    }
   }
 
-  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {
+  private async getEvalScore(
+    lastResponse: string,
+    options?: CallApiOptionsParams,
+  ): Promise<[any, TokenUsage | undefined]> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );
@@ -1338,38 +1415,52 @@ export class CrescendoProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
     }
     if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
+      throw new RedteamProviderError(
+        `Error from redteam (eval) provider: ${evalResponse.error}`,
+        evalResponse.tokenUsage,
+      );
     }
 
     logger.debug(`[Crescendo] Eval score response: ${evalResponse.output}`);
 
-    const parsed =
-      typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
-        : evalResponse.output;
+    try {
+      const parsed =
+        typeof evalResponse.output === 'string'
+          ? extractFirstJsonObject<{
+              value: boolean;
+              description: string;
+              rationale: string;
+              metadata: number;
+            }>(evalResponse.output)
+          : evalResponse.output;
 
-    logger.debug('[Crescendo] Eval score parsed response', { parsed });
-    invariant(
-      typeof parsed.value === 'boolean',
-      `Expected eval grader value to be a boolean: ${parsed}`,
-    );
-    invariant(
-      typeof parsed.metadata === 'number',
-      `Expected eval grader metadata to be a number: ${parsed}`,
-    );
+      logger.debug('[Crescendo] Eval score parsed response', { parsed });
+      invariant(
+        typeof parsed.value === 'boolean',
+        `Expected eval grader value to be a boolean: ${parsed}`,
+      );
+      invariant(
+        typeof parsed.metadata === 'number',
+        `Expected eval grader metadata to be a number: ${parsed}`,
+      );
 
-    return parsed;
+      return [parsed, evalResponse.tokenUsage];
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      logger.warn('[Crescendo] Failed to parse eval score response', { error });
+      throw new RedteamProviderError(
+        'Failed to parse evaluation response',
+        evalResponse.tokenUsage,
+      );
+    }
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {

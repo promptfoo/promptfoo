@@ -94,10 +94,14 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
+  accumulateTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
+  normalizeTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
@@ -1042,6 +1046,7 @@ async function applyProviderDelayIfNeeded(provider: ApiProvider, response: Provi
 
 function createEvaluateResult({
   fileMetadata,
+  includeGenerationTokenUsage,
   latencyMs,
   prompt,
   promptIdx,
@@ -1055,6 +1060,7 @@ function createEvaluateResult({
   vars,
 }: {
   fileMetadata: Record<string, unknown>;
+  includeGenerationTokenUsage: boolean;
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
@@ -1067,6 +1073,10 @@ function createEvaluateResult({
   evalId?: string;
   vars: Vars;
 }): EvaluateResult {
+  const tokenUsage = createEmptyTokenUsage();
+  if (includeGenerationTokenUsage) {
+    accumulateGenerationTokenUsage(tokenUsage, test.metadata?.providerTokenUsage);
+  }
   const ret: EvaluateResult = {
     ...setup,
     // Use the caller-provided vars (which exclude the __eval* runtime vars)
@@ -1089,7 +1099,7 @@ function createEvaluateResult({
     testIdx,
     testCase: test,
     promptId: prompt.id || '',
-    tokenUsage: createEmptyTokenUsage(),
+    tokenUsage,
     ...getTraceLinkage(traceContext, evalId),
   };
 
@@ -1109,7 +1119,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   const trackingId = provider.constructor?.name
     ? `${providerId} (${provider.constructor.name})`
     : providerId;
-  TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
 }
 
 async function applyRunEvalResponseOutcome({
@@ -1522,6 +1532,7 @@ async function runEvalInternal({
 
     const ret = createEvaluateResult({
       fileMetadata: state.fileMetadata,
+      includeGenerationTokenUsage: testIndex === 0 && promptIndex === 0 && repeatIndex === 0,
       latencyMs,
       prompt,
       promptIdx: promptIndex,
@@ -1559,9 +1570,7 @@ async function runEvalInternal({
     });
 
     // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsage(ret.tokenUsage, response);
-    }
+    accumulateResponseTokenUsage(ret.tokenUsage, response);
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
       // Save the output in a register for later use
@@ -1583,6 +1592,24 @@ async function runEvalInternal({
     if (!isAbortError) {
       logger.error('Provider call failed during eval', logContext);
     }
+    const responseTokenUsage = getErrorTokenUsage(err);
+    let errorTokenUsage = responseTokenUsage
+      ? normalizeTokenUsage({
+          ...responseTokenUsage,
+          numRequests: responseTokenUsage.numRequests ?? 1,
+        })
+      : undefined;
+    if (
+      testIndex === 0 &&
+      promptIndex === 0 &&
+      repeatIndex === 0 &&
+      test.metadata?.providerTokenUsage
+    ) {
+      const combinedTokenUsage = errorTokenUsage ?? createEmptyTokenUsage();
+      if (accumulateGenerationTokenUsage(combinedTokenUsage, test.metadata.providerTokenUsage)) {
+        errorTokenUsage = combinedTokenUsage;
+      }
+    }
 
     return [
       {
@@ -1600,6 +1627,10 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...(responseTokenUsage
+          ? { response: { error: errorWithStack, tokenUsage: responseTokenUsage } }
+          : {}),
+        ...(errorTokenUsage ? { tokenUsage: errorTokenUsage } : {}),
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
@@ -2122,6 +2153,68 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
+function mergeGenerationTokenUsage(
+  existing: TokenUsage | undefined,
+  update: TokenUsage | undefined,
+): TokenUsage | undefined {
+  if (!existing) {
+    return update ? structuredClone(update) : undefined;
+  }
+
+  const merged = structuredClone(existing);
+  accumulateTokenUsage(merged, update);
+  return merged;
+}
+
+// Keep carrier consolidation in the evaluator layer to avoid a forbidden evaluator -> redteam edge.
+function detachGenerationTokenUsage(
+  testCases: AtomicTestCase[],
+  initialTokenUsage: unknown,
+): { testCases: AtomicTestCase[]; tokenUsage: TokenUsage | undefined } {
+  let tokenUsage = mergeGenerationTokenUsage(
+    undefined,
+    getErrorTokenUsage({ tokenUsage: initialTokenUsage }),
+  );
+  return {
+    testCases: testCases.map((testCase) => {
+      if (!testCase.metadata || !('providerTokenUsage' in testCase.metadata)) {
+        return testCase;
+      }
+
+      tokenUsage = mergeGenerationTokenUsage(
+        tokenUsage,
+        getErrorTokenUsage({ tokenUsage: testCase.metadata.providerTokenUsage }),
+      );
+      const { providerTokenUsage: _providerTokenUsage, ...metadata } = testCase.metadata!;
+      return { ...testCase, metadata };
+    }),
+    tokenUsage,
+  };
+}
+
+function attachGenerationTokenUsage(
+  testCases: AtomicTestCase[],
+  tokenUsage: TokenUsage | undefined,
+): AtomicTestCase[] {
+  if (!tokenUsage || testCases.length === 0) {
+    return testCases;
+  }
+  const [first, ...rest] = testCases;
+  return [
+    {
+      ...first,
+      metadata: { ...first.metadata, providerTokenUsage: tokenUsage },
+    },
+    ...rest,
+  ];
+}
+
+function getDefaultTestMetadata(testSuite: TestSuite) {
+  const { providerTokenUsage: _providerTokenUsage, ...metadata } =
+    getDefaultTest(testSuite)?.metadata || {};
+  return metadata;
+}
+
 function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   const tests = getInitialTests(testSuite);
   if (!testSuite.scenarios?.length) {
@@ -2164,7 +2257,7 @@ function mergeScenarioTest(
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
   const mergedMetadata = {
-    ...(defaultTest?.metadata || {}),
+    ...getDefaultTestMetadata(testSuite),
     ...data.metadata,
     ...test.metadata,
   };
@@ -2321,7 +2414,7 @@ async function prepareTestCaseForEval(
     ...testCase.options,
   };
   testCase.metadata = {
-    ...(defaultTest?.metadata || {}),
+    ...getDefaultTestMetadata(testSuite),
     ...testCase.metadata,
   };
   testCase.prompts = testCase.prompts ?? defaultTest?.prompts;
@@ -3227,7 +3320,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (row.tokenUsage) {
-      accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
+      accumulateResponseTokenUsage(this.stats.tokenUsage, {
+        tokenUsage: { ...row.tokenUsage, assertions: undefined },
+      });
     }
   }
 
@@ -3293,6 +3388,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+    if (row.testIdx === 0 && row.promptIdx === 0) {
+      accumulateGenerationTokenUsage(
+        metrics.tokenUsage,
+        row.testCase?.metadata?.providerTokenUsage,
+      );
+    }
 
     if (row.gradingResult?.tokensUsed) {
       updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
@@ -4553,8 +4654,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     await this.store.appendPrompts(prompts);
 
-    let tests = buildTestsFromSuite(testSuite);
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    const { testCases, tokenUsage } = detachGenerationTokenUsage(
+      buildTestsFromSuite(testSuite),
+      getDefaultTest(testSuite)?.metadata?.providerTokenUsage,
+    );
+    let tests = filterByRange(testCases, options.filterRange, warnEmptyFilterRange);
+    tests = attachGenerationTokenUsage(tests, tokenUsage);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

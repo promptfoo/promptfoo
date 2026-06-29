@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+import {
+  applyRuntimeTransforms,
+  RUNTIME_TRANSFORM_TOKEN_USAGE_KEY,
+} from '../../../src/redteam/shared/runtimeTransform';
 
 import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
@@ -111,6 +114,102 @@ describe('runtimeTransform', () => {
       expect(mockSecondStrategy.action).toHaveBeenCalledTimes(1);
     });
 
+    it('should preserve auxiliary layer usage without exposing the private carrier metadata', async () => {
+      const tokenStrategy: Strategy = {
+        id: 'token-layer',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            vars: {
+              ...tc.vars,
+              input: 'layered prompt',
+            },
+            metadata: {
+              ...tc.metadata,
+              [RUNTIME_TRANSFORM_TOKEN_USAGE_KEY]: {
+                total: 9,
+                prompt: 4,
+                completion: 5,
+                numRequests: 1,
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['token-layer'],
+        [tokenStrategy],
+      );
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 9,
+        prompt: 4,
+        completion: 5,
+        numRequests: 0,
+      });
+      expect(result.metadata).not.toHaveProperty(RUNTIME_TRANSFORM_TOKEN_USAGE_KEY);
+    });
+
+    it('should preserve incremental providerTokenUsage from successful layers', async () => {
+      const firstTokenLayer: Strategy = {
+        id: 'first-token-layer',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            metadata: {
+              ...tc.metadata,
+              providerTokenUsage: {
+                total: 5,
+                prompt: 3,
+                completion: 2,
+                numRequests: 1,
+              },
+            },
+          })),
+        ),
+      };
+      const secondTokenLayer: Strategy = {
+        id: 'second-token-layer',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            metadata: {
+              ...tc.metadata,
+              providerTokenUsage: {
+                total: 12,
+                prompt: 7,
+                completion: 5,
+                numRequests: 2,
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['first-token-layer', 'second-token-layer'],
+        [firstTokenLayer, secondTokenLayer],
+      );
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        numRequests: 0,
+      });
+      expect(result.metadata?.providerTokenUsage).toMatchObject({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        numRequests: 2,
+      });
+    });
+
     it('should extract audio data from data URL', async () => {
       const result = await applyRuntimeTransforms('hello', 'input', ['audio'], mockStrategies);
 
@@ -215,6 +314,37 @@ describe('runtimeTransform', () => {
       expect(result.originalPrompt).toBe('hello');
     });
 
+    it('should preserve failed layer usage when a transform throws it', async () => {
+      const failingStrategy: Strategy = {
+        id: 'failing-with-usage',
+        action: vi.fn(async () => {
+          throw Object.assign(new Error('Transform failed'), {
+            tokenUsage: {
+              total: 11,
+              prompt: 7,
+              completion: 4,
+              numRequests: 1,
+            },
+          });
+        }),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['failing-with-usage'],
+        [failingStrategy],
+      );
+
+      expect(result.error).toContain('Transform failing-with-usage failed');
+      expect(result.tokenUsage).toMatchObject({
+        total: 11,
+        prompt: 7,
+        completion: 4,
+        numRequests: 0,
+      });
+    });
+
     it('should preserve pluginId in metadata during transforms', async () => {
       let capturedTestCase: TestCaseWithPlugin | undefined;
 
@@ -227,9 +357,12 @@ describe('runtimeTransform', () => {
       };
 
       const strategies = [...mockStrategies, inspectingStrategy];
-      await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies);
+      await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies, {
+        originalTestCaseId: 'layer-row-1',
+      });
 
       expect(capturedTestCase?.metadata?.pluginId).toBe('runtime-transform');
+      expect(capturedTestCase?.metadata?.originalTestCaseId).toBe('layer-row-1');
     });
 
     it('should handle different inject variable names', async () => {

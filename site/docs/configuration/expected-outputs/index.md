@@ -286,6 +286,8 @@ type ScoringFunction = (
       total: number;
       prompt: number;
       completion: number;
+      cached?: number;
+      numRequests?: number;
     };
   },
 ) => {
@@ -294,6 +296,10 @@ type ScoringFunction = (
   reason: string; // Explanation of the score
 };
 ```
+
+For model-graded assertions, `tokensUsed` aggregates the grader's token usage and request count.
+When a grader reports token usage without `numRequests`, Promptfoo infers one grading request;
+an explicit `numRequests: 0` is preserved.
 
 When assertions use `weight`, each named score passed into the scoring function is already normalized as a weighted average. Eval outputs also include `namedScoreWeights` so downstream consumers can recover the weighted denominator when needed.
 

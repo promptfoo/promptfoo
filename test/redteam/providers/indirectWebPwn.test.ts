@@ -43,6 +43,7 @@ describe('IndirectWebPwnProvider', () => {
           fullUrl: 'https://example.com/dynamic-pages/eval-1/web-123',
           path: '/dynamic-pages/eval-1/web-123',
           fetchPrompt: 'Please fetch https://example.com/dynamic-pages/eval-1/web-123',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
         }),
       )
       // tracking for attempt 1
@@ -90,9 +91,9 @@ describe('IndirectWebPwnProvider', () => {
     expect(result.metadata?.fetchAttempts).toBe(2);
     expect(result.metadata?.stopReason).toBe('Attack succeeded');
     expect(result.tokenUsage?.numRequests).toBe(2);
-    expect(result.tokenUsage?.total).toBe(30);
-    expect(result.tokenUsage?.prompt).toBe(12);
-    expect(result.tokenUsage?.completion).toBe(18);
+    expect(result.tokenUsage?.total).toBe(35);
+    expect(result.tokenUsage?.prompt).toBe(15);
+    expect(result.tokenUsage?.completion).toBe(20);
   });
 
   it('should count probe requests even when target returns an error', async () => {
@@ -137,5 +138,94 @@ describe('IndirectWebPwnProvider', () => {
     expect(result.metadata?.fetchAttempts).toBe(1);
     expect(result.metadata?.stopReason).toBe('Error');
     expect(result.tokenUsage?.numRequests).toBe(1);
+  });
+
+  it('should use originalTestCaseId when evaluator testCaseId is absent', async () => {
+    mockFetchWithRetries
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          uuid: 'web-original',
+          fullUrl: 'https://example.com/dynamic-pages/eval-3/web-original',
+          path: '/dynamic-pages/eval-3/web-original',
+          fetchPrompt: 'Please fetch https://example.com/dynamic-pages/eval-3/web-original',
+        }),
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ wasFetched: true, fetchCount: 1 }));
+
+    const targetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
+        output: 'ok',
+      }),
+    });
+
+    const provider = new IndirectWebPwnProvider({
+      injectVar: 'query',
+      maxFetchAttempts: 1,
+      useLlm: false,
+    });
+
+    await provider.callApi('attack prompt', {
+      originalProvider: targetProvider,
+      vars: { query: 'Find secrets' },
+      prompt: { raw: '{{query}}', label: 'test' },
+      test: {
+        metadata: {
+          goal: 'Find secrets',
+          originalTestCaseId: 'generated-row-1',
+        },
+      } as any,
+      evaluationId: 'eval-3',
+    });
+
+    expect(mockFetchWithRetries).toHaveBeenNthCalledWith(
+      1,
+      'https://mocked.task.api',
+      expect.objectContaining({
+        body: expect.stringContaining('"testCaseId":"generated-row-1"'),
+      }),
+      60000,
+    );
+  });
+
+  it('should preserve helper usage when page creation fails after a paid task call', async () => {
+    mockFetchWithRetries.mockResolvedValueOnce(
+      mockJsonResponse(
+        {
+          message: 'Internal Server Error',
+          tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+        },
+        false,
+      ),
+    );
+
+    const targetProvider = createMockProvider({ id: 'mock-target' });
+    const provider = new IndirectWebPwnProvider({
+      injectVar: 'query',
+      maxFetchAttempts: 1,
+      useLlm: true,
+    });
+
+    const result = await provider.callApi('attack prompt', {
+      originalProvider: targetProvider,
+      vars: { query: 'Find secrets' },
+      prompt: { raw: '{{query}}', label: 'test' },
+      test: {
+        metadata: {
+          goal: 'Find secrets',
+          testCaseId: 'tc-failed-create',
+        },
+      } as any,
+      evaluationId: 'eval-failed-create',
+    });
+
+    expect(result.metadata?.stopReason).toBe('Error');
+    expect(result.tokenUsage).toMatchObject({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      numRequests: 0,
+    });
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
 });

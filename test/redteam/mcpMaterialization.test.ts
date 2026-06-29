@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { materializeMcpValue } from '../../src/redteam/mcpMaterialization';
+import {
+  materializeMcpValue,
+  materializeTrackedMcpValue,
+} from '../../src/redteam/mcpMaterialization';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
 import type { ApiProvider } from '../../src/types/index';
@@ -121,6 +124,35 @@ describe('materializeMcpValue', () => {
     );
   });
 
+  it('returns provider token usage for tracked materialization', async () => {
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      output: '{"tool":"search_companies","args":{"query":"clean energy","limit":3}}',
+      tokenUsage: {
+        prompt: 10,
+        completion: 4,
+        total: 14,
+        numRequests: 1,
+      },
+    });
+
+    await expect(
+      materializeTrackedMcpValue({
+        provider,
+        purpose: 'Search companies',
+        value: 'Find clean energy companies.',
+        tools: [searchCompaniesTool],
+      }),
+    ).resolves.toEqual({
+      value: '{"tool":"search_companies","args":{"query":"clean energy","limit":3}}',
+      tokenUsage: {
+        prompt: 10,
+        completion: 4,
+        total: 14,
+        numRequests: 1,
+      },
+    });
+  });
+
   it('accepts MCP JSON from array provider outputs', async () => {
     vi.mocked(provider.callApi).mockResolvedValueOnce({
       output: ['Some preface.', '{"tool":"search_companies","args":{"query":"cloud","limit":2}}'],
@@ -206,6 +238,29 @@ describe('materializeMcpValue', () => {
     ).rejects.toThrow('Failed to materialize MCP value');
   });
 
+  it('preserves provider token usage when tracked repair rejects after a billed LLM call', async () => {
+    const error = Object.assign(new Error('Missing API key'), {
+      tokenUsage: {
+        prompt: 8,
+        completion: 3,
+        total: 11,
+        numRequests: 1,
+      },
+    });
+    vi.mocked(provider.callApi).mockRejectedValueOnce(error);
+
+    await expect(
+      materializeTrackedMcpValue({
+        provider,
+        purpose: 'Search companies',
+        value: 'Find clean energy companies.',
+        tools: [searchCompaniesTool],
+      }),
+    ).rejects.toMatchObject({
+      tokenUsage: error.tokenUsage,
+    });
+  });
+
   it('throws when provider repair returns an error response', async () => {
     vi.mocked(provider.callApi).mockResolvedValueOnce({
       error: 'No JSON object returned',
@@ -241,5 +296,34 @@ describe('materializeMcpValue', () => {
         ],
       }),
     ).rejects.toThrow('Failed to materialize MCP value');
+  });
+
+  it('preserves provider token usage when tracked repair fails after the LLM call', async () => {
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      output: '{"tool":"search_companies","args":{"limit":3}}',
+      tokenUsage: {
+        prompt: 8,
+        completion: 3,
+        total: 11,
+        numRequests: 1,
+      },
+    });
+
+    await expect(
+      materializeTrackedMcpValue({
+        provider,
+        purpose: 'Search companies',
+        value: 'Find clean energy companies.',
+        tools: [searchCompaniesTool],
+      }),
+    ).rejects.toMatchObject({
+      message: 'Failed to materialize MCP value: "Find clean energy companies."',
+      tokenUsage: {
+        prompt: 8,
+        completion: 3,
+        total: 11,
+        numRequests: 1,
+      },
+    });
   });
 });

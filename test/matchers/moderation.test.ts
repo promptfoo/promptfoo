@@ -20,6 +20,8 @@ describe('matchesModeration', () => {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
     },
   };
   let restoreProcessEnv = () => {};

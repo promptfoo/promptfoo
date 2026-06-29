@@ -251,6 +251,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -422,6 +423,176 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
+    });
+  });
+
+  it('should preserve target and remote task usage in discovery results', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I am a test assistant'],
+        },
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(function () {
+      return Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    const target = createMockProvider({
+      id: 'test',
+      response: {
+        output: 'I am a test assistant',
+      },
+    });
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(discoveredPurpose).toMatchObject({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      user: 'Test user',
+      tokenUsage: {
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        numRequests: 3,
+      },
+    });
+  });
+
+  it('should merge final nested discovery usage with earlier remote and target usage', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: { currentQuestionIndex: 0, answers: [] },
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: null,
+          tools: [],
+          user: null,
+          tokenUsage: {
+            total: 7,
+            prompt: 4,
+            completion: 3,
+            completionDetails: { reasoning: 2 },
+          },
+        },
+        state: { currentQuestionIndex: 1, answers: ['Target answer'] },
+      },
+    ];
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const target = createMockProvider({
+      response: {
+        output: 'Target answer',
+        tokenUsage: { total: 11, prompt: 6, completion: 5 },
+      },
+    });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result?.tokenUsage).toMatchObject({
+      total: 23,
+      prompt: 13,
+      completion: 10,
+      numRequests: 3,
+      completionDetails: { reasoning: 2 },
+    });
+  });
+
+  it('should preserve an explicit zero request count from final nested discovery usage', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: null,
+            tools: [],
+            user: null,
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 0 },
+          },
+          state: { currentQuestionIndex: 0, answers: [] },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ response: { output: 'unused' } });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result?.tokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 0,
+    });
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should retain both top-level and nested final discovery usage', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: null,
+            tools: [],
+            user: null,
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 2 },
+          },
+          state: { currentQuestionIndex: 0, answers: [] },
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ response: { output: 'unused' } });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result?.tokenUsage).toMatchObject({
+      total: 12,
+      prompt: 7,
+      completion: 5,
+      numRequests: 3,
     });
   });
 
@@ -471,6 +642,7 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -478,6 +650,7 @@ describe('doTargetPurposeDiscovery', () => {
     const errorBody = JSON.stringify({
       error: 'Invalid task',
       message: 'Unknown task: target-purpose-discovery',
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
     });
 
     mockedFetchWithProxy.mockResolvedValue(
@@ -498,11 +671,49 @@ describe('doTargetPurposeDiscovery', () => {
       'Remote server returned HTTP 400: Unknown task: target-purpose-discovery',
     );
     expect(error.message).toContain('promptfoo@latest');
+    expect(error.tokenUsage).toMatchObject({
+      total: 9,
+      prompt: 5,
+      completion: 4,
+      numRequests: 1,
+    });
     // Should not retry — fetch should only be called once
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
     expect(target.callApi).not.toHaveBeenCalled();
     expect(mockProgressBar.increment).toHaveBeenCalledOnce();
     expect(mockProgressBar.stop).toHaveBeenCalledOnce();
+  });
+
+  it('should reject malformed remote token usage instead of trusting it', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: null,
+            tools: [],
+            user: null,
+          },
+          state: { currentQuestionIndex: 0, answers: [] },
+          tokenUsage: 'not-an-object',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toMatchObject({
+      name: 'ZodError',
+    });
+    expect(target.callApi).not.toHaveBeenCalled();
   });
 
   it('should surface an auth hint on 401 responses', async () => {
@@ -620,6 +831,7 @@ describe('doTargetPurposeDiscovery', () => {
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 });

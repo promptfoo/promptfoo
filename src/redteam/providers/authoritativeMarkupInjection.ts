@@ -96,9 +96,14 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
 
     const data = await response.json();
     if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
-      throw new Error(
-        `[AuthoritativeMarkupInjection] Invalid response from server: ${safeJsonStringify(data)}`,
-      );
+      const totalTokenUsage = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
+      return {
+        error: `[AuthoritativeMarkupInjection] Invalid response from server: ${safeJsonStringify(
+          data,
+        )}`,
+        tokenUsage: totalTokenUsage,
+      };
     }
 
     const attackerMessage = data.message;
@@ -122,6 +127,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     });
 
     const totalTokenUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
 
     // Call the target provider with the injected attack
     throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);

@@ -3,7 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { fail, normalizeMatcherResponseTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -50,8 +50,9 @@ export async function matchesSelectBest(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return Array.from({ length: outputs.length }, () =>
-      fail(resp.error || 'No output', resp.tokenUsage),
+    const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
+    return Array.from({ length: outputs.length }, (_, index) =>
+      fail(resp.error || 'No output', index === 0 ? tokensUsed : undefined),
     );
   }
 
@@ -61,26 +62,27 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return Array.from({ length: outputs.length }, () =>
-      fail(`Invalid select-best verdict: ${verdict}`, resp.tokenUsage),
+    const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
+    return Array.from({ length: outputs.length }, (_, index) =>
+      fail(`Invalid select-best verdict: ${verdict}`, index === 0 ? tokensUsed : undefined),
     );
   }
 
-  const tokensUsed = normalizeMatcherTokenUsage(resp.tokenUsage);
+  const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
   return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
-        tokensUsed,
+        ...(index === 0 ? { tokensUsed } : {}),
       };
     } else {
       return {
         pass: false,
         score: 0,
         reason: `Output not selected: ${criteria}`,
-        tokensUsed,
+        ...(index === 0 ? { tokensUsed } : {}),
       };
     }
   });

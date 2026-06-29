@@ -702,33 +702,45 @@ function renderTokenMetrics({
   metrics,
   filteredMetrics,
   testCount,
+  isRedteam,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
-}): React.ReactNode {
-  if (!metrics?.tokenUsage?.total) {
-    return null;
-  }
-
-  const totalTokens = metrics.tokenUsage.total;
+  isRedteam: boolean;
+}): React.ReactNode[] {
+  const totalTokens = metrics?.tokenUsage?.total ?? 0;
+  const gradingTokens = metrics?.tokenUsage?.assertions?.total ?? 0;
+  const rows: React.ReactNode[] = [];
   const filteredTokens = filteredMetrics?.tokenUsage?.total;
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
 
-  return (
-    <>
-      <div>
-        <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+  if (totalTokens) {
+    rows.push(
+      <div key="total-tokens">
+        <strong>{isRedteam ? 'Non-grading Tokens:' : 'Total Tokens:'}</strong>{' '}
+        {formatMetricValue(totalTokens)}
         {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
-      </div>
-      <div>
-        <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+      </div>,
+      <div key="avg-tokens">
+        <strong>{isRedteam ? 'Avg Non-grading Tokens:' : 'Avg Tokens:'}</strong>{' '}
+        {formatMetricValue(totalAverage)}
         {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
-      </div>
-    </>
-  );
+      </div>,
+    );
+  }
+
+  if (isRedteam && gradingTokens) {
+    rows.push(
+      <div key="grading-tokens">
+        <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+      </div>,
+    );
+  }
+
+  return rows;
 }
 
 function renderLatencyMetric({
@@ -769,7 +781,13 @@ function renderLatencyMetric({
   );
 }
 
-function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.ReactNode {
+function renderTokensPerSecondMetric({
+  metrics,
+  isRedteam,
+}: {
+  metrics: PromptMetrics['total'];
+  isRedteam: boolean;
+}): React.ReactNode {
   if (!metrics?.totalLatencyMs || !metrics.tokenUsage?.completion) {
     return null;
   }
@@ -781,7 +799,8 @@ function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.Rea
 
   return (
     <div>
-      <strong>Tokens/Sec:</strong> {formatMetricValue(tokPerSec)}
+      <strong>{isRedteam ? 'Non-grading Tokens/Sec:' : 'Tokens/Sec:'}</strong>{' '}
+      {formatMetricValue(tokPerSec)}
     </div>
   );
 }
@@ -1035,13 +1054,14 @@ function renderPromptMetricDetails({
         metrics,
         filteredMetrics,
         testCount: testCounts[idx],
+        isRedteam,
       })}
       {renderLatencyMetric({
         metrics,
         filteredMetrics,
         testCount: testCounts[idx],
       })}
-      {renderTokensPerSecondMetric(metrics)}
+      {renderTokensPerSecondMetric({ metrics, isRedteam })}
     </div>
   );
 }

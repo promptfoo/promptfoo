@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   extractAllPromptsFromTags,
   extractGoalFromPrompt,
+  extractGoalFromPromptWithUsage,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   extractVariablesFromJson,
@@ -166,6 +167,26 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBe('test goal');
   });
 
+  it('should expose token usage for callers that need the full extraction ledger', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: {
+        intent: 'test goal',
+        tokenUsage: { total: 17, prompt: 11, completion: 6, numRequests: 1 },
+      },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPromptWithUsage('test prompt', 'test purpose');
+    expect(result).toEqual({
+      goal: 'test goal',
+      tokenUsage: { total: 17, prompt: 11, completion: 6, numRequests: 1 },
+    });
+  });
+
   it('should return null on HTTP error', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
@@ -178,6 +199,25 @@ describe('extractGoalFromPrompt', () => {
 
     const result = await extractGoalFromPrompt('test prompt', 'test purpose');
     expect(result).toBeNull();
+  });
+
+  it('should preserve token usage for callers when remote extraction fails', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      headers: {},
+      data: {
+        tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+      },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPromptWithUsage('test prompt', 'test purpose');
+    expect(result).toEqual({
+      goal: null,
+      tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+    });
   });
 
   it('should return null when no intent returned', async () => {

@@ -11,8 +11,14 @@ import {
   type Inputs,
   normalizeInputDefinition,
 } from '../types/shared';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../util/tokenUsageUtils';
 
-import type { ApiProvider } from '../types/index';
+import type { ApiProvider, TokenUsage } from '../types/index';
 
 const SVG_WIDTH = 1200;
 const SVG_LINE_HEIGHT = 32;
@@ -41,6 +47,7 @@ export type MaterializedInputMetadata = {
 
 export type MaterializedInputVariablesResult = {
   metadata?: Record<string, MaterializedInputMetadata>;
+  tokenUsage?: TokenUsage;
   vars: Record<string, string>;
 };
 
@@ -695,7 +702,7 @@ export async function materializeInputValueWithMetadata(
   value: string,
   definition: InputDefinition,
   context: InputMaterializationContext = {},
-): Promise<{ metadata?: MaterializedInputMetadata; value: string }> {
+): Promise<{ metadata?: MaterializedInputMetadata; tokenUsage?: TokenUsage; value: string }> {
   const normalizedInput = normalizeInputDefinition(definition);
   const injectionPlacement = getInputInjectionPlacementForIndex(
     definition,
@@ -724,11 +731,16 @@ export async function materializeInputValueWithMetadata(
   }
 
   let output: unknown;
+  let tokenUsage: TokenUsage | undefined;
   try {
-    ({ output } = await context.provider.callApi(
+    const response = await context.provider.callApi(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
-    ));
+    );
+    output = response.output;
+    tokenUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(tokenUsage, response);
   } catch (error) {
+    tokenUsage = getErrorTokenUsage(error);
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,
       inputPurpose: normalizedInput.config?.inputPurpose,
@@ -742,6 +754,7 @@ export async function materializeInputValueWithMetadata(
         inputPurpose: normalizedInput.config?.inputPurpose,
         wrapperSummary: renderPlan.wrapperSummary,
       },
+      ...(tokenUsage ? { tokenUsage } : {}),
       value: toDataUri(DOCX_MIME_TYPE, buildDocxDataFromRenderPlan(renderPlan)),
     };
   }
@@ -759,6 +772,7 @@ export async function materializeInputValueWithMetadata(
       inputPurpose: normalizedInput.config?.inputPurpose,
       wrapperSummary: renderPlan.wrapperSummary,
     },
+    tokenUsage,
     value: toDataUri(DOCX_MIME_TYPE, buildDocxDataFromRenderPlan(renderPlan)),
   };
 }
@@ -810,6 +824,8 @@ export async function materializeInputVariablesWithMetadata(
 ): Promise<MaterializedInputVariablesResult> {
   const metadata: Record<string, MaterializedInputMetadata> = {};
   const vars: Record<string, string> = {};
+  const tokenUsage = createEmptyTokenUsage();
+  let hasTokenUsage = false;
   const materializedKeys = new Set<string>();
   let inputIndex = 0;
 
@@ -832,6 +848,10 @@ export async function materializeInputVariablesWithMetadata(
     }
     vars[key] = materializedValue.value;
     materializedKeys.add(key);
+    if (materializedValue.tokenUsage) {
+      accumulateTokenUsage(tokenUsage, materializedValue.tokenUsage);
+      hasTokenUsage = true;
+    }
 
     if (materializedValue.metadata) {
       metadata[key] = materializedValue.metadata;
@@ -846,6 +866,7 @@ export async function materializeInputVariablesWithMetadata(
 
   return {
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    ...(hasTokenUsage ? { tokenUsage } : {}),
     vars,
   };
 }

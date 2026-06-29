@@ -1,7 +1,7 @@
 import { getInputType, type Inputs } from '../types/shared';
 import { getRemoteGenerationUrl } from './remoteGeneration';
 
-import type { VarValue } from '../types';
+import type { TokenUsage, VarValue } from '../types';
 import type { MaterializedInputMetadata, MaterializedInputVariablesResult } from './inputVariables';
 
 export const REMOTE_MATERIALIZATION_CONTEXT_VAR = '__promptfooRemoteMaterialization';
@@ -18,6 +18,7 @@ export interface RemoteMaterializationResponse {
   inputMaterialization?: Record<string, unknown>;
   materializationHandled?: boolean;
   materializedVars?: Record<string, string>;
+  tokenUsage?: TokenUsage;
 }
 
 function filterMaterializedVarsToInputs(

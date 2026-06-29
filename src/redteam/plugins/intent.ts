@@ -2,7 +2,8 @@ import dedent from 'dedent';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { extractGoalFromPrompt } from '../util';
+import { mergeProviderTokenUsage } from '../strategies/util';
+import { extractGoalFromPromptWithUsage } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
@@ -58,7 +59,7 @@ export class IntentPlugin extends RedteamPluginBase {
 
     for (const intent of this.intents) {
       if (typeof intent === 'string') {
-        const extractedIntent = await extractGoalFromPrompt(
+        const extractedIntent = await extractGoalFromPromptWithUsage(
           intent,
           this.purpose,
           this.id,
@@ -72,14 +73,22 @@ export class IntentPlugin extends RedteamPluginBase {
           },
           assert: this.getAssertions(intent),
           metadata: {
-            goal: extractedIntent,
+            goal: extractedIntent.goal,
             pluginId: this.id,
             pluginConfig: undefined,
+            ...(extractedIntent.tokenUsage
+              ? {
+                  providerTokenUsage: mergeProviderTokenUsage(
+                    undefined,
+                    extractedIntent.tokenUsage,
+                  ),
+                }
+              : {}),
           },
         });
       } else {
         const firstPrompt = Array.isArray(intent) ? intent[0] : intent;
-        const extractedIntent = await extractGoalFromPrompt(
+        const extractedIntent = await extractGoalFromPromptWithUsage(
           firstPrompt,
           this.purpose,
           this.id,
@@ -99,9 +108,17 @@ export class IntentPlugin extends RedteamPluginBase {
           },
           assert: this.getAssertions(firstPrompt),
           metadata: {
-            goal: extractedIntent,
+            goal: extractedIntent.goal,
             pluginId: this.id,
             pluginConfig: undefined,
+            ...(extractedIntent.tokenUsage
+              ? {
+                  providerTokenUsage: mergeProviderTokenUsage(
+                    undefined,
+                    extractedIntent.tokenUsage,
+                  ),
+                }
+              : {}),
           },
         });
       }

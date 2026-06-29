@@ -45,6 +45,7 @@ describe('mathPrompt', () => {
       const mockResponse = {
         data: {
           result: mockResult,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
         },
         cached: false,
         status: 200,
@@ -58,7 +59,15 @@ describe('mathPrompt', () => {
         targetId: 'cloud-target-123',
       });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual([
+        {
+          vars: { prompt: 'encoded1' },
+          metadata: {
+            providerTokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+        },
+        { vars: { prompt: 'encoded2' } },
+      ]);
       expect(mockProgressBar.start).toHaveBeenCalledWith(1, 0);
       expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
       expect(mockProgressBar.stop).toHaveBeenCalledWith();
@@ -97,8 +106,15 @@ describe('mathPrompt', () => {
 
       const result = await encodeMathPrompt('test text', 'set theory');
 
-      expect(result).toContain('encoded math text');
-      expect(result).toContain('Also provide a complete translation');
+      expect(result.encodedPrompt).toContain('encoded math text');
+      expect(result.encodedPrompt).toContain('Also provide a complete translation');
+      expect(result.tokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
+      });
     });
 
     it('should handle JSON parsing errors', async () => {
@@ -112,6 +128,22 @@ describe('mathPrompt', () => {
       await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow(
         'Expected a JSON object',
       );
+    });
+
+    it('should preserve helper usage on JSON parsing errors', async () => {
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: 'invalid json',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      });
+
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+
+      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toMatchObject({
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+      });
     });
   });
 
@@ -130,6 +162,7 @@ describe('mathPrompt', () => {
         id: 'mock',
         response: createProviderResponse({
           output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
         }),
       });
 
@@ -147,6 +180,281 @@ describe('mathPrompt', () => {
       });
 
       expect(result).toHaveLength(customConcepts.length);
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve prior generation usage exactly once across concept fan-out', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      });
+
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt(
+        [
+          {
+            vars: { prompt: 'test' },
+            metadata: {
+              providerTokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            },
+          },
+        ] as any,
+        'prompt',
+        { mathConcepts: ['topology', 'calculus'] },
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve completed concept usage when a later encoding throws', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      const provider = createMockProvider({
+        id: 'mock',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: JSON.stringify({ encodedPrompt: 'encoded' }),
+            tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+          })
+          .mockRejectedValueOnce(
+            Object.assign(new Error('second concept failed'), {
+              tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            }),
+          ),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(provider);
+
+      await expect(
+        addMathPrompt(
+          [
+            {
+              vars: { prompt: 'test' },
+              metadata: {
+                providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+              },
+            },
+          ] as any,
+          'prompt',
+          { mathConcepts: ['topology', 'calculus'] },
+        ),
+      ).rejects.toMatchObject({
+        message: 'second concept failed',
+        tokenUsage: {
+          total: 22,
+          prompt: 12,
+          completion: 10,
+          numRequests: 3,
+        },
+      });
+    });
+
+    it('should preserve empty remote batch usage before local fallback', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [],
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        },
+      } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+      });
+
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it('should preserve one-row remote failure usage before local fallback', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          error: 'remote parse failed',
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        },
+      } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+      });
+
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it('should preserve batched remote failure usage exactly once before local fallback', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          error: 'remote batch parse failed',
+          tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
+        },
+      } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt(
+        [{ vars: { prompt: 'first' } }, { vars: { prompt: 'second' } }] as any,
+        'prompt',
+        { mathConcepts: ['topology'] },
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 21,
+        prompt: 11,
+        completion: 10,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve completed batch usage when a later remote batch fails', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { prompt: 'remote encoded' } }],
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+        } as any)
+        .mockResolvedValueOnce({
+          data: {
+            error: 'second batch failed',
+            tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
+          },
+        } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'local encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt(
+        Array.from({ length: 9 }, (_value, index) => ({
+          vars: { prompt: `test ${index}` },
+        })) as any,
+        'prompt',
+        { mathConcepts: ['topology'] },
+      );
+
+      expect(result).toHaveLength(9);
+      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 28,
+        prompt: 15,
+        completion: 13,
+        numRequests: 3,
+      });
+      expect(result[1]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        numRequests: 1,
+      });
     });
 
     it('should validate mathConcepts config', async () => {

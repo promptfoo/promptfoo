@@ -249,7 +249,7 @@ describe('retryCommand', () => {
       total: 10,
       prompt: 6,
       completion: 4,
-      assertions: { total: 3, prompt: 2, completion: 1 },
+      assertions: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
     });
     expect(prompts[1].metrics).toMatchObject({
       score: 0.5,

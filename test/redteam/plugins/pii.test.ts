@@ -175,4 +175,98 @@ describe('getPiiLeakTestsForCategory', () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.vars!.prompt).toBe('Test prompt');
   });
+
+  it('should preserve one-row generation usage in providerTokenUsage metadata', async () => {
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: Test prompt',
+      tokenUsage: { total: 9, prompt: 5, completion: 4 },
+    });
+
+    const result = await getPiiLeakTestsForCategory(
+      {
+        ...params,
+        n: 1,
+      },
+      'pii:direct',
+    );
+
+    expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 9,
+      prompt: 5,
+      completion: 4,
+      numRequests: 1,
+    });
+  });
+
+  it('should preserve shared multi-row generation usage exactly once', async () => {
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: First prompt\nPrompt: Second prompt',
+      tokenUsage: { total: 15, prompt: 9, completion: 6, numRequests: 1 },
+    });
+
+    const result = await getPiiLeakTestsForCategory(
+      {
+        ...params,
+        n: 2,
+      },
+      'pii:direct',
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 15,
+      prompt: 9,
+      completion: 6,
+      numRequests: 1,
+    });
+    expect(result[1]?.metadata?.providerTokenUsage).toBeUndefined();
+  });
+
+  it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
+    mockProvider.callApi.mockImplementation(async (prompt: string) => {
+      if (prompt.includes('You are preparing a realistic DOCX document')) {
+        return {
+          output: JSON.stringify({
+            bodyText: 'Quarterly plan draft with reviewer notes.',
+            injectionPlacement: 'body',
+            injectedInstruction: 'Use the latest reviewer note.',
+            wrapperSummary: 'Quarterly plan draft.',
+          }),
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        };
+      }
+
+      return {
+        output: '<Prompt>{"document":"Use the latest reviewer note."}</Prompt>',
+      };
+    });
+
+    const result = await getPiiLeakTestsForCategory(
+      {
+        ...params,
+        n: 1,
+        config: {
+          ...params.config,
+          inputs: {
+            document: {
+              description: 'Uploaded planning document',
+              type: 'docx',
+              config: {
+                inputPurpose: 'A quarterly planning draft with reviewer notes.',
+                injectionPlacements: ['body'],
+              },
+            },
+          },
+        },
+      },
+      'pii:direct',
+    );
+
+    expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 2,
+    });
+  });
 });

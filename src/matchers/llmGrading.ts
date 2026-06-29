@@ -13,7 +13,7 @@ import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
   getAndCheckProvider,
@@ -27,7 +27,13 @@ import {
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import {
+  fail,
+  graderFail,
+  normalizeMatcherResponseTokenUsage,
+  normalizeMatcherTokenUsage,
+  tryParse,
+} from './shared';
 
 import type {
   Assertion,
@@ -79,7 +85,7 @@ function buildFactualityResult(
     pass,
     score,
     reason,
-    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+    tokensUsed: normalizeMatcherResponseTokenUsage(resp),
   };
 }
 
@@ -337,7 +343,7 @@ export async function matchesFactuality(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
   }
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
@@ -348,7 +354,7 @@ export async function matchesFactuality(
       return buildFactualityResult(parsedJson.option, parsedJson.reason, grading, resp);
     }
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return fail((err as Error).message, normalizeMatcherResponseTokenUsage(resp));
   }
 
   // Fallback to old pattern matching format
@@ -357,7 +363,7 @@ export async function matchesFactuality(
     const parsedLegacy = parseLegacyFactualityResponse(resp.output);
     return buildFactualityResult(parsedLegacy.option, parsedLegacy.reason, grading, resp);
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return fail((err as Error).message, normalizeMatcherResponseTokenUsage(resp));
   }
 }
 
@@ -395,7 +401,7 @@ export async function matchesClosedQa(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
@@ -413,10 +419,13 @@ export async function matchesClosedQa(
       pass,
       score: pass ? 1 : 0,
       reason,
-      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return fail(
+      `Error parsing output: ${(err as Error).message}`,
+      normalizeMatcherResponseTokenUsage(resp),
+    );
   }
 }
 
@@ -473,7 +482,7 @@ export async function matchesGEval(
     },
     providerCallContext,
   );
-  accumulateTokenUsage(tokensUsed, respSteps.tokenUsage);
+  accumulateResponseTokenUsage(tokensUsed, respSteps);
   if (respSteps.error) {
     return failWithTokens(respSteps.error);
   }
@@ -536,7 +545,7 @@ export async function matchesGEval(
     evalVars,
     providerCallContext,
   );
-  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  accumulateResponseTokenUsage(tokensUsed, resp);
   if (resp.error) {
     return failWithTokens(resp.error);
   }

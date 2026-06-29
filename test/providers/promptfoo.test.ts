@@ -68,15 +68,24 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
-    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
-      status: 200,
-      statusText: 'OK',
-    });
+    const mockResponse = new Response(
+      JSON.stringify({
+        output: 'test output',
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
-    expect(result).toEqual({ output: ['test output'] });
+    expect(result).toEqual({
+      output: ['test output'],
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
   });
 
   it('should include target context in harmful generation requests', async () => {
@@ -137,6 +146,27 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toContain('[HarmfulCompletionProvider]');
+  });
+
+  it('should preserve helper usage from non-OK harmful generation responses', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        error: 'Could not generate harmful inputs',
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      }),
+      {
+        status: 500,
+        statusText: 'Internal Server Error',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toMatchObject({
+      error: '[HarmfulCompletionProvider] Could not generate harmful inputs',
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
@@ -373,6 +403,27 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(result.error).toBe('LLM did not return a result, likely refusal');
   });
 
+  it('should preserve remote task usage when the task server returns an error without a result', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        error: 'Agent output parse error',
+        tokenUsage: { total: 42, prompt: 30, completion: 12, numRequests: 1 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      error: 'Agent output parse error',
+      tokenUsage: { total: 42, prompt: 30, completion: 12, numRequests: 1 },
+    });
+  });
+
   it('should handle API error', async () => {
     vi.mocked(fetchWithRetries).mockRejectedValue(new Error('API Error'));
 
@@ -529,6 +580,27 @@ describe('PromptfooSimulatedUserProvider', () => {
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
 
     expect(result.error).toContain('API call error');
+  });
+
+  it('should preserve task usage from failed simulated-user responses', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        message: 'Internal Server Error',
+        tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+      }),
+      {
+        status: 500,
+        statusText: 'Internal Server Error',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
+
+    expect(result).toMatchObject({
+      error: 'API call error: Internal Server Error',
+      tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+    });
   });
 
   it('should handle API call exception', async () => {

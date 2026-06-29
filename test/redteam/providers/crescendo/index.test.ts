@@ -788,12 +788,22 @@ describe('CrescendoProvider', () => {
   });
 
   it('should grade the latest assistant output while passing prior turns in grading context', async () => {
-    const getResult = vi.fn(async () => ({
-      grade: {
-        pass: true,
-      },
-      rubric: 'rendered rubric',
-    }));
+    const getResult = vi
+      .fn()
+      .mockResolvedValueOnce({
+        grade: {
+          pass: true,
+          tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        },
+        rubric: 'rendered rubric',
+      })
+      .mockResolvedValueOnce({
+        grade: {
+          pass: true,
+          tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
+        },
+        rubric: 'rendered rubric',
+      });
     mockGetGraderById.mockImplementation(() => ({ getResult }) as any);
 
     const provider = new CrescendoProvider({
@@ -846,6 +856,12 @@ describe('CrescendoProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(getResult).toHaveBeenCalledTimes(2);
+    expect(result.metadata?.storedGraderResult?.tokensUsed).toMatchObject({
+      total: 30,
+      prompt: 18,
+      completion: 12,
+      numRequests: 3,
+    });
 
     const firstCall = getResult.mock.calls[0] as unknown as unknown[];
     expect(firstCall?.[0]).toBe('first question');
@@ -1548,11 +1564,11 @@ describe('CrescendoProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Should accumulate token usage from target provider calls
+      // Should accumulate non-assertion strategy work while keeping probes target-only.
       expect(result.tokenUsage).toMatchObject({
-        total: 100,
-        prompt: 40,
-        completion: 60,
+        total: 205,
+        prompt: 92,
+        completion: 113,
         numRequests: 1,
         cached: 0,
       });
@@ -1603,11 +1619,11 @@ describe('CrescendoProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Should accumulate token usage from all target provider calls
+      // Should accumulate target plus strategy-side usage across both rounds.
       expect(result.tokenUsage).toMatchObject({
-        total: 180,
-        prompt: 70,
-        completion: 110,
+        total: 400,
+        prompt: 180,
+        completion: 220,
         numRequests: 2,
         cached: 0,
       });
@@ -1655,6 +1671,170 @@ describe('CrescendoProvider', () => {
         prompt: 0,
         completion: 0,
         numRequests: 1, // Still tracks requests even without token counts
+        cached: 0,
+      });
+    });
+
+    it('should preserve attacker usage when prompt generation returns an error', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        error: 'attacker failed',
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 50,
+        prompt: 25,
+        completion: 25,
+        numRequests: 0,
+        cached: 0,
+      });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('should preserve refusal helper usage when refusal scoring throws', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1, cached: 0 },
+      });
+      // Refusal scoring throws RedteamProviderError, which exits the round before eval scoring runs.
+      // Helper tokens from the failed refusal call should still be accumulated.
+      mockScoringProvider.callApi.mockResolvedValueOnce({
+        error: 'refusal failed',
+        tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 180,
+        prompt: 80,
+        completion: 100,
+        numRequests: 1,
+        cached: 0,
+      });
+    });
+
+    it('should preserve refusal helper usage when refusal scoring payloads are malformed', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1, cached: 0 },
+      });
+      mockScoringProvider.callApi.mockResolvedValueOnce({
+        output: 'not-json',
+        tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 180,
+        prompt: 80,
+        completion: 100,
+        numRequests: 1,
+        cached: 0,
+      });
+    });
+
+    it('should preserve eval helper usage when eval scoring payloads are malformed', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1, cached: 0 },
+      });
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+          tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'not-json',
+          tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1, cached: 0 },
+        });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 200,
+        prompt: 90,
+        completion: 110,
+        numRequests: 1,
         cached: 0,
       });
     });
@@ -1758,6 +1938,35 @@ describe('CrescendoProvider', () => {
       });
     });
 
+    it('should preserve attacker usage when prompt generation is refused', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: 'I cannot help with that request',
+        isRefusal: true,
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 50,
+        prompt: 25,
+        completion: 25,
+        numRequests: 0,
+        cached: 0,
+      });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('should track token usage from scoring provider calls', async () => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',
@@ -1849,6 +2058,7 @@ describe('CrescendoProvider', () => {
       vi.mocked(tryUnblocking).mockResolvedValue({
         success: true,
         unblockingPrompt: 'Our registration number is REG123456',
+        tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
       });
 
       mockScoringProvider.callApi.mockResolvedValue({
@@ -1862,11 +2072,11 @@ describe('CrescendoProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Should accumulate token usage from both target provider calls
+      // Should accumulate target plus strategy-side calls, without treating strategy calls as probes.
       expect(result.tokenUsage).toMatchObject({
-        total: 140,
-        prompt: 55,
-        completion: 85,
+        total: 270,
+        prompt: 120,
+        completion: 150,
         numRequests: 2,
         cached: 0,
       });

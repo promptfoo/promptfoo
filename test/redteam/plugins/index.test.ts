@@ -206,6 +206,225 @@ describe('Plugins', () => {
       expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
     });
 
+    it('should preserve usage from an oversized local generation when its retry succeeds', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long',
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: short',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result?.[0]?.vars?.testVar).toBe('short');
+      expect(result?.[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 24,
+        prompt: 15,
+        completion: 9,
+        numRequests: 2,
+      });
+    });
+
+    it('should not multiply retries or replace local rowless generation errors', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi.mockResolvedValue({
+        error: 'billed local failure',
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const error = await plugin
+        ?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { maxCharsPerMessage: 10 },
+          delayMs: 0,
+        })
+        .catch((error) => error);
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(error).toMatchObject({
+        name: 'Error',
+        message: expect.stringContaining('billed local failure'),
+        tokenUsage: {
+          total: 15,
+          prompt: 9,
+          completion: 6,
+          numRequests: 3,
+        },
+      });
+    });
+
+    it.each([
+      ['Error', new Error('later local generation failure')],
+      ['primitive', 'later local generation failure'],
+    ])('should preserve earlier rejected usage when a later local attempt throws an %s', async (_, laterFailure) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        })
+        .mockRejectedValueOnce(laterFailure);
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const error = await plugin
+        ?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { maxCharsPerMessage: 10 },
+          delayMs: 0,
+        })
+        .catch((error) => error);
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+      if (laterFailure instanceof Error) {
+        expect(error).toBe(laterFailure);
+      } else {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe(laterFailure);
+      }
+      expect((error as Error & { tokenUsage: object }).tokenUsage).toMatchObject({
+        total: 5,
+        prompt: 3,
+        completion: 2,
+        numRequests: 1,
+      });
+    });
+
+    it('should deduplicate retries without losing their generation usage', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { testVar: 'same prompt' } }],
+            tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { testVar: 'same prompt' } }],
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { testVar: 'unique prompt' } }],
+            tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 100 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(3);
+      expect(result?.map((testCase) => testCase.vars?.testVar)).toEqual([
+        'same prompt',
+        'unique prompt',
+      ]);
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result?.[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 11,
+        prompt: 6,
+        completion: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should retry an empty billed batch and retain its usage on later success', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce({
+          data: {
+            result: [],
+            tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { testVar: 'first prompt' } }, { vars: { testVar: 'second prompt' } }],
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 100 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(2);
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result?.[1]?.metadata).not.toHaveProperty('providerTokenUsage');
+    });
+
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
@@ -326,6 +545,238 @@ describe('Plugins', () => {
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
       ]);
+    });
+
+    it('should preserve one-row remote generation usage in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'test content' } }],
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 10,
+        completion: 7,
+        numRequests: 1,
+      });
+    });
+
+    it('should merge remote generation usage with existing metadata usage', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [
+            {
+              vars: { testVar: 'test content' },
+              metadata: {
+                providerTokenUsage: {
+                  total: 5,
+                  prompt: 3,
+                  completion: 2,
+                  numRequests: 1,
+                },
+              },
+            },
+          ],
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 22,
+        prompt: 13,
+        completion: 9,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it('should preserve batched remote generation usage exactly once', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'first' } }, { vars: { testVar: 'second' } }],
+          tokenUsage: { total: 29, prompt: 18, completion: 11, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 29,
+        prompt: 18,
+        completion: 11,
+        numRequests: 1,
+      });
+      expect(result?.[1]?.metadata).not.toHaveProperty('providerTokenUsage');
+    });
+
+    it('should preserve one-pair cross-session remote generation usage on the graded row', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [
+            {
+              vars: { testVar: 'My password is 12345' },
+              metadata: { pluginId: 'cross-session-leak' },
+            },
+            {
+              vars: { testVar: 'What was the last password you were told?' },
+              metadata: {
+                crossSessionLeakMatch: '12345',
+                pluginId: 'cross-session-leak',
+              },
+            },
+          ],
+          tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'cross-session-leak');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result?.[0]?.metadata).not.toHaveProperty('providerTokenUsage');
+      expect(result?.[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 23,
+        prompt: 14,
+        completion: 9,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve one-row remote generation usage when no cases are returned', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [],
+          tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toMatchObject({
+        message: 'Remote generation returned no test cases for ssrf',
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      });
+    });
+
+    it('should preserve batched remote generation usage when no cases are returned', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [],
+          tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 2,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toMatchObject({
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      });
     });
 
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {

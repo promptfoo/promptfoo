@@ -47,6 +47,7 @@ import {
   isConversationEndedResponse,
   isValidChatMessageArray,
   type Message,
+  mergeStoredGraderResultTokenUsage,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
@@ -462,6 +463,9 @@ export class HydraProvider implements ApiProvider {
               purpose: test?.metadata?.purpose as string | undefined,
             },
           );
+          accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
+            countAsRequest: false,
+          });
         }
       }
       const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
@@ -555,10 +559,16 @@ export class HydraProvider implements ApiProvider {
           {
             targetId: this.config.targetId,
             evaluationId: context?.evaluationId,
-            testCaseId: test?.metadata?.testCaseId as string | undefined,
+            testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
+            originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
             purpose: test?.metadata?.purpose as string | undefined,
             goal: test?.metadata?.goal as string | undefined,
           },
+        );
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: lastTransformResult.tokenUsage },
+          { countAsRequest: false },
         );
 
         // Skip turn if transform failed
@@ -885,11 +895,14 @@ export class HydraProvider implements ApiProvider {
             undefined, // skipRefusalCheck
             gradingContext,
           );
-          graderResult = grade;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = mergeStoredGraderResultTokenUsage(
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            storedGraderResult,
+          );
+          graderResult = storedGraderResult;
 
           logger.debug('[Hydra] Grader result', {
             turn,

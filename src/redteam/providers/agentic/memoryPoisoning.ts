@@ -63,6 +63,8 @@ export class MemoryPoisoningProvider implements ApiProvider {
       invariant(context?.test, 'Expected test to be set');
       invariant(purpose, 'Expected purpose to be set');
 
+      const totalTokenUsage = createEmptyTokenUsage();
+
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
       const scenarioRes = await fetchWithProxy(
         getRemoteGenerationUrl(),
@@ -82,15 +84,19 @@ export class MemoryPoisoningProvider implements ApiProvider {
 
       // Send the memory message to the provider.
       if (!scenarioRes.ok) {
-        throw new Error(`Failed to generate scenario: ${scenarioRes.statusText}`);
+        const scenarioError = await scenarioRes.json().catch(() => undefined);
+        accumulateResponseTokenUsage(totalTokenUsage, scenarioError, { countAsRequest: false });
+        return {
+          error: `Failed to generate scenario: ${scenarioRes.statusText}`,
+          ...(scenarioError?.tokenUsage ? { tokenUsage: totalTokenUsage } : {}),
+        };
       }
 
       // Scope the scenario to the test case to ensure its passed to the grader:
       const scenario = await scenarioRes.json();
       context!.test!.metadata ??= {};
       context!.test!.metadata['scenario'] = scenario;
-
-      const totalTokenUsage = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(totalTokenUsage, scenario, { countAsRequest: false });
 
       // Send the memory message to the provider.
       throwIfTargetPromptExceedsMaxChars(scenario.memory);

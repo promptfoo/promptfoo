@@ -11,12 +11,13 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   fail,
+  normalizeMatcherResponseTokenUsage,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -63,7 +64,7 @@ export async function matchesAnswerRelevance(
       { answer: parsedOutput },
       providerCallContext,
     );
-    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+    accumulateResponseTokenUsage(tokensUsed, resp);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
     }
@@ -81,7 +82,7 @@ export async function matchesAnswerRelevance(
   );
 
   const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
-  accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
+  accumulateResponseTokenUsage(tokensUsed, inputEmbeddingResp);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
@@ -92,7 +93,7 @@ export async function matchesAnswerRelevance(
 
   for (const question of candidateQuestions) {
     const resp = await embeddingProvider.callEmbeddingApi(question);
-    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+    accumulateResponseTokenUsage(tokensUsed, resp);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
@@ -168,7 +169,7 @@ export async function matchesContextRecall(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
@@ -220,7 +221,7 @@ export async function matchesContextRecall(
     reason: pass
       ? `Recall ${score.toFixed(2)} is >= ${threshold}`
       : `Recall ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+    tokensUsed: normalizeMatcherResponseTokenUsage(resp),
     metadata,
   };
 }
@@ -258,7 +259,7 @@ export async function matchesContextRelevance(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
@@ -313,7 +314,7 @@ export async function matchesContextRelevance(
     reason: pass
       ? `Context relevance ${score.toFixed(2)} is >= ${threshold}`
       : `Context relevance ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+    tokensUsed: normalizeMatcherResponseTokenUsage(resp),
     metadata,
   };
 }
@@ -368,7 +369,7 @@ export async function matchesContextFaithfulness(
     },
     providerCallContext,
   );
-  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  accumulateResponseTokenUsage(tokensUsed, resp);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
   }
@@ -395,7 +396,7 @@ export async function matchesContextFaithfulness(
     },
     providerCallContext,
   );
-  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  accumulateResponseTokenUsage(tokensUsed, resp);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
   }

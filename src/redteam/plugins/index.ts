@@ -8,6 +8,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -39,9 +40,10 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
+import { attachProviderTokenUsage, mergeProviderTokenUsage } from '../strategies/util';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { type RedteamPluginBase } from './base';
+import { isTerminalRedteamPluginGenerationError, type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
@@ -80,13 +82,29 @@ import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
+import type {
+  ApiProvider,
+  PluginActionParams,
+  PluginConfig,
+  TestCase,
+  TokenUsage,
+} from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
+}
+
+class RemotePluginGenerationError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'RemotePluginGenerationError';
+  }
 }
 
 type PluginClass<T extends PluginConfig> = new (
@@ -238,10 +256,12 @@ function stripRetryModifier(testCase: TestCase): TestCase {
 
 function dedupeTestCases(testCases: TestCase[]): TestCase[] {
   const deduped: TestCase[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, TestCase>();
 
   for (const testCase of testCases) {
     const normalizedTestCase = stripRetryModifier(testCase);
+    const { providerTokenUsage, ...metadataWithoutProviderTokenUsage } =
+      normalizedTestCase.metadata ?? {};
     const provider =
       typeof normalizedTestCase.provider === 'string'
         ? normalizedTestCase.provider
@@ -252,15 +272,26 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
       vars: normalizedTestCase.vars,
       assert: normalizedTestCase.assert,
       options: normalizedTestCase.options,
-      metadata: normalizedTestCase.metadata,
+      metadata: normalizedTestCase.metadata ? metadataWithoutProviderTokenUsage : undefined,
       provider,
     });
 
-    if (seen.has(dedupKey)) {
+    const existingTestCase = seen.get(dedupKey);
+    if (existingTestCase) {
+      const mergedTokenUsage = mergeProviderTokenUsage(
+        existingTestCase.metadata?.providerTokenUsage,
+        providerTokenUsage,
+      );
+      if (mergedTokenUsage) {
+        existingTestCase.metadata = {
+          ...existingTestCase.metadata,
+          providerTokenUsage: mergedTokenUsage,
+        };
+      }
       continue;
     }
 
-    seen.add(dedupKey);
+    seen.set(dedupKey, normalizedTestCase);
     deduped.push(normalizedTestCase);
   }
 
@@ -292,13 +323,50 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       }
 
       let retryInstructions: string | undefined;
+      let rejectedTokenUsage: TokenUsage | undefined;
+      const rethrowWithRejectedTokenUsage = (error: unknown): never => {
+        if (!rejectedTokenUsage) {
+          throw error;
+        }
+        const errorTokenUsage = getErrorTokenUsage(error);
+        const tokenUsage = mergeProviderTokenUsage(
+          rejectedTokenUsage,
+          errorTokenUsage
+            ? {
+                ...errorTokenUsage,
+                numRequests: errorTokenUsage.numRequests ?? 1,
+              }
+            : undefined,
+        )!;
+        const errorCarrier = error && typeof error === 'object' ? error : new Error(String(error));
+        throw Object.assign(errorCarrier, { tokenUsage });
+      };
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
-        const generatedTestCases = await pluginFactory.action({
-          ...params,
-          n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
-        });
+        let generatedTestCases: TestCase[];
+        try {
+          generatedTestCases = await pluginFactory.action({
+            ...params,
+            n: Math.max(params.n - currentTestCases.length, 0),
+            config: retryConfig,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            rethrowWithRejectedTokenUsage(error);
+          }
+          if (isTerminalRedteamPluginGenerationError(error)) {
+            rethrowWithRejectedTokenUsage(error);
+          }
+          const errorTokenUsage = getErrorTokenUsage(error);
+          if (!errorTokenUsage) {
+            return rethrowWithRejectedTokenUsage(error);
+          }
+          rejectedTokenUsage = mergeProviderTokenUsage(rejectedTokenUsage, {
+            ...errorTokenUsage,
+            numRequests: errorTokenUsage.numRequests ?? 1,
+          });
+          return [];
+        }
 
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
@@ -312,6 +380,10 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
           if (violation) {
             rejectedPromptLengths.push(violation.length);
             rejectedPromptLimit = violation.limit;
+            rejectedTokenUsage = mergeProviderTokenUsage(
+              rejectedTokenUsage,
+              testCase.metadata?.providerTokenUsage,
+            );
             continue;
           }
 
@@ -333,7 +405,26 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         dedupeTestCases,
       );
 
-      return testCases.map(stripRetryModifier);
+      const strippedTestCases = testCases.map(stripRetryModifier);
+      if (strippedTestCases.length === 0 && rejectedTokenUsage) {
+        throw new RemotePluginGenerationError(
+          `Plugin generation failed after retries for ${pluginFactory.key}`,
+          rejectedTokenUsage,
+        );
+      }
+      if (!rejectedTokenUsage) {
+        return strippedTestCases;
+      }
+
+      const preferredUsageTargetIndex =
+        pluginFactory.key === 'cross-session-leak'
+          ? strippedTestCases.findIndex((testCase) => testCase.metadata?.crossSessionLeakMatch)
+          : 0;
+      return attachProviderTokenUsage(
+        strippedTestCases,
+        rejectedTokenUsage,
+        preferredUsageTargetIndex >= 0 ? preferredUsageTargetIndex : 0,
+      );
     },
   };
 }
@@ -386,6 +477,7 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
+    tokenUsage?: TokenUsage;
   }
 
   try {
@@ -400,16 +492,39 @@ async function fetchRemoteTestCases(
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      if (data?.tokenUsage) {
+        throw new RemotePluginGenerationError(
+          `Remote generation failed for ${key}`,
+          data.tokenUsage,
+        );
+      }
       return [];
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
+    if (ret.length === 0 && data.tokenUsage) {
+      throw new RemotePluginGenerationError(
+        `Remote generation returned no test cases for ${key}`,
+        data.tokenUsage,
+      );
+    }
+    if (ret.length > 0 && data.tokenUsage) {
+      const preferredUsageTargetIndex =
+        key === 'cross-session-leak'
+          ? ret.findIndex((testCase) => testCase.metadata?.crossSessionLeakMatch)
+          : 0;
+      const usageTargetIndex = preferredUsageTargetIndex >= 0 ? preferredUsageTargetIndex : 0;
+      return attachProviderTokenUsage(ret, data.tokenUsage, usageTargetIndex);
+    }
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);
+    if (err instanceof RemotePluginGenerationError) {
+      throw err;
+    }
     return [];
   }
 }

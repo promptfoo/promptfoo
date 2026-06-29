@@ -621,6 +621,71 @@ describe('App component target selection', () => {
     expect(overviewTotal).toHaveTextContent('1');
   });
 
+  it('falls back to result rows when the stored probe count is zero', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', false),
+    ]);
+    evalData.prompts![0]!.metrics = { tokenUsage: { total: 0, numRequests: 0 } } as any;
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await screen.findByTestId('overview-total');
+    expect(screen.getByText('Depth:').parentElement).toHaveTextContent('1 probes');
+  });
+
+  it('labels red-team token populations in the report header tooltip', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', false),
+    ]);
+    evalData.prompts![0]!.metrics = {
+      tokenUsage: {
+        total: 100,
+        numRequests: 2,
+        assertions: {
+          total: 25,
+        },
+      },
+    } as any;
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await screen.findByTestId('overview-total');
+    await userEvent.hover(screen.getByText('Depth:').parentElement!);
+    expect(await screen.findAllByText('100 non-grading tokens')).not.toHaveLength(0);
+    expect(screen.getAllByText('25 grading tokens')).not.toHaveLength(0);
+  });
+
+  it('shows grading-only usage in the report header tooltip', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', false),
+    ]);
+    evalData.prompts![0]!.metrics = {
+      tokenUsage: {
+        total: 0,
+        numRequests: 0,
+        assertions: {
+          total: 25,
+        },
+      },
+    } as any;
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await screen.findByTestId('overview-total');
+    await userEvent.hover(screen.getByText('Depth:').parentElement!);
+    expect(await screen.findAllByText('25 grading tokens')).not.toHaveLength(0);
+    expect(screen.queryByText('0 non-grading tokens')).not.toBeInTheDocument();
+  });
+
   it('should update displayed statistics when a different target is selected', async () => {
     const results = [
       createComponentMockResult(0, 'plugin1', true),

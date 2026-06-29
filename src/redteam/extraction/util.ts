@@ -6,18 +6,39 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
-import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
+import type { ApiProvider, RemoteGenerationContext, TokenUsage } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
   result: z.union([z.string(), z.array(z.string())]),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export type RedTeamTask = 'purpose' | 'entities';
+export type ExtractionResult<T> = {
+  result: T;
+  tokenUsage?: TokenUsage;
+};
+
+class ExtractionError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'ExtractionError';
+  }
+}
+
+export function getExtractionErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  return error instanceof ExtractionError ? error.tokenUsage : undefined;
+}
 
 /**
  * Fetches remote generation results for a given task and prompts.
@@ -39,6 +60,14 @@ export async function fetchRemoteGeneration(
   prompts: string[],
   generationContext?: RemoteGenerationContext,
 ): Promise<string | string[]> {
+  return (await fetchRemoteGenerationWithMetadata(task, prompts, generationContext)).result;
+}
+
+export async function fetchRemoteGenerationWithMetadata(
+  task: RedTeamTask,
+  prompts: string[],
+  generationContext?: RemoteGenerationContext,
+): Promise<ExtractionResult<string | string[]>> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteGeneration should never be called when remote generation is disabled',
@@ -63,8 +92,26 @@ export async function fetchRemoteGeneration(
       'json',
     );
 
-    const parsedResponse = RedTeamGenerationResponse.parse(response.data);
-    return parsedResponse.result;
+    if (response.status !== 200) {
+      throw new ExtractionError(
+        `Remote extraction failed for task '${task}' with status ${response.status}`,
+        getErrorTokenUsage(response.data),
+      );
+    }
+
+    const parsedResponse = RedTeamGenerationResponse.safeParse(response.data);
+    if (!parsedResponse.success) {
+      const tokenUsage = getErrorTokenUsage(response.data);
+      if (tokenUsage) {
+        throw new ExtractionError(parsedResponse.error.message, tokenUsage);
+      }
+      throw parsedResponse.error;
+    }
+
+    return {
+      result: parsedResponse.data.result,
+      ...(parsedResponse.data.tokenUsage ? { tokenUsage: parsedResponse.data.tokenUsage } : {}),
+    };
   } catch (error) {
     logger.warn(`Error using remote generation for task '${task}': ${error}`);
     throw error;
@@ -76,21 +123,62 @@ export async function callExtraction<T>(
   prompt: string,
   processOutput: (output: string) => T,
 ): Promise<T> {
-  const { output, error } = await provider.callApi(
-    JSON.stringify([{ role: 'user', content: prompt }]),
-  );
+  return (await callExtractionWithMetadata(provider, prompt, processOutput)).result;
+}
+
+export async function callExtractionWithMetadata<T>(
+  provider: ApiProvider,
+  prompt: string,
+  processOutput: (output: string) => T,
+): Promise<ExtractionResult<T>> {
+  let response: Awaited<ReturnType<ApiProvider['callApi']>>;
+  try {
+    response = await provider.callApi(JSON.stringify([{ role: 'user', content: prompt }]));
+  } catch (error) {
+    const errorTokenUsage = getErrorTokenUsage(error);
+    throw new ExtractionError(
+      error instanceof Error ? error.message : String(error),
+      errorTokenUsage
+        ? {
+            ...errorTokenUsage,
+            ...(errorTokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+          }
+        : { numRequests: 1 },
+    );
+  }
+
+  const { output, error, tokenUsage } = response;
+  const normalizedTokenUsage = tokenUsage
+    ? {
+        ...tokenUsage,
+        ...(tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+      }
+    : { numRequests: 1 };
 
   if (error) {
     logger.error(`Error in extraction: ${error}`);
-    throw new Error(`Failed to perform extraction: ${error}`);
+    throw new ExtractionError(`Failed to perform extraction: ${error}`, normalizedTokenUsage);
   }
 
   if (typeof output !== 'string') {
     logger.error(`Invalid output from extraction. Got: ${output}`);
-    throw new Error(`Invalid extraction output: expected string, got: ${output}`);
+    throw new ExtractionError(
+      `Invalid extraction output: expected string, got: ${output}`,
+      normalizedTokenUsage,
+    );
   }
 
-  return processOutput(output);
+  try {
+    return {
+      result: processOutput(output),
+      tokenUsage: normalizedTokenUsage,
+    };
+  } catch (error) {
+    throw new ExtractionError(
+      error instanceof Error ? error.message : String(error),
+      normalizedTokenUsage,
+    );
+  }
 }
 
 export function formatPrompts(prompts: string[]): string {

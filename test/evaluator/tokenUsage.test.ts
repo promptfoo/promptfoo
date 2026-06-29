@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { filterTests } from '../../src/util/eval/filterTests';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -96,7 +97,6 @@ describeEvaluator('evaluator token usage', () => {
           prompt: 30,
           completion: 20,
           cached: 5,
-          numRequests: 1,
         },
       }),
     };
@@ -140,7 +140,7 @@ describeEvaluator('evaluator token usage', () => {
         prompt: 30,
         completion: 20,
         cached: 5,
-        numRequests: 0,
+        numRequests: 1, // Assertion requests tracked separately
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -158,5 +158,348 @@ describeEvaluator('evaluator token usage', () => {
 
     // The main verification is at the stats level (already done above)
     // Individual results may not always have tokenUsage populated in the summary
+  });
+
+  it('should preserve provider usage when a provider throws a token-carrying error', async () => {
+    const providerWithErrorUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-error-usage'),
+      callApi: vi.fn().mockRejectedValue(
+        Object.assign(new Error('provider failed'), {
+          tokenUsage: { total: 9, prompt: 5, completion: 4 },
+        }),
+      ),
+    };
+
+    const [result] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      provider: providerWithErrorUsage,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      response: {
+        error: expect.stringContaining('provider failed'),
+        tokenUsage: { total: 9, prompt: 5, completion: 4 },
+      },
+      tokenUsage: { total: 9, prompt: 5, completion: 4 },
+    });
+    expect(result.response?.tokenUsage).not.toHaveProperty('numRequests');
+
+    const testSuite: TestSuite = {
+      providers: [providerWithErrorUsage],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.tokenUsage.numRequests).toBe(1);
+    expect(summary.results[0].response?.tokenUsage).not.toHaveProperty('numRequests');
+  });
+
+  it('should count a successful provider response that omits token usage', async () => {
+    const providerWithoutUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-without-usage'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test response' }),
+    };
+
+    const [result] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      provider: providerWithoutUsage,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 1,
+    });
+  });
+
+  it('includes generation totals without counting generation requests as probes', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+
+    const [result] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: true,
+      provider: providerWithTokens,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: {
+          providerTokenUsage: {
+            total: 7,
+            prompt: 4,
+            completion: 3,
+            numRequests: 3,
+          },
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 17,
+      prompt: 10,
+      completion: 7,
+      numRequests: 1,
+    });
+
+    const [laterPromptResult] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 1,
+      repeatIndex: 0,
+      isRedteam: true,
+      provider: providerWithTokens,
+      prompt: { raw: 'Second prompt', label: 'second-label' },
+      test: result.testCase,
+      conversations: {},
+      registers: {},
+    });
+    expect(laterPromptResult.tokenUsage).toMatchObject({
+      total: 10,
+      prompt: 6,
+      completion: 4,
+      numRequests: 1,
+    });
+  });
+
+  it('moves default generation usage onto only the first resolved test', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: {
+          providerTokenUsage: {
+            total: 7,
+            prompt: 4,
+            completion: 3,
+            numRequests: 2,
+          },
+        },
+      },
+      tests: [
+        {
+          metadata: {
+            providerTokenUsage: {
+              total: 3,
+              prompt: 2,
+              completion: 1,
+              numRequests: 1,
+            },
+          },
+        },
+        {},
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.tokenUsage).toMatchObject({
+      total: 30,
+      prompt: 18,
+      completion: 12,
+      numRequests: 2,
+    });
+    expect(summary.results[0].testCase?.metadata?.providerTokenUsage).toMatchObject({
+      total: 10,
+      prompt: 6,
+      completion: 4,
+      numRequests: 3,
+    });
+    expect(summary.results[1].testCase?.metadata).not.toHaveProperty('providerTokenUsage');
+  });
+
+  it('moves default generation usage before scenario metadata inheritance', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('Test prompt {{ role }}')],
+      defaultTest: {
+        metadata: {
+          providerTokenUsage: {
+            total: 7,
+            prompt: 4,
+            completion: 3,
+            numRequests: 2,
+          },
+        },
+      },
+      scenarios: [
+        {
+          config: [{ vars: { role: 'user' } }, { vars: { role: 'admin' } }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { filterRange: '1:2' });
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.tokenUsage).toMatchObject({
+      total: 17,
+      prompt: 10,
+      completion: 7,
+      numRequests: 1,
+    });
+    expect(summary.results[0].testCase?.metadata?.providerTokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 2,
+    });
+    expect(summary.results).toHaveLength(1);
+    const defaultTest = testSuite.defaultTest;
+    expect(defaultTest).toBeTypeOf('object');
+    if (!defaultTest || typeof defaultTest === 'string') {
+      throw new Error('Expected object defaultTest');
+    }
+    expect(defaultTest.metadata?.providerTokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 2,
+    });
+  });
+
+  it('consolidates non-first generation carriers before range filtering', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          metadata: {
+            providerTokenUsage: {
+              total: 3,
+              prompt: 2,
+              completion: 1,
+              numRequests: 1,
+            },
+          },
+        },
+        {
+          metadata: {
+            providerTokenUsage: {
+              total: 7,
+              prompt: 4,
+              completion: 3,
+              numRequests: 2,
+            },
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { filterRange: '1:2' });
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.tokenUsage).toMatchObject({
+      total: 20,
+      prompt: 12,
+      completion: 8,
+      numRequests: 1,
+    });
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].testCase?.metadata?.providerTokenUsage).toMatchObject({
+      total: 10,
+      prompt: 6,
+      completion: 4,
+      numRequests: 3,
+    });
+  });
+
+  it('preserves default generation usage through config-level test filtering', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: {
+          providerTokenUsage: {
+            total: 7,
+            prompt: 4,
+            completion: 3,
+            numRequests: 2,
+          },
+        },
+      },
+      tests: [{ description: 'existing' }, { description: 'generated' }],
+    };
+    testSuite.tests = await filterTests(testSuite, { firstN: 1 });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results).toHaveLength(1);
+    expect(summary.stats.tokenUsage).toMatchObject({
+      total: 17,
+      prompt: 10,
+      completion: 7,
+      numRequests: 1,
+    });
+    expect(summary.results[0].testCase?.metadata?.providerTokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 2,
+    });
   });
 });

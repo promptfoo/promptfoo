@@ -11,11 +11,13 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
+import { mergeProviderTokenUsage } from '../../redteam/strategies/util';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 
 import type { ConversationMessage } from '../../redteam/types';
+import type { TokenUsage } from '../../types/shared';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -23,6 +25,16 @@ export class RemoteGenerationDisabledError extends Error {
   constructor() {
     super('Remote generation is disabled. Enable remote generation to test multi-turn strategies.');
     this.name = 'RemoteGenerationDisabledError';
+  }
+}
+
+export class MultiTurnGenerationError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'MultiTurnGenerationError';
   }
 }
 
@@ -244,6 +256,45 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
+function getNestedTokenUsage(
+  metadata: Record<string, unknown>,
+  key: 'goat' | 'hydra' | 'mischievousUser',
+): TokenUsage | undefined {
+  const nestedMetadata = metadata[key];
+  if (!nestedMetadata || typeof nestedMetadata !== 'object') {
+    return undefined;
+  }
+
+  return (nestedMetadata as { tokenUsage?: TokenUsage }).tokenUsage;
+}
+
+async function getRemoteTaskError(
+  response: Response,
+  taskName: string,
+): Promise<MultiTurnGenerationError> {
+  const responseText = await response.text();
+  let parsedBody: { error?: string; message?: string; tokenUsage?: TokenUsage } | undefined;
+  try {
+    parsedBody = JSON.parse(responseText) as {
+      error?: string;
+      message?: string;
+      tokenUsage?: TokenUsage;
+    };
+  } catch {
+    // Fall back to the raw response body below.
+  }
+
+  const detail =
+    parsedBody?.message ||
+    parsedBody?.error ||
+    (responseText ? responseText : `${response.status} ${response.statusText}`);
+
+  return new MultiTurnGenerationError(
+    `${taskName} task failed with status ${response.status}: ${detail}`,
+    parsedBody?.tokenUsage,
+  );
+}
+
 async function handleGoatStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
@@ -274,7 +325,7 @@ async function handleGoatStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
+    throw await getRemoteTaskError(response, 'GOAT');
   }
 
   const data = await response.json();
@@ -282,7 +333,10 @@ async function handleGoatStrategy(
   const nextQuestion = attackerMessage?.content;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('GOAT task did not return a valid next question');
+    throw new MultiTurnGenerationError(
+      'GOAT task did not return a valid next question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -293,9 +347,16 @@ async function handleGoatStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
       goat: {
         message: attackerMessage,
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: mergeProviderTokenUsage(
+          getNestedTokenUsage(ctx.baseMetadata, 'goat'),
+          data?.tokenUsage,
+        ),
       },
     },
   };
@@ -328,9 +389,7 @@ async function handleMischievousUserStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Mischievous User task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteTaskError(response, 'Mischievous User');
   }
 
   const data = await response.json();
@@ -343,7 +402,10 @@ async function handleMischievousUserStrategy(
         : '';
 
   if (!nextMessage) {
-    throw new Error('Mischievous User task did not return a valid message');
+    throw new MultiTurnGenerationError(
+      'Mischievous User task did not return a valid message',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextMessage.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -355,8 +417,15 @@ async function handleMischievousUserStrategy(
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
       instructions,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
       mischievousUser: {
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: mergeProviderTokenUsage(
+          getNestedTokenUsage(ctx.baseMetadata, 'mischievousUser'),
+          data?.tokenUsage,
+        ),
       },
     },
   };
@@ -440,7 +509,7 @@ async function handleHydraStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
+    throw await getRemoteTaskError(response, 'Hydra');
   }
 
   const data = await response.json();
@@ -455,7 +524,10 @@ async function handleHydraStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new Error('Hydra task did not return a valid next prompt');
+    throw new MultiTurnGenerationError(
+      'Hydra task did not return a valid next prompt',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -466,11 +538,18 @@ async function handleHydraStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
       hydra: {
         testRunId: hydraTestRunId,
         scanId: hydraScanId,
         stateful,
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: mergeProviderTokenUsage(
+          getNestedTokenUsage(ctx.baseMetadata, 'hydra'),
+          data?.tokenUsage,
+        ),
       },
     },
   };
@@ -525,9 +604,7 @@ async function handleCrescendoLikeStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Crescendo task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteTaskError(response, 'Crescendo');
   }
 
   const data = await response.json();
@@ -546,7 +623,10 @@ async function handleCrescendoLikeStrategy(
   const nextQuestion = parsedResult?.generatedQuestion;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('Crescendo task did not return a valid generated question');
+    throw new MultiTurnGenerationError(
+      'Crescendo task did not return a valid generated question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || roundNumber >= ctx.resolvedMaxTurns;
@@ -559,7 +639,10 @@ async function handleCrescendoLikeStrategy(
       goal: ctx.effectiveGoal,
       rationaleBehindJailbreak: parsedResult?.rationaleBehindJailbreak,
       lastResponseSummary: parsedResult?.lastResponseSummary,
-      providerTokenUsage: data?.tokenUsage,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
     },
   };
 }

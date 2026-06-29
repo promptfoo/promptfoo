@@ -1,7 +1,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
-import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import {
+  DEFAULT_PURPOSE,
+  extractSystemPurpose,
+  extractSystemPurposeWithMetadata,
+} from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -88,6 +92,28 @@ describe('System Purpose Extractor', () => {
     );
   });
 
+  it('should preserve remote extraction token usage through the metadata helper', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        task: 'purpose',
+        result: 'Remote extracted purpose',
+        tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await extractSystemPurposeWithMetadata(provider, ['prompt1', 'prompt2']);
+
+    expect(result).toEqual({
+      result: 'Remote extracted purpose',
+      tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+    });
+  });
+
   it('should not fall back to local extraction when remote generation fails', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     const originalOpenaiKey = process.env.OPENAI_API_KEY;
@@ -100,6 +126,28 @@ describe('System Purpose Extractor', () => {
     mockProcessEnv({ OPENAI_API_KEY: originalOpenaiKey });
   });
 
+  it('should preserve remote error token usage through the metadata helper', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        error: 'Remote purpose extraction failed',
+        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      },
+      status: 500,
+      statusText: 'Internal Server Error',
+      cached: false,
+    });
+
+    const result = await extractSystemPurposeWithMetadata(provider, ['prompt1', 'prompt2']);
+
+    expect(result).toEqual({
+      result: '',
+      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+    });
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should use local extraction when remote generation is disabled', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
@@ -108,6 +156,55 @@ describe('System Purpose Extractor', () => {
     expect(result).toBe('Extracted system purpose');
     expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
     expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should preserve local extraction token usage through the metadata helper', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
+    vi.mocked(provider.callApi).mockResolvedValue({
+      output: '<Purpose>Extracted system purpose</Purpose>',
+      tokenUsage: { total: 13, prompt: 8, completion: 5 },
+    });
+
+    const result = await extractSystemPurposeWithMetadata(provider, ['prompt']);
+
+    expect(result).toEqual({
+      result: 'Extracted system purpose',
+      tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+    });
+  });
+
+  it('should preserve local extraction usage when the provider returns an error', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
+    vi.mocked(provider.callApi).mockResolvedValue({
+      error: 'purpose extraction failed',
+      tokenUsage: { total: 9, prompt: 5, completion: 4 },
+    });
+
+    const result = await extractSystemPurposeWithMetadata(provider, ['prompt']);
+
+    expect(result).toEqual({
+      result: '',
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+  });
+
+  it('should continue to use remote purpose extraction when local credentials are available', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'sk-local',
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false',
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { task: 'purpose', result: 'Remote extracted purpose' },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await extractSystemPurpose(provider, ['prompt']);
+
+    expect(result).toBe('Remote extracted purpose');
+    expect(fetchWithCache).toHaveBeenCalled();
+    expect(provider.callApi).not.toHaveBeenCalled();
   });
 
   it('should extract system purpose when returned without xml tags', async () => {

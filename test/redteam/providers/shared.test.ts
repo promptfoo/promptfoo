@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -13,6 +14,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   type Message,
+  mergeStoredGraderResultTokenUsage,
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
@@ -29,6 +31,7 @@ import type {
   AssertionSet,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Prompt,
 } from '../../../src/types/index';
 
@@ -446,6 +449,24 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('preserves token usage carried by thrown target errors', async () => {
+      const mockProvider = createMockProvider({
+        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(
+          Object.assign(new Error('Billed target error'), {
+            tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+          }),
+        ),
+      });
+
+      const result = await getTargetResponse(mockProvider, 'test prompt');
+
+      expect(result).toEqual({
+        output: '',
+        error: 'Billed target error',
+        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      });
+    });
+
     it('re-throws AbortError from getTargetResponse and does not swallow it', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
@@ -502,6 +523,96 @@ describe('shared redteam provider utilities', () => {
           temperature: TEMPERATURE,
           response_format: { type: 'json_object' },
         });
+      });
+    });
+  });
+
+  describe('mergeStoredGraderResultTokenUsage', () => {
+    it('preserves the latest grader result while accumulating all prior grader token usage', () => {
+      const previousResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'first judge',
+        tokensUsed: {
+          total: 10,
+          prompt: 6,
+          completion: 4,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 2,
+          },
+        },
+      };
+      const latestResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'latest judge',
+        tokensUsed: {
+          total: 20,
+          prompt: 12,
+          completion: 8,
+          numRequests: 2,
+          completionDetails: {
+            reasoning: 3,
+            cacheReadInputTokens: 5,
+          },
+        },
+      };
+
+      expect(mergeStoredGraderResultTokenUsage(latestResult, previousResult)).toEqual({
+        ...latestResult,
+        tokensUsed: {
+          total: 30,
+          prompt: 18,
+          completion: 12,
+          cached: 0,
+          numRequests: 3,
+          completionDetails: {
+            reasoning: 5,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 5,
+            cacheCreationInputTokens: 0,
+          },
+          assertions: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            numRequests: 0,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+          },
+        },
+      });
+    });
+
+    it('infers one request per grader result when counts are omitted', () => {
+      const previousResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'first judge',
+        tokensUsed: { total: 10, prompt: 6, completion: 4 },
+      };
+      const latestResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'latest judge',
+        tokensUsed: { total: 20, prompt: 12, completion: 8 },
+      };
+
+      expect(
+        mergeStoredGraderResultTokenUsage(latestResult, previousResult).tokensUsed,
+      ).toMatchObject({
+        total: 30,
+        prompt: 18,
+        completion: 12,
+        numRequests: 2,
       });
     });
   });
@@ -1029,6 +1140,54 @@ describe('shared redteam provider utilities', () => {
         'blocking-question-analysis',
         BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
       );
+    });
+
+    it('returns token usage when unblocking analysis runs', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      const callApiSpy = vi
+        .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+        .mockResolvedValue({
+          output: { isBlocking: false },
+          tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+        });
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'No blocking question here',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result).toEqual({
+        success: false,
+        tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+      });
+      callApiSpy.mockRestore();
+    });
+
+    it('preserves billed token usage when unblocking analysis rejects', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      const error = Object.assign(new Error('analysis request failed'), {
+        tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+      });
+      const callApiSpy = vi
+        .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+        .mockRejectedValue(error);
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'Can you confirm this request?',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result).toEqual({
+        success: false,
+        tokenUsage: error.tokenUsage,
+      });
+      callApiSpy.mockRestore();
     });
   });
 
