@@ -47,6 +47,16 @@ describe('OpenAI Provider', () => {
       expect(envProvider.getOrganization()).toBe('env-org');
     });
 
+    it('should allow explicitly disabling the organization header', () => {
+      mockProcessEnv({ OPENAI_ORGANIZATION: 'env-org' });
+      const envProvider = new OpenAiGenericProvider('test-model', {
+        config: { organization: '' },
+      });
+
+      expect(envProvider.getOrganization()).toBeUndefined();
+      expect(envProvider.getOpenAiRequestHeaders()).not.toHaveProperty('OpenAI-Organization');
+    });
+
     it('should include the default originator header and allow explicit overrides', () => {
       expect(provider.getOpenAiRequestHeaders()).toEqual({
         [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR,
