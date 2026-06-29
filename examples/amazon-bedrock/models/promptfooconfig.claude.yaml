@@ -16,8 +16,8 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
-    label: Claude Opus 4
+  - id: bedrock:us.anthropic.claude-opus-4-8
+    label: Claude Opus 4.8
     config:
       temperature: 1
       max_tokens: 2048

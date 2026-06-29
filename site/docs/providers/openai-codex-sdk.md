@@ -458,7 +458,17 @@ providers:
       enable_streaming: true
 ```
 
-Deep tracing injects OpenTelemetry environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACEPARENT`, etc.) into the Codex CLI process. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span.
+Codex configures its log exporter through the `config.toml` in `CODEX_HOME`. Point it at Promptfoo's JSON logs receiver using the complete `/v1/logs` endpoint:
+
+```toml title="$CODEX_HOME/config.toml"
+[otel]
+log_user_prompt = false
+exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "json" } }
+```
+
+If you override `cli_env.CODEX_HOME`, put this configuration in that directory. The endpoint is the complete logs URL, not merely the OTLP host and port.
+
+Deep tracing injects `TRACEPARENT` and `promptfoo.trace_id` / `promptfoo.parent_span_id` resource attributes into the Codex CLI process so log records remain linked even when Codex does not attach inline trace context. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span. Standard OpenTelemetry environment variables are also injected, but they do not replace Codex's `[otel]` exporter configuration.
 
 :::warning
 
