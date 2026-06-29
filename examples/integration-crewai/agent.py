@@ -1,53 +1,107 @@
 import asyncio
 import json
 import os
-import re
 import textwrap
-from typing import Any, Dict
+from decimal import Decimal
+from typing import Any, Dict, NoReturn
 
-from crewai import Agent, Crew, Task
+from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
 
 
-def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
+class RecruitmentAgentError(Exception):
+    def __init__(self, message: str, raw_output: str = ""):
+        super().__init__(message)
+        self.raw_output = raw_output
+
+
+def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
+    parsed: Dict[str, Any] = {}
+    for key, value in pairs:
+        if key in parsed:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        parsed[key] = value
+    return parsed
+
+
+def reject_invalid_json_constant(value: str) -> NoReturn:
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def parse_safe_json_float(value: str) -> float:
+    parsed = Decimal(value)
+    if abs(parsed) > MAX_SAFE_JSON_INTEGER:
+        raise ValueError(f"JSON number is outside JavaScript's safe range: {value}")
+    return float(parsed)
+
+
+def parse_safe_json_int(value: str) -> int | float:
+    if value == "-0":
+        return -0.0
+    parsed = int(value)
+    if abs(parsed) > MAX_SAFE_JSON_INTEGER:
+        raise ValueError(f"JSON integer is outside JavaScript's safe range: {value}")
+    return parsed
+
+
+def unwrap_json_fence(output_text: str) -> str | None:
+    if not output_text.startswith("```") or not output_text.endswith("```"):
+        return None
+
+    content = output_text[3:-3].lstrip(" \t")
+    if content[:4].lower() == "json" and (
+        len(content) == 4 or content[4].isspace() or content[4] in "{["
+    ):
+        content = content[4:]
+    return content.strip()
+
+
+def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
-    This agent's goal: find the best Ruby on Rails + React candidates.
+    This agent's goal: find candidates that match the supplied job requirements.
     """
+    llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
         role="Senior Recruiter specializing in technical roles",
-        goal="Find the best candidates for a given set of job requirements and return the results in a valid JSON format.",
+        goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
         backstory=textwrap.dedent("""
-            You are an expert recruiter with years of experience in sourcing top talent for the tech industry.
-            You have a keen eye for detail and are a master at following instructions to the letter, especially when it comes to output formats.
-            You never fail to return a valid JSON object as your final answer.
+            You are a technical recruiter who evaluates candidates against supplied role requirements.
+            Return a single valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        model=model,
-        api_key=OPENAI_API_KEY,  # ✅ Make sure to pass the API key
+        llm=llm,
     )
 
     task = Task(
-        description="Find the top 3 candidates based on the following job requirements: {job_requirements}",
+        description="Return at least 2 candidate entries based on the following job requirements: {job_requirements}",
         expected_output=textwrap.dedent("""
-            A single valid JSON object. The JSON object must have a single key called "candidates".
+            A single valid JSON object with "candidates" and "summary" keys.
             The value of the "candidates" key must be an array of JSON objects.
             Each object in the array must have the following keys: "name", "experience", and "skills".
             - "name" must be a string representing the candidate's name.
             - "experience" must be a string summarizing the candidate's relevant experience.
             - "skills" must be an array of strings listing the candidate's skills.
+            The top-level "summary" value must be a short string explaining the recommendation.
 
-            Example of the expected final output:
+            Example of a valid output shape (with two candidates):
             {
               "candidates": [
                 {
                   "name": "Jane Doe",
                   "experience": "8 years of experience in Ruby on Rails and React, with a strong focus on building scalable web applications.",
                   "skills": ["Ruby on Rails", "React", "JavaScript", "PostgreSQL", "TDD"]
+                },
+                {
+                  "name": "John Smith",
+                  "experience": "6 years of experience building Ruby on Rails and React applications.",
+                  "skills": ["Ruby on Rails", "React", "TypeScript", "PostgreSQL"]
                 }
-              ]
+              ],
+              "summary": "Jane Doe and John Smith are strong matches based on their Rails and React experience."
             }
         """).strip(),
         agent=agent,
@@ -58,54 +112,53 @@ def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
     return crew
 
 
-async def run_recruitment_agent(prompt, model="openai:gpt-4.1"):
+async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
+    Raises RecruitmentAgentError when the provider cannot return valid output.
     """
     # Check if API key is set
     if not OPENAI_API_KEY:
-        return {
-            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
-        }
+        raise RecruitmentAgentError(
+            "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
+        )
 
-    crew = get_recruitment_agent(model)
     try:
-        # ⚡ Trigger the agent to start working
-        crew.kickoff(inputs={"job_requirements": prompt})
+        crew = get_recruitment_agent(model)
 
-        # The result might be a string, or an object with a 'raw' attribute.
-        output_text = ""
-        if result:
-            if hasattr(result, "raw") and result.raw:
-                output_text = result.raw
-            elif isinstance(result, str):
-                output_text = result
+        # ⚡ Trigger the agent to start working
+        output_text = crew.kickoff(inputs={"job_requirements": prompt}).raw.strip()
 
         if not output_text:
-            return {"error": "CrewAI agent returned an empty response."}
+            raise RecruitmentAgentError("CrewAI agent returned an empty response.")
 
-        # Use regex to find the JSON block, even with markdown
-        json_match = re.search(r"```json\s*([\s\S]*?)\s*```|({[\s\S]*})", output_text)
-        if not json_match:
-            return {
-                "error": "No valid JSON block found in the agent's output.",
-                "raw_output": output_text,
-            }
+        # Accept either a JSON object or one complete Markdown JSON fence.
+        fenced_json = unwrap_json_fence(output_text)
+        if fenced_json is None and not output_text.startswith("{"):
+            raise RecruitmentAgentError(
+                "No valid JSON block found in the agent's output.", output_text
+            )
 
-        json_string = json_match.group(1) or json_match.group(2)
+        json_string = fenced_json if fenced_json is not None else output_text
 
         try:
-            return json.loads(json_string)
-        except json.JSONDecodeError as e:
-            return {
-                "error": f"Failed to parse JSON from agent output: {str(e)}",
-                "raw_output": json_string,
-            }
+            return json.loads(
+                json_string,
+                object_pairs_hook=reject_duplicate_json_keys,
+                parse_constant=reject_invalid_json_constant,
+                parse_float=parse_safe_json_float,
+                parse_int=parse_safe_json_int,
+            )
+        except (json.JSONDecodeError, ValueError) as e:
+            raise RecruitmentAgentError(
+                f"Failed to parse JSON from agent output: {str(e)}", json_string
+            ) from e
 
+    except RecruitmentAgentError:
+        raise
     except Exception as e:
-        # 🔥 Catch and report any error as part of the output
-        return {"error": f"An unexpected error occurred: {str(e)}"}
+        raise RecruitmentAgentError(f"An unexpected error occurred: {str(e)}") from e
 
 
 def call_api(
@@ -118,13 +171,12 @@ def call_api(
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-4.1")
+        model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
-
-        if "error" in result:
-            return {"error": result["error"], "raw": result.get("raw_output", "")}
         return {"output": result}
 
+    except RecruitmentAgentError as e:
+        return {"error": str(e), "raw": e.raw_output}
     except Exception as e:
         # 🔥 Catch and return any error as part of the output
         return {"error": f"An error occurred in call_api: {str(e)}"}

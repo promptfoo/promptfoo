@@ -8,71 +8,136 @@ providers:
   - id: 'file://./agent.py'
     label: 'CrewAI Recruitment Agent'
     config:
-      model: 'openai:gpt-4.1'
+      model: 'openai/gpt-4.1'
 
 # It's a good practice to have a defaultTest that applies to all test cases.
 defaultTest:
   assert:
-    # We expect the agent to always return a valid JSON object
+    # Validate the complete structured output contract.
     - type: is-json
-    # We expect the output to contain a "candidates" key
-    - type: javascript
-      value: 'output.hasOwnProperty("candidates")'
+      value:
+        type: object
+        properties:
+          candidates:
+            type: array
+            minItems: 2
+            uniqueItems: true
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
+                experience:
+                  type: string
+                  pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
+                skills:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
+              required: ['name', 'experience', 'skills']
+          summary:
+            type: string
+            pattern: '[^\s\p{C}\p{M}\u115F\u1160\u2800\u3164\uFFA0]'
+        required: ['candidates', 'summary']
 
 tests:
-  - description: 'Senior Full-Stack Engineer'
+  - description: 'Full-Stack Engineer skill match'
     vars:
-      role: 'A Senior Full-Stack Engineer with 8+ years of experience in Python, Django, and React.'
+      role: 'A Full-Stack Engineer with Python, Django, and React experience.'
     assert:
-      - type: javascript
-        value: |
-          // Check that there are at least 2 candidates
-          return output.candidates.length >= 2;
-
       - type: python
         value: |
-          # Check that all candidates have relevant skills
+          import re
+          import unicodedata
+
+          def is_token_character(character):
+              if not character:
+                  return False
+              category = unicodedata.category(character)
+              return character.isalnum() or category[0] in {'M', 'C'} or category == 'Pc'
+
+          def has_skill(candidate, required_skill):
+              needle = required_skill.casefold()
+              for candidate_skill in candidate.get('skills', []):
+                  skill = candidate_skill.casefold()
+                  for match in re.finditer(re.escape(needle), skill):
+                      before = skill[match.start() - 1:match.start()]
+                      after = skill[match.end():match.end() + 1]
+                      if not is_token_character(before) and not is_token_character(after):
+                          return True
+              return False
+
           required_skills = ['python', 'django', 'react']
-          all_have_skills = all(
-              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+          return all(
+              all(has_skill(candidate, required_skill) for required_skill in required_skills)
               for candidate in output.get('candidates', [])
           )
-          return all_have_skills
 
   - description: 'Data Scientist with Machine Learning and Cloud'
     vars:
       role: 'A Data Scientist with machine learning, Python, and cloud (AWS or GCP) experience.'
     assert:
-      - type: javascript
-        value: |
-          // Check that there are at least 2 candidates
-          return output.candidates.length >= 2;
-
       - type: python
         value: |
-          # Check for relevant data science and cloud skills
-          required_skills = ['machine learning', 'python', 'aws', 'gcp', 'tensorflow', 'pytorch']
-          all_have_skills = all(
-              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+          import re
+          import unicodedata
+
+          def is_token_character(character):
+              if not character:
+                  return False
+              category = unicodedata.category(character)
+              return character.isalnum() or category[0] in {'M', 'C'} or category == 'Pc'
+
+          def has_skill(candidate, required_skill):
+              needle = required_skill.casefold()
+              for candidate_skill in candidate.get('skills', []):
+                  skill = candidate_skill.casefold()
+                  for match in re.finditer(re.escape(needle), skill):
+                      before = skill[match.start() - 1:match.start()]
+                      after = skill[match.end():match.end() + 1]
+                      if not is_token_character(before) and not is_token_character(after):
+                          return True
+              return False
+
+          machine_learning_skills = ['machine learning', 'tensorflow', 'pytorch']
+          cloud_skills = ['aws', 'gcp']
+          return all(
+              has_skill(candidate, 'python')
+              and any(has_skill(candidate, skill) for skill in machine_learning_skills)
+              and any(has_skill(candidate, skill) for skill in cloud_skills)
               for candidate in output.get('candidates', [])
           )
-          return all_have_skills
 
-  - description: 'Junior UX/UI Designer'
+  - description: 'UX/UI Designer skill match'
     vars:
-      role: 'A junior UX/UI designer with Figma and Adobe Creative Suite experience.'
+      role: 'A UX/UI designer with Figma and Adobe tools experience.'
     assert:
-      - type: javascript
-        value: |
-          // Check that there are at least 2 candidates
-          return output.candidates.length >= 2;
-
       - type: python
         value: |
-          # Check for relevant design tool skills
-          required_skills = ['figma', 'adobe', 'ux', 'ui', 'user experience', 'user interface']
-          all_have_skills = all(
-              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+          import re
+          import unicodedata
+
+          def is_token_character(character):
+              if not character:
+                  return False
+              category = unicodedata.category(character)
+              return character.isalnum() or category[0] in {'M', 'C'} or category == 'Pc'
+
+          def has_skill(candidate, required_skill):
+              needle = required_skill.casefold()
+              for candidate_skill in candidate.get('skills', []):
+                  skill = candidate_skill.casefold()
+                  for match in re.finditer(re.escape(needle), skill):
+                      before = skill[match.start() - 1:match.start()]
+                      after = skill[match.end():match.end() + 1]
+                      if not is_token_character(before) and not is_token_character(after):
+                          return True
+              return False
+
+          return all(
+              has_skill(candidate, 'figma') and has_skill(candidate, 'adobe')
               for candidate in output.get('candidates', [])
           )
-          return all_have_skills
