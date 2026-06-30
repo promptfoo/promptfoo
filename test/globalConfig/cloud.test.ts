@@ -53,6 +53,19 @@ describe('CloudConfig', () => {
       expect(cloudConfigInstance.getApiHost()).toBe('https://test.api');
       expect(cloudConfigInstance.getApiKey()).toBe('test-key');
     });
+
+    it('should resolve legacy API_HOST after deferred initialization', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      const restoreEnv = mockProcessEnv({ API_HOST: 'https://env-file.example.com' });
+
+      try {
+        const config = new CloudConfig(false);
+
+        expect(config.getApiHost()).toBe('https://env-file.example.com');
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('isEnabled', () => {

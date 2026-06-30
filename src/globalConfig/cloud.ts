@@ -128,7 +128,13 @@ export class CloudConfig {
    * entered via `promptfoo auth login --api-host https://host/` commonly include one.
    */
   private resolveApiHost(): string {
-    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+    // API_HOST is a legacy fallback that may arrive through an early --env-file. Resolve it when
+    // the deferred singleton is first used instead of relying on the module-level compatibility
+    // export, which is captured before argv env loading.
+    const host =
+      this.config.apiHost ||
+      process.env.PROMPTFOO_CLOUD_API_URL ||
+      getEnvString('API_HOST', CLOUD_API_HOST);
     return host.replace(/\/+$/, '');
   }
 
