@@ -58,6 +58,100 @@ describe('config-schema.json', () => {
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
   });
 
+  it('validates scenario config rows and $values refs', () => {
+    const validate = ajv.compile(schema);
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [{ config: [{ vars: { topic: 'billing' } }] }],
+      }),
+    ).toBe(true);
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [
+              { $values: 'file://matrix.yaml' },
+              { $values: 'file://more-matrix.yaml' },
+              { vars: { topic: 'billing' } },
+            ],
+            tests: [{}],
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    for (const tests of [
+      'file://tests.csv',
+      ['file://tests.csv'],
+      [{ path: 'file://generate-tests.js', config: { count: 2 } }],
+    ]) {
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: ['echo'],
+          scenarios: [{ config: [{}], tests }],
+        }),
+      ).toBe(true);
+    }
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [{ config: [{}], tests: [{ path: 42 }] }],
+      }),
+    ).toBe(false);
+
+    // Plain rows stay lenient: unknown keys are allowed so existing configs keep validating.
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [{ vars: { topic: 'billing' }, customAnnotation: 'ok' }],
+            tests: [{}],
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    // Known fields are still type-checked.
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [{ threshold: 'not-a-number' }],
+            tests: [{}],
+          },
+        ],
+      }),
+    ).toBe(false);
+
+    for (const invalidRow of [
+      { $values: 'matrix.yaml' },
+      { $values: 'file://matrix.yaml', description: 'oops' },
+      { $expand: 'file://matrix.yaml' },
+    ]) {
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: ['echo'],
+          scenarios: [{ config: [invalidRow], tests: [{}] }],
+        }),
+        `Expected generated schema to reject ${JSON.stringify(invalidRow)}`,
+      ).toBe(false);
+    }
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
       const findPluginEnums = (

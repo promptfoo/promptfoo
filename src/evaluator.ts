@@ -1,10 +1,12 @@
+import * as fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
@@ -18,6 +20,16 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { redactEnvValues } from './envOverrides';
+import {
+  getScenarioOriginalValue,
+  getScenarioSourceContext,
+  getScenarioTestSourceContext,
+  type ScenarioSourceContext,
+  setScenarioSourceContext,
+  setScenarioTestSourceContext,
+  transferScenarioSourceContext,
+} from './evaluator/scenarioContext';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -37,7 +49,10 @@ import {
   createRateLimitRegistry,
   type RateLimitRegistry,
 } from './scheduler';
-import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
+import {
+  type ProviderCacheEntry,
+  withProviderCallExecutionContext,
+} from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -67,13 +82,19 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { type ApiProvider, isApiProvider } from './types/providers';
+import {
+  type ApiProvider,
+  isApiProvider,
+  isProviderOptions,
+  type ProviderTypeMap,
+} from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
+  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
@@ -82,6 +103,7 @@ import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMe
 import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
+  getProviderIdentifier,
   isAnthropicProvider,
   isGoogleProvider,
   isOpenAiProvider,
@@ -134,9 +156,39 @@ export class PromptSuggestionsRejectedError extends Error {
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+const VAR_FILE_GLOB_OPTIONS = {
+  magicalBraces: true,
+  nodir: true,
+  windowsPathsNoEscape: process.platform === 'win32',
+} as const;
+const scenarioTargetOverrideTests = new WeakSet<AtomicTestCase>();
+const scenarioTargetOverrideContexts = new WeakMap<AtomicTestCase, ScenarioSourceContext>();
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
+
+function resolveLiteralVarPathOrGlob(pattern: string): string[] {
+  if (fs.statSync(pattern, { throwIfNoEntry: false })?.isFile()) {
+    return [pattern];
+  }
+  const { root } = path.parse(pattern);
+  const parts = pattern.slice(root.length).split(path.sep).filter(Boolean);
+  let literalPrefix = root;
+  let consumedParts = 0;
+  for (const part of parts) {
+    const candidate = path.join(literalPrefix, part);
+    if (!fs.statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) {
+      break;
+    }
+    literalPrefix = candidate;
+    consumedParts++;
+  }
+  const globPattern =
+    consumedParts > 0 && hasMagic(pattern, VAR_FILE_GLOB_OPTIONS)
+      ? path.join(escapeGlob(literalPrefix, VAR_FILE_GLOB_OPTIONS), ...parts.slice(consumedParts))
+      : pattern;
+  return globSync(globPattern, VAR_FILE_GLOB_OPTIONS);
+}
 
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
@@ -840,6 +892,7 @@ async function callProviderForRunEval({
   abortSignal,
   evalId,
   filters,
+  originalProvider,
   promptForRender,
   provider,
   rateLimitRegistry,
@@ -852,6 +905,7 @@ async function callProviderForRunEval({
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
+  | 'originalProvider'
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
@@ -876,6 +930,7 @@ async function callProviderForRunEval({
         abortSignal,
         evalId,
         filters,
+        originalProvider,
         promptForRender,
         provider,
         rateLimitRegistry,
@@ -899,6 +954,7 @@ async function callActiveProvider({
   abortSignal,
   evalId,
   filters,
+  originalProvider,
   promptForRender,
   provider,
   rateLimitRegistry,
@@ -909,7 +965,13 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
+  | 'abortSignal'
+  | 'evalId'
+  | 'originalProvider'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
@@ -917,9 +979,9 @@ async function callActiveProvider({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
-  const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
+  const providerForContext = maybeWrapMcpProviderForRedteam(originalProvider ?? provider, test);
   const activeProvider = maybeWrapMcpProviderForRedteam(
-    isApiProvider(test.provider) ? test.provider : originalProvider,
+    isApiProvider(test.provider) ? test.provider : providerForContext,
     test,
   );
   logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
@@ -927,7 +989,7 @@ async function callActiveProvider({
   const callApiContext = buildCallApiContext({
     evalId,
     filters,
-    originalProvider,
+    originalProvider: providerForContext,
     promptForRender,
     repeatIndex,
     test,
@@ -1409,6 +1471,7 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
 
 async function runEvalInternal({
   provider,
+  originalProvider,
   prompt, // raw prompt
   test,
   testSuite,
@@ -1482,6 +1545,7 @@ async function runEvalInternal({
       abortSignal,
       evalId,
       filters,
+      originalProvider,
       promptForRender: {
         ...state.promptForRender,
         config: rendered.setup.prompt.config,
@@ -1725,13 +1789,15 @@ export function generateVarCombinations(
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
       const basePath = cliState.basePath || '';
-      const filePaths =
-        globSync(filePath, {
-          cwd: basePath || process.cwd(),
-          windowsPathsNoEscape: true,
-        }) || [];
+      const resolvedFilePath = path.isAbsolute(filePath)
+        ? filePath
+        : path.resolve(basePath || process.cwd(), filePath);
+      const filePaths = resolveLiteralVarPathOrGlob(resolvedFilePath);
 
-      values = filePaths.map((path: string) => `file://${path}`);
+      values = filePaths.map(
+        (matchedPath) =>
+          `file://${path.isAbsolute(filePath) ? matchedPath : path.relative(basePath || process.cwd(), matchedPath)}`,
+      );
       if (values.length === 0) {
         throw new Error(
           `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
@@ -2035,32 +2101,107 @@ function buildExistingPromptsMap(store: EvaluationStore) {
   return existingPromptsMap;
 }
 
-function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): CompletedPrompt[] {
+function appendCompletedPromptForProvider({
+  existingPromptsMap,
+  prompt,
+  prompts,
+  providerKey,
+}: {
+  existingPromptsMap: Map<string, CompletedPrompt>;
+  prompt: Prompt;
+  prompts: CompletedPrompt[];
+  providerKey: string;
+}): string {
+  const promptId = generateIdFromPrompt(prompt);
+  const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
+  if (existingPrompt?.metrics) {
+    backfillNamedScoreWeights(existingPrompt.metrics);
+  }
+
+  prompts.push({
+    ...prompt,
+    id: promptId,
+    provider: providerKey,
+    label: prompt.label,
+    metrics: existingPrompt?.metrics || createDefaultPromptMetrics(),
+  });
+
+  return promptId;
+}
+
+function appendScenarioTargetOverridePrompts(
+  testSuite: TestSuite,
+  tests: AtomicTestCase[] | undefined,
+  prompts: CompletedPrompt[],
+  existingPromptsMap: Map<string, CompletedPrompt>,
+) {
+  if (!tests?.length) {
+    return;
+  }
+
+  const promptKeys = new Set(prompts.map((prompt) => `${prompt.provider}:${prompt.id}`));
+  for (const testCase of tests) {
+    if (!scenarioTargetOverrideTests.has(testCase) || !isApiProvider(testCase.provider)) {
+      continue;
+    }
+
+    const providerKey = getProviderIdentifier(testCase.provider);
+    const scenarioOverridePromptIndexes = new Set<number>();
+    for (const suiteProvider of testSuite.providers) {
+      if (!isProviderAllowed(suiteProvider, testCase.providers)) {
+        continue;
+      }
+      const suiteProviderKey = getProviderIdentifier(suiteProvider);
+      for (const [promptIndex, prompt] of testSuite.prompts.entries()) {
+        if (scenarioOverridePromptIndexes.has(promptIndex)) {
+          continue;
+        }
+        if (!shouldRunPromptForTest(prompt, suiteProviderKey, testCase, testSuite)) {
+          continue;
+        }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const promptKey = `${providerKey}:${promptId}`;
+        if (!promptKeys.has(promptKey)) {
+          appendCompletedPromptForProvider({
+            existingPromptsMap,
+            prompt,
+            prompts,
+            providerKey,
+          });
+          promptKeys.add(promptKey);
+        }
+        scenarioOverridePromptIndexes.add(promptIndex);
+      }
+    }
+  }
+}
+
+function buildCompletedPrompts(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+  tests?: AtomicTestCase[],
+): CompletedPrompt[] {
   const prompts: CompletedPrompt[] = [];
   const existingPromptsMap = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
     for (const prompt of testSuite.prompts) {
-      const providerKey = provider.label || provider.id();
+      const providerKey = getProviderIdentifier(provider);
       if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
         continue;
       }
 
-      const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
-      if (existingPrompt?.metrics) {
-        backfillNamedScoreWeights(existingPrompt.metrics);
-      }
-
-      prompts.push({
-        ...prompt,
-        id: promptId,
-        provider: providerKey,
-        label: prompt.label,
-        metrics: existingPrompt?.metrics || createDefaultPromptMetrics(),
+      appendCompletedPromptForProvider({
+        existingPromptsMap,
+        prompt,
+        prompts,
+        providerKey,
       });
     }
   }
+
+  appendScenarioTargetOverridePrompts(testSuite, tests, prompts, existingPromptsMap);
 
   return prompts;
 }
@@ -2071,6 +2212,315 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
     promptIndexMap.set(`${prompts[i].provider}:${prompts[i].id}`, i);
   }
   return promptIndexMap;
+}
+
+function withRuntimeProviderEnv<T extends object>(provider: T, env?: EnvOverrides): T {
+  if (env && Object.keys(env).length > 0) {
+    Object.defineProperty(provider, 'env', {
+      value: env,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return provider;
+}
+
+function withScenarioProviderContext<T>(
+  provider: T,
+  sourceContext: ScenarioSourceContext,
+  preserveConfiguredReference: boolean,
+  seen = new WeakMap<object, unknown>(),
+): T {
+  if (!provider || isApiProvider(provider)) {
+    return provider;
+  }
+  if (preserveConfiguredReference) {
+    return provider;
+  }
+  if (typeof provider === 'string') {
+    const contextualProvider = {
+      id: provider,
+      ...(sourceContext.basePath ? { config: { basePath: sourceContext.basePath } } : {}),
+    };
+    return withRuntimeProviderEnv(contextualProvider, sourceContext.envOverrides) as T;
+  }
+  if (isProviderOptions(provider)) {
+    const { env: providerEnv, ...providerWithoutEnv } = provider;
+    const contextualProvider = {
+      ...providerWithoutEnv,
+      ...(sourceContext.basePath || provider.config
+        ? {
+            config: {
+              ...(sourceContext.basePath ? { basePath: sourceContext.basePath } : {}),
+              ...provider.config,
+            },
+          }
+        : {}),
+    };
+    const env = { ...sourceContext.envOverrides, ...providerEnv };
+    return withRuntimeProviderEnv(contextualProvider, env) as T;
+  }
+  if (isProviderTypeMap(provider)) {
+    const cached = seen.get(provider);
+    if (cached !== undefined) {
+      return cached as T;
+    }
+    const resolved: ProviderTypeMap = { ...provider };
+    seen.set(provider, resolved);
+    for (const key of ['text', 'embedding', 'classification', 'moderation'] as const) {
+      if (provider[key]) {
+        resolved[key] = withScenarioProviderContext(
+          provider[key],
+          sourceContext,
+          preserveConfiguredReference,
+          seen,
+        );
+      }
+    }
+    return resolved as T;
+  }
+  if (typeof provider === 'object' && !Array.isArray(provider)) {
+    const cached = seen.get(provider);
+    if (cached !== undefined) {
+      return cached as T;
+    }
+    const resolved: Record<string, unknown> = {};
+    seen.set(provider, resolved);
+    for (const [key, value] of Object.entries(provider as Record<string, unknown>)) {
+      Object.defineProperty(resolved, key, {
+        value: withScenarioProviderContext(value, sourceContext, preserveConfiguredReference, seen),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return resolved as T;
+  }
+  return provider;
+}
+
+function withScenarioAssertionContexts(
+  assertions: AssertionOrSet[] | undefined,
+  sourceContext: ScenarioSourceContext,
+  preserveConfiguredReference: boolean,
+  seen = new WeakMap<object, unknown>(),
+): AssertionOrSet[] | undefined {
+  if (!assertions) {
+    return undefined;
+  }
+  const cachedAssertions = seen.get(assertions);
+  if (cachedAssertions !== undefined) {
+    return cachedAssertions as AssertionOrSet[];
+  }
+  const resolvedAssertions: AssertionOrSet[] = [];
+  seen.set(assertions, resolvedAssertions);
+  let changed = false;
+  for (const assertion of assertions) {
+    const cachedAssertion = seen.get(assertion);
+    if (cachedAssertion !== undefined) {
+      resolvedAssertions.push(cachedAssertion as AssertionOrSet);
+      changed ||= cachedAssertion !== assertion;
+      continue;
+    }
+    const provisional = { ...assertion } as AssertionOrSet;
+    seen.set(assertion, provisional);
+    if (assertion.type === 'assert-set') {
+      const nestedAssertions = withScenarioAssertionContexts(
+        assertion.assert,
+        sourceContext,
+        preserveConfiguredReference,
+        seen,
+      ) as Assertion[];
+      if (nestedAssertions === assertion.assert) {
+        seen.set(assertion, assertion);
+        resolvedAssertions.push(assertion);
+      } else {
+        (provisional as Extract<AssertionOrSet, { type: 'assert-set' }>).assert = nestedAssertions;
+        resolvedAssertions.push(provisional);
+        changed = true;
+      }
+      continue;
+    }
+    const resolvedProvider = withScenarioProviderContext(
+      assertion.provider,
+      sourceContext,
+      preserveConfiguredReference,
+    );
+    if (resolvedProvider === assertion.provider) {
+      seen.set(assertion, assertion);
+      resolvedAssertions.push(assertion);
+    } else {
+      (provisional as Assertion).provider = resolvedProvider;
+      resolvedAssertions.push(provisional);
+      changed = true;
+    }
+  }
+  if (!changed) {
+    seen.set(assertions, assertions);
+    return assertions;
+  }
+  return resolvedAssertions;
+}
+
+function restoreOriginalAssertionProviders(
+  assertions: AssertionOrSet[] | undefined,
+  originalAssertions: unknown,
+): AssertionOrSet[] | undefined {
+  if (!assertions || !Array.isArray(originalAssertions)) {
+    return assertions;
+  }
+  let changed = false;
+  const restored = assertions.map((assertion, index) => {
+    const original = originalAssertions[index];
+    if (!original || typeof original !== 'object' || Array.isArray(original)) {
+      return assertion;
+    }
+    let next = assertion;
+    if (Object.prototype.hasOwnProperty.call(original, 'provider')) {
+      next = {
+        ...next,
+        provider: restoreOriginalProviderTemplates(
+          (assertion as Assertion).provider,
+          (original as Assertion).provider,
+        ),
+      } as AssertionOrSet;
+    }
+    if (assertion.type === 'assert-set') {
+      const nested = restoreOriginalAssertionProviders(
+        assertion.assert,
+        (original as { assert?: unknown }).assert,
+      ) as Assertion[];
+      if (nested !== assertion.assert) {
+        next = { ...next, assert: nested } as AssertionOrSet;
+      }
+    }
+    changed ||= next !== assertion;
+    return next;
+  });
+  return changed ? restored : assertions;
+}
+
+function restoreOriginalProviderTemplates(
+  runtimeValue: unknown,
+  originalValue: unknown,
+  seen = new WeakMap<object, unknown>(),
+): unknown {
+  if (isApiProvider(runtimeValue)) {
+    return runtimeValue;
+  }
+  if (typeof originalValue === 'string' && originalValue.includes('{{')) {
+    return originalValue;
+  }
+  if (
+    !runtimeValue ||
+    typeof runtimeValue !== 'object' ||
+    !originalValue ||
+    typeof originalValue !== 'object'
+  ) {
+    return runtimeValue;
+  }
+  const cached = seen.get(runtimeValue);
+  if (cached !== undefined) {
+    return cached;
+  }
+  if (Array.isArray(runtimeValue) && Array.isArray(originalValue)) {
+    const restored: unknown[] = [];
+    seen.set(runtimeValue, restored);
+    runtimeValue.forEach((value, index) => {
+      restored.push(restoreOriginalProviderTemplates(value, originalValue[index], seen));
+    });
+    return restored;
+  }
+  if (Array.isArray(runtimeValue) || Array.isArray(originalValue)) {
+    return runtimeValue;
+  }
+  const restored = { ...(runtimeValue as Record<string, unknown>) };
+  seen.set(runtimeValue, restored);
+  for (const [key, original] of Object.entries(originalValue as Record<string, unknown>)) {
+    if (Object.prototype.hasOwnProperty.call(runtimeValue, key)) {
+      restored[key] = restoreOriginalProviderTemplates(
+        (runtimeValue as Record<string, unknown>)[key],
+        original,
+        seen,
+      );
+    }
+  }
+  return restored;
+}
+
+function restoreOriginalScenarioProviderRefs<T extends AtomicTestCase>(testCase: T): T {
+  const original = getScenarioOriginalValue(testCase);
+  if (!original || typeof original !== 'object' || Array.isArray(original)) {
+    return testCase;
+  }
+  const originalTest = original as AtomicTestCase;
+  const hasProvider = Object.prototype.hasOwnProperty.call(originalTest, 'provider');
+  const hasOptionsProvider = Object.prototype.hasOwnProperty.call(
+    originalTest.options ?? {},
+    'provider',
+  );
+  const assertions = restoreOriginalAssertionProviders(testCase.assert, originalTest.assert);
+  if (!hasProvider && !hasOptionsProvider && assertions === testCase.assert) {
+    return testCase;
+  }
+  return {
+    ...testCase,
+    ...(hasProvider
+      ? {
+          provider: restoreOriginalProviderTemplates(testCase.provider, originalTest.provider),
+        }
+      : {}),
+    ...(hasOptionsProvider
+      ? {
+          options: {
+            ...testCase.options,
+            provider: restoreOriginalProviderTemplates(
+              testCase.options?.provider,
+              originalTest.options?.provider,
+            ),
+          },
+        }
+      : {}),
+    ...(assertions ? { assert: assertions as Assertion[] } : {}),
+  };
+}
+
+function withScenarioGradingContexts<T extends AtomicTestCase>(
+  testCase: T,
+  sourceContext: ScenarioSourceContext,
+  testSuite: TestSuite,
+): T {
+  testCase = restoreOriginalScenarioProviderRefs(testCase);
+  const preserveConfiguredReference =
+    isDeepStrictEqual(sourceContext.envOverrides ?? {}, testSuite.env ?? {}) &&
+    (sourceContext.basePath === process.cwd() || sourceContext.basePath === cliState.basePath);
+  const optionsProvider = testCase.options?.provider
+    ? withScenarioProviderContext(
+        testCase.options.provider,
+        sourceContext,
+        preserveConfiguredReference,
+      )
+    : undefined;
+  const assertions = withScenarioAssertionContexts(
+    testCase.assert,
+    sourceContext,
+    preserveConfiguredReference,
+  );
+  if (optionsProvider === testCase.options?.provider && assertions === testCase.assert) {
+    return testCase;
+  }
+  return {
+    ...testCase,
+    ...(testCase.options
+      ? {
+          options: {
+            ...testCase.options,
+            ...(optionsProvider ? { provider: optionsProvider } : {}),
+          },
+        }
+      : {}),
+    ...(assertions ? { assert: assertions as Assertion[] } : {}),
+  };
 }
 
 function resolveAssertionProviderReferences(
@@ -2118,6 +2568,177 @@ function resolveRuntimeGradingProviderReferences(
   }
 }
 
+function getRuntimeGradingProviderEnv(_testCase: AtomicTestCase, testSuite: TestSuite) {
+  return testSuite.env;
+}
+
+export function __resolveRuntimeGradingProviderReferencesForTests(
+  testCase: AtomicTestCase,
+  providerMap: Record<string, ApiProvider>,
+  testSuite: TestSuite,
+): void {
+  resolveRuntimeGradingProviderReferences(
+    testCase,
+    providerMap,
+    getRuntimeGradingProviderEnv(testCase, testSuite),
+  );
+}
+
+function loadProviderModule() {
+  return import('./providers');
+}
+
+async function resolveRuntimeTargetProviderReference(
+  provider: AtomicTestCase['provider'],
+  sourceContext?: ScenarioSourceContext,
+): Promise<AtomicTestCase['provider']> {
+  if (!provider || isApiProvider(provider)) {
+    return provider;
+  }
+
+  const { resolveProvider } = await loadProviderModule();
+  // Target overrides follow readTest() semantics: a raw string/options object
+  // creates its own provider instead of inheriting options from a suite provider
+  // that happens to use the same ID.
+  try {
+    return await resolveProvider(provider, Object.create(null), {
+      env: sourceContext?.envOverrides,
+      basePath: sourceContext?.basePath ?? cliState.basePath ?? process.cwd(),
+    });
+  } catch (error) {
+    const detail = redactEnvValues(
+      error instanceof Error ? error.message : String(error),
+      sourceContext?.envOverrides,
+    );
+    throw new Error(`Failed to load scenario target provider: ${detail}`, {
+      cause: new Error(detail),
+    });
+  }
+}
+
+async function resolveScenarioProviderRows<T extends { provider?: AtomicTestCase['provider'] }>(
+  rows: T[],
+  fallbackContext?: ScenarioSourceContext,
+): Promise<T[]> {
+  let changed = false;
+  const resolvedRows = [];
+  for (const row of rows) {
+    if (!row.provider || isApiProvider(row.provider)) {
+      resolvedRows.push(row);
+      continue;
+    }
+    const provider = await resolveRuntimeTargetProviderReference(
+      row.provider,
+      getScenarioTestSourceContext(row) ?? fallbackContext,
+    );
+    changed ||= provider !== row.provider;
+    resolvedRows.push(provider === row.provider ? row : { ...row, provider });
+  }
+  return changed ? resolvedRows : rows;
+}
+
+function hasEligibleProviderPrompt(test: AtomicTestCase, testSuite: TestSuite): boolean {
+  return testSuite.providers.some(
+    (provider) =>
+      isProviderAllowed(provider, test.providers) &&
+      testSuite.prompts.some((prompt) =>
+        shouldRunPromptForTest(prompt, getProviderIdentifier(provider), test, testSuite),
+      ),
+  );
+}
+
+async function resolveScenarioTargetProvidersForTests(
+  tests: AtomicTestCase[],
+  testSuite: TestSuite,
+  ownedProviders?: Set<ApiProvider>,
+): Promise<AtomicTestCase[]> {
+  let changed = false;
+  const resolvedTests: AtomicTestCase[] = [];
+  const cache: Array<{
+    context: ScenarioSourceContext;
+    provider: AtomicTestCase['provider'];
+    resolved: AtomicTestCase['provider'];
+  }> = [];
+  for (const test of tests) {
+    if (!scenarioTargetOverrideTests.has(test) || !test.provider || isApiProvider(test.provider)) {
+      resolvedTests.push(test);
+      continue;
+    }
+    if (!hasEligibleProviderPrompt(test, testSuite)) {
+      resolvedTests.push(test);
+      continue;
+    }
+    const context = scenarioTargetOverrideContexts.get(test) ?? {
+      basePath: cliState.basePath ?? process.cwd(),
+      envOverrides: testSuite.env,
+    };
+    const cachedEntry = cache.find(
+      (entry) =>
+        isDeepStrictEqual(entry.provider, test.provider) &&
+        isDeepStrictEqual(entry.context, context),
+    );
+    const provider =
+      cachedEntry?.resolved ??
+      (await resolveRuntimeTargetProviderReference(test.provider, context));
+    if (!cachedEntry) {
+      cache.push({ context, provider: test.provider, resolved: provider });
+      if (provider && isApiProvider(provider) && !isApiProvider(test.provider)) {
+        ownedProviders?.add(provider);
+      }
+    }
+    if (provider === test.provider) {
+      resolvedTests.push(test);
+      continue;
+    }
+    const resolvedTest = { ...test, provider };
+    scenarioTargetOverrideTests.add(resolvedTest);
+    if (context) {
+      scenarioTargetOverrideContexts.set(resolvedTest, context);
+    }
+    resolvedTests.push(resolvedTest);
+    changed = true;
+  }
+  return changed ? resolvedTests : tests;
+}
+
+async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Promise<TestSuite> {
+  if (!testSuite.scenarios) {
+    return testSuite;
+  }
+
+  let scenariosChanged = false;
+  const resolvedScenarios = [];
+  for (const scenario of testSuite.scenarios) {
+    const sourceContext = getScenarioSourceContext(scenario) ?? {
+      basePath: cliState.basePath ?? process.cwd(),
+      envOverrides: testSuite.env,
+    };
+    const resolvedConfig = await resolveScenarioProviderRows(scenario.config, sourceContext);
+    const resolvedTests = scenario.tests
+      ? await resolveScenarioProviderRows(scenario.tests, sourceContext)
+      : scenario.tests;
+    if (resolvedConfig !== scenario.config || resolvedTests !== scenario.tests) {
+      scenariosChanged = true;
+      resolvedScenarios.push(
+        transferScenarioSourceContext(scenario, {
+          ...scenario,
+          config: resolvedConfig,
+          tests: resolvedTests,
+        }),
+      );
+    } else {
+      resolvedScenarios.push(scenario);
+    }
+  }
+  return scenariosChanged ? { ...testSuite, scenarios: resolvedScenarios } : testSuite;
+}
+
+export async function __resolveScenarioTargetProviderReferencesForTests(
+  testSuite: TestSuite,
+): Promise<TestSuite> {
+  return resolveScenarioTargetProviderReferences(testSuite);
+}
+
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
@@ -2131,12 +2752,138 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   telemetry.record('feature_used', { feature: 'scenarios' });
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
+    const sourceContext = getScenarioSourceContext(scenario) ?? {
+      basePath: cliState.basePath ?? process.cwd(),
+      envOverrides: testSuite.env,
+    };
     for (const data of scenario.config) {
-      tests.push(...buildScenarioTests(testSuite, scenario, data, scenarioIndex));
+      for (const test of scenario.tests || [{}]) {
+        tests.push(mergeScenarioTest(testSuite, data, test, scenarioIndex, sourceContext));
+      }
       scenarioIndex++;
     }
   }
   return tests;
+}
+
+const BEFORE_ALL_SCENARIO_CONTEXT_TOKEN = Symbol('promptfoo.beforeAllScenarioContextToken');
+
+type ScenarioContextTokenTarget = {
+  [BEFORE_ALL_SCENARIO_CONTEXT_TOKEN]?: object;
+};
+
+function captureScenarioContextValue<T extends object>(
+  value: T,
+  context: ScenarioSourceContext | undefined,
+) {
+  const token = {};
+  try {
+    Object.defineProperty(value, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN, {
+      value: token,
+      configurable: true,
+      enumerable: true,
+    });
+  } catch {
+    // Frozen user objects still use identity/deep-equality fallback restoration.
+  }
+  return { value, context, token };
+}
+
+function captureScenarioSourceContexts(scenarios: TestSuite['scenarios']) {
+  return scenarios?.map((scenario) => ({
+    ...captureScenarioContextValue(scenario, getScenarioSourceContext(scenario)),
+    config: scenario.config.map((row) =>
+      captureScenarioContextValue(row, getScenarioTestSourceContext(row)),
+    ),
+    tests:
+      scenario.tests?.map((test) =>
+        captureScenarioContextValue(test, getScenarioTestSourceContext(test)),
+      ) ?? [],
+  }));
+}
+
+function clearCapturedScenarioContextTokens(
+  captured: ReturnType<typeof captureScenarioSourceContexts>,
+): void {
+  for (const scenario of captured ?? []) {
+    Reflect.deleteProperty(scenario.value, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+    for (const entry of [...scenario.config, ...scenario.tests]) {
+      Reflect.deleteProperty(entry.value, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+    }
+  }
+}
+
+function getScenarioContextToken(value: object): object | undefined {
+  return (value as ScenarioContextTokenTarget)[BEFORE_ALL_SCENARIO_CONTEXT_TOKEN];
+}
+
+function restoreCapturedScenarioSourceContexts(
+  scenarios: TestSuite['scenarios'],
+  captured: ReturnType<typeof captureScenarioSourceContexts>,
+): void {
+  const scenariosByToken = new Map((captured ?? []).map((entry) => [entry.token, entry]));
+  scenarios?.forEach((scenario, scenarioIndex) => {
+    const token = getScenarioContextToken(scenario);
+    const indexedSource = captured?.[scenarioIndex];
+    const sourceContexts =
+      (token ? scenariosByToken.get(token) : undefined) ??
+      (indexedSource &&
+      (indexedSource.value === scenario || isDeepStrictEqual(indexedSource.value, scenario))
+        ? indexedSource
+        : captured?.find(
+            (candidate) =>
+              candidate.value === scenario || isDeepStrictEqual(candidate.value, scenario),
+          ));
+    if (!sourceContexts) {
+      for (const entry of [...scenario.config, ...(scenario.tests ?? [])]) {
+        Reflect.deleteProperty(entry, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+      }
+      Reflect.deleteProperty(scenario, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+      return;
+    }
+    if (sourceContexts.context && !getScenarioSourceContext(scenario)) {
+      setScenarioSourceContext(scenario, sourceContexts.context);
+    }
+    const configByToken = new Map(sourceContexts.config.map((entry) => [entry.token, entry]));
+    scenario.config.forEach((row, rowIndex) => {
+      const rowToken = getScenarioContextToken(row);
+      const indexedEntry = sourceContexts.config[rowIndex];
+      const sourceEntry =
+        (rowToken ? configByToken.get(rowToken) : undefined) ??
+        (indexedEntry && (indexedEntry.value === row || isDeepStrictEqual(indexedEntry.value, row))
+          ? indexedEntry
+          : sourceContexts.config.find(
+              (candidate) => candidate.value === row || isDeepStrictEqual(candidate.value, row),
+            ));
+      if (sourceEntry?.context && !getScenarioTestSourceContext(row)) {
+        setScenarioTestSourceContext(row, sourceEntry.context);
+      }
+      Reflect.deleteProperty(row, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+    });
+    const testsByToken = new Map(sourceContexts.tests.map((entry) => [entry.token, entry]));
+    scenario.tests?.forEach((test, testIndex) => {
+      const testToken = getScenarioContextToken(test);
+      const indexedEntry = sourceContexts.tests[testIndex];
+      const sourceEntry =
+        (testToken ? testsByToken.get(testToken) : undefined) ??
+        (indexedEntry &&
+        (indexedEntry.value === test || isDeepStrictEqual(indexedEntry.value, test))
+          ? indexedEntry
+          : sourceContexts.tests.find(
+              (candidate) => candidate.value === test || isDeepStrictEqual(candidate.value, test),
+            ));
+      if (sourceEntry?.context && !getScenarioTestSourceContext(test)) {
+        setScenarioTestSourceContext(test, sourceEntry.context);
+      }
+      Reflect.deleteProperty(test, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+    });
+    Reflect.deleteProperty(scenario, BEFORE_ALL_SCENARIO_CONTEXT_TOKEN);
+  });
+}
+
+/** Test-only: materialize configured tests without executing providers. */
+export function __buildTestsFromSuiteForTests(testSuite: TestSuite): AtomicTestCase[] {
+  return buildTestsFromSuite(testSuite);
 }
 
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
@@ -2146,47 +2893,69 @@ function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
   return testSuite.scenarios ? [] : [{} as AtomicTestCase];
 }
 
-function buildScenarioTests(
-  testSuite: TestSuite,
-  scenario: NonNullable<TestSuite['scenarios']>[number],
-  data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
-  scenarioIndex: number,
-): AtomicTestCase[] {
-  const scenarioTests = scenario.tests || [{}];
-  return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
-}
-
 function mergeScenarioTest(
   testSuite: TestSuite,
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   test: NonNullable<TestSuite['scenarios']>[number]['tests'][number],
   scenarioIndex: number,
+  scenarioSourceContext: ScenarioSourceContext,
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
+  // Expansion happens in config loading (resolveConfigs / createRuntimeTestSuite);
+  // an unexpanded ref here would silently spread junk into the merged test case.
+  invariant(
+    !(data && typeof data === 'object' && ('$values' in data || '$expand' in data)),
+    'Unexpanded scenario config $values reference reached the evaluator',
+  );
+  const dataSourceContext = getScenarioTestSourceContext(data) ?? scenarioSourceContext;
+  const testSourceContext = getScenarioTestSourceContext(test) ?? scenarioSourceContext;
+  const scenarioData = withScenarioGradingContexts(
+    data as AtomicTestCase,
+    dataSourceContext,
+    testSuite,
+  );
+  const scenarioTest = withScenarioGradingContexts(
+    test as AtomicTestCase,
+    testSourceContext,
+    testSuite,
+  );
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),
-    ...data.metadata,
-    ...test.metadata,
+    ...scenarioData.metadata,
+    ...scenarioTest.metadata,
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
-  return {
+  const mergedTest = {
     ...(defaultTest || {}),
-    ...data,
-    ...test,
+    ...scenarioData,
+    ...scenarioTest,
     vars: {
       ...(defaultTest?.vars || {}),
-      ...data.vars,
-      ...test.vars,
+      ...scenarioData.vars,
+      ...scenarioTest.vars,
     },
     options: {
       ...(defaultTest?.options || {}),
-      ...data.options,
-      ...test.options,
+      ...scenarioData.options,
+      ...scenarioTest.options,
     },
-    assert: [...(data.assert || []), ...(test.assert || [])],
+    assert: [...(scenarioData.assert || []), ...(scenarioTest.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
+
+  const targetSourceContext =
+    Object.prototype.hasOwnProperty.call(scenarioTest, 'provider') && scenarioTest.provider
+      ? testSourceContext
+      : Object.prototype.hasOwnProperty.call(scenarioData, 'provider') && scenarioData.provider
+        ? dataSourceContext
+        : undefined;
+  if (targetSourceContext) {
+    scenarioTargetOverrideTests.add(mergedTest);
+    scenarioTargetOverrideContexts.set(mergedTest, targetSourceContext);
+  }
+
+  return mergedTest;
 }
 
 async function prepareTestVariables(
@@ -2274,7 +3043,11 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
-    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
+    resolveRuntimeGradingProviderReferences(
+      testCase,
+      configuredProviderMap,
+      getRuntimeGradingProviderEnv(testCase, testSuite),
+    );
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -2352,7 +3125,7 @@ async function resolveDefaultTestProvider(
     return defaultProvider;
   }
   if (typeof defaultProvider === 'object' && defaultProvider.id) {
-    const { loadApiProvider } = await import('./providers');
+    const { loadApiProvider } = await loadProviderModule();
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
     return loadApiProvider(providerId, {
@@ -2469,6 +3242,9 @@ function appendRunEvalOptionsForVars({
   testSuite: TestSuite;
   vars: Vars | undefined;
 }) {
+  const scenarioOverridePromptIndexes = scenarioTargetOverrideTests.has(testCase)
+    ? new Set<number>()
+    : undefined;
   for (const provider of testSuite.providers) {
     if (!isProviderAllowed(provider, testCase.providers)) {
       continue;
@@ -2492,6 +3268,7 @@ function appendRunEvalOptionsForVars({
       testIdx,
       testSuite,
       vars,
+      scenarioOverridePromptIndexes,
     });
   }
 }
@@ -2515,6 +3292,7 @@ function appendRunEvalOptionsForProvider({
   testIdx,
   testSuite,
   vars,
+  scenarioOverridePromptIndexes,
 }: {
   concurrency: number;
   conversations: EvalConversations;
@@ -2534,17 +3312,26 @@ function appendRunEvalOptionsForProvider({
   testIdx: number;
   testSuite: TestSuite;
   vars: Vars | undefined;
+  scenarioOverridePromptIndexes?: Set<number>;
 }) {
-  const providerKey = provider.label || provider.id();
-  for (const prompt of testSuite.prompts) {
+  const providerKey = getProviderIdentifier(provider);
+  const activeProvider =
+    scenarioOverridePromptIndexes && isApiProvider(testCase.provider)
+      ? testCase.provider
+      : provider;
+  const activeProviderKey = getProviderIdentifier(activeProvider);
+  for (const [promptIndex, prompt] of testSuite.prompts.entries()) {
+    if (scenarioOverridePromptIndexes?.has(promptIndex)) {
+      continue;
+    }
     if (!shouldRunPromptForTest(prompt, providerKey, testCase, testSuite)) {
       continue;
     }
 
-    const promptIdx = promptIndexMap.get(`${providerKey}:${promptIdCache.get(prompt)!}`);
+    const promptIdx = promptIndexMap.get(`${activeProviderKey}:${promptIdCache.get(prompt)!}`);
     if (promptIdx === undefined) {
       logger.warn(
-        `Could not find prompt index for ${providerKey}:${promptIdCache.get(prompt)}, skipping`,
+        `Could not find prompt index for ${activeProviderKey}:${promptIdCache.get(prompt)}, skipping`,
       );
       continue;
     }
@@ -2559,7 +3346,8 @@ function appendRunEvalOptionsForProvider({
         promptIdx,
         promptPrefix,
         promptSuffix,
-        provider,
+        provider: activeProvider,
+        originalProvider: activeProvider === provider ? undefined : provider,
         providerAbortSignal,
         rateLimitRegistry,
         registers,
@@ -2570,6 +3358,7 @@ function appendRunEvalOptionsForProvider({
         vars,
       }),
     );
+    scenarioOverridePromptIndexes?.add(promptIndex);
   }
 }
 
@@ -2590,6 +3379,7 @@ function createRunEvalOption({
   conversations,
   evalId,
   options,
+  originalProvider,
   prompt,
   promptIdx,
   promptPrefix,
@@ -2608,6 +3398,7 @@ function createRunEvalOption({
   conversations: EvalConversations;
   evalId: string;
   options: InternalEvaluateOptions;
+  originalProvider?: ApiProvider;
   prompt: Prompt;
   promptIdx: number;
   promptPrefix: string;
@@ -2625,6 +3416,7 @@ function createRunEvalOption({
   return {
     delay: options.delay || 0,
     provider,
+    originalProvider,
     prompt: {
       ...prompt,
       raw: promptPrefix + prompt.raw + promptSuffix,
@@ -3108,6 +3900,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  ownedScenarioProviders = new Set<ApiProvider>();
+  gradingProviderCache: ProviderCacheEntry[] = [];
+  globalTimeout: NodeJS.Timeout | undefined;
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3352,11 +4147,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEvalInternal({
-      ...evalStep,
-      deferGrading,
-      providerCallQueue: deferGrading ? providerCallQueue : undefined,
-    });
+    const rows = await withProviderCallExecutionContext(
+      {
+        ownedProviders: this.ownedScenarioProviders,
+        providerCache: this.gradingProviderCache,
+      },
+      () =>
+        runEvalInternal({
+          ...evalStep,
+          deferGrading,
+          providerCallQueue: deferGrading ? providerCallQueue : undefined,
+        }),
+    );
     onRowsReady?.();
     return rows;
   }
@@ -4061,7 +4863,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         : undefined,
       () =>
         withProviderCallExecutionContext(
-          { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+          {
+            abortSignal: providerAbortSignal,
+            ownedProviders: this.ownedScenarioProviders,
+            providerCache: this.gradingProviderCache,
+            rateLimitRegistry: this.rateLimitRegistry,
+          },
           () =>
             runCompareAssertion(
               resultsToCompare[0].testCase,
@@ -4517,6 +5324,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalTimedOut = true;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
+      this.globalTimeout = globalTimeout;
     }
 
     const vars = new Set<string>();
@@ -4539,22 +5347,39 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithMaxScoreAssertion = new Set<number>();
 
     ensureDefaultTestForExtensions(testSuite);
-    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
-      suite: testSuite,
-    });
+    const scenarioSourceContexts = testSuite.extensions?.length
+      ? captureScenarioSourceContexts(testSuite.scenarios)
+      : undefined;
+    const beforeAllOut = await (async () => {
+      try {
+        return await runExtensionHook(testSuite.extensions, 'beforeAll', {
+          suite: testSuite,
+        });
+      } finally {
+        clearCapturedScenarioContextTokens(scenarioSourceContexts);
+      }
+    })();
     testSuite = beforeAllOut.suite;
+    if (scenarioSourceContexts) {
+      restoreCapturedScenarioSourceContexts(testSuite.scenarios, scenarioSourceContexts);
+    }
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
     }
 
-    prompts.push(...buildCompletedPrompts(testSuite, this.store));
+    let tests = buildTestsFromSuite(testSuite);
+    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    tests = await resolveScenarioTargetProvidersForTests(
+      tests,
+      testSuite,
+      this.ownedScenarioProviders,
+    );
+
+    prompts.push(...buildCompletedPrompts(testSuite, this.store, tests));
     const promptIndexMap = buildPromptIndexMap(prompts);
 
     await this.store.appendPrompts(prompts);
-
-    let tests = buildTestsFromSuite(testSuite);
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
@@ -4777,6 +5602,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       evaluationError = error;
       throw error;
     } finally {
+      if (this.globalTimeout) {
+        clearTimeout(this.globalTimeout);
+        this.globalTimeout = undefined;
+      }
       // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
       // teardown below, so the streamed file is fully flushed before the post-run rewrite
       // reads it back and the file handle is released promptly. allSettled so one writer's
@@ -4789,6 +5618,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       );
 
       let cleanupError: unknown;
+      let deferredScenarioCleanupError: unknown;
       try {
         // Flush and shutdown OTEL SDK
         if (otelInitialized) {
@@ -4803,6 +5633,30 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
+
+        // Scenario providers are evaluator-owned and are not part of testSuite.providers.
+        const scenarioCleanupResults = await Promise.allSettled(
+          Array.from(this.ownedScenarioProviders, async (provider) => provider.cleanup?.()),
+        );
+        this.ownedScenarioProviders.clear();
+        this.gradingProviderCache.length = 0;
+        const scenarioCleanupErrors = scenarioCleanupResults.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        if (scenarioCleanupErrors.length > 0) {
+          logger.error('[Evaluator] Error cleaning up scenario providers', {
+            errors: scenarioCleanupErrors,
+          });
+          if (evaluationError === undefined) {
+            deferredScenarioCleanupError =
+              scenarioCleanupErrors.length === 1
+                ? scenarioCleanupErrors[0]
+                : new AggregateError(
+                    scenarioCleanupErrors,
+                    'Multiple scenario providers failed to clean up',
+                  );
+          }
+        }
 
         // Clean up Python worker pools to prevent resource leaks
         await providerRegistry.shutdownAll();
@@ -4834,6 +5688,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;
+
+        if (deferredScenarioCleanupError !== undefined) {
+          throw deferredScenarioCleanupError;
+        }
       } catch (error) {
         cleanupError = error;
         throw error;

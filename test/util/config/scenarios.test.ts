@@ -13,12 +13,13 @@ import { type TestCase } from '../../../src/types/index';
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readFilters } from '../../../src/util/index';
-import { readTests } from '../../../src/util/testCaseReader';
+import { readScenarioTests, readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 
 vi.mock('fs');
 vi.mock('fs/promises');
 vi.mock('glob', () => ({
+  escape: vi.fn((pattern: string) => pattern),
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -49,6 +50,8 @@ vi.mock('../../../src/assertions/validateAssertions');
 
 describe('Scenario loading with glob patterns', () => {
   const originalBasePath = cliState.basePath;
+  const normalizePath = (input: unknown): string | undefined =>
+    typeof input === 'string' ? input.replace(/\\/g, '/') : undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,12 +66,16 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(readTests).mockImplementation(async (tests) =>
       Array.isArray(tests) ? (tests as TestCase[]) : [],
     );
+    vi.mocked(readScenarioTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : readTests(tests as never),
+    );
     vi.mocked(readFilters).mockResolvedValue({});
     vi.mocked(validateAssertions).mockImplementation(() => {});
   });
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    vi.resetAllMocks();
   });
 
   it('should flatten scenarios when loaded with glob patterns', async () => {
@@ -99,12 +106,20 @@ describe('Scenario loading with glob patterns', () => {
       return Promise.resolve('');
     });
 
-    // Mock glob to return config file
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    // Mock glob to return config file and matched scenario file
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      if (
+        typeof pathOrGlob === 'string' &&
+        normalizePath(pathOrGlob)?.endsWith('/scenarios/*.yaml')
+      ) {
+        return ['/test/path/scenarios/group.yaml'];
+      }
+      return ['config.yaml'];
+    });
 
     // Mock maybeLoadFromExternalFile to return nested array (simulating glob expansion)
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input) && input[0] === 'file://scenarios/*.yaml') {
+      if (normalizePath(input)?.endsWith('/scenarios/group.yaml')) {
         // Return nested array as would happen with glob pattern
         return [[scenario1, scenario2]];
       }
@@ -117,7 +132,11 @@ describe('Scenario loading with glob patterns', () => {
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
     // Check if maybeLoadFromExternalFile was called with the expected argument
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/*.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^file:\/\/.*[\\/]scenarios[\\/]group\.yaml$/),
+      undefined,
+      {},
+    );
 
     // Verify scenarios are flattened correctly
     expect(testSuite.scenarios).toHaveLength(2);
@@ -158,15 +177,27 @@ describe('Scenario loading with glob patterns', () => {
       return Promise.resolve('');
     });
 
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      const normalizedPath = normalizePath(pathOrGlob);
+      if (normalizedPath?.endsWith('/group1/*.yaml')) {
+        return ['/test/path/group1/a.yaml', '/test/path/group1/b.yaml'];
+      }
+      if (normalizedPath?.endsWith('/group2/*.yaml')) {
+        return ['/test/path/group2/c.yaml'];
+      }
+      return ['config.yaml'];
+    });
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input)) {
-        // Simulate two glob patterns each returning different scenarios
-        return [
-          [scenarios[0], scenarios[1]], // group1/*.yaml
-          [scenarios[2]], // group2/*.yaml
-        ];
+      const normalizedInput = normalizePath(input);
+      if (normalizedInput?.endsWith('/group1/a.yaml')) {
+        return [scenarios[0]];
+      }
+      if (normalizedInput?.endsWith('/group1/b.yaml')) {
+        return [scenarios[1]];
+      }
+      if (normalizedInput?.endsWith('/group2/c.yaml')) {
+        return [scenarios[2]];
       }
       return input;
     });
@@ -215,12 +246,19 @@ describe('Scenario loading with glob patterns', () => {
       return Promise.resolve('');
     });
 
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      if (
+        typeof pathOrGlob === 'string' &&
+        normalizePath(pathOrGlob)?.endsWith('/scenarios/*.yaml')
+      ) {
+        return ['/test/path/scenarios/group.yaml'];
+      }
+      return ['config.yaml'];
+    });
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input)) {
-        // First element is direct scenario, second is glob pattern
-        return [directScenario, globScenarios];
+      if (normalizePath(input)?.endsWith('/scenarios/group.yaml')) {
+        return globScenarios;
       }
       return input;
     });
@@ -235,5 +273,23 @@ describe('Scenario loading with glob patterns', () => {
     expect(testSuite.scenarios![0]).toEqual(directScenario);
     expect(testSuite.scenarios![1]).toEqual(globScenarios[0]);
     expect(testSuite.scenarios![2]).toEqual(globScenarios[1]);
+  });
+
+  it('uses one default test when scenario tests are omitted', async () => {
+    const { testSuite } = await resolveConfigs(
+      {},
+      {
+        prompts: ['Test prompt'],
+        providers: ['openai:gpt-3.5-turbo'],
+        scenarios: [{ config: [{ vars: { topic: 'billing' } }] }],
+      },
+    );
+
+    expect(testSuite.scenarios).toEqual([
+      {
+        config: [{ vars: { topic: 'billing' } }],
+        tests: [{}],
+      },
+    ]);
   });
 });

@@ -214,7 +214,9 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://scenarios/*.yaml');
       expect(result).toEqual([mockData1, mockData2]);
       expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'scenarios/*.yaml'), {
-        windowsPathsNoEscape: true,
+        magicalBraces: true,
+        nodir: true,
+        windowsPathsNoEscape: process.platform === 'win32',
       });
     });
 
@@ -290,10 +292,44 @@ describe('file utilities', () => {
 
     it('should throw error when glob pattern matches no files', () => {
       vi.mocked(globSync).mockReturnValue([]);
+      vi.mocked(fs.statSync).mockReturnValue(undefined as never);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent/*.yaml')).toThrow(
         `No files found matching pattern: ${path.resolve('/mock/base/path', 'nonexistent/*.yaml')}`,
       );
+    });
+
+    it('should load a literal file whose path looks like a glob but exists', () => {
+      vi.mocked(globSync).mockReturnValue([]);
+      vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as never);
+      vi.mocked(fs.readFileSync).mockReturnValue('- value1\n- value2');
+
+      const result = maybeLoadFromExternalFile('file://configs [prod]/list.yaml');
+
+      expect(result).toEqual(['value1', 'value2']);
+      expect(globSync).not.toHaveBeenCalled();
+    });
+
+    it('should keep single-file shape for an object file loaded via the literal fallback', () => {
+      vi.mocked(globSync).mockReturnValue([]);
+      vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as never);
+      vi.mocked(fs.readFileSync).mockReturnValue('vars:\n  language: French');
+
+      const result = maybeLoadFromExternalFile('file://configs [prod]/defaultTest.yaml');
+
+      // Must NOT be array-wrapped: consumers like defaultTest expect the object itself.
+      expect(result).toEqual({ vars: { language: 'French' } });
+    });
+
+    it('should expand a glob when no literal file exists', () => {
+      vi.mocked(fs.statSync).mockReturnValue(undefined as never);
+      vi.mocked(globSync).mockReturnValue(['/mock/base/path/a.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('- value1');
+
+      const result = maybeLoadFromExternalFile('file://*.yaml');
+
+      expect(result).toEqual(['value1']);
+      expect(fs.statSync).toHaveBeenCalled();
     });
 
     it('should throw error when file does not exist', () => {
@@ -585,6 +621,42 @@ describe('file utilities', () => {
       expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     });
 
+    it('should ignore inherited scenario-test context keys', () => {
+      let result: unknown;
+      Object.defineProperty(Object.prototype, 'metadata', {
+        configurable: true,
+        get: () => {
+          throw new Error('inherited metadata getter ran');
+        },
+      });
+
+      try {
+        result = maybeLoadConfigFromExternalFile({ metadata: { source: 'safe' } }, 'scenario-test');
+      } finally {
+        delete (Object.prototype as Record<string, unknown>).metadata;
+      }
+
+      expect(result).toEqual({ metadata: { source: 'safe' } });
+    });
+
+    it('should ignore inherited assertion types in scenario tests', () => {
+      let result: unknown;
+      Object.defineProperty(Object.prototype, 'type', {
+        configurable: true,
+        get: () => {
+          throw new Error('inherited type getter ran');
+        },
+      });
+
+      try {
+        result = maybeLoadConfigFromExternalFile({ assert: [{ value: 'safe' }] }, 'scenario-test');
+      } finally {
+        delete (Object.prototype as Record<string, unknown>).type;
+      }
+
+      expect(result).toEqual({ assert: [{ value: 'safe' }] });
+    });
+
     it('should handle very large nested structures efficiently', () => {
       vi.mocked(fs.readFileSync).mockReturnValue('file content');
 
@@ -732,7 +804,9 @@ describe('file utilities', () => {
       // Glob expansion should still work correctly
       expect(result).toEqual([mockData1, mockData2]);
       expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'test*.yaml'), {
-        windowsPathsNoEscape: true,
+        magicalBraces: true,
+        nodir: true,
+        windowsPathsNoEscape: process.platform === 'win32',
       });
     });
   });

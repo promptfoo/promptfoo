@@ -5,7 +5,6 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -17,13 +16,33 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
+import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
+import { ConfigResolutionError } from './config/errors';
+import {
+  getScenarioDependencyContext,
+  getScenarioOriginalValue,
+  getScenarioTestSourceContext,
+  mergeScenarioSourceContexts,
+  restoreScenarioTestSourceContext,
+  setScenarioOriginalValue,
+  setScenarioTestSourceContext,
+  transferScenarioTestSourceContext,
+  withScenarioSourceFallback,
+} from './config/scenarioContext';
+import {
+  materializeScenarioTestCase,
+  materializeScenarioTestSource,
+  renderScenarioSourceEnvTemplates,
+} from './config/scenarioMatrix';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { resolveLiteralPathOrGlob } from './pathUtils';
+import { REDACTED, redactEnvValues, sanitizeUrl } from './sanitizer';
 import { parseXlsxFile } from './xlsx';
 
 import type {
   CsvRow,
+  EnvOverrides,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -41,7 +60,6 @@ type StandaloneTestsFileMetadata = {
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
-
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -54,9 +72,7 @@ export async function readTestFiles(
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
 
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
+    const paths = resolveLiteralPathOrGlob(resolvedPath);
 
     for (const p of paths) {
       const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
@@ -248,23 +264,15 @@ function getStandaloneTestsFileMetadata(
   varsPath: string,
   basePath: string,
 ): StandaloneTestsFileMetadata {
-  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  // Split on the last colon to handle Windows drive letters correctly
-  const colonCount = resolvedVarsPath.split(':').length - 1;
-  const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
-
-  // For Windows paths, we need to account for the drive letter colon
-  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
-  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
-
-  if (effectiveColonCount > 1) {
-    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
+  let localPath = varsPath.replace(/^file:\/\//, '');
+  if (process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(localPath)) {
+    localPath = localPath.slice(1);
   }
-
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
-  const maybeFunctionName =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
+  const resolvedVarsPath = path.isAbsolute(localPath)
+    ? localPath
+    : path.resolve(basePath, localPath);
+  const { pathWithoutFunction, functionName: maybeFunctionName } =
+    splitTestScriptPath(resolvedVarsPath);
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
   // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
   const extensionWithoutSheet = fileExtension.split('#')[0];
@@ -275,6 +283,24 @@ function getStandaloneTestsFileMetadata(
     maybeFunctionName,
     fileExtension,
     extensionWithoutSheet,
+  };
+}
+
+function splitTestScriptPath(value: string): {
+  pathWithoutFunction: string;
+  functionName?: string;
+} {
+  const lastColonIndex = value.lastIndexOf(':');
+  if (lastColonIndex <= 1) {
+    return { pathWithoutFunction: value };
+  }
+  const candidatePath = value.slice(0, lastColonIndex);
+  if (!isJavascriptFile(candidatePath) && !candidatePath.endsWith('.py')) {
+    return { pathWithoutFunction: value };
+  }
+  return {
+    pathWithoutFunction: candidatePath,
+    functionName: value.slice(lastColonIndex + 1),
   };
 }
 
@@ -344,11 +370,8 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
 
 function parseJsonTestCases(fileContent: string): TestCase[] {
   const jsonData = yaml.load(fileContent) as any;
-  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  const testCases: unknown[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+  return testCases.map((item, idx) => normalizeParsedTestCase(item, idx, 'JSON'));
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -360,24 +383,23 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
   return fileContent
     .split('\n')
     .filter((line) => line.trim())
-    .map((line, idx) => {
-      const row = JSON.parse(line);
-      return {
-        ...row,
-        description: row.description || `Row #${idx + 1}`,
-      };
-    });
+    .map((line, idx) => normalizeParsedTestCase(JSON.parse(line), idx, 'JSONL'));
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
   const rawContent = yaml.load(fileContent);
-  const testCases: TestCase[] = Array.isArray(rawContent)
-    ? (rawContent as TestCase[])
-    : [rawContent as TestCase];
-  return testCases.map((item, idx) => ({
+  const testCases: unknown[] = Array.isArray(rawContent) ? rawContent : [rawContent];
+  return testCases.map((item, idx) => normalizeParsedTestCase(item, idx, 'YAML'));
+}
+
+function normalizeParsedTestCase(item: unknown, index: number, source: string): TestCase {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    throw new Error(`Test case ${index + 1} in ${source} test file must be an object`);
+  }
+  return {
     ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+    description: (item as TestCase).description || `Row #${index + 1}`,
+  };
 }
 
 async function loadTestWithVars(
@@ -456,6 +478,8 @@ export async function readTest(
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
+  allowPartialTests = false,
+  envOverrides?: EnvOverrides,
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -467,16 +491,15 @@ export async function loadTestsFromGlob(
   if (loadTestsGlob.startsWith('file://')) {
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
+  if (process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(loadTestsGlob)) {
+    loadTestsGlob = loadTestsGlob.slice(1);
+  }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
-  const testFiles: Array<string> = globSync(resolvedPath, {
-    windowsPathsNoEscape: true,
-  });
+  const testFiles: Array<string> = resolveLiteralPathOrGlob(resolvedPath);
 
   // Check for possible function names in the path (Windows-aware)
-  const lastColonIndex = resolvedPath.lastIndexOf(':');
-  const pathWithoutFunction: string =
-    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
+  const { pathWithoutFunction } = splitTestScriptPath(resolvedPath);
   // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
@@ -496,15 +519,13 @@ export async function loadTestsFromGlob(
 
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
-    logger.error(`No test files found for path: ${loadTestsGlob}`);
+    logger.error(`No test files found for path: ${redactEnvValues(loadTestsGlob, envOverrides)}`);
     return ret;
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
     // Extract path without function name (Windows-aware)
-    const lastColonIndex = testFile.lastIndexOf(':');
-    const pathWithoutFunction: string =
-      lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
+    const { pathWithoutFunction } = splitTestScriptPath(testFile);
 
     // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
     const fileWithoutSheet = testFile.split('#')[0];
@@ -519,7 +540,8 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadTestCaseConfig(rawContent, allowPartialTests, envOverrides);
+      assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
@@ -527,31 +549,87 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = loadTestCaseConfig(rawCases, allowPartialTests, envOverrides);
+      assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadTestCaseConfig(rawContent, allowPartialTests, envOverrides);
+      assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }
 
-    if (testCases) {
-      if (!Array.isArray(testCases) && typeof testCases === 'object') {
-        testCases = [testCases];
-      }
-      for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
-      }
-    }
+    await appendLoadedTestCases(ret, testCases, testFile, allowPartialTests, envOverrides);
   }
   return ret;
+}
+
+function loadTestCaseConfig(
+  config: unknown,
+  allowPartialTests: boolean,
+  envOverrides?: EnvOverrides,
+): TestCase[] {
+  if (allowPartialTests) {
+    return config as TestCase[];
+  }
+  return maybeLoadConfigFromExternalFile(config, undefined, envOverrides) as TestCase[];
+}
+
+async function appendLoadedTestCases(
+  destination: TestCase[],
+  loaded: TestCase[] | undefined,
+  testFile: string,
+  allowPartialTests: boolean,
+  envOverrides?: EnvOverrides,
+): Promise<void> {
+  if (!loaded) {
+    return;
+  }
+  const testCases = Array.isArray(loaded) ? loaded : [loaded];
+  for (const [index, testCase] of testCases.entries()) {
+    if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {
+      throw new Error(`Test case ${index + 1} in ${testFile} must be an object`);
+    }
+    const testBasePath = path.dirname(testFile);
+    const normalizedTest = allowPartialTests
+      ? materializeScenarioTestCase(testBasePath, testCase, envOverrides)
+      : testCase;
+    const hasProvider =
+      allowPartialTests && Object.prototype.hasOwnProperty.call(normalizedTest, 'provider');
+    const providerRef = hasProvider ? normalizedTest.provider : undefined;
+    const testForNormalization = hasProvider ? { ...normalizedTest } : normalizedTest;
+    if (hasProvider) {
+      Reflect.deleteProperty(testForNormalization, 'provider');
+    }
+    const loadedTest = await readTest(testForNormalization, testBasePath, allowPartialTests);
+    if (hasProvider) {
+      loadedTest.provider = providerRef as TestCase['provider'];
+    }
+    transferScenarioTestSourceContext(normalizedTest, loadedTest);
+    setScenarioOriginalValue(loadedTest, getScenarioOriginalValue(normalizedTest) ?? testCase);
+    destination.push(loadedTest);
+  }
+}
+
+function assertLoadedTestCaseShapes(loaded: unknown, testFile: string): void {
+  if (loaded === null || loaded === undefined) {
+    return;
+  }
+  const testCases = Array.isArray(loaded) ? loaded : [loaded];
+  for (const [index, testCase] of testCases.entries()) {
+    if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {
+      throw new Error(`Test case ${index + 1} in ${testFile} must be an object`);
+    }
+  }
 }
 
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
+  allowPartialTests = false,
+  envOverrides?: EnvOverrides,
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
@@ -561,7 +639,7 @@ export async function readTests(
     }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlob(tests, basePath);
+      return loadTestsFromGlob(tests, basePath, allowPartialTests, envOverrides);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
@@ -577,9 +655,8 @@ export async function readTests(
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
         // Extract path without function name (Windows-aware)
-        const lastColonIndex = globOrTest.lastIndexOf(':');
-        const pathWithoutFunction: string =
-          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
+        const localPath = globOrTest.replace(/^file:\/\//, '');
+        const { functionName, pathWithoutFunction } = splitTestScriptPath(localPath);
         // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
         const pathWithoutSheet = globOrTest.split('#')[0];
         // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
@@ -588,18 +665,20 @@ export async function readTests(
           pathWithoutFunction.endsWith('.py') ||
           pathWithoutSheet.endsWith('.xlsx') ||
           pathWithoutSheet.endsWith('.xls') ||
-          globOrTest.replace(/^file:\/\//, '').includes(':')
+          functionName !== undefined
         ) {
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {
           // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
+          ret.push(
+            ...(await loadTestsFromGlob(globOrTest, basePath, allowPartialTests, envOverrides)),
+          );
         }
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
+        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, allowPartialTests));
       }
     }
   } else if (tests !== undefined && tests !== null) {
@@ -633,4 +712,260 @@ export async function readTests(
   }
 
   return ret;
+}
+
+/**
+ * Materialize external scenario test sources while preserving ordinary inline
+ * tests that may rely on scenario/default fields for their runnable behavior.
+ */
+export async function readScenarioTests(
+  tests: unknown,
+  basePath = '',
+  envOverrides?: EnvOverrides,
+): Promise<TestCase[] | undefined> {
+  if (tests === undefined || tests === null) {
+    return undefined;
+  }
+
+  const normalizedTests: TestCase[] = [];
+  for (const test of Array.isArray(tests) ? tests : [tests]) {
+    if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
+      const restoredTest = restoreScenarioTestSourceContext(test);
+      const sourceContext = withScenarioSourceFallback(
+        getScenarioTestSourceContext(restoredTest),
+        basePath,
+        envOverrides,
+      );
+      const renderedTest = renderScenarioSourceEnvTemplates(
+        restoredTest,
+        sourceContext.envOverrides,
+      );
+      const materializedTest = materializeScenarioTestCase(
+        sourceContext.basePath,
+        renderedTest,
+        sourceContext.envOverrides,
+      ) as TestCaseWithVarsFile;
+      const hasProvider = Object.prototype.hasOwnProperty.call(materializedTest, 'provider');
+      const providerRef = hasProvider ? materializedTest.provider : undefined;
+      const testForNormalization = hasProvider ? { ...materializedTest } : materializedTest;
+      if (hasProvider) {
+        Reflect.deleteProperty(testForNormalization, 'provider');
+      }
+      const normalizedTest = await readTest(testForNormalization, sourceContext.basePath, true);
+      if (hasProvider) {
+        normalizedTest.provider = providerRef as TestCase['provider'];
+      }
+      transferScenarioTestSourceContext(materializedTest, normalizedTest);
+      setScenarioOriginalValue(
+        normalizedTest,
+        getScenarioOriginalValue(restoredTest) ?? restoredTest,
+      );
+      normalizedTests.push(normalizedTest);
+      continue;
+    }
+    for (const loadedTest of await loadScenarioTestSource(test, basePath, envOverrides)) {
+      normalizedTests.push(loadedTest);
+    }
+  }
+
+  return normalizedTests;
+}
+
+function isScenarioTestRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null || Object.keys(value).length > 0;
+}
+
+function isGeneratorLikeScenarioTest(value: Record<string, unknown>): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'path') ||
+    Object.prototype.hasOwnProperty.call(value, 'config')
+  );
+}
+
+async function loadScenarioTestSource(
+  test: unknown,
+  basePath: string,
+  envOverrides?: EnvOverrides,
+): Promise<TestCase[]> {
+  const isGenerator = isScenarioTestRecord(test) && isGeneratorLikeScenarioTest(test);
+  if (isGenerator && typeof test.path !== 'string') {
+    throw new ConfigResolutionError('Scenario test generator must have a string path');
+  }
+  if (typeof test !== 'string' && !isGenerator) {
+    throw new ConfigResolutionError(
+      `Scenario tests must be test case objects or file:// references; got ${typeof test}`,
+    );
+  }
+
+  const materializedTest = isGenerator
+    ? materializeScenarioTestSource(basePath, test, envOverrides)
+    : test;
+  const sourceType = typeof test === 'string' ? 'file' : 'generator';
+  const sourcePath =
+    typeof materializedTest === 'string' ? materializedTest : (materializedTest.path as string);
+  const safeSourcePath = redactEnvValues(
+    sourcePath.startsWith('az://')
+      ? sanitizeAzureBlobUriForError(sourcePath)
+      : sanitizeUrl(sourcePath),
+    envOverrides,
+  );
+  const sourceContext =
+    materializedTest && typeof materializedTest === 'object'
+      ? getScenarioTestSourceContext(materializedTest)
+      : undefined;
+  let normalizedTests: TestCase[];
+  try {
+    const loaded = (await readTests(
+      (typeof materializedTest === 'string'
+        ? [materializedTest]
+        : materializedTest) as TestSuiteConfig['tests'],
+      basePath,
+      true,
+      envOverrides,
+    )) as unknown;
+    if (!Array.isArray(loaded)) {
+      throw new Error(`expected an array of test cases, got ${typeof loaded}`);
+    }
+    normalizedTests = await normalizeLoadedScenarioTests(
+      loaded,
+      sourcePath,
+      basePath,
+      envOverrides,
+      sourceContext,
+    );
+  } catch (error) {
+    const detail = sanitizeScenarioSourceErrorDetail(
+      sourcePath,
+      safeSourcePath,
+      error,
+      envOverrides,
+    );
+    throw new ConfigResolutionError(
+      `Failed to load scenario test ${sourceType} ${safeSourcePath}: ${detail}`,
+      { cause: new Error(detail) },
+    );
+  }
+  if (normalizedTests.length === 0) {
+    throw new ConfigResolutionError(
+      `Failed to load scenario test ${sourceType} ${safeSourcePath}: source contributed no tests`,
+    );
+  }
+  return normalizedTests;
+}
+
+async function normalizeLoadedScenarioTests(
+  loadedTests: unknown[],
+  sourcePath: string,
+  fallbackBasePath: string,
+  envOverrides?: EnvOverrides,
+  declaringContext?: ReturnType<typeof getScenarioTestSourceContext>,
+): Promise<TestCase[]> {
+  const normalizedTests: TestCase[] = [];
+  const shouldNormalize = isLocalScenarioTestSource(sourcePath);
+  const declarationDependencyContext = shouldNormalize
+    ? getScenarioDependencyContext(
+        getStandaloneTestsFileMetadata(sourcePath, fallbackBasePath).pathWithoutFunction,
+        fallbackBasePath,
+      )
+    : {};
+  for (const [index, loadedTest] of loadedTests.entries()) {
+    if (!isScenarioTestRecord(loadedTest)) {
+      throw new Error(`test case ${index + 1} must be a plain object`);
+    }
+    if (!shouldNormalize) {
+      const sourceContext = mergeScenarioSourceContexts(
+        getScenarioTestSourceContext(loadedTest),
+        declaringContext,
+        { basePath: fallbackBasePath, envOverrides },
+      );
+      if (sourceContext) {
+        setScenarioTestSourceContext(loadedTest, sourceContext);
+      }
+      normalizedTests.push(loadedTest as TestCase);
+      continue;
+    }
+
+    const loadedContext = getScenarioTestSourceContext(loadedTest);
+    const sourceBasePath =
+      loadedContext?.basePath ?? getScenarioTestSourceBasePath(sourcePath, fallbackBasePath);
+    const resolvedTest = materializeScenarioTestCase(
+      sourceBasePath,
+      loadedTest,
+      envOverrides,
+    ) as TestCaseWithVarsFile;
+    const hasProvider = Object.prototype.hasOwnProperty.call(resolvedTest, 'provider');
+    const providerRef = hasProvider ? resolvedTest.provider : undefined;
+    const testForNormalization = hasProvider ? { ...resolvedTest } : resolvedTest;
+    if (hasProvider) {
+      Reflect.deleteProperty(testForNormalization, 'provider');
+    }
+    const normalizedTest = await readTest(testForNormalization, sourceBasePath, true);
+    if (hasProvider) {
+      normalizedTest.provider = providerRef as TestCase['provider'];
+    }
+    transferScenarioTestSourceContext(resolvedTest, normalizedTest);
+    const sourceContext = mergeScenarioSourceContexts(
+      getScenarioTestSourceContext(normalizedTest),
+      loadedContext,
+      declaringContext,
+      {
+        basePath: sourceBasePath,
+        envOverrides,
+        ...declarationDependencyContext,
+      },
+    );
+    if (sourceContext) {
+      setScenarioTestSourceContext(normalizedTest, sourceContext);
+    }
+    setScenarioOriginalValue(normalizedTest, getScenarioOriginalValue(loadedTest) ?? loadedTest);
+    normalizedTests.push(normalizedTest);
+  }
+  return normalizedTests;
+}
+
+function sanitizeScenarioSourceErrorDetail(
+  sourcePath: string,
+  safeSourcePath: string,
+  error: unknown,
+  envOverrides?: EnvOverrides,
+): string {
+  let detail = error instanceof Error ? error.message : String(error);
+  detail = detail.split(sourcePath).join(safeSourcePath);
+  try {
+    const url = new URL(sourcePath);
+    const sensitiveValues = [
+      url.username,
+      url.password,
+      ...Array.from(url.searchParams.values()),
+    ].filter(Boolean);
+    for (const value of sensitiveValues) {
+      detail = detail.split(value).join(REDACTED);
+      try {
+        detail = detail.split(decodeURIComponent(value)).join(REDACTED);
+      } catch {}
+    }
+  } catch {}
+  const sanitized = redactEnvValues(detail, envOverrides).replace(/[\u0000-\u001f\u007f]/g, '?');
+  return sanitized.length > 512 ? `${sanitized.slice(0, 512)}...` : sanitized;
+}
+
+function getScenarioTestSourceBasePath(sourcePath: string, fallbackBasePath: string): string {
+  if (!isLocalScenarioTestSource(sourcePath)) {
+    return fallbackBasePath;
+  }
+  return path.dirname(
+    getStandaloneTestsFileMetadata(sourcePath, fallbackBasePath).pathWithoutFunction,
+  );
+}
+
+function isLocalScenarioTestSource(sourcePath: string): boolean {
+  return (
+    !sourcePath.startsWith('az://') &&
+    !sourcePath.startsWith('huggingface://') &&
+    !/^https?:\/\//i.test(sourcePath)
+  );
 }

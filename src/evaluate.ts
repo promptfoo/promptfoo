@@ -5,12 +5,19 @@ import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
-import { isTransformFunction } from './types/transform';
+import { ConfigResolutionError } from './util/config/errors';
+import { createSerializableUnifiedConfig } from './util/config/persistableScenario';
+import {
+  getScenarioSourceContext,
+  redactSensitiveEnvValues,
+  transferScenarioSourceContext,
+  withScenarioSourceFallback,
+} from './util/config/scenarioContext';
+import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -18,14 +25,12 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
-import { readTests } from './util/testCaseReader';
-import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
+import { readScenarioTests, readTests } from './util/testCaseReader';
 
 import type {
   EnvOverrides,
   EvaluateTestSuite,
   GradingConfig,
-  Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
@@ -58,148 +63,6 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
   return cloned;
 }
 
-function toSerializableProviderRef(provider: unknown): unknown {
-  if (isApiProvider(provider)) {
-    return sanitizeProvider(provider);
-  }
-  if (Array.isArray(provider)) {
-    return provider.map(toSerializableProviderRef);
-  }
-  return provider;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
-    return record;
-  }
-  return {
-    ...record,
-    provider: sanitizeProvider(record.provider),
-  };
-}
-
-/**
- * Function-valued transforms are first-class at runtime but are silently dropped
- * by `JSON.stringify`. Persisted eval configs (drizzle-stored) must never retain
- * a function reference, so replace every `transform`-like field with a
- * `[inline function]: name` marker. Non-function values pass through unchanged.
- *
- * `droppedRef.value` is flipped to `true` the first time a function is replaced
- * so the caller can emit a single warning instead of logging per field.
- */
-function replaceFunctionTransforms<T extends Record<string, unknown>>(
-  record: T,
-  droppedRef: { value: boolean },
-): T {
-  let result: T | undefined;
-  for (const key of TRANSFORM_KEYS) {
-    const value = record[key];
-    if (!isTransformFunction(value)) {
-      continue;
-    }
-    if (!result) {
-      result = { ...record };
-    }
-    (result as Record<string, unknown>)[key] = value.name
-      ? `${INLINE_FUNCTION_LABEL}: ${value.name}`
-      : INLINE_FUNCTION_LABEL;
-    droppedRef.value = true;
-  }
-  return result ?? record;
-}
-
-function toSerializableAssertion(assertion: unknown, droppedRef: { value: boolean }): unknown {
-  if (!isRecord(assertion)) {
-    return assertion;
-  }
-
-  let sanitizedAssertion = withSerializableProvider(assertion);
-  sanitizedAssertion = replaceFunctionTransforms(sanitizedAssertion, droppedRef);
-
-  if (Array.isArray(assertion.assert)) {
-    sanitizedAssertion = {
-      ...sanitizedAssertion,
-      assert: assertion.assert.map((a) => toSerializableAssertion(a, droppedRef)),
-    };
-  }
-
-  return sanitizedAssertion;
-}
-
-function toSerializableTestCase(test: unknown, droppedRef: { value: boolean }): unknown {
-  if (!isRecord(test)) {
-    return test;
-  }
-
-  let sanitizedTest = withSerializableProvider(test);
-
-  if (isRecord(test.options)) {
-    let options = withSerializableProvider(test.options);
-    options = replaceFunctionTransforms(options, droppedRef);
-    if (options !== test.options) {
-      sanitizedTest = {
-        ...sanitizedTest,
-        options,
-      };
-    }
-  }
-
-  if (Array.isArray(test.assert)) {
-    sanitizedTest = {
-      ...sanitizedTest,
-      assert: test.assert.map((a) => toSerializableAssertion(a, droppedRef)),
-    };
-  }
-
-  return sanitizedTest;
-}
-
-function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean }): unknown {
-  if (!isRecord(scenario)) {
-    return scenario;
-  }
-
-  if (!Array.isArray(scenario.tests)) {
-    return scenario;
-  }
-
-  return {
-    ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
-  };
-}
-
-function createSerializableUnifiedConfig(
-  testSuite: EvaluateTestSuite,
-  prompts: TestSuite['prompts'],
-): Partial<UnifiedConfig> {
-  const droppedRef = { value: false };
-  const config = {
-    ...testSuite,
-    providers: toSerializableProviderRef(testSuite.providers),
-    defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
-    tests: Array.isArray(testSuite.tests)
-      ? testSuite.tests.map((t) => toSerializableTestCase(t, droppedRef))
-      : testSuite.tests,
-    scenarios: Array.isArray(testSuite.scenarios)
-      ? testSuite.scenarios.map((s) => toSerializableScenario(s, droppedRef))
-      : testSuite.scenarios,
-    prompts,
-  } as Partial<UnifiedConfig>;
-
-  if (droppedRef.value && testSuite.writeLatestResults) {
-    logger.warn(
-      'Function-valued transform(s) in testSuite were replaced with "[inline function]" markers in the persisted config. Re-running the saved eval will not invoke them; use string expressions or file:// references if you need the config to round-trip.',
-    );
-  }
-
-  return config;
-}
-
 async function resolveGradingProvider(
   provider: GradingConfig['provider'],
   providerMap: Record<string, ApiProvider>,
@@ -225,10 +88,59 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
+  const scenarioEnv = testSuiteConfig.env ?? {};
+  const loadedScenarios = await loadScenarioConfigs(
+    testSuiteConfig.scenarios,
+    process.cwd(),
+    scenarioEnv,
+  );
+  let scenarios: TestSuite['scenarios'];
+  if (loadedScenarios) {
+    scenarios = [];
+    for (const scenario of loadedScenarios) {
+      const sourceContext = withScenarioSourceFallback(
+        getScenarioSourceContext(scenario),
+        process.cwd(),
+        scenarioEnv,
+      );
+      try {
+        const scenarioTests = await readScenarioTests(
+          (scenario as { tests?: unknown }).tests,
+          sourceContext.basePath,
+          sourceContext.envOverrides,
+        );
+        scenarios.push(
+          transferScenarioSourceContext(scenario, {
+            ...scenario,
+            tests: scenarioTests ?? [{}],
+            config: await expandScenarioConfigValues(
+              scenario.config,
+              sourceContext.basePath,
+              sourceContext.envOverrides,
+            ),
+          }),
+        );
+      } catch (error) {
+        const declaringSource = sourceContext.dependencies?.[0];
+        if (!declaringSource) {
+          throw error;
+        }
+        const safeSource = redactSensitiveEnvValues(declaringSource, sourceContext.envOverrides);
+        const detail = redactSensitiveEnvValues(
+          error instanceof Error ? error.message : String(error),
+          sourceContext.envOverrides,
+        );
+        throw new ConfigResolutionError(`Failed to load scenario ${safeSource}: ${detail}`, {
+          cause: new Error(detail),
+        });
+      }
+    }
+  }
+
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios: testSuiteConfig.scenarios as Scenario[],
+    scenarios,
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
@@ -335,10 +247,16 @@ export async function evaluateWithSource(
     testSuiteConfig,
     constructedTestSuite.prompts,
   );
+  // Persist expanded scenario rows (matching CLI behavior) so re-runs and retries
+  // do not re-resolve relative $values refs against a different cwd.
   const unifiedConfig = createSerializableUnifiedConfig(
-    testSuiteConfig,
+    { ...testSuiteConfig, scenarios: constructedTestSuite.scenarios },
     constructedTestSuite.prompts,
-  );
+    () =>
+      logger.warn(
+        'Function-valued transform(s) in testSuite were replaced with "[inline function]" markers in the persisted config. Re-running the saved eval will not invoke them; use string expressions or file:// references if you need the config to round-trip.',
+      ),
+  ) as Partial<UnifiedConfig>;
   const author = getAuthor(suiteAuthor);
   const evalRecord = testSuiteConfig.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })

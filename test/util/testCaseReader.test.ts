@@ -18,6 +18,7 @@ import { readAzureBlobText } from '../../src/util/azureBlob';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
   loadTestsFromGlob,
+  readScenarioTests,
   readStandaloneTestsFile,
   readTest,
   readTestFiles,
@@ -1124,6 +1125,70 @@ describe('readTests', () => {
     ]);
     expect(globSync).not.toHaveBeenCalled();
     expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
+  it('readScenarioTests keeps remote Azure refs as remote test data', async () => {
+    const blobUri = 'az://account/container/scenario-tests.yaml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure scenario data
+        vars: vars1.yaml
+        provider: file://providers/local.js
+    `);
+
+    await expect(readScenarioTests(blobUri, '/local/config')).resolves.toEqual([
+      {
+        description: 'Azure scenario data',
+        provider: 'file://providers/local.js',
+        vars: 'vars1.yaml',
+      },
+    ]);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
+  it('readScenarioTests redacts Azure SAS credentials from wrapped errors', async () => {
+    const blobUri = 'az://account/container/scenario-tests.yaml?sp=r&sig=SUPER_SECRET_SENTINEL';
+    vi.mocked(readAzureBlobText).mockRejectedValueOnce(new Error('download failed'));
+
+    let error: unknown;
+    try {
+      await readScenarioTests(blobUri);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(String(error)).toContain('az://account/container/scenario-tests.yaml?<redacted>');
+    expect(String(error)).not.toContain('SUPER_SECRET_SENTINEL');
+  });
+
+  it('readScenarioTests redacts Azure SAS credentials from empty-source errors', async () => {
+    const blobUri = 'az://account/container/scenario-tests.json?sp=r&sig=EMPTY_SECRET_SENTINEL';
+    vi.mocked(readAzureBlobText).mockResolvedValueOnce('[]');
+
+    let error: unknown;
+    try {
+      await readScenarioTests(blobUri);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(String(error)).toContain('az://account/container/scenario-tests.json?<redacted>');
+    expect(String(error)).not.toContain('EMPTY_SECRET_SENTINEL');
+  });
+
+  it('readScenarioTests redacts signed URL credentials from wrapped errors', async () => {
+    const signedUrl =
+      'https://example.com/scenario-tests.yaml?api_key=SIGNED_URL_SECRET_SENTINEL&version=1';
+
+    let error: unknown;
+    try {
+      await readScenarioTests(signedUrl);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(String(error)).toContain('https://example.com/scenario-tests.yaml');
+    expect(String(error)).not.toContain('SIGNED_URL_SECRET_SENTINEL');
   });
 
   it('readTests with multiple __expected in CSV', async () => {

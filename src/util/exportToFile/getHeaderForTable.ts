@@ -1,4 +1,13 @@
+import { isScenarioConfigValuesRef, type TestCase } from '../../types/index';
+
 import type Eval from '../../models/eval';
+
+function getInlineScenarioTests(tests: unknown): TestCase[] {
+  const entries = Array.isArray(tests) ? tests : tests ? [tests] : [];
+  return entries.filter((test): test is TestCase =>
+    Boolean(test && typeof test === 'object' && !Array.isArray(test) && !('path' in test)),
+  );
+}
 
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();
@@ -48,14 +57,14 @@ export function getHeaderForTable(eval_: Eval) {
       continue;
     }
     for (const config of scenario.config || []) {
+      if (isScenarioConfigValuesRef(config)) {
+        continue;
+      }
       for (const varName of Object.keys(config.vars || {})) {
         varsForHeader.add(varName);
       }
     }
-    for (const test of scenario.tests || []) {
-      if (typeof test === 'string') {
-        continue;
-      }
+    for (const test of getInlineScenarioTests(scenario.tests)) {
       for (const varName of Object.keys(test.vars || {})) {
         varsForHeader.add(varName);
       }

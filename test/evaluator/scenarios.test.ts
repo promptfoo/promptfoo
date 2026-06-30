@@ -1,15 +1,45 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
+import os from 'os';
+import path from 'path';
 
 import { expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
+import {
+  __buildTestsFromSuiteForTests,
+  __resolveRuntimeGradingProviderReferencesForTests,
+  evaluate,
+} from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import * as providerModule from '../../src/providers';
+import {
+  type ApiProvider,
+  type CompletedPrompt,
+  type EvaluateSummaryV3,
+  type TestCase,
+  type TestSuite,
+} from '../../src/types/index';
+import { loadScenarioConfigs } from '../../src/util/config/scenarioMatrix';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it('materializes scenario test files above the JavaScript argument limit', () => {
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      scenarios: [
+        {
+          config: [{}],
+          tests: Array.from({ length: 150_000 }, () => ({})),
+        },
+      ],
+    } as TestSuite;
+
+    expect(__buildTestsFromSuiteForTests(testSuite)).toHaveLength(150_000);
+  });
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -66,6 +96,749 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Hola mundo');
     expect(summary.results[1].response?.output).toBe('Bonjour le monde');
+  });
+
+  it('rejects unexpanded $values refs in scenario config', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn<ApiProvider['callApi']>(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ language }}')],
+      scenarios: [
+        {
+          config: [{ $values: 'file://matrix.yaml' } as never],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Unexpanded scenario config \$values reference/,
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('uses scenario source env when resolving scenario grading providers', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [
+        {
+          config: [{ options: { provider: 'echo' } }],
+          tests: [{}],
+        },
+      ],
+      '/source/scenarios',
+      { GRADER_TOKEN: 'source-env' },
+    );
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      env: { GRADER_TOKEN: 'suite-env' },
+      scenarios,
+    } as TestSuite;
+    const [testCase] = __buildTestsFromSuiteForTests(testSuite);
+    const configuredSuiteGrader: ApiProvider = {
+      id: () => 'echo',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output: 'unused' }),
+    };
+
+    __resolveRuntimeGradingProviderReferencesForTests(
+      testCase,
+      { echo: configuredSuiteGrader },
+      testSuite,
+    );
+
+    expect(testCase.options?.provider).toEqual({
+      id: 'echo',
+      config: { basePath: '/source/scenarios' },
+      env: { GRADER_TOKEN: 'source-env' },
+    });
+    expect(testCase.options?.provider).not.toBe(configuredSuiteGrader);
+  });
+
+  it('keeps defaultTest and scenario-owned grader environments separate', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [
+        {
+          config: [
+            {
+              options: { provider: 'echo' },
+            },
+          ],
+          tests: [{}],
+        },
+      ],
+      '',
+      { GRADER_TOKEN: 'source-env' },
+    );
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      env: { GRADER_TOKEN: 'suite-env' },
+      defaultTest: {
+        assert: [{ type: 'llm-rubric', value: 'default', provider: 'echo' }],
+      },
+      scenarios,
+    } as TestSuite;
+    const [testCase] = __buildTestsFromSuiteForTests(testSuite);
+    testCase.assert = [
+      ...((testSuite.defaultTest as TestCase | undefined)?.assert ?? []),
+      ...(testCase.assert ?? []),
+    ];
+
+    __resolveRuntimeGradingProviderReferencesForTests(testCase, Object.create(null), testSuite);
+
+    expect((testCase.assert?.[0] as { provider?: unknown } | undefined)?.provider).toEqual({
+      id: 'echo',
+      env: { GRADER_TOKEN: 'suite-env' },
+    });
+    expect(testCase.options?.provider).toEqual({
+      id: 'echo',
+      env: { GRADER_TOKEN: 'source-env' },
+    });
+  });
+
+  it('restores scenario source context after beforeAll clones scenario objects', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [{ config: [{ provider: 'echo' }], tests: [{}] }],
+      '/source/scenarios',
+      { SOURCE_TOKEN: 'source-env' },
+    );
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'scenario' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementationOnce(async (_extensions, _hookName, context) => {
+      const beforeAllContext = context as { suite: TestSuite };
+      return {
+        ...beforeAllContext,
+        suite: {
+          ...beforeAllContext.suite,
+          scenarios: beforeAllContext.suite.scenarios?.map((scenario) => ({
+            ...scenario,
+            config: scenario.config.map((row) => ({ ...row })),
+            tests: scenario.tests?.map((test) => ({ ...test })),
+          })),
+        },
+      } as never;
+    });
+    const resolveProviderSpy = vi
+      .spyOn(providerModule, 'resolveProvider')
+      .mockResolvedValueOnce(scenarioProvider);
+    const testSuite: TestSuite = {
+      extensions: ['file://before-all.js'],
+      providers: [suiteProvider],
+      prompts: [toPrompt('Prompt')],
+      scenarios: scenarios as TestSuite['scenarios'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(resolveProviderSpy).toHaveBeenCalledWith(
+        'echo',
+        expect.any(Object),
+        expect.objectContaining({
+          basePath: '/source/scenarios',
+          env: { SOURCE_TOKEN: 'source-env' },
+        }),
+      );
+      expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(suiteProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      resolveProviderSpy.mockRestore();
+    }
+  });
+
+  it('accepts frozen scenario objects returned by beforeAll hooks', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [{ config: [{ vars: { source: 'frozen' } }], tests: [{}] }],
+      '/source/scenarios',
+      { SOURCE_TOKEN: 'source-env' },
+    );
+    const provider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'frozen' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementationOnce(async (_extensions, _hookName, context) => {
+      const beforeAllContext = context as { suite: TestSuite };
+      const frozenScenarios = beforeAllContext.suite.scenarios?.map((scenario) =>
+        Object.freeze({
+          ...scenario,
+          config: scenario.config.map((row) => Object.freeze({ ...row })),
+          tests: scenario.tests?.map((test) => Object.freeze({ ...test })),
+        }),
+      );
+      return {
+        ...beforeAllContext,
+        suite: { ...beforeAllContext.suite, scenarios: frozenScenarios },
+      } as never;
+    });
+    const testSuite: TestSuite = {
+      extensions: ['file://before-all.js'],
+      providers: [provider],
+      prompts: [toPrompt('{{source}}')],
+      scenarios: scenarios as TestSuite['scenarios'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps source context attached when beforeAll clones, mutates, and reorders scenarios', async () => {
+    const [scenarioA] = (await loadScenarioConfigs(
+      [{ config: [{ provider: 'echo-a', vars: { source: 'a' } }], tests: [{}] }],
+      '/source/a',
+      { SOURCE_TOKEN: 'env-a' },
+    ))!;
+    const [scenarioB] = (await loadScenarioConfigs(
+      [{ config: [{ provider: 'echo-b', vars: { source: 'b' } }], tests: [{}] }],
+      '/source/b',
+      { SOURCE_TOKEN: 'env-b' },
+    ))!;
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const scenarioProviderA: ApiProvider = {
+      id: () => 'scenario-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'a' }),
+    };
+    const scenarioProviderB: ApiProvider = {
+      id: () => 'scenario-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'b' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementationOnce(async (_extensions, _hookName, context) => {
+      const beforeAllContext = context as { suite: TestSuite };
+      return {
+        ...beforeAllContext,
+        suite: {
+          ...beforeAllContext.suite,
+          scenarios: beforeAllContext.suite.scenarios
+            ?.map((scenario) => ({
+              ...scenario,
+              config: scenario.config.map((row) => ({
+                ...row,
+                metadata: { ...row.metadata, changedByHook: true },
+              })),
+              tests: scenario.tests?.map((test) => ({ ...test })),
+            }))
+            .reverse(),
+        },
+      } as never;
+    });
+    const resolveProviderSpy = vi
+      .spyOn(providerModule, 'resolveProvider')
+      .mockImplementation(async (provider, _providerMap, _options) => {
+        return provider === 'echo-a' ? scenarioProviderA : scenarioProviderB;
+      });
+    const testSuite: TestSuite = {
+      extensions: ['file://before-all.js'],
+      providers: [suiteProvider],
+      prompts: [toPrompt('{{source}}')],
+      scenarios: [scenarioA, scenarioB] as TestSuite['scenarios'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(resolveProviderSpy).toHaveBeenCalledWith(
+        'echo-a',
+        expect.any(Object),
+        expect.objectContaining({ basePath: '/source/a', env: { SOURCE_TOKEN: 'env-a' } }),
+      );
+      expect(resolveProviderSpy).toHaveBeenCalledWith(
+        'echo-b',
+        expect.any(Object),
+        expect.objectContaining({ basePath: '/source/b', env: { SOURCE_TOKEN: 'env-b' } }),
+      );
+      expect(scenarioProviderA.callApi).toHaveBeenCalledTimes(1);
+      expect(scenarioProviderB.callApi).toHaveBeenCalledTimes(1);
+      expect(suiteProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      resolveProviderSpy.mockRestore();
+    }
+  });
+
+  it('does not serialize valid cyclic scenario provider state in invariant messages', async () => {
+    const client: { self?: unknown } = {};
+    client.self = client;
+    const scenarioProvider = {
+      id: () => 'cyclic-scenario-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+      client,
+    } as ApiProvider;
+    const testSuite: TestSuite = {
+      providers: [scenarioProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [{ config: [{ provider: scenarioProvider }], tests: [{}] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects cyclic assertion sets before applying scenario grader context', async () => {
+    const assertion: Record<string, unknown> = {
+      type: 'assert-set',
+      assert: [],
+    };
+    (assertion.assert as unknown[]).push(assertion);
+    await expect(
+      loadScenarioConfigs(
+        [{ config: [{ assert: [assertion] }], tests: [{}] } as never],
+        '/source/scenarios',
+        { GRADER_TOKEN: 'source-env' },
+      ),
+    ).rejects.toThrow(/contains a cycle/);
+  });
+
+  it('resolves string and options-object provider overrides from scenario rows', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'echo',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('{{case}}')],
+      scenarios: [
+        {
+          config: [
+            { vars: { case: 'string' }, provider: 'echo' },
+            {
+              vars: { case: 'object' },
+              provider: { id: 'echo', label: 'scenario-echo' },
+            },
+            { vars: { case: 'suite' } },
+          ],
+          tests: [{}],
+        },
+        {
+          config: [{ vars: { case: 'test' } }],
+          tests: [{ provider: 'echo' }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results.map((result) => result.response?.output)).toEqual([
+      'string',
+      'object',
+      'suite',
+      'test',
+    ]);
+    expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a scenario provider override once without changing normal suite fanout', async () => {
+    const calls: string[] = [];
+    const makeProvider = (id: string): ApiProvider => ({
+      id: () => id,
+      callApi: vi.fn(async (_prompt, context) => {
+        calls.push(`${id}:${context?.originalProvider?.id()}`);
+        return { output: id };
+      }),
+    });
+    const suiteProviderA = makeProvider('suite-a');
+    const suiteProviderB = makeProvider('suite-b');
+    const scenarioProvider = makeProvider('scenario-override');
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('{{kind}}')],
+      scenarios: [
+        {
+          config: [
+            { vars: { kind: 'override' }, provider: scenarioProvider },
+            { vars: { kind: 'normal' } },
+          ],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(calls).toEqual(['scenario-override:suite-a', 'suite-a:suite-a', 'suite-b:suite-b']);
+    expect(summary.results.map((result) => result.response?.output)).toEqual([
+      'scenario-override',
+      'suite-a',
+      'suite-b',
+    ]);
+    expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(suiteProviderA.callApi).toHaveBeenCalledTimes(1);
+    expect(suiteProviderB.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not duplicate a scenario override for fuzzy or duplicate suite-provider IDs', async () => {
+    const suiteProviders: ApiProvider[] = ['openai', 'openai:gpt-4', 'openai'].map((id) => ({
+      id: () => id,
+      callApi: vi.fn().mockResolvedValue({ output: id }),
+    }));
+    const originalProviders: string[] = [];
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn(async (_prompt, context) => {
+        originalProviders.push(context?.originalProvider?.id() ?? 'missing');
+        return { output: 'scenario-override' };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: suiteProviders,
+      prompts: [toPrompt('Prompt')],
+      scenarios: [{ config: [{ provider: scenarioProvider }], tests: [{}] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(originalProviders).toEqual(['openai']);
+    expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.results).toHaveLength(1);
+  });
+
+  it('preserves distinct prompt coverage while deduplicating scenario overrides', async () => {
+    const suiteProviderA: ApiProvider = {
+      id: () => 'suite-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
+    };
+    const suiteProviderB: ApiProvider = {
+      id: () => 'suite-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-b' }),
+    };
+    const calls: Array<{ originalProvider: string; prompt: string }> = [];
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn(async (prompt, context) => {
+        calls.push({
+          originalProvider: context?.originalProvider?.id() ?? 'missing',
+          prompt,
+        });
+        return { output: prompt };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('one'), toPrompt('two')],
+      providerPromptMap: {
+        'suite-a': ['one'],
+        'suite-b': ['two'],
+      },
+      scenarios: [{ config: [{ provider: scenarioProvider }], tests: [{}] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(calls).toEqual([
+      { originalProvider: 'suite-a', prompt: 'one' },
+      { originalProvider: 'suite-b', prompt: 'two' },
+    ]);
+    expect(summary.results).toHaveLength(2);
+  });
+
+  it('applies provider filters before appending scenario override prompt columns', async () => {
+    const suiteProviderA: ApiProvider = {
+      id: () => 'suite-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
+    };
+    const suiteProviderB: ApiProvider = {
+      id: () => 'suite-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-b' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn(async (prompt) => ({ output: prompt })),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('one'), toPrompt('two')],
+      providerPromptMap: {
+        'suite-a': ['one'],
+        'suite-b': ['two'],
+      },
+      scenarios: [
+        {
+          config: [{ provider: scenarioProvider, providers: ['suite-a'] }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('scenario-override');
+    expect(summary.results[0].prompt.raw).toBe('one');
+    const scenarioPrompts = summary.prompts.filter(
+      (prompt: CompletedPrompt) => prompt.provider === 'scenario-override',
+    );
+    expect(scenarioPrompts).toEqual([expect.objectContaining({ raw: 'one' })]);
+  });
+
+  it('applies filter ranges before appending scenario override prompt columns', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-provider' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn().mockResolvedValue({ output: 'scenario-override' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('only')],
+      scenarios: [
+        {
+          config: [{ provider: scenarioProvider }, {}],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { filterRange: '1:2', maxConcurrency: 1 });
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('suite-provider');
+    expect(scenarioProvider.callApi).not.toHaveBeenCalled();
+    expect(
+      summary.prompts.filter((prompt: CompletedPrompt) => prompt.provider === 'scenario-override'),
+    ).toEqual([]);
+  });
+
+  it('does not load scenario provider overrides excluded by filter ranges', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-provider' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('only')],
+      scenarios: [
+        {
+          config: [{ provider: 'file://missing-provider.cjs' }, {}],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { filterRange: '1:2', maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('suite-provider');
+    expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not instantiate scenario providers with no eligible provider or prompt slots', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-provider' }),
+    };
+    const missingProvider = `file://${path.join(os.tmpdir(), `missing-${randomUUID()}.cjs`)}`;
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('eligible')],
+      scenarios: [
+        {
+          config: [
+            { provider: missingProvider, providers: [] },
+            { provider: missingProvider, prompts: ['not-eligible'] },
+          ],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(0);
+    expect(suiteProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {
+    const suiteProviderA: ApiProvider = {
+      id: () => 'suite-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
+    };
+    const suiteProviderB: ApiProvider = {
+      id: () => 'suite-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-b' }),
+    };
+    const originalProviders: string[] = [];
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn(async (_prompt, context) => {
+        originalProviders.push(context?.originalProvider?.id() ?? 'missing');
+        return { output: 'scenario-override' };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('eligible')],
+      providerPromptMap: {
+        'suite-a': ['not-eligible'],
+        'suite-b': ['eligible'],
+      },
+      scenarios: [
+        {
+          config: [{ provider: scenarioProvider }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(originalProviders).toEqual(['suite-b']);
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('scenario-override');
+    expect(summary.results[0].response?.output).toBe('scenario-override');
+  });
+
+  it('does not multiply scenario override repeats and variable combinations by suite providers', async () => {
+    const suiteProviderA: ApiProvider = {
+      id: () => 'suite-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
+    };
+    const suiteProviderB: ApiProvider = {
+      id: () => 'suite-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-b' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn().mockResolvedValue({ output: 'scenario-override' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('{{value}}')],
+      scenarios: [
+        {
+          config: [
+            {
+              provider: scenarioProvider,
+              vars: { value: ['one', 'two'] },
+              options: { repeat: 2 },
+            },
+          ],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(scenarioProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(suiteProviderA.callApi).not.toHaveBeenCalled();
+    expect(suiteProviderB.callApi).not.toHaveBeenCalled();
+    expect(summary.results).toHaveLength(4);
+  });
+
+  it('preserves top-level provider override fanout for wrapper compatibility', async () => {
+    const suiteProviderA: ApiProvider = {
+      id: () => 'suite-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
+    };
+    const suiteProviderB: ApiProvider = {
+      id: () => 'suite-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-b' }),
+    };
+    const originalProviders: string[] = [];
+    const wrapperProvider: ApiProvider = {
+      id: () => 'wrapper',
+      callApi: vi.fn(async (_prompt, context) => {
+        originalProviders.push(context?.originalProvider?.id() ?? 'missing');
+        return { output: 'wrapper' };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('Prompt')],
+      tests: [{ provider: wrapperProvider }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(originalProviders).toEqual(['suite-a', 'suite-b']);
+    expect(wrapperProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.results).toHaveLength(2);
+  });
+
+  it('rejects malformed scenario provider overrides before executing providers', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [
+        {
+          config: [{ provider: { config: { marker: 'missing-id' } } as never }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Provider object must have an 'id' field/,
+    );
+    expect(suiteProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('does not execute raw provider refs from unnormalized top-level test data', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('Prompt')],
+      tests: [{ provider: 'echo' }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results[0].response?.output).toBe('suite');
+    expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
   it('applies repeat from scenario config options', async () => {

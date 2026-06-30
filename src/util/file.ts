@@ -13,10 +13,10 @@ import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
-import { safeResolve } from './pathUtils';
+import { GLOB_OPTIONS, resolveLiteralPathOrGlob, safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 
-import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
+import type { EnvOverrides, NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -44,18 +44,116 @@ export async function pathExists(filePath: string): Promise<boolean> {
  * Simple Nunjucks engine specifically for file paths
  * This function is separate from the main getNunjucksEngine to avoid circular dependencies
  */
-export function getNunjucksEngineForFilePath(): nunjucks.Environment {
+export function getNunjucksEngineForFilePath(envOverrides?: EnvOverrides): nunjucks.Environment {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return {
+      renderString: (template: string) => template,
+    } as unknown as nunjucks.Environment;
+  }
+
   const env = nunjucks.configure({
     autoescape: false,
   });
 
-  // Add environment variables as template globals
+  const processEnvVarsDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+
+  // Explicit config/suite env wins and suppresses stale global config state.
+  // When no override is supplied, retain the existing generic-loader behavior.
   env.addGlobal('env', {
-    ...process.env,
-    ...cliState.config?.env,
+    ...(processEnvVarsDisabled ? {} : process.env),
+    ...(envOverrides ?? cliState.config?.env),
   });
 
   return env;
+}
+
+export function renderEnvOnlyInStringForFilePath(
+  template: string,
+  envOverrides?: EnvOverrides,
+): string {
+  if (!template.includes('{{') || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return template;
+  }
+
+  const processEnvVarsDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+  const effectiveEnvOverrides = envOverrides ?? cliState.config?.env ?? {};
+  const envGlobals: Record<string, string | undefined> = {
+    ...(processEnvVarsDisabled ? {} : process.env),
+    ...effectiveEnvOverrides,
+  };
+  const nunjucksEngine = getNunjucksEngineForFilePath(envOverrides);
+
+  return template.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+    if (!match.match(/\benv\.|env\[/)) {
+      return match;
+    }
+
+    const varMatch = match.match(/env\.(\w+)|env\[['"]([^'"]+)['"]\]/);
+    const varName = varMatch?.[1] || varMatch?.[2];
+    const hasFilter = match.includes('|');
+
+    if (!hasFilter && (!varName || !(varName in envGlobals) || envGlobals[varName] === undefined)) {
+      return match;
+    }
+
+    try {
+      return nunjucksEngine.renderString(match, {});
+    } catch (error) {
+      logger.debug(
+        `Failed to render env template "${match}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return match;
+    }
+  });
+}
+
+function parseGlobFile(matchedFile: string, contents: string): any[] {
+  if (matchedFile.endsWith('.json')) {
+    const parsed = JSON.parse(contents);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  }
+  if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
+    const parsed = yaml.load(contents);
+    return parsed === null || parsed === undefined ? [] : Array.isArray(parsed) ? parsed : [parsed];
+  }
+  if (matchedFile.endsWith('.csv')) {
+    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      columns: true as const,
+    };
+    const records = csvParse<Record<string, string>>(contents, csvOptions);
+    // If single column, return array of values to match single file behavior.
+    return records.length > 0 && Object.keys(records[0]).length === 1
+      ? records.map((record) => Object.values(record)[0])
+      : records;
+  }
+  return [contents];
+}
+
+function combineGlobMatches(matchedFiles: string[]): any[] {
+  const allContents: any[] = [];
+  for (const matchedFile of matchedFiles) {
+    let contents: string;
+    try {
+      contents = fs.readFileSync(matchedFile, 'utf8');
+    } catch (error) {
+      // File may have been deleted between glob and read (race condition)
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
+        continue;
+      }
+      throw error;
+    }
+    for (const item of parseGlobFile(matchedFile, contents)) {
+      allContents.push(item);
+    }
+  }
+  return allContents;
 }
 
 /**
@@ -66,6 +164,8 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
  * preserves Python/JS file references instead of loading their content.
+ * @param envOverrides - Optional explicit template environment. Supplying this prevents
+ * stale cliState config env from affecting long-lived or programmatic callers.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -74,11 +174,13 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: 'assertion' | 'general' | 'opaque' | 'provider' | 'vars',
+  envOverrides?: EnvOverrides,
+  basePath?: string,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, context);
+      const content: any = maybeLoadFromExternalFile(path, context, envOverrides, basePath);
       return content;
     });
   }
@@ -91,34 +193,37 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath = renderEnvOnlyInStringForFilePath(filePath, envOverrides);
+
+  if (context === 'opaque') {
+    return renderedFilePath;
+  }
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
+  const resolvedFileRef =
+    basePath === undefined
+      ? renderedFilePath
+      : `file://${path.resolve(basePath, cleanPath)}${functionName ? `:${functionName}` : ''}`;
+
+  if (context === 'provider' || context === 'vars') {
+    return resolvedFileRef;
+  }
 
   // In assertion contexts, always preserve Python/JS file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
   if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
     logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
-    return renderedFilePath;
-  }
-
-  // In vars contexts, preserve all file:// references for test case expansion
-  // This prevents premature file loading - JS/Python files should be executed at runtime
-  // by renderPrompt in evaluatorHelpers.ts, and glob patterns should be expanded by
-  // generateVarCombinations in evaluator.ts
-  if (context === 'vars') {
-    logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
-    return renderedFilePath;
+    return resolvedFileRef;
   }
 
   // For Python/JS files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
   if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    return renderedFilePath;
+    return resolvedFileRef;
   }
 
   // For non-Python/JS files, use the original path (ignore potential function name)
@@ -127,67 +232,19 @@ export function maybeLoadFromExternalFile(
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
-  const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
+  const resolvedPath = path.resolve(basePath ?? cliState.basePath ?? '', pathToUse);
 
-  // Check if the path contains glob patterns
-  if (hasMagic(pathToUse)) {
+  // An existing literal file always wins, even when its name contains glob magic.
+  // This prevents a sibling glob match from silently selecting the wrong file.
+  const literalFileExists = fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile() ?? false;
+  if (!literalFileExists && hasMagic(pathToUse, GLOB_OPTIONS)) {
     // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
+    const matchedFiles = resolveLiteralPathOrGlob(resolvedPath);
 
     if (matchedFiles.length === 0) {
       throw new Error(`No files found matching pattern: ${resolvedPath}`);
     }
-
-    // Load all matched files and combine their contents
-    const allContents: any[] = [];
-    for (const matchedFile of matchedFiles) {
-      let contents: string;
-      try {
-        contents = fs.readFileSync(matchedFile, 'utf8');
-      } catch (error) {
-        // File may have been deleted between glob and read (race condition)
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
-          continue;
-        }
-        throw error;
-      }
-      if (matchedFile.endsWith('.json')) {
-        const parsed = JSON.parse(contents);
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
-        if (parsed === null || parsed === undefined) {
-          continue; // Skip empty files
-        }
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.csv')) {
-        const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-          columns: true as const,
-        };
-        const records = csvParse<Record<string, string>>(contents, csvOptions);
-        // If single column, return array of values to match single file behavior
-        if (records.length > 0 && Object.keys(records[0]).length === 1) {
-          allContents.push(...records.map((record) => Object.values(record)[0]));
-        } else {
-          allContents.push(...records);
-        }
-      } else {
-        allContents.push(contents);
-      }
-    }
-
-    return allContents;
+    return combineGlobMatches(matchedFiles);
   }
 
   // Original single file logic
@@ -198,7 +255,11 @@ export function maybeLoadFromExternalFile(
     contents = fs.readFileSync(finalPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`File does not exist: ${finalPath}`);
+      const missingFileError = new Error(
+        `File does not exist: ${finalPath}`,
+      ) as NodeJS.ErrnoException;
+      missingFileError.code = 'ENOENT';
+      throw missingFileError;
     }
     throw new Error(`Failed to read file ${finalPath}: ${error}`);
   }
@@ -255,45 +316,160 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * @param context - Optional context to control file loading behavior
  * @returns The configuration with external file references resolved
  */
+export type ConfigFileContext =
+  | 'assertion'
+  | 'file-ref'
+  | 'general'
+  | 'opaque'
+  | 'vars'
+  | 'scenario-test'
+  | 'scenario-test-options'
+  | 'scenario-test-assertions'
+  | 'provider';
+
+const SCENARIO_CONFIG_CHILD_CONTEXTS: Partial<
+  Record<ConfigFileContext, Record<string, ConfigFileContext>>
+> = {
+  'scenario-test': {
+    vars: 'vars',
+    provider: 'provider',
+    options: 'scenario-test-options',
+    assert: 'scenario-test-assertions',
+    assertScoringFunction: 'assertion',
+    providerOutput: 'general',
+  },
+  'scenario-test-options': {
+    provider: 'provider',
+    transform: 'assertion',
+    transformVars: 'assertion',
+    contextTransform: 'assertion',
+    postprocess: 'assertion',
+    response_format: 'file-ref',
+    tools: 'file-ref',
+    functions: 'file-ref',
+    rubricPrompt: 'file-ref',
+  },
+  'scenario-test-assertions': {
+    provider: 'provider',
+    assert: 'scenario-test-assertions',
+    transform: 'assertion',
+    transformVars: 'assertion',
+    contextTransform: 'assertion',
+    postprocess: 'assertion',
+    value: 'general',
+  },
+};
+
+function isScriptAssertionValue(config: Record<string, unknown>, key: string): boolean {
+  return (
+    key === 'value' &&
+    Object.prototype.hasOwnProperty.call(config, 'type') &&
+    typeof config.type === 'string' &&
+    ['python', 'javascript', 'ruby'].includes(config.type.replace(/^not-/, ''))
+  );
+}
+
+export function getConfigFileChildContext(
+  config: Record<string, unknown>,
+  key: string,
+  context?: ConfigFileContext,
+): ConfigFileContext | undefined {
+  if (context === 'provider') {
+    return 'provider';
+  }
+  if (context === 'scenario-test-assertions' && isScriptAssertionValue(config, key)) {
+    return 'assertion';
+  }
+  const structuralContext = context ? SCENARIO_CONFIG_CHILD_CONTEXTS[context] : undefined;
+  if (structuralContext) {
+    if (Object.prototype.hasOwnProperty.call(structuralContext, key)) {
+      return structuralContext[key];
+    }
+    return 'opaque';
+  }
+  return isScriptAssertionValue(config, key) ? 'assertion' : key === 'vars' ? 'vars' : context;
+}
+
+function isPlainConfigRecord(value: object): value is Record<string, unknown> {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isLiveProviderRecord(value: Record<string, unknown>): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'id') &&
+    Object.prototype.hasOwnProperty.call(value, 'callApi') &&
+    typeof value.id === 'function' &&
+    typeof value.callApi === 'function'
+  );
+}
+
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: ConfigFileContext,
+  envOverrides?: EnvOverrides,
+  seen = new WeakMap<object, any>(),
+  basePath?: string,
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
-  }
-  if (typeof config === 'object' && config !== null) {
-    const result: Record<string, any> = {};
-    for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
-      const isAssertionValue =
-        key === 'value' &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
-
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
-
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
-
-      if (key === '__proto__') {
-        Object.defineProperty(result, key, {
-          value,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        result[key] = value;
-      }
+    const cached = seen.get(config);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const result: any[] = [];
+    seen.set(config, result);
+    for (const item of config) {
+      result.push(maybeLoadConfigFromExternalFile(item, context, envOverrides, seen, basePath));
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  if (typeof config === 'object' && config !== null) {
+    if (!isPlainConfigRecord(config)) {
+      return config;
+    }
+    if (isLiveProviderRecord(config)) {
+      return config;
+    }
+    const cached = seen.get(config);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const result: Record<string, any> = {};
+    seen.set(config, result);
+    for (const key of Object.keys(config)) {
+      const childContext = getConfigFileChildContext(config, key, context);
+      const value = maybeLoadConfigFromExternalFile(
+        config[key],
+        childContext,
+        envOverrides,
+        seen,
+        basePath,
+      );
+
+      Object.defineProperty(result, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return result;
+  }
+  const externalContext =
+    context === 'assertion' ||
+    context === 'file-ref' ||
+    context === 'general' ||
+    context === 'opaque' ||
+    context === 'provider' ||
+    context === 'vars'
+      ? context
+      : undefined;
+  return maybeLoadFromExternalFile(
+    config,
+    externalContext === 'file-ref' ? 'provider' : externalContext,
+    envOverrides,
+    basePath,
+  );
 }
 
 /**

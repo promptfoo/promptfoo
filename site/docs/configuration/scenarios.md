@@ -84,16 +84,16 @@ The full source behind this sample is in [`examples/config-multiple-translations
 
 The `scenarios` configuration is an array of `Scenario` objects. Each `Scenario` has two main parts:
 
-- `config`: an array of `vars` objects. Each `vars` object represents a set of variables that will be passed to the tests.
-- `tests`: an array of `TestCase` objects. These are the tests that will be run for each set of variables in the `config`.
+- `config`: an array of partial test cases or `$values` matrix-file references. Each expanded row is passed to the tests.
+- `tests`: optional inline `TestCase` objects, an external test file, or a test generator. These tests run for each row in `config`; when omitted, each config row runs once with the default test.
 
 Here is the structure of a `Scenario`:
 
-| Property    | Type                  | Required | Description                                                        |
-| ----------- | --------------------- | -------- | ------------------------------------------------------------------ |
-| description | `string`              | No       | Optional description of what you're testing                        |
-| config      | `Partial<TestCase>[]` | Yes      | An array of variable sets. Each set will be run through the tests. |
-| tests       | `TestCase[]`          | Yes      | The tests to be run on each set of variables.                      |
+| Property    | Type                                                                                | Required | Description                                                         |
+| ----------- | ----------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------- |
+| description | `string`                                                                            | No       | Optional description of what you're testing                         |
+| config      | `Array<Partial<TestCase> \| { $values: string }>`                                   | Yes      | Inline rows or matrix-file references expanded before the tests run |
+| tests       | `string \| TestGeneratorConfig \| Array<string \| TestGeneratorConfig \| TestCase>` | No       | Inline, generated, or file-backed tests; defaults to one empty test |
 
 Scenarios can also be loaded from external files. To reference an external file, use the `file://` prefix:
 
@@ -103,6 +103,51 @@ scenarios:
 ```
 
 The external file should follow the same structure as inline scenarios.
+
+Scenario tests use the standard test loader, so CSV, YAML, JSON, and generator files work the same way as top-level tests. File and generator paths in an external scenario resolve relative to that scenario file:
+
+```yaml title="scenario.yaml"
+config:
+  - vars:
+      language: French
+tests: file://tests.csv
+```
+
+```yaml title="generated-scenario.yaml"
+config:
+  - vars:
+      language: French
+tests:
+  - path: file://generate-tests.js
+    config:
+      count: 10
+```
+
+Inline `provider` overrides in `config` or `tests` rows follow the same rule. Provider IDs and nested provider option refs resolve relative to the external scenario file; refs inside a separate scenario test file resolve relative to that test file. Both forms use the declaring config's environment. A scenario provider override runs once per eligible prompt without multiplying across suite-provider slots; rows without an override continue to run across every eligible suite provider.
+
+You can also keep large `config` matrices in separate files with `$values`:
+
+```yaml
+scenarios:
+  - config:
+      - $values: file://test-matrix.yaml
+      - vars:
+          language: German
+    tests:
+      - vars:
+          input: 'Hello world'
+```
+
+```yaml title="test-matrix.yaml"
+- vars:
+    language: French
+- vars:
+    language: Spanish
+```
+
+The referenced YAML or JSON file should contain one `Partial<TestCase>` object or an array of them; loaded entries are flattened into the `config` array alongside any inline entries. Glob patterns such as `$values: file://matrices/*.yaml` load all matching files. Every non-empty row must contain a test case field such as `vars` or `assert` — flat key-value rows (such as raw CSV columns) are rejected with a pointer to nest them under `vars`.
+
+A `$values` entry must have `$values` as its only key, and the referenced rows cannot themselves contain `$values`. The `$values` ref resolves against the file that declares the scenario: the config file for inline scenarios, or the scenario file when the scenario itself is loaded via `file://`. Relative target and grader provider refs inside loaded rows resolve against each matrix file, using the declaring scenario's environment in multi-config runs. When loading scenarios with a glob, keep matrix files out of the glob's reach (a different directory or extension) so they are not also loaded as scenarios.
 
 ### Using Glob Patterns
 

@@ -11,6 +11,65 @@ const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
 
+function isSensitiveEnvEntry(key: string, value: string): boolean {
+  return (
+    /(?:^|_)(?:auth|authorization|cookie|credential|credentials|password|passwd|pwd|secret|session|sig|signature|token)(?:_|$)|api[_-]?key|apikey/i.test(
+      key,
+    ) ||
+    /^(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|key-[A-Za-z0-9]{20,}|Bearer\s+.{20,}|Basic\s+.{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|[A-Za-z0-9+/=_-]{64,})$/i.test(
+      value,
+    )
+  );
+}
+
+function getSensitiveValueVariants(value: string): string[] {
+  const trimmed = value.trim();
+  const normalizedValues = [value, trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()];
+  return Array.from(
+    new Set(
+      normalizedValues.flatMap((normalized) => {
+        const variants = [normalized];
+        try {
+          variants.push(encodeURI(normalized), encodeURIComponent(normalized));
+        } catch {}
+        return variants;
+      }),
+    ),
+  ).filter(Boolean);
+}
+
+export function redactEnvValues(
+  value: string,
+  overrides?: Record<string, string | undefined>,
+): string {
+  const candidates = Array.from(
+    new Set(
+      Object.entries({ ...process.env, ...overrides })
+        .filter(
+          (entry): entry is [string, string] =>
+            typeof entry[1] === 'string' &&
+            entry[1].length > 0 &&
+            isSensitiveEnvEntry(entry[0], entry[1]),
+        )
+        .flatMap(([, envValue]) => getSensitiveValueVariants(envValue)),
+    ),
+  ).sort((left, right) => right.length - left.length);
+
+  let redacted = '';
+  let index = 0;
+  while (index < value.length) {
+    const match = candidates.find((candidate) => value.startsWith(candidate, index));
+    if (match) {
+      redacted += REDACTED;
+      index += match.length;
+    } else {
+      redacted += value[index];
+      index++;
+    }
+  }
+  return redacted;
+}
+
 // Query-parameter names that imply a credential value. Shared by sanitizeUrl's
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =

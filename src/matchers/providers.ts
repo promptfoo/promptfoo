@@ -1,6 +1,8 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import cliState from '../cliState';
 import logger from '../logger';
-import { loadApiProvider } from '../providers/index';
+import { loadApiProvider, sanitizeProviderErrorDetail } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
@@ -99,10 +101,48 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
   invariant(provider.id, 'Provider supplied to assertion must have an id');
-  return loadApiProvider(provider.id, {
-    options: provider as ProviderOptions,
-    basePath: cliState.basePath,
-  });
+  return loadGradingProvider(
+    { env: provider.env, provider },
+    () =>
+      loadApiProvider(provider.id!, {
+        options: provider as ProviderOptions,
+        basePath: provider.config?.basePath ?? cliState.basePath,
+      }),
+    provider.env,
+  );
+}
+
+async function loadGradingProvider(
+  definition: unknown,
+  load: () => Promise<ApiProvider>,
+  env?: Record<string, string | undefined>,
+): Promise<ApiProvider> {
+  const executionContext = getProviderCallExecutionContext();
+  const cachedEntry = executionContext?.providerCache?.find((entry) =>
+    isDeepStrictEqual(entry.definition, definition),
+  );
+  const providerPromise = (cachedEntry?.promise ?? load()) as Promise<ApiProvider>;
+  if (!cachedEntry) {
+    executionContext?.providerCache?.push({ definition, promise: providerPromise });
+  }
+  try {
+    const loaded = await providerPromise;
+    (executionContext?.ownedProviders as Set<ApiProvider> | undefined)?.add(loaded);
+    return loaded;
+  } catch (error) {
+    if (!cachedEntry && executionContext?.providerCache) {
+      const index = executionContext.providerCache.findIndex(
+        (entry) => entry.promise === providerPromise,
+      );
+      if (index >= 0) {
+        executionContext.providerCache.splice(index, 1);
+      }
+    }
+    const detail = sanitizeProviderErrorDetail(error, env);
+    const sanitizedError = new Error(detail);
+    Object.defineProperty(sanitizedError, 'cause', { value: new Error(detail) });
+    throw sanitizedError;
+  }
 }
 
 function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
@@ -136,7 +176,9 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
+    finalProvider = await loadGradingProvider({ basePath: cliState.basePath, provider }, () =>
+      loadApiProvider(provider, { basePath: cliState.basePath }),
+    );
   } else if (
     provider != null &&
     typeof provider === 'object' &&

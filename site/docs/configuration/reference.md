@@ -30,7 +30,7 @@ Here is the main structure of the promptfoo configuration file:
 | targets                         | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `providers` is set | Alias for `providers`, commonly used in [red team](/docs/red-team) configs. Exactly one of `targets` or `providers` must be set.                                                                                                |
 | prompts                         | string \| string[] \| Record\<string, string\> \| Prompt[]                                                                                            | Yes                            | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
 | tests                           | string \| (string \| [Test Case](#test-case) \| [Test Generator Config](#test-generator-config))[] \| [Test Generator Config](#test-generator-config) | No                             | Path to a [test file](/docs/configuration/test-cases), inline tests, or a generator. If omitted, promptfoo runs each prompt/provider pair once with empty vars.                                                                 |
-| scenarios                       | (string \| [Scenario](#scenario))[]                                                                                                                   | No                             | [Scenario](/docs/configuration/scenarios) files or inline scenario definitions                                                                                                                                                  |
+| scenarios                       | (string \| [ScenarioInput](#scenario-input))[]                                                                                                        | No                             | [Scenario](/docs/configuration/scenarios) files or inline scenario definitions                                                                                                                                                  |
 | defaultTest                     | `file://${string}` \| Partial [Test Case](#test-case)                                                                                                 | No                             | Sets the [default properties](/docs/configuration/guide#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                      |
 | outputPath                      | string \| string[]                                                                                                                                    | No                             | Where to write output. Writes to console/web viewer if not set. See [output formats](/docs/configuration/outputs).                                                                                                              |
 | sharing                         | boolean \| object                                                                                                                                     | No                             | Enables or configures [result sharing](/docs/usage/sharing) with optional `apiBaseUrl` and `appBaseUrl` fields                                                                                                                  |
@@ -916,7 +916,7 @@ interface TestSuiteConfig {
   tests?: string | (string | TestCase | TestGeneratorConfig)[] | TestGeneratorConfig;
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios?: (string | Scenario)[];
+  scenarios?: (string | ScenarioInput)[];
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest?: `file://${string}` | Omit<TestCase, 'description'>;
@@ -974,14 +974,29 @@ interface UnifiedConfig extends Omit<TestSuiteConfig, 'providers'> {
 
 ### Scenario
 
-`Scenario` is an object that represents a group of test cases to be evaluated.
-It includes a description, default test case configuration, and a list of test cases.
+`Scenario` is the resolved runtime object that represents a group of test cases to be evaluated.
+Source configuration uses the broader [`ScenarioInput`](#scenario-input) shape below.
 
 ```typescript
 interface Scenario {
   description?: string;
   config: Partial<TestCase>[];
   tests: TestCase[];
+}
+```
+
+### Scenario Input
+
+`ScenarioInput` is the pre-parse configuration shape. Scenario rows can be inline or loaded from
+YAML/JSON matrix files, and scenario tests use the same file and generator forms as top-level tests.
+
+```typescript
+type ScenarioConfig = Partial<TestCase> | { $values: `file://${string}` };
+
+interface ScenarioInput {
+  description?: string;
+  config: ScenarioConfig[];
+  tests?: string | TestGeneratorConfig | (string | TestCase | TestGeneratorConfig)[];
 }
 ```
 

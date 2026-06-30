@@ -6,6 +6,12 @@ import {
   optimizePromptTestSuite,
 } from '../../src/optimizer/promptOptimizer';
 import { getDefaultProviders } from '../../src/providers/defaults';
+import {
+  getScenarioSourceContext,
+  getScenarioTestSourceContext,
+  setScenarioSourceContext,
+  setScenarioTestSourceContext,
+} from '../../src/util/config/scenarioContext';
 import { createMockProvider } from '../factories/provider';
 
 import type { CompletedPrompt, EvaluateResult, TestSuite } from '../../src/types/index';
@@ -645,6 +651,15 @@ describe('prompt optimizer', () => {
         },
       ],
     };
+    const scenarioContext = {
+      basePath: '/source/scenario',
+      envOverrides: { SOURCE_ENV: 'scenario' },
+    };
+    const configContext = { basePath: '/source/matrix', envOverrides: { SOURCE_ENV: 'matrix' } };
+    const testContext = { basePath: '/source/tests', envOverrides: { SOURCE_ENV: 'tests' } };
+    setScenarioSourceContext(testSuite.scenarios![0], scenarioContext);
+    setScenarioTestSourceContext(testSuite.scenarios![0].config[0], configContext);
+    setScenarioTestSourceContext(testSuite.scenarios![0].tests[0], testContext);
 
     await optimizePromptTestSuite({}, testSuite);
 
@@ -657,6 +672,11 @@ describe('prompt optimizer', () => {
     ).toEqual(['Seed', 'Seed [optimized 1]']);
     expect(candidateSuite.scenarios?.[0].config[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
     expect(candidateSuite.scenarios?.[0].tests[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(getScenarioSourceContext(candidateSuite.scenarios![0])).toBe(scenarioContext);
+    expect(getScenarioTestSourceContext(candidateSuite.scenarios![0].config[0])).toBe(
+      configContext,
+    );
+    expect(getScenarioTestSourceContext(candidateSuite.scenarios![0].tests[0])).toBe(testContext);
   });
 
   it('rejects validation splits for scenario-based optimization instead of pretending they are held out', async () => {

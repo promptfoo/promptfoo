@@ -2,7 +2,48 @@
  * Path resolution utilities that work with both regular paths and file:// URLs
  */
 import { fileURLToPath } from 'node:url';
+import * as fs from 'fs';
 import path from 'path';
+
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
+
+export const GLOB_OPTIONS = {
+  magicalBraces: true,
+  nodir: true,
+  windowsPathsNoEscape: process.platform === 'win32',
+} as const;
+
+export function escapeExistingDirectoryPrefix(pattern: string): string {
+  const { root } = path.parse(pattern);
+  const parts = pattern.slice(root.length).split(path.sep).filter(Boolean);
+  let literalPrefix = root;
+  let consumedParts = 0;
+
+  for (const part of parts) {
+    const candidate = path.join(literalPrefix, part);
+    if (!fs.statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) {
+      break;
+    }
+    literalPrefix = candidate;
+    consumedParts++;
+  }
+
+  if (consumedParts === 0) {
+    return pattern;
+  }
+  return path.join(escapeGlob(literalPrefix, GLOB_OPTIONS), ...parts.slice(consumedParts));
+}
+
+/** Return an exact existing file before interpreting its name as glob syntax. */
+export function resolveLiteralPathOrGlob(pattern: string): string[] {
+  if (fs.statSync(pattern, { throwIfNoEntry: false })?.isFile()) {
+    return [pattern];
+  }
+  const globPattern = hasMagic(pattern, GLOB_OPTIONS)
+    ? escapeExistingDirectoryPrefix(pattern)
+    : pattern;
+  return globSync(globPattern, GLOB_OPTIONS);
+}
 
 /**
  * Check if a file path is absolute, handling both regular paths and URLs

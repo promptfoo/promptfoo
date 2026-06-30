@@ -32,12 +32,11 @@ import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { ConfigResolutionError, logConfigResolutionError } from '../util/config/errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
-import {
-  ConfigResolutionError,
-  logConfigResolutionError,
-  resolveConfigs,
-} from '../util/config/load';
+import { resolveConfigs } from '../util/config/load';
+import { toSerializableScenario } from '../util/config/persistableScenario';
+import { collectScenarioDependencies } from '../util/config/scenarioContext';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,
@@ -126,6 +125,24 @@ async function resolveReplayConfigs(
   // from its raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
   return configs;
+}
+
+function restoreLogicalPrompts(prompts: Eval['prompts']): TestSuite['prompts'] {
+  const seen = new Set<string>();
+  return prompts.flatMap((prompt) => {
+    const key = prompt.id || `${prompt.label ?? ''}\u0000${prompt.raw}`;
+    if (seen.has(key)) {
+      return [];
+    }
+    seen.add(key);
+    return [
+      {
+        raw: prompt.raw,
+        label: prompt.label,
+        config: prompt.config,
+      },
+    ];
+  });
 }
 
 export class EvalRunError extends Error {
@@ -270,6 +287,14 @@ export async function doEval(
     defaultConfigPath = undefined;
   }
 
+  let watcher: ReturnType<typeof chokidar.watch> | undefined;
+  let watchedPaths = new Set<string>();
+  let resolveInitialWatchEvaluation: () => void;
+  const initialWatchEvaluation = new Promise<void>((resolve) => {
+    resolveInitialWatchEvaluation = resolve;
+  });
+  let watchEvaluationQueue = initialWatchEvaluation;
+
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
     telemetry.record('command_used', {
@@ -385,14 +410,7 @@ export async function doEval(
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        testSuite.prompts = restoreLogicalPrompts(resumeEval.prompts);
       }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
@@ -443,14 +461,7 @@ export async function doEval(
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        testSuite.prompts = restoreLogicalPrompts(resumeEval.prompts);
       }
     } else {
       ({
@@ -777,11 +788,21 @@ export async function doEval(
 
     // Create or load eval record
     const author = getAuthor();
+    const persistedConfig: Partial<UnifiedConfig> =
+      Array.isArray(config.scenarios) && config.scenarios.length > 0
+        ? {
+            ...config,
+            scenarios: config.scenarios.map((scenario) =>
+              typeof scenario === 'object' ? toSerializableScenario(scenario) : scenario,
+            ) as UnifiedConfig['scenarios'],
+          }
+        : config;
+
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
-        : new Eval(config, { author, runtimeOptions });
+        ? await Eval.create(persistedConfig, testSuite.prompts, { author, runtimeOptions })
+        : new Eval(persistedConfig, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -1088,82 +1109,112 @@ export async function doEval(
     });
 
     if (cmdObj.watch && !resumeEval) {
-      if (initialization) {
-        const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
-        if (!configPaths.length) {
-          const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
-            ',',
-          )}}.`;
-          return failEvalRun(message, isCliInvocation, {
-            logForCli: () => logger.error(message),
-            cliFallback: ret,
-          });
-        }
-        const basePath = path.dirname(configPaths[0]);
-        const promptPaths = Array.isArray(config.prompts)
-          ? (config.prompts
-              .map((p) => {
-                if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
-                }
-                return null;
-              })
-              .filter(Boolean) as string[])
-          : [];
-        const providerPaths = Array.isArray(config.providers)
-          ? (config.providers
-              .map((p) =>
-                typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
-                  : null,
-              )
-              .filter(Boolean) as string[])
-          : [];
-        const varPaths = Array.isArray(config.tests)
-          ? config.tests
-              .flatMap((t) => {
-                if (typeof t === 'string' && t.startsWith('file://')) {
-                  return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
-                  return Object.values(t.vars).flatMap((v) => {
-                    if (typeof v === 'string' && v.startsWith('file://')) {
-                      return path.resolve(basePath, v.slice('file://'.length));
-                    }
-                    return [];
-                  });
-                }
-                return [];
-              })
-              .filter(Boolean)
-          : [];
-        const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-        );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
-
-        watcher
-          .on('change', async (path) => {
-            printBorder();
-            logger.info(`File change detected: ${path}`);
-            printBorder();
-            clearConfigCache();
-            try {
-              await runEvaluation();
-            } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
+      const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+      if (!configPaths.length) {
+        const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+          ',',
+        )}}.`;
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+          cliFallback: ret,
+        });
+      }
+      const basePath = path.dirname(configPaths[0]);
+      const promptPaths = Array.isArray(config.prompts)
+        ? (config.prompts
+            .map((p) => {
+              if (typeof p === 'string' && p.startsWith('file://')) {
+                return path.resolve(basePath, p.slice('file://'.length));
+              } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                return path.resolve(basePath, p.id.slice('file://'.length));
               }
-              throw error;
+              return null;
+            })
+            .filter(Boolean) as string[])
+        : [];
+      const providerPaths = Array.isArray(config.providers)
+        ? (config.providers
+            .map((p) =>
+              typeof p === 'string' && p.startsWith('file://')
+                ? path.resolve(basePath, p.slice('file://'.length))
+                : null,
+            )
+            .filter(Boolean) as string[])
+        : [];
+      const varPaths = Array.isArray(config.tests)
+        ? config.tests
+            .flatMap((t) => {
+              if (typeof t === 'string' && t.startsWith('file://')) {
+                return path.resolve(basePath, t.slice('file://'.length));
+              } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
+                return Object.values(t.vars).flatMap((v) => {
+                  if (typeof v === 'string' && v.startsWith('file://')) {
+                    return path.resolve(basePath, v.slice('file://'.length));
+                  }
+                  return [];
+                });
+              }
+              return [];
+            })
+            .filter(Boolean)
+        : [];
+      const scenarioDependencies = collectScenarioDependencies(testSuite.scenarios);
+      const nextWatchPaths = new Set([
+        ...configPaths,
+        ...promptPaths,
+        ...providerPaths,
+        ...varPaths,
+        ...scenarioDependencies.dependencies,
+        ...scenarioDependencies.watchRoots,
+      ]);
+
+      if (initialization) {
+        watchedPaths = nextWatchPaths;
+        watcher = chokidar.watch([...watchedPaths], {
+          ignored: /^\./,
+          ignoreInitial: true,
+          persistent: true,
+        });
+        watcher
+          .on('all', (event, changedPath) => {
+            if (event !== 'add' && event !== 'change' && event !== 'unlink') {
+              return;
             }
+            printBorder();
+            logger.info(`File ${event} detected: ${changedPath}`);
+            printBorder();
+            const evaluation = watchEvaluationQueue.then(async () => {
+              clearConfigCache();
+              try {
+                await runEvaluation();
+              } catch (error) {
+                if (handleRecoverableWatchError(error)) {
+                  return;
+                }
+                throw error;
+              }
+            });
+            watchEvaluationQueue = evaluation.catch((error) => {
+              logger.error('Watch evaluation failed', { error });
+            });
+            return evaluation;
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
-            watchPaths.forEach((watchPath) =>
+            watchedPaths.forEach((watchPath) =>
               logger.info(`Watching for file changes on ${watchPath} ...`),
             ),
           );
+      } else if (watcher) {
+        const removed = [...watchedPaths].filter((watchPath) => !nextWatchPaths.has(watchPath));
+        const added = [...nextWatchPaths].filter((watchPath) => !watchedPaths.has(watchPath));
+        if (removed.length > 0) {
+          await watcher.unwatch(removed);
+        }
+        if (added.length > 0) {
+          watcher.add(added);
+        }
+        watchedPaths = nextWatchPaths;
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
@@ -1203,5 +1254,9 @@ export async function doEval(
     return ret;
   };
 
-  return await runEvaluation(true /* initialization */);
+  try {
+    return await runEvaluation(true /* initialization */);
+  } finally {
+    resolveInitialWatchEvaluation!();
+  }
 }

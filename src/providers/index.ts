@@ -18,7 +18,7 @@ import {
   readProviderConfigFile,
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
-import { sanitizeObject } from '../util/sanitizer';
+import { redactEnvValues, sanitizeObject } from '../util/sanitizer';
 import { getProviderFactories } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -41,6 +41,10 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
   'inputs',
   'config',
 ] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+
+export function sanitizeProviderErrorDetail(error: unknown, env?: EnvOverrides): string {
+  return redactEnvValues(error instanceof Error ? error.message : String(error), env);
+}
 
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
@@ -208,8 +212,9 @@ export async function loadApiProvider(
     }
   }
 
+  const safeProviderPath = redactEnvValues(providerPath, mergedEnv);
   const errorMessage = dedent`
-    Could not identify provider: ${chalk.bold(providerPath)}.
+    Could not identify provider: ${chalk.bold(safeProviderPath)}.
 
     ${chalk.white(dedent`
       Please check your configuration and ensure the provider is correctly specified.

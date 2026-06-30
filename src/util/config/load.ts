@@ -20,6 +20,7 @@ import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
   CommandLineOptionsSchema,
+  type EnvOverrides,
   EvaluateOptionsSchema,
   type Prompt,
   type ProviderOptions,
@@ -44,37 +45,25 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
-import { readTest, readTests } from '../testCaseReader';
+import { readScenarioTests, readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { ConfigResolutionError, failConfigResolution } from './errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+import {
+  getScenarioSourceContext,
+  redactSensitiveEnvValues,
+  transferScenarioSourceContext,
+  withScenarioSourceFallback,
+} from './scenarioContext';
+import {
+  expandScenarioConfigValues,
+  loadScenarioConfigs,
+  resolveFileRefFromBase,
+  resolveScenarioFileRefs,
+} from './scenarioMatrix';
 
-type ConfigResolutionLogLevel = 'error' | 'warn';
-
-interface ConfigResolutionErrorOptions {
-  cliMessage?: string;
-  logLevel?: ConfigResolutionLogLevel;
-}
-
-export class ConfigResolutionError extends Error {
-  readonly cliMessage: string;
-  readonly logLevel: ConfigResolutionLogLevel;
-
-  constructor(message: string, options: ConfigResolutionErrorOptions = {}) {
-    super(message);
-    this.name = 'ConfigResolutionError';
-    this.cliMessage = options.cliMessage ?? message;
-    this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
-  }
-}
-
-export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
-  logger[error.logLevel](prefix ? `${prefix}${error.cliMessage}` : error.cliMessage);
-}
-
-function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
-  throw new ConfigResolutionError(message, options);
-}
+export { ConfigResolutionError, logConfigResolutionError } from './errors';
 
 function normalizeConfiguredCommandLineOptions(
   commandLineOptions: Partial<CommandLineOptions> | undefined,
@@ -104,6 +93,40 @@ function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
   }
 
   return state >>> 0;
+}
+
+async function materializeScenarioSources(
+  scenario: Scenario,
+  fallbackBasePath: string,
+  fallbackEnv: EnvOverrides,
+): Promise<void> {
+  const sourceContext = withScenarioSourceFallback(
+    getScenarioSourceContext(scenario),
+    fallbackBasePath,
+    fallbackEnv,
+  );
+  const { basePath, envOverrides } = sourceContext;
+  try {
+    if (scenario.tests !== undefined) {
+      scenario.tests = (await readScenarioTests(scenario.tests, basePath, envOverrides)) ?? [];
+    }
+    if (scenario.config !== undefined) {
+      scenario.config = await expandScenarioConfigValues(scenario.config, basePath, envOverrides);
+    }
+  } catch (error) {
+    const declaringSource = sourceContext.dependencies?.[0];
+    if (!declaringSource) {
+      throw error;
+    }
+    const safeSource = redactSensitiveEnvValues(declaringSource, envOverrides);
+    const detail = redactSensitiveEnvValues(
+      error instanceof Error ? error.message : String(error),
+      envOverrides,
+    );
+    throw new ConfigResolutionError(`Failed to load scenario ${safeSource}: ${detail}`, {
+      cause: new Error(detail),
+    });
+  }
 }
 
 /**
@@ -493,6 +516,7 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
+  const configSourcePaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -506,8 +530,12 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       );
     }
     for (const globPath of globPaths) {
+      const configSourcePath = path.isAbsolute(globPath)
+        ? globPath
+        : path.resolve(path.dirname(resolvedPath), globPath);
       const config = await readConfig(globPath);
       configs.push(config);
+      configSourcePaths.push(configSourcePath);
     }
   }
 
@@ -538,7 +566,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const tests: UnifiedConfig['tests'] = [];
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
-    const configPath = configPaths[i];
+    const configPath = configSourcePaths[i];
     if (typeof config.tests === 'string') {
       const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
@@ -633,7 +661,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(configSourcePaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -644,7 +672,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(configSourcePaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -656,6 +684,37 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts.push(...Array.from(seenPrompts));
   }
 
+  let scenarios: UnifiedConfig['scenarios'];
+  if (configs.some((config) => config.scenarios !== undefined)) {
+    const resolvedScenarios: NonNullable<UnifiedConfig['scenarios']> = [];
+    for (const [idx, config] of configs.entries()) {
+      if (!config.scenarios) {
+        continue;
+      }
+      const configBasePath = path.dirname(configSourcePaths[idx]);
+      const entries = Array.isArray(config.scenarios) ? config.scenarios : [config.scenarios];
+      for (const scenario of entries) {
+        if (typeof scenario === 'string') {
+          if (scenario.startsWith('file://')) {
+            const loadedScenarios = await loadScenarioConfigs(
+              [scenario],
+              configBasePath,
+              config.env ?? {},
+            );
+            loadedScenarios?.forEach((loadedScenario) => resolvedScenarios.push(loadedScenario));
+          } else {
+            resolvedScenarios.push(
+              resolveFileRefFromBase(configBasePath, scenario, config.env ?? {}),
+            );
+          }
+          continue;
+        }
+        resolvedScenarios.push(resolveScenarioFileRefs(configBasePath, scenario, config.env ?? {}));
+      }
+    }
+    scenarios = resolvedScenarios;
+  }
+
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -663,9 +722,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     providers,
     prompts,
     tests,
-    scenarios: configs.some((config) => config.scenarios !== undefined)
-      ? configs.flatMap((config) => config.scenarios || [])
-      : undefined,
+    scenarios,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
@@ -930,35 +987,29 @@ export async function resolveConfigs(
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
-    config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
-    // Flatten the scenarios array in case glob patterns were used
-    config.scenarios = config.scenarios.flat().map((scenario) =>
-      typeof scenario === 'object'
-        ? {
-            ...scenario,
-            tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
-          }
-        : scenario,
-    );
+    config.scenarios = (
+      await loadScenarioConfigs(config.scenarios, basePath, config.env ?? {})
+    )?.map((scenario) => {
+      if (typeof scenario !== 'object') {
+        return scenario;
+      }
+      return transferScenarioSourceContext(scenario, {
+        ...scenario,
+        tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
+      });
+    });
   }
   if (Array.isArray(config.scenarios)) {
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
-      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          cmdObj.tests ? undefined : basePath,
-        );
-        scenario.tests = parsedScenarioTests;
-      }
       invariant(typeof scenario === 'object', 'scenario must be an object');
+      const resolvedScenario = scenario as Scenario;
+      await materializeScenarioSources(resolvedScenario, basePath, config.env ?? {});
       const filteredTests = await filterTests(
         {
-          ...(scenario ?? {}),
+          ...resolvedScenario,
+          tests: resolvedScenario.tests ?? [{}],
           providers: parsedProviders,
           prompts: parsedPrompts,
         },
@@ -974,7 +1025,7 @@ export async function resolveConfigs(
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');
-      scenario.tests = filteredTests;
+      resolvedScenario.tests = filteredTests;
     }
   }
 
@@ -1021,6 +1072,7 @@ export async function resolveConfigs(
     redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
+    env: config.env,
   };
 
   // Validate assertions in tests and defaultTest using Zod schema

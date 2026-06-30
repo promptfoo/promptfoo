@@ -208,6 +208,7 @@ export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
   provider: ApiProvider;
+  originalProvider?: ApiProvider;
   prompt: Prompt;
   delay: number;
 
@@ -950,12 +951,85 @@ export const TestCasesWithMetadataSchema = z.object({
 
 export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
+export type ScenarioConfigValuesRef = { $values: string };
+export type ScenarioConfigRow = Partial<TestCase> & {
+  $values?: never;
+  $expand?: never;
+};
+export type ScenarioConfig = ScenarioConfigRow | ScenarioConfigValuesRef;
+
+/**
+ * Type guard for `$values` matrix-file references in `scenarios[].config`.
+ * Exported so library consumers can narrow `ScenarioConfig` entries.
+ *
+ * Checks shape only: the `file://` prefix and `$values`-as-only-key rules are
+ * enforced by `ScenarioConfigValuesSchema` and the expansion step, not here.
+ */
+export function isScenarioConfigValuesRef(value: unknown): value is ScenarioConfigValuesRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.prototype.hasOwnProperty.call(value, '$values') &&
+    typeof (value as ScenarioConfigValuesRef).$values === 'string'
+  );
+}
+
+const ScenarioConfigValuesSchema = z
+  .object({
+    $values: z.string().regex(/^file:\/\//, {
+      error: 'Scenario config $values must be a file:// reference',
+    }),
+  })
+  .strict()
+  .meta({
+    id: 'ScenarioConfigValues',
+  });
+
+// Plain rows accept unknown keys (passthrough, matching the lenient CLI loader) so that
+// configs with extra keys keep validating. Stray $values/$expand keys are rejected here
+// instead, so a malformed matrix reference fails loudly rather than being silently
+// treated as an ordinary row.
+const ScenarioConfigRowSchema = TestCaseSchema.partial()
+  .extend({
+    $values: z
+      .never({
+        error:
+          'A scenario config $values entry must have $values as its only key, e.g. { $values: "file://matrix.yaml" }',
+      })
+      .optional(),
+    $expand: z
+      .never({ error: 'Scenario config rows do not support $expand; use $values' })
+      .optional(),
+  })
+  .catchall(z.unknown())
+  .refine((row) => !('$expand' in row), {
+    error: 'Scenario config rows do not support $expand; use $values',
+  })
+  .refine((row) => !('$values' in row), {
+    error:
+      'A scenario config $values entry must have $values as its only key, e.g. { $values: "file://matrix.yaml" }',
+  });
+
+// Checked annotation (not a cast) so schema/type drift fails compilation.
+const ScenarioConfigSchema: z.ZodType<ScenarioConfig> = z.union([
+  ScenarioConfigValuesSchema,
+  ScenarioConfigRowSchema,
+]);
+
+const ResolvedScenarioConfigRowSchema = TestCaseSchema.partial()
+  .extend({
+    $values: z.never().optional(),
+    $expand: z.never().optional(),
+  })
+  .refine((row) => !('$values' in row) && !('$expand' in row));
+
 export const ScenarioSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
 
   // Default test case config
-  config: z.array(TestCaseSchema.partial()),
+  config: z.array(ResolvedScenarioConfigRowSchema),
 
   // Optional list of automatic checks to run on the LLM output
   tests: z.array(TestCaseSchema),
@@ -1015,6 +1089,26 @@ export const TestGeneratorConfigSchema = z.object({
 });
 
 export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;
+
+const ScenarioInlineTestInputSchema = TestCaseWithVarsFileSchema.extend({
+  path: z.never().optional(),
+  config: z.never().optional(),
+});
+
+// Raw config accepts matrix-file references and test generators. ScenarioSchema
+// remains the resolved runtime contract for consumers of materialized suites.
+export const ScenarioInputSchema = ScenarioSchema.extend({
+  config: z.array(ScenarioConfigSchema),
+  tests: z
+    .union([
+      z.string(),
+      z.array(z.union([z.string(), TestGeneratorConfigSchema, ScenarioInlineTestInputSchema])),
+      TestGeneratorConfigSchema,
+    ])
+    .optional(),
+});
+
+export type ScenarioInput = z.infer<typeof ScenarioInputSchema>;
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric
@@ -1196,7 +1290,7 @@ export const TestSuiteConfigSchema = z.object({
     .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
+  scenarios: z.array(z.union([z.string(), ScenarioInputSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest: z
@@ -1228,7 +1322,6 @@ export const TestSuiteConfigSchema = z.object({
   // Envvar overrides
   env: z
     .union([
-      ProviderEnvOverridesSchema,
       z.record(
         z.string(),
         z.union([
@@ -1237,6 +1330,7 @@ export const TestSuiteConfigSchema = z.object({
           z.boolean().transform((b) => String(b)),
         ]),
       ),
+      ProviderEnvOverridesSchema,
     ])
     .optional(),
 

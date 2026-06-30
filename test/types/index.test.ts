@@ -12,6 +12,7 @@ import {
   CommandLineOptionsSchema,
   GradingConfigSchema,
   isGradingResult,
+  isScenarioConfigValuesRef,
   MAX_SUGGESTIONS_COUNT,
   OutputConfigSchema,
   TestCaseSchema,
@@ -24,7 +25,7 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type { Scenario, ScenarioConfig, TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -886,6 +887,12 @@ describe('TestSuiteConfigSchema', () => {
       const result = TestSuiteConfigSchema.safeParse(config);
 
       expect(result.success).toBe(true);
+      expect(result.success ? result.data.env : undefined).toEqual({
+        CUSTOM_STRING_VALUE: 'string-value',
+        CUSTOM_NUMBER_VALUE: '42',
+        CUSTOM_BOOLEAN_TRUE: 'true',
+        CUSTOM_BOOLEAN_FALSE: 'false',
+      });
 
       const testProvider = result.success
         ? {
@@ -913,6 +920,243 @@ describe('TestSuiteConfigSchema', () => {
       });
 
       expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
+    });
+  });
+
+  describe('scenario config file expansion refs', () => {
+    it('preserves $values refs when parsing suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const scenario = result.success ? result.data.scenarios?.[0] : undefined;
+      expect(typeof scenario === 'object' ? scenario.config[0] : undefined).toEqual({
+        $values: 'file://matrix.yaml',
+      });
+    });
+
+    it('preserves scenario test generator objects in raw suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [
+              {
+                path: 'file://generate.js',
+                config: { prefix: 'api' },
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const tests =
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined;
+      expect(Array.isArray(tests) ? tests[0] : undefined).toEqual({
+        path: 'file://generate.js',
+        config: { prefix: 'api' },
+      });
+    });
+
+    it('preserves scalar scenario test file refs in raw suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [{ config: [{}], tests: 'file://tests.csv' }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined,
+      ).toBe('file://tests.csv');
+    });
+
+    it('preserves scenario test file refs in arrays', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [{ config: [{}], tests: ['file://tests.csv'] }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined,
+      ).toEqual(['file://tests.csv']);
+    });
+
+    it('preserves inline scenario vars file refs in raw suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [{ config: [{}], tests: [{ vars: 'vars.yaml' }] }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined,
+      ).toEqual([{ vars: 'vars.yaml' }]);
+    });
+
+    it.each([
+      { path: 42 },
+      { config: { prefix: 'missing-path' } },
+    ])('rejects malformed scenario test generators: %j', (generator) => {
+      expect(
+        TestSuiteConfigSchema.safeParse({
+          providers: ['provider1'],
+          prompts: ['prompt1'],
+          scenarios: [{ config: [{}], tests: [generator] }],
+        }).success,
+      ).toBe(false);
+    });
+
+    it('allows scenario config expansion refs in exported config types', () => {
+      const config: TestSuiteConfig = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      };
+
+      expect(
+        typeof config.scenarios?.[0] === 'object' ? config.scenarios[0].config[0] : undefined,
+      ).toEqual({
+        $values: 'file://matrix.yaml',
+      });
+    });
+
+    it('keeps resolved Scenario config rows backward-compatible', () => {
+      const scenario: Scenario = {
+        config: [{ vars: { topic: 'billing' } }],
+        tests: [{}],
+      };
+
+      expect(scenario.config[0].vars).toEqual({ topic: 'billing' });
+      expect(
+        TestSuiteSchema.safeParse({
+          providers: [createMockProvider({ id: 'provider1', response: {} })],
+          prompts: [{ raw: 'prompt1', label: 'prompt1' }],
+          scenarios: [scenario],
+        }).success,
+      ).toBe(true);
+    });
+
+    it('rejects unresolved refs in resolved test suites', () => {
+      expect(
+        TestSuiteSchema.safeParse({
+          providers: [createMockProvider({ id: 'provider1', response: {} })],
+          prompts: [{ raw: 'prompt1', label: 'prompt1' }],
+          scenarios: [
+            {
+              config: [{ $values: 'file://matrix.yaml' }],
+              tests: [{}],
+            },
+          ],
+        }).success,
+      ).toBe(false);
+    });
+
+    it('rejects scenario config expansion refs without file://', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts and preserves unknown keys in plain scenario config rows', () => {
+      // Regression guard: scenario config rows must stay lenient for API clients and
+      // stored configs that carry extra keys (previously stripped, never rejected).
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ vars: { topic: 'billing' }, customAnnotation: 'kept' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const scenario = result.success ? result.data.scenarios?.[0] : undefined;
+      expect(typeof scenario === 'object' ? scenario.config[0] : undefined).toEqual({
+        vars: { topic: 'billing' },
+        customAnnotation: 'kept',
+      });
+    });
+
+    it('rejects $values refs mixed with other keys', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'file://matrix.yaml', description: 'oops' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects $expand refs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $expand: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('narrows config rows with isScenarioConfigValuesRef', () => {
+      const rows: ScenarioConfig[] = [
+        { $values: 'file://matrix.yaml' },
+        { vars: { topic: 'billing' } },
+      ];
+      const [ref, row] = rows;
+      expect(isScenarioConfigValuesRef(ref)).toBe(true);
+      expect(isScenarioConfigValuesRef(row)).toBe(false);
+      if (!isScenarioConfigValuesRef(row)) {
+        expect(row.vars).toEqual({ topic: 'billing' });
+      }
     });
   });
 
