@@ -1,5 +1,6 @@
 import type { ModelAuditCheck } from '@promptfoo/types/modelAudit';
 
+import type { GetScanResponse, ScannerInfo } from '../../../../types/api/modelAudit';
 import type { ModelAuditScanResults } from '../../../../types/modelAudit';
 
 /**
@@ -49,13 +50,7 @@ export interface ScanOptions {
   author?: string;
 }
 
-export interface ScannerCatalogEntry {
-  id: string;
-  class: string;
-  description: string;
-  extensions: string[];
-  dependencies: string[];
-}
+export type ScannerCatalogEntry = ScannerInfo;
 
 export interface ScanIssue {
   // Note: modelaudit scanner can output both 'critical' and 'error' severity.
@@ -98,24 +93,8 @@ export interface ScanResult extends ModelAuditScanResults {
 /**
  * A historical scan record retrieved from the database.
  */
-export interface HistoricalScan {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  name?: string | null;
-  author?: string | null;
-  modelPath: string;
-  modelType?: string | null;
+export type HistoricalScan = GetScanResponse & {
+  // Scanner output and metadata are intentionally open on the wire; these are the fields this UI reads.
   results: ScanResult;
-  hasErrors: boolean;
-  totalChecks?: number | null;
-  passedChecks?: number | null;
-  failedChecks?: number | null;
   metadata?: Record<string, unknown> | null;
-  modelId?: string | null;
-  revisionSha?: string | null;
-  contentHash?: string | null;
-  modelSource?: string | null;
-  sourceLastModified?: number | null;
-  scannerVersion?: string | null;
-}
+};

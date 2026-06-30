@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { ApiResponseError, ApiRoutes, BlobsSchemas, callApiJson } from '@app/utils/api';
 import { MEDIA_PAGE_SIZE } from '@app/utils/media';
 
-import type {
-  EvalOption,
-  MediaItem,
-  MediaLibraryResponse,
-  MediaSort,
-  MediaTypeFilter,
-} from '../types';
+import type { EvalOption, MediaItem, MediaSort, MediaTypeFilter } from '../types';
 
 interface UseMediaItemsOptions {
   type?: MediaTypeFilter;
@@ -75,24 +69,17 @@ export function useMediaItems({
         params.set('sortField', sort.field);
         params.set('sortOrder', sort.order);
 
-        const response = await callApi(`/blobs/library?${params.toString()}`, { signal });
+        const data = await callApiJson(ApiRoutes.Blobs.Library, BlobsSchemas.Library.Response, {
+          query: params,
+          signal,
+        });
 
         // Check if request was aborted
         if (signal?.aborted) {
           return;
         }
 
-        if (!response.ok) {
-          throw new Error(`Server error (${response.status})`);
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to load media');
-        }
-
-        const result = data.data as MediaLibraryResponse;
+        const result = data.data;
 
         if (loadingMore) {
           setItems((prev) => [...prev, ...result.items]);
@@ -179,25 +166,21 @@ export interface FetchMediaItemResult {
  */
 export async function fetchMediaItemByHash(hash: string): Promise<FetchMediaItemResult> {
   try {
-    const response = await callApi(`/blobs/library?hash=${encodeURIComponent(hash)}&limit=1`);
-
-    if (!response.ok) {
-      return { item: null, error: 'server_error' };
-    }
-
-    const data = await response.json();
-
-    if (!data.success) {
-      return { item: null, error: 'server_error' };
-    }
+    const query = new URLSearchParams({ hash, limit: '1' });
+    const data = await callApiJson(ApiRoutes.Blobs.Library, BlobsSchemas.Library.Response, {
+      query,
+    });
 
     if (!data.data.items.length) {
       return { item: null, error: 'not_found' };
     }
 
     return { item: data.data.items[0], error: null };
-  } catch {
-    return { item: null, error: 'network_error' };
+  } catch (error) {
+    return {
+      item: null,
+      error: error instanceof ApiResponseError ? 'server_error' : 'network_error',
+    };
   }
 }
 
@@ -232,19 +215,14 @@ export function useEvalsWithMedia(search?: string): UseEvalsWithMediaResult {
           params.set('search', search);
         }
 
-        const response = await callApi(`/blobs/library/evals?${params.toString()}`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Server error (${response.status})`);
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to load evals');
-        }
+        const data = await callApiJson(
+          ApiRoutes.Blobs.LibraryEvals,
+          BlobsSchemas.LibraryEvals.Response,
+          {
+            query: params,
+            signal: controller.signal,
+          },
+        );
 
         const hasMore = data.data.length > EVALS_FETCH_LIMIT;
         setEvals(hasMore ? data.data.slice(0, EVALS_FETCH_LIMIT) : data.data);

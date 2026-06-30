@@ -48,20 +48,60 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn().mockImplementation(async (url: string) => {
-    if (url === '/redteam/status') {
-      return {
-        ok: true,
-        json: async () => ({ hasRunningJob: false }),
-      };
+vi.mock('@app/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@app/utils/api')>();
+  class MockApiResponseError extends Error {
+    constructor(
+      public readonly status: number,
+      public readonly body: { error: string },
+      public readonly response: Response,
+    ) {
+      super(body.error);
+      this.name = 'ApiResponseError';
     }
-    return { ok: true, json: async () => ({}) };
-  }),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
-}));
+  }
+
+  return {
+    ...actual,
+    ApiResponseError: MockApiResponseError,
+    callApi: vi.fn().mockImplementation(async (url: string) => {
+      if (url === '/redteam/status') {
+        return {
+          ok: true,
+          json: async () => ({ hasRunningJob: false }),
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    }),
+    callApiJson: vi.fn(
+      async (
+        route: { clientPath: string },
+        _schema: unknown,
+        options: {
+          params?: Record<string, string | number>;
+          query?: URLSearchParams;
+        } & RequestInit = {},
+      ) => {
+        const { params = {}, query, ...requestInit } = options;
+        let path = route.clientPath;
+        for (const [name, value] of Object.entries(params)) {
+          path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+        }
+        const queryString = query?.toString();
+        const requestPath = queryString ? `${path}?${queryString}` : path;
+        const response = await vi.mocked(callApi)(requestPath, requestInit);
+        if (response.ok === false) {
+          const body = await response.json();
+          throw new MockApiResponseError(response.status, body, response);
+        }
+        return response.json();
+      },
+    ),
+    fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+    fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+    updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+  };
+});
 
 // Mock the redteamJobStore
 const mockSetJob = vi.fn();
@@ -1376,7 +1416,7 @@ Application Details:
 
       // Wait for the effect to run
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/redteam/status');
+        expect(callApi).toHaveBeenCalledWith('/redteam/status', {});
       });
     });
 
@@ -1415,6 +1455,54 @@ Application Details:
 
       // Should have called setJob with the server's job ID
       expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
+    });
+
+    it('should clear a reconnected job when it disappears during polling', async () => {
+      let jobRequests = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'restarted-job' }),
+          } as Response;
+        }
+        if (url === '/eval/job/restarted-job') {
+          jobRequests += 1;
+          if (jobRequests === 1) {
+            return {
+              ok: true,
+              json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+            } as Response;
+          }
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ error: 'Job not found' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      });
+
+      await waitFor(
+        () => {
+          expect(mockClearJob).toHaveBeenCalled();
+        },
+        { timeout: 2000 },
+      );
+
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
     });
 
     it('should show completed state when returning to completed job', async () => {
@@ -1494,7 +1582,7 @@ Application Details:
 
       // Wait for recovery to complete
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999');
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999', {});
       });
 
       // Should clear job since it completed while away
@@ -1618,6 +1706,58 @@ Application Details:
       });
     });
 
+    it('should clear stale running state when cancel reports that no job is running', async () => {
+      const user = userEvent.setup({ delay: null });
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'stale-job' }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ error: 'No job currently running' }),
+          } as Response;
+        }
+        if (url === '/eval/job/stale-job') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await user.click(await screen.findByRole('button', { name: /cancel/i }));
+
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      });
+    });
+
     it('should handle job recovery failure when server job returns 404', async () => {
       vi.mocked(callApi).mockImplementation(async (url: string) => {
         if (url === '/redteam/status') {
@@ -1684,7 +1824,11 @@ Application Details:
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should NOT have checked the saved job since we're not hydrated
-      expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
+      expect(
+        vi
+          .mocked(callApi)
+          .mock.calls.some(([path]) => path === '/eval/job/saved-job-before-hydration'),
+      ).toBe(false);
     });
   });
 

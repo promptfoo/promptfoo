@@ -34,8 +34,19 @@ const connectedApiHealth = {
   isLoading: false,
 } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>;
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
+  callApiResult: vi.fn(
+    async (route: { clientPath: string }, _schema: unknown, options?: RequestInit) => {
+      const response = await vi.mocked(callApi)(route.clientPath, options);
+      if (!response.ok) {
+        const body = await response.json();
+        return { ok: false, error: new Error(body.error ?? 'Request failed'), response };
+      }
+      return { ok: true, data: await response.json(), response };
+    },
+  ),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
