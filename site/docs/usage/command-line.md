@@ -46,6 +46,7 @@ The `promptfoo` command line utility includes these command groups:
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
 - `retry <evalId>` - Retry ERROR results from a previous eval in place.
+- `update` - Update promptfoo to the latest version.
 - `validate` - Validate a promptfoo configuration file.
   - `validate config`
   - `validate target`
@@ -248,6 +249,37 @@ Create a URL that can be shared online. If no ID is provided, promptfoo shares t
 | Option        | Description                         |
 | ------------- | ----------------------------------- |
 | `--show-auth` | Include auth info in the shared URL |
+
+## `promptfoo update`
+
+Update promptfoo to the latest version. The command automatically detects how promptfoo was installed and either runs a supported global package-manager update or prints the safest manual instructions.
+
+| Option    | Description                                    |
+| --------- | ---------------------------------------------- |
+| `--check` | Only check for updates without installing      |
+| `--force` | Force update even if already on latest version |
+
+### Examples
+
+```sh
+# Check if updates are available
+promptfoo update --check
+
+# Update to the latest version
+promptfoo update
+
+# Force update (useful for reinstalling)
+promptfoo update --force
+```
+
+The update command will:
+
+1. Detect your installation method (npm global, yarn global, Homebrew, etc.)
+2. Show you what it detected and, when supported, which command it will run
+3. Execute supported global npm, yarn, pnpm, and bun updates
+4. Provide manual instructions if automatic update is not possible
+
+For installations that cannot be safely updated by the CLI (including Homebrew, `npx`, local project installations, or an unconfirmed npm path), the command will provide appropriate manual update instructions.
 
 ## `promptfoo cache`
 

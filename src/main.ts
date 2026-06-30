@@ -25,13 +25,18 @@ import { redteamSetupCommand } from './commands/redteam/setup';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { updateCommand } from './commands/update';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
+import { getEnvBool, getEnvBoolFromEnvironment } from './envars';
 import { EmailValidationError } from './globalConfig/accounts';
+import { getInitialProcessEnvironment } from './initialProcessEnvironment';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
   isMainModule,
+  isSuccessfulExitCode,
+  isUpdateCommandRequested,
   setupEnvFilesFromArgv,
   shouldSkipDefaultConfigLoading,
   shutdownGracefully,
@@ -43,15 +48,30 @@ import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
 import { ServerError } from './server/errors';
-import { checkForUpdates } from './updates';
+import {
+  AUTO_UPDATE_TIMEOUT_MS,
+  handleAutoUpdate,
+  setUpdateHandler,
+} from './updates/handleAutoUpdate';
+import { checkForUpdates, UPDATE_INSTRUCTIONS } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
 import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
-async function main() {
+import type { UpdateObject } from './updates/updateCheck';
+
+interface PendingAutoUpdate {
+  info: UpdateObject;
+  disableUpdateNag: boolean;
+  projectRoot: string;
+  sourceEnvironment: NodeJS.ProcessEnv;
+}
+
+async function main(): Promise<PendingAutoUpdate | undefined> {
   const argv = process.argv.slice(2);
+  const startupEnvironment = getInitialProcessEnvironment();
   setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
@@ -60,10 +80,48 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  await checkForUpdates();
-  await runDbMigrations({ suppressBindingErrorLogging: true });
+  // Set up update event handlers (for future use by web UI or other consumers)
+  setUpdateHandler(
+    (info) => logger.debug(`Update notification: ${info.message}`),
+    (info) => logger.info(info.message),
+    (info) => logger.warn(info.message),
+    (info) => logger.warn(info.message),
+  );
+
+  // Check for updates and show notification (non-blocking)
+  const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+  // Auto-update is opt-in: only enabled if explicitly set to true
+  const enableAutoUpdate = getEnvBoolFromEnvironment(
+    'PROMPTFOO_ENABLE_AUTO_UPDATE',
+    startupEnvironment,
+  );
+  const updateCommandRequested = isUpdateCommandRequested(argv);
+
+  let pendingAutoUpdate: UpdateObject | undefined;
+  let updateCheckPromise: Promise<void> | undefined;
+  if (!disableUpdateNag && !updateCommandRequested) {
+    updateCheckPromise = checkForUpdates()
+      .then((info) => {
+        if (info) {
+          logger.info(info.message);
+          logger.info(UPDATE_INSTRUCTIONS);
+
+          // Defer replacement until shutdown has released resources used by this invocation.
+          if (enableAutoUpdate) {
+            pendingAutoUpdate = info;
+          }
+        }
+      })
+      .catch((err) => {
+        logger.debug(`Failed to check for updates: ${err}`);
+      });
+  }
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
+  if (!updateCommandRequested) {
+    await runDbMigrations({ suppressBindingErrorLogging: true });
+  }
+
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
     ? { defaultConfig: {}, defaultConfigPath: undefined }
     : await loadDefaultConfig();
@@ -109,6 +167,7 @@ async function main() {
   modelScanCommand(program);
   optimizeCommand(program, defaultConfig, defaultConfigPath);
   setupRetryCommand(program);
+  updateCommand(program, startupEnvironment);
   validateCommand(program, defaultConfig, defaultConfigPath);
   void showCommand(program);
 
@@ -145,6 +204,15 @@ async function main() {
   });
 
   await program.parseAsync();
+  await updateCheckPromise;
+  if (pendingAutoUpdate && isSuccessfulExitCode(process.exitCode)) {
+    return {
+      info: pendingAutoUpdate,
+      disableUpdateNag,
+      projectRoot: process.cwd(),
+      sourceEnvironment: startupEnvironment,
+    };
+  }
 }
 
 // ESM replacement for require.main === module check
@@ -160,8 +228,9 @@ try {
 if (isMain) {
   let mainError: unknown;
   let libsqlBindingErrorMessage: string | undefined;
+  let pendingAutoUpdate: PendingAutoUpdate | undefined;
   try {
-    await main();
+    pendingAutoUpdate = await main();
   } catch (error) {
     mainError = error;
     if (error instanceof ConfigResolutionError) {
@@ -178,8 +247,22 @@ if (isMain) {
     // callers and CLI wrappers see the same outcome.
     process.exitCode = error instanceof EvalRunError ? error.exitCode : 1;
   } finally {
+    const autoUpdateToRun = pendingAutoUpdate;
     try {
-      await shutdownGracefully();
+      await shutdownGracefully(
+        autoUpdateToRun
+          ? () =>
+              handleAutoUpdate(
+                autoUpdateToRun.info,
+                autoUpdateToRun.disableUpdateNag,
+                false,
+                autoUpdateToRun.projectRoot,
+                undefined,
+                autoUpdateToRun.sourceEnvironment,
+              )
+          : undefined,
+        autoUpdateToRun ? AUTO_UPDATE_TIMEOUT_MS + 1_000 : undefined,
+      );
     } catch (shutdownError) {
       // Log shutdown error but preserve the original main error if it exists
       logger.error(

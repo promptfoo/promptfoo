@@ -113,10 +113,42 @@ export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.sli
       continue;
     }
 
-    return arg === 'code-scans';
+    return arg === 'code-scans' || arg === 'update';
   }
 
   return false;
+}
+
+export function isUpdateCommandRequested(argv: string[] = process.argv.slice(2)): boolean {
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+
+    if (arg === '--') {
+      return false;
+    }
+
+    if (arg === '--env-file' || arg === '--env-path') {
+      index += 1;
+      continue;
+    }
+
+    if (
+      arg === '-v' ||
+      arg === '--verbose' ||
+      arg.startsWith('--env-file=') ||
+      arg.startsWith('--env-path=')
+    ) {
+      continue;
+    }
+
+    return arg === 'update';
+  }
+
+  return false;
+}
+
+export function isSuccessfulExitCode(exitCode: number | string | null | undefined): boolean {
+  return exitCode === undefined || exitCode === 0;
 }
 
 export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
@@ -197,7 +229,12 @@ export function addCommonOptionsRecursively(command: Command) {
   });
 }
 
-export const shutdownGracefully = async (): Promise<void> => {
+const CLEANUP_OP_TIMEOUT_MS = 1000;
+
+export const shutdownGracefully = async (
+  afterResourcesReleased?: () => Promise<void>,
+  afterResourcesReleasedTimeoutMs = CLEANUP_OP_TIMEOUT_MS,
+): Promise<void> => {
   const FORCE_EXIT_TIMEOUT_MS = 3000;
   const forceExitTimeout = setTimeout(() => {
     // eslint-disable-next-line no-console
@@ -208,16 +245,18 @@ export const shutdownGracefully = async (): Promise<void> => {
 
   logger.debug('Shutting down gracefully...');
 
-  const CLEANUP_OP_TIMEOUT_MS = 1000;
-
-  const withTimeout = async <T>(promise: Promise<T>, name: string): Promise<T | undefined> => {
+  const withTimeout = async <T>(
+    promise: Promise<T>,
+    name: string,
+    timeoutMs = CLEANUP_OP_TIMEOUT_MS,
+  ): Promise<T | undefined> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<undefined>((resolveTimeout) => {
       timeoutId = setTimeout(() => {
         // eslint-disable-next-line no-console
         console.warn(`${name} timed out during shutdown`);
         resolveTimeout(undefined);
-      }, CLEANUP_OP_TIMEOUT_MS);
+      }, timeoutMs);
       timeoutId.unref();
     });
 
@@ -238,14 +277,6 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  logger.debug('Closing logger file transports');
-
-  try {
-    await withTimeout(closeLogger(), 'closeLogger()');
-  } catch {
-    // Can't log since logger might be closed.
-  }
-
   await closeDbIfOpen();
   clearAgentCache();
 
@@ -257,6 +288,24 @@ export const shutdownGracefully = async (): Promise<void> => {
   }
 
   clearTimeout(forceExitTimeout);
+
+  try {
+    if (afterResourcesReleased) {
+      await withTimeout(
+        afterResourcesReleased(),
+        'afterResourcesReleased()',
+        afterResourcesReleasedTimeoutMs,
+      );
+    }
+  } finally {
+    logger.debug('Closing logger file transports');
+
+    try {
+      await withTimeout(closeLogger(), 'closeLogger()');
+    } catch {
+      // Can't log since logger might be closed.
+    }
+  }
 
   const NATURAL_EXIT_TIMEOUT_MS = 100;
   setTimeout(() => {

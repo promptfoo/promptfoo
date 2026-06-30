@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import '../initialProcessEnvironment';
 
 dotenv.config({ quiet: true });
 

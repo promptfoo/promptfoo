@@ -46,6 +46,21 @@ vi.mock('undici', async () => ({
   getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
+// Mock the update check system
+vi.mock('../src/updates/updateCheck', () => ({
+  checkForUpdates: vi.fn(() => Promise.resolve(null)),
+}));
+
+vi.mock('../src/envars', () => ({
+  getEnvBool: vi.fn(() => false),
+  getEnvInt: vi.fn((_key, defaultValue) => defaultValue),
+  getEnvString: vi.fn((_key, defaultValue) => defaultValue),
+  getEnvFloat: vi.fn((_key, defaultValue) => defaultValue),
+  getEvalTimeoutMs: vi.fn(() => 0),
+  getMaxEvalTimeMs: vi.fn(() => 0),
+  isCI: vi.fn(() => false),
+}));
+
 // Mock code scan commands to avoid ESM import issues with execa
 vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
@@ -53,6 +68,8 @@ vi.mock('../src/codeScan', () => ({
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let isSuccessfulExitCode: typeof import('../src/mainUtils').isSuccessfulExitCode;
+let isUpdateCommandRequested: typeof import('../src/mainUtils').isUpdateCommandRequested;
 let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
 let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
 let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
@@ -62,6 +79,8 @@ async function loadMainModule() {
   ({
     addCommonOptionsRecursively,
     isMainModule,
+    isSuccessfulExitCode,
+    isUpdateCommandRequested,
     shouldSkipDefaultConfigLoading,
     setupEnvFilesFromArgv,
     shutdownGracefully,
@@ -133,9 +152,45 @@ describe('shouldSkipDefaultConfigLoading', () => {
     );
   });
 
+  it('skips default config discovery for update commands', () => {
+    expect(shouldSkipDefaultConfigLoading(['update'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--verbose', 'update', '--check'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-file', '.env.local', 'update'])).toBe(true);
+  });
+
   it('keeps default config discovery for other commands and post-separator arguments', () => {
     expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
     expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
+  });
+});
+
+describe('isUpdateCommandRequested', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+  });
+
+  it('recognizes the update command after supported global options', () => {
+    expect(isUpdateCommandRequested(['update'])).toBe(true);
+    expect(isUpdateCommandRequested(['--verbose', 'update'])).toBe(true);
+    expect(isUpdateCommandRequested(['--env-file', '.env.local', 'update'])).toBe(true);
+  });
+
+  it('does not confuse arguments or separator content with the update command', () => {
+    expect(isUpdateCommandRequested(['eval', 'update'])).toBe(false);
+    expect(isUpdateCommandRequested(['--', 'update'])).toBe(false);
+  });
+});
+
+describe('isSuccessfulExitCode', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+  });
+
+  it('allows automatic updates only after successful command status', () => {
+    expect(isSuccessfulExitCode(undefined)).toBe(true);
+    expect(isSuccessfulExitCode(0)).toBe(true);
+    expect(isSuccessfulExitCode(1)).toBe(false);
+    expect(isSuccessfulExitCode(100)).toBe(false);
   });
 });
 
@@ -521,6 +576,45 @@ describe('shutdownGracefully', () => {
     expect(mockDispatcherDestroy).toHaveBeenCalled();
   });
 
+  it('runs post-resource work before logger closure', async () => {
+    const callOrder: string[] = [];
+    mockCloseDbIfOpen.mockImplementation(() => {
+      callOrder.push('database');
+    });
+    mockDispatcherDestroy.mockImplementation(async () => {
+      callOrder.push('dispatcher');
+    });
+    mockCloseLogger.mockImplementation(async () => {
+      callOrder.push('logger');
+    });
+
+    const shutdownPromise = shutdownGracefully(async () => {
+      callOrder.push('update');
+    });
+    await vi.runAllTimersAsync();
+    await shutdownPromise;
+
+    expect(callOrder).toEqual(['database', 'dispatcher', 'update', 'logger']);
+  });
+
+  it('bounds post-resource work using the caller-provided timeout', async () => {
+    let postResourceWorkStarted = false;
+    const shutdownPromise = shutdownGracefully(() => {
+      postResourceWorkStarted = true;
+      return new Promise(() => {});
+    }, 60_000);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(postResourceWorkStarted).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(mockCloseLogger).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(58_900);
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+  });
+
   it('should handle telemetry shutdown timeout', async () => {
     // Make telemetry.shutdown() hang forever
     mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
@@ -600,7 +694,7 @@ describe('shutdownGracefully', () => {
     await expect(shutdownPromise).resolves.toBeUndefined();
   });
 
-  it('should force exit when all cleanup operations hang', async () => {
+  it('should complete shutdown after timed out cleanup operations', async () => {
     // Make all operations hang
     mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
     mockCloseLogger.mockImplementation(() => new Promise(() => {}));
@@ -609,8 +703,8 @@ describe('shutdownGracefully', () => {
     // Start shutdown but don't await yet
     void shutdownGracefully();
 
-    // The force exit timeout is 3000ms
-    await vi.advanceTimersByTimeAsync(3000);
+    // Individual timeouts finish resource cleanup, allowing the natural exit timer to run.
+    await vi.advanceTimersByTimeAsync(3200);
 
     expect(process.exit).toHaveBeenCalledWith(0);
   });

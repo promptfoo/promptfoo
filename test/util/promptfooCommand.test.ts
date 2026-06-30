@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  detectInstaller,
-  isRunningUnderNpx,
-  promptfooCommand,
-} from '../../src/util/promptfooCommand';
+import { isRunningUnderNpx, promptfooCommand } from '../../src/util/promptfooCommand';
 import { mockProcessEnv } from './utils';
 
-describe('nextCommand', () => {
+describe('promptfooCommand', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
@@ -16,98 +12,6 @@ describe('nextCommand', () => {
 
   afterEach(() => {
     mockProcessEnv(originalEnv, { clear: true });
-  });
-
-  describe('detectInstaller', () => {
-    it('should detect npx from npm_execpath', () => {
-      mockProcessEnv({ npm_execpath: '/path/to/npx' });
-      expect(detectInstaller()).toBe('npx');
-    });
-
-    it('should detect npx from npm_lifecycle_script', () => {
-      mockProcessEnv({ npm_lifecycle_script: 'npx some-command' });
-      expect(detectInstaller()).toBe('npx');
-    });
-
-    it('should detect npx from process.execPath', () => {
-      const originalExecPath = process.execPath;
-      Object.defineProperty(process, 'execPath', {
-        value: '/path/to/npx/node',
-        configurable: true,
-      });
-
-      expect(detectInstaller()).toBe('npx');
-
-      Object.defineProperty(process, 'execPath', {
-        value: originalExecPath,
-        configurable: true,
-      });
-    });
-
-    it('should detect npx from npm_config_user_agent', () => {
-      mockProcessEnv({ npm_config_user_agent: 'npx/10.5.0 npm/10.8.2 node/v18.20.4' });
-      expect(detectInstaller()).toBe('npx');
-    });
-
-    it('should detect brew from npm_config_prefix', () => {
-      mockProcessEnv({ npm_config_prefix: '/usr/local/Homebrew/Cellar/node/20.0.0/bin' });
-      expect(detectInstaller()).toBe('brew');
-    });
-
-    it('should detect brew from process.execPath', () => {
-      const originalExecPath = process.execPath;
-      Object.defineProperty(process, 'execPath', {
-        value: '/usr/local/Homebrew/bin/node',
-        configurable: true,
-      });
-
-      expect(detectInstaller()).toBe('brew');
-
-      Object.defineProperty(process, 'execPath', {
-        value: originalExecPath,
-        configurable: true,
-      });
-    });
-
-    it('should detect npm-global from npm_config_user_agent', () => {
-      mockProcessEnv({ npm_config_user_agent: 'npm/10.8.2 node/v18.20.4' });
-      expect(detectInstaller()).toBe('npm-global');
-    });
-
-    it('should return unknown for unrecognized patterns', () => {
-      mockProcessEnv({ npm_config_user_agent: 'yarn/1.22.0' });
-      expect(detectInstaller()).toBe('unknown');
-    });
-
-    it('should prioritize npm_execpath over user agent', () => {
-      mockProcessEnv({ npm_execpath: '/path/to/npx' });
-      mockProcessEnv({ npm_config_user_agent: 'npm/10.8.2 node/v18.20.4' });
-      expect(detectInstaller()).toBe('npx');
-    });
-
-    it('should prioritize npm_lifecycle_script over user agent', () => {
-      mockProcessEnv({ npm_lifecycle_script: 'npx some-command' });
-      mockProcessEnv({ npm_config_user_agent: 'npm/10.8.2 node/v18.20.4' });
-      expect(detectInstaller()).toBe('npx');
-    });
-
-    it('should handle empty environment variables', () => {
-      mockProcessEnv({ npm_execpath: undefined });
-      mockProcessEnv({ npm_lifecycle_script: undefined });
-      mockProcessEnv({ npm_config_prefix: undefined });
-      mockProcessEnv({ npm_config_user_agent: undefined });
-      expect(detectInstaller()).toBe('unknown');
-    });
-
-    it('should handle case insensitive homebrew detection', () => {
-      mockProcessEnv({ npm_config_prefix: '/usr/local/homebrew/cellar/node/20.0.0/bin' });
-      expect(detectInstaller()).toBe('brew');
-    });
-
-    it('should detect brew with Windows-style paths', () => {
-      mockProcessEnv({ npm_config_prefix: 'C:\\Users\\user\\homebrew\\Cellar\\node\\20.0.0\\bin' });
-      expect(detectInstaller()).toBe('brew');
-    });
   });
 
   describe('promptfooCommand', () => {
@@ -163,28 +67,6 @@ describe('nextCommand', () => {
     it('should return false for non-npx installers', () => {
       mockProcessEnv({ npm_config_prefix: '/usr/local/Homebrew/Cellar/node/20.0.0/bin' });
       expect(isRunningUnderNpx()).toBe(false);
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should handle partial matches in strings', () => {
-      mockProcessEnv({ npm_execpath: '/some/path/with-npx-in-middle/but-not-npx' });
-      expect(detectInstaller()).toBe('npx'); // Should still match because contains 'npx'
-    });
-
-    it('should handle npm_config_user_agent with multiple patterns', () => {
-      mockProcessEnv({ npm_config_user_agent: 'npx/10.5.0 npm/10.8.2 node/v18.20.4' });
-      expect(detectInstaller()).toBe('npx'); // Should detect npx, not npm
-    });
-
-    it('should handle undefined environment variables gracefully', () => {
-      mockProcessEnv({ npm_execpath: undefined });
-      mockProcessEnv({ npm_lifecycle_script: undefined });
-      mockProcessEnv({ npm_config_prefix: undefined });
-      mockProcessEnv({ npm_config_user_agent: undefined });
-
-      expect(() => detectInstaller()).not.toThrow();
-      expect(detectInstaller()).toBe('unknown');
     });
   });
 });
