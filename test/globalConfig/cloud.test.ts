@@ -29,6 +29,15 @@ describe('CloudConfig', () => {
   });
 
   describe('constructor', () => {
+    it('should support deferred singleton-style initialization', () => {
+      vi.mocked(readGlobalConfig).mockClear();
+      const config = new CloudConfig(false);
+
+      expect(readGlobalConfig).not.toHaveBeenCalled();
+      expect(config.getAppUrl()).toBe('https://test.app');
+      expect(readGlobalConfig).toHaveBeenCalledOnce();
+    });
+
     it('should initialize with default values when no saved config exists', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',

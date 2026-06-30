@@ -2,6 +2,11 @@ import * as fs from 'fs';
 
 import dotenv from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import {
+  getConfigDirectoryPath,
+  refreshConfigDirectoryPathFromEnv,
+  setConfigDirectoryPath,
+} from '../../src/util/config/manage';
 import { setupEnv } from '../../src/util/env';
 import { mockProcessEnv } from './utils';
 
@@ -23,6 +28,9 @@ describe('setupEnv', () => {
     originalEnv = { ...process.env };
     // Ensure NODE_ENV is not set at the start of each test
     mockProcessEnv({ NODE_ENV: undefined });
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: undefined });
+    refreshConfigDirectoryPathFromEnv();
+    setConfigDirectoryPath(undefined);
     // Spy on dotenv.config to verify it's called with the right parameters
     dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
     // Mock file existence check - default to true for backward compat with existing tests
@@ -31,6 +39,8 @@ describe('setupEnv', () => {
 
   afterEach(() => {
     mockProcessEnv(originalEnv, { clear: true });
+    refreshConfigDirectoryPathFromEnv();
+    setConfigDirectoryPath(undefined);
     vi.resetAllMocks();
   });
 
@@ -79,6 +89,19 @@ describe('setupEnv', () => {
     // Then load .env.production with override (should change NODE_ENV to 'production')
     setupEnv('.env.production');
     expect(process.env.NODE_ENV).toBe('production');
+  });
+
+  it('should refresh the config directory after early env loading and freeze later changes', () => {
+    dotenvConfigSpy.mockImplementation(() => {
+      mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/early/config' });
+      return { parsed: {} };
+    });
+
+    setupEnv('.env.early', { refreshConfigDirectory: true });
+    expect(getConfigDirectoryPath()).toBe('/early/config');
+
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/late/config' });
+    expect(getConfigDirectoryPath()).toBe('/early/config');
   });
 
   describe('multi-file support', () => {
