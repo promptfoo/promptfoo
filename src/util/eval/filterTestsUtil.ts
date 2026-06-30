@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import Eval from '../../models/eval';
-import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
+import { extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 
 import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
@@ -30,6 +30,18 @@ function mergeDefaultVars(test: TestCase, defaultTest: TestSuite['defaultTest'])
       ...test.vars,
     },
   };
+}
+
+function conversationsExactlyMatch(result: EvaluateResult, test: TestCase): boolean {
+  return result.testCase?.metadata?.conversationId === test.metadata?.conversationId;
+}
+
+function getExtractedResultKey(result: EvaluateResult): string {
+  return JSON.stringify({
+    vars: filterRuntimeVars(result.vars),
+    conversationId: result.testCase?.metadata?.conversationId,
+    strategyId: result.testCase?.metadata?.strategyId,
+  });
 }
 
 /**
@@ -103,47 +115,64 @@ export async function filterTestsByResults(
   // When a match is found, we restore runtime variables (like _conversation, sessionId)
   // from the result into the test so they're available during re-evaluation.
   const matchedTests: Tests = [];
-
+  const matchedResults = new Set<EvaluateResult>();
+  const hasDefaultVars = Boolean(
+    testSuite.defaultTest &&
+      typeof testSuite.defaultTest !== 'string' &&
+      testSuite.defaultTest.vars &&
+      Object.keys(testSuite.defaultTest.vars).length > 0,
+  );
+  const matchesWithDefaultsByTest = new Map<TestCase, EvaluateResult[]>();
+  const matchesWithoutDefaultsByTest = new Map<TestCase, EvaluateResult[]>();
+  const allMatchingResultsByTest = new Map<TestCase, EvaluateResult[]>();
   for (const test of testSuite.tests) {
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
-
-    // Try matching with merged defaults first (new results)
-    // Prefer results that have runtime vars to ensure we restore them when available.
-    // This prevents issues when a test matches multiple results and only some have runtime vars.
-    let matchedResult = filteredResults.find(
-      (result) =>
-        resultIsForTestCase(result, testWithDefaults) &&
-        extractRuntimeVars(result.vars) !== undefined,
+    const matchesWithDefaults = filteredResults.filter((result) =>
+      resultIsForTestCase(result, testWithDefaults),
     );
-
-    // Fallback: any matching result (even without runtime vars)
-    if (!matchedResult) {
-      matchedResult = filteredResults.find((result) =>
-        resultIsForTestCase(result, testWithDefaults),
-      );
-    }
-
-    // Fallback: try matching without defaults (old results that don't have defaults merged)
-    if (!matchedResult) {
-      const hasDefaultVars =
-        testSuite.defaultTest &&
-        typeof testSuite.defaultTest !== 'string' &&
-        testSuite.defaultTest.vars &&
-        Object.keys(testSuite.defaultTest.vars).length > 0;
-
-      if (hasDefaultVars) {
-        // Again, prefer results with runtime vars first
-        matchedResult = filteredResults.find(
-          (result) =>
-            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
-        );
-        if (!matchedResult) {
-          matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
-        }
+    const matchesWithoutDefaults = hasDefaultVars
+      ? filteredResults.filter((result) => resultIsForTestCase(result, test))
+      : [];
+    matchesWithDefaultsByTest.set(test, matchesWithDefaults);
+    matchesWithoutDefaultsByTest.set(test, matchesWithoutDefaults);
+    allMatchingResultsByTest.set(
+      test,
+      Array.from(new Set([...matchesWithDefaults, ...matchesWithoutDefaults])),
+    );
+  }
+  const resultsWithExactConversationMatches = new Set<EvaluateResult>();
+  for (const [test, results] of allMatchingResultsByTest) {
+    for (const result of results) {
+      if (conversationsExactlyMatch(result, test)) {
+        resultsWithExactConversationMatches.add(result);
       }
     }
+  }
+
+  for (const test of testSuite.tests) {
+    const isEligibleConversationMatch = (result: EvaluateResult) =>
+      conversationsExactlyMatch(result, test) || !resultsWithExactConversationMatches.has(result);
+    const eligibleMatchesWithDefaults = (matchesWithDefaultsByTest.get(test) ?? []).filter(
+      isEligibleConversationMatch,
+    );
+    const eligibleMatchesWithoutDefaults = (matchesWithoutDefaultsByTest.get(test) ?? []).filter(
+      isEligibleConversationMatch,
+    );
+    const matchingResults =
+      eligibleMatchesWithDefaults.length > 0 || !hasDefaultVars
+        ? eligibleMatchesWithDefaults
+        : eligibleMatchesWithoutDefaults;
+    const allMatchingResults = Array.from(
+      new Set([...eligibleMatchesWithDefaults, ...eligibleMatchesWithoutDefaults]),
+    );
+    const matchedResult =
+      matchingResults.find((result) => extractRuntimeVars(result.vars) !== undefined) ??
+      matchingResults[0];
 
     if (matchedResult) {
+      for (const result of allMatchingResults) {
+        matchedResults.add(result);
+      }
       // Restore runtime variables from the matched result into the test.
       // This ensures variables like _conversation and sessionId are available
       // during re-evaluation, preventing template render errors.
@@ -175,27 +204,12 @@ export async function filterTestsByResults(
   // This captures runtime-generated tests (e.g., from remote plugins like cipher-code, wordplay)
   // that exist in results but not in the config file.
   const extractedTests: TestCase[] = [];
-  const matchedResultKeys = new Set<string>();
-
-  // Track which results matched config tests
-  const matchedTestsWithDefaults = matchedTests.map((test) =>
-    mergeDefaultVars(test, testSuite.defaultTest),
-  );
-  for (const result of filteredResults) {
-    for (const testWithDefaults of matchedTestsWithDefaults) {
-      if (resultIsForTestCase(result, testWithDefaults)) {
-        matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
-        break;
-      }
-    }
-  }
+  const extractedResultKeys = new Set<string>();
 
   // Extract tests from unmatched results
   for (const result of filteredResults) {
-    const resultKey = JSON.stringify(filterRuntimeVars(result.vars));
-
     // Skip if this result already matched a config test
-    if (matchedResultKeys.has(resultKey)) {
+    if (matchedResults.has(result)) {
       continue;
     }
 
@@ -209,10 +223,13 @@ export async function filterTestsByResults(
       continue;
     }
 
-    // Skip if we already extracted a test with these vars (dedup within extraction)
-    if (extractedTests.some((t) => JSON.stringify(filterRuntimeVars(t.vars)) === resultKey)) {
+    // Results for the same logical runtime-generated test may be repeated across prompts and
+    // providers. Preserve distinct conversations and strategies without multiplying those rows.
+    const resultKey = getExtractedResultKey(result);
+    if (extractedResultKeys.has(resultKey)) {
       continue;
     }
+    extractedResultKeys.add(resultKey);
 
     // Extract test case, filtering runtime vars and omitting provider (security)
     extractedTests.push({
@@ -245,6 +262,7 @@ export async function filterTestsByResults(
     );
   }
 
-  // Deduplicate and return combined tests
-  return deduplicateTestCases([...matchedTests, ...extractedTests]);
+  // Each configured test is visited at most once above, and extracted tests are deduplicated
+  // while they are collected. Preserve configured rows that intentionally share vars.
+  return [...matchedTests, ...extractedTests];
 }

@@ -38,6 +38,13 @@ type StandaloneTestsFileMetadata = {
   extensionWithoutSheet: string;
 };
 
+/** @internal Original config reference retained when a test provider is instantiated. */
+export const originalTestProviderReference = Symbol('originalTestProviderReference');
+
+export type TestCaseWithOriginalProvider = TestCase & {
+  [originalTestProviderReference]?: TestCase['provider'];
+};
+
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
@@ -412,6 +419,7 @@ export async function readTest(
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
+    const providerReference = testCase.provider;
     // Load provider - resolve paths relative to the test case's location
     if (typeof testCase.provider === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider, { basePath: effectiveBasePath });
@@ -421,6 +429,7 @@ export async function readTest(
         basePath: effectiveBasePath,
       });
     }
+    (testCase as TestCaseWithOriginalProvider)[originalTestProviderReference] = providerReference;
   }
 
   if (

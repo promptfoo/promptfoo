@@ -1040,5 +1040,64 @@ describe('PythonProvider', () => {
       await provider.shutdown();
       expect((provider as any).isInitialized).toBe(false);
     });
+
+    it('should reinitialize after shutdown', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+
+      await provider.initialize();
+      await provider.shutdown();
+      await provider.initialize();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(2);
+      expect((provider as any).pool).not.toBeNull();
+      expect((provider as any).isInitialized).toBe(true);
+
+      await provider.shutdown();
+    });
+
+    it('should reprocess the original config rather than processed state after shutdown', async () => {
+      let configReads = 0;
+      // The processor returns a new plain object, so this getter distinguishes the original
+      // source config from the already-processed value stored on the provider.
+      const sourceConfig = {
+        basePath: process.cwd(),
+        get settings() {
+          configReads += 1;
+          return { version: configReads };
+        },
+      };
+      const provider = new PythonProvider('script.py', {
+        config: sourceConfig,
+      });
+
+      await provider.initialize();
+      expect(provider.config.settings).toEqual({ version: 1 });
+      await provider.shutdown();
+      await provider.initialize();
+
+      expect(configReads).toBe(2);
+      expect(provider.config.settings).toEqual({ version: 2 });
+
+      await provider.shutdown();
+    });
+
+    it('should honor public config replacements across initialization cycles', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd(), marker: 'constructor' },
+      });
+      provider.config = { ...provider.config, marker: 'before-first-call' };
+
+      await provider.initialize();
+      expect(provider.config.marker).toBe('before-first-call');
+      await provider.shutdown();
+
+      provider.config = { ...provider.config, marker: 'after-shutdown' };
+      await provider.initialize();
+      expect(provider.config.marker).toBe('after-shutdown');
+
+      await provider.shutdown();
+    });
   });
 });

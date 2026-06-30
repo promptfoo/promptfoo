@@ -126,13 +126,17 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   const resultVars = filterRuntimeVars(result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
   const doVarsMatch = varsMatch(testVars, resultVars);
-  const isMatch = doVarsMatch && providersMatch;
+  const testConversationId = testCase.metadata?.conversationId;
+  const resultConversationId = result.testCase?.metadata?.conversationId;
+  const conversationsMatch =
+    !testConversationId || !resultConversationId || testConversationId === resultConversationId;
+  const isMatch = doVarsMatch && providersMatch && conversationsMatch;
 
   // Log matching details at debug level for troubleshooting filter issues
   if (!isMatch) {
     const varKeys = testVars ? Object.keys(testVars).join(', ') : 'none';
     logger.debug(
-      `[resultIsForTestCase] No match: vars=${doVarsMatch}, providers=${providersMatch}`,
+      `[resultIsForTestCase] No match: vars=${doVarsMatch}, providers=${providersMatch}, conversations=${conversationsMatch}`,
       {
         testProvider: testProviderId || 'none',
         resultProvider: resultProviderId || 'none',

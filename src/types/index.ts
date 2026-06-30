@@ -313,6 +313,8 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal The persisted config already contains the exact test selection for this eval. */
+  testSelectionApplied?: boolean;
 };
 
 const PromptMetricsSchema = z.object({
