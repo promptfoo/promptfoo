@@ -283,6 +283,7 @@ describe('initializeProject', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.exitCode = originalExitCode;
   });
 
@@ -302,24 +303,25 @@ describe('initializeProject', () => {
     expect(process.exitCode).toBe(130);
   });
 
-  it('should not print an "undefined" directory in next steps for the redteam path', async () => {
+  it('should print current-directory next steps for the redteam path', async () => {
     // `promptfoo init` with no directory arg, choosing "Run a red team evaluation".
     mockSelect.mockResolvedValueOnce('redteam');
 
     const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
 
-    try {
-      await initializeProject(null, true);
+    await initializeProject(null, true);
 
-      const messages = infoSpy.mock.calls.map((call) => String(call[0]));
+    const messages = infoSpy.mock.calls.map((call) => String(call[0]));
 
-      // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
-      // output interpolated `undefined` into the path and `cd` command.
-      expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
-      expect(messages.some((msg) => msg.includes('cd undefined'))).toBe(false);
-    } finally {
-      // Restore in `finally` so a failing assertion can't leak the spy into other tests.
-      infoSpy.mockRestore();
-    }
+    // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
+    // output interpolated `undefined` instead of using the current-directory flow.
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Setup complete! Next steps:'),
+        expect.stringContaining('to evaluate your prompts'),
+        expect.stringContaining('to view results in your browser'),
+      ]),
+    );
+    expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
   });
 });
