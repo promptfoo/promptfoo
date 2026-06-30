@@ -1,6 +1,7 @@
 import { matchesAgentRubric } from '../matchers/agent';
 import { isGraderFailure } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
+import { renderProviderConfigTemplates } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -24,10 +25,18 @@ export const handleAgentRubric = async ({
 
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
+  // Render `{{var}}` templates in the grading provider's config (e.g. `working_dir`)
+  // so that batch evaluations can bind a per-test-case workspace from `test.vars`.
+  // Only applied to `agent-rubric` to keep the change scoped.
+  // See: https://github.com/promptfoo/promptfoo/issues/9915
+  const renderedOptions = test.options
+    ? { ...test.options, provider: renderProviderConfigTemplates(test.options.provider, test.vars) }
+    : test.options;
+
   const resp = await matchesAgentRubric(
     renderedValue || '',
     outputString,
-    test.options,
+    renderedOptions,
     test.vars,
     assertion,
     providerCallContext,
