@@ -21,7 +21,7 @@
     "build-storybook": "storybook build"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.6",
+    "@babel/core": "^8.0.0",
     "@chromatic-com/storybook": "^5.2.1",
     "@kurkle/color": "^0.4.0",
     "@storybook/addon-a11y": "^10.4.0",
