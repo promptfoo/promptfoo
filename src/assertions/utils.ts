@@ -5,9 +5,54 @@ import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types/index';
+import { type Assertion, type GradingConfig, type TestCase, type VarValue } from '../types/index';
+import { getNunjucksEngine } from '../util/templates';
 
 const clone = Clone();
+
+/**
+ * Render `{{var}}` Nunjucks templates inside string fields of a grading provider's
+ * `config` object. Used by `agent-rubric` so users can bind per-test-case paths
+ * (e.g. `working_dir: ./evidence/{{trace_id}}`).
+ *
+ * Only top-level string values inside `config` are rendered — nested objects and
+ * arrays are passed through unchanged to avoid surprising behavior. Returns the
+ * provider definition unchanged when it's a string, an ApiProvider instance, or
+ * has no `config` to render.
+ */
+export function renderProviderConfigTemplates(
+  provider: GradingConfig['provider'],
+  vars?: Record<string, VarValue>,
+): GradingConfig['provider'] {
+  if (!provider || typeof provider !== 'object') {
+    return provider;
+  }
+  // Skip already-constructed ApiProvider instances (they have an `id()` function).
+  if (typeof (provider as { id?: unknown }).id === 'function') {
+    return provider;
+  }
+  const cfg = (provider as { config?: Record<string, unknown> }).config;
+  if (!cfg || typeof cfg !== 'object') {
+    return provider;
+  }
+  const engine = getNunjucksEngine(undefined, false, true);
+  const renderedConfig: Record<string, unknown> = { ...cfg };
+  let mutated = false;
+  for (const [key, value] of Object.entries(cfg)) {
+    if (typeof value !== 'string' || !value.includes('{{')) {
+      continue;
+    }
+    const rendered = engine.renderString(value, vars || {});
+    if (rendered !== value) {
+      renderedConfig[key] = rendered;
+      mutated = true;
+    }
+  }
+  if (!mutated) {
+    return provider;
+  }
+  return { ...(provider as object), config: renderedConfig } as GradingConfig['provider'];
+}
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
   // Deep copy
