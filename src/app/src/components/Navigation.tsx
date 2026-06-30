@@ -15,6 +15,7 @@ import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
+import CloudStatusIndicator from './CloudStatusIndicator';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import ThemeSelector from './ThemeSelector';
@@ -266,19 +267,22 @@ export default function Navigation() {
             </Tooltip>
 
             {IS_RUNNING_LOCALLY && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={handleApiSettingsModalToggle}
-                    className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
-                  >
-                    <Settings className="size-5" />
-                    <span className="sr-only">API and Sharing Settings</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">API and Sharing Settings</TooltipContent>
-              </Tooltip>
+              <>
+                <CloudStatusIndicator />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleApiSettingsModalToggle}
+                      className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
+                    >
+                      <Settings className="size-5" />
+                      <span className="sr-only">API and Sharing Settings</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">API and Sharing Settings</TooltipContent>
+                </Tooltip>
+              </>
             )}
 
             <ThemeSelector />

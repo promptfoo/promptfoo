@@ -174,7 +174,11 @@ vi.stubGlobal(
     if (method === 'GET' && pathname.endsWith('/api/user/cloud-config')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({}),
+        json: async () => ({
+          appUrl: 'https://www.promptfoo.app',
+          isEnabled: false,
+          isEnterprise: false,
+        }),
       } as Response);
     }
 

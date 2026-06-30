@@ -171,4 +171,17 @@ describe('DialogDescription', () => {
     expect(description).toBeInTheDocument();
     expect(description).toHaveClass('text-sm', 'text-muted-foreground');
   });
+
+  it('describes the dialog with visible content when the hidden fallback is disabled', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent hideDescription={false}>
+          <DialogTitle>Title</DialogTitle>
+          <DialogDescription>Visible dialog description</DialogDescription>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription('Visible dialog description');
+  });
 });

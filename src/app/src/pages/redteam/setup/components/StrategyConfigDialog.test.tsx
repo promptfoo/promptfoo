@@ -1,12 +1,23 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  <TooltipProvider>{children}</TooltipProvider>
-);
+// `StrategyConfigDialog` calls `useCloudConfig`, which now uses TanStack
+// Query and therefore requires a `QueryClientProvider` in the test tree.
+// Disable retries so failures surface immediately rather than after retries.
+const AllProviders = ({ children }: { children: React.ReactNode }) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(ui, { wrapper: AllProviders });

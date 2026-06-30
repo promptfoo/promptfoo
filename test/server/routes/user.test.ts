@@ -3,18 +3,34 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { UserSchemas } from '../../../src/types/api/user';
 
 // Mock dependencies before imports
 vi.mock('../../../src/globalConfig/accounts');
-vi.mock('../../../src/globalConfig/cloud');
+vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/globalConfig/cloud')>();
+  return {
+    ...actual,
+    cloudConfig: {
+      delete: vi.fn(),
+      getApiHost: vi.fn(),
+      getAppUrl: vi.fn(),
+      isEnabled: vi.fn(),
+      reload: vi.fn(),
+      validateAndSetApiToken: vi.fn(),
+    },
+  };
+});
 vi.mock('../../../src/telemetry');
 
 // Import after mocking
 import { checkEmailStatus, setUserEmail } from '../../../src/globalConfig/accounts';
+import { cloudConfig } from '../../../src/globalConfig/cloud';
 import telemetry from '../../../src/telemetry';
 
 const mockedSetUserEmail = vi.mocked(setUserEmail);
 const mockedCheckEmailStatus = vi.mocked(checkEmailStatus);
+const mockedCloudConfig = vi.mocked(cloudConfig);
 const mockedTelemetry = vi.mocked(telemetry);
 
 describe('User Routes', () => {
@@ -154,6 +170,196 @@ describe('User Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('API key is required');
+    });
+  });
+
+  describe('GET /api/user/cloud-config', () => {
+    beforeEach(() => {
+      mockedCloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.app');
+    });
+
+    it('should return configured cloud state', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        appUrl: 'https://app.promptfoo.app',
+        isEnabled: true,
+        isEnterprise: false,
+      });
+      expect(mockedCloudConfig.reload).toHaveBeenCalledOnce();
+    });
+
+    it('should retain a valid app URL when cloud is not configured', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(false);
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        appUrl: 'https://app.promptfoo.app',
+        isEnabled: false,
+        isEnterprise: false,
+      });
+    });
+
+    it('should detect enterprise deployment for custom domains', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://enterprise.company.com');
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        appUrl: 'https://enterprise.company.com',
+        isEnabled: true,
+        isEnterprise: true,
+      });
+    });
+
+    it('should not link a hosted dashboard for a configured custom API deployment', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedCloudConfig.getApiHost.mockReturnValue('https://api.enterprise.company.com');
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://www.promptfoo.app');
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        appUrl: null,
+        isEnabled: true,
+        isEnterprise: true,
+      });
+    });
+
+    it('should not detect enterprise for hosted promptfoo domains, including saved legacy URLs', async () => {
+      const standardUrls = [
+        'https://promptfoo.app',
+        'https://www.promptfoo.app',
+        'https://app.promptfoo.app',
+        'https://app.promptfoo.com',
+      ];
+
+      for (const url of standardUrls) {
+        mockedCloudConfig.isEnabled.mockReturnValue(true);
+        mockedCloudConfig.getAppUrl.mockReturnValue(url);
+
+        const response = await api.get('/api/user/cloud-config');
+
+        expect(response.status).toBe(200);
+        expect(response.body.isEnterprise).toBe(false);
+      }
+    });
+
+    it('should treat a hosted-app apiHost as hosted cloud', async () => {
+      // Older or manually saved configs may put a hosted app hostname in
+      // apiHost. Previously HOSTED_CLOUD_API_HOSTNAMES only listed
+      // `api.promptfoo.app`, so the hosted-app apiHost looked like an
+      // enterprise API to the route, tripping the "mismatched app vs api"
+      // branch that nulls out appUrl.
+      // Result: a happy-path logged-in user saw `appUrl: null, isEnterprise: true`,
+      // and the navbar indicator rendered the "dashboard URL unavailable" state.
+      const hostedApiHosts = [
+        'https://promptfoo.app',
+        'https://www.promptfoo.app',
+        'https://app.promptfoo.app',
+        'https://app.promptfoo.com',
+      ];
+
+      for (const apiHost of hostedApiHosts) {
+        mockedCloudConfig.isEnabled.mockReturnValue(true);
+        mockedCloudConfig.getApiHost.mockReturnValue(apiHost);
+        mockedCloudConfig.getAppUrl.mockReturnValue('https://www.promptfoo.app');
+
+        const response = await api.get('/api/user/cloud-config');
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+          appUrl: 'https://www.promptfoo.app',
+          isEnabled: true,
+          isEnterprise: false,
+        });
+      }
+    });
+
+    it('should classify suspicious lookalike promptfoo domains as enterprise', async () => {
+      const testCases = [
+        'https://evil.promptfoo.app.attacker.com',
+        'https://promptfoo.app.evil.com',
+      ];
+
+      for (const url of testCases) {
+        mockedCloudConfig.isEnabled.mockReturnValue(false);
+        mockedCloudConfig.getAppUrl.mockReturnValue(url);
+
+        const response = await api.get('/api/user/cloud-config');
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          appUrl: url,
+          isEnabled: false,
+          isEnterprise: true,
+        });
+      }
+    });
+
+    it('should reject invalid, non-http, or credentialed app URLs for enterprise detection', async () => {
+      const invalidUrls = ['not-a-url', 'javascript:alert(1)', 'https://user:password@example.com'];
+
+      for (const url of invalidUrls) {
+        mockedCloudConfig.isEnabled.mockReturnValue(true);
+        mockedCloudConfig.getAppUrl.mockReturnValue(url);
+
+        const response = await api.get('/api/user/cloud-config');
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          appUrl: null,
+          isEnabled: true,
+          isEnterprise: false,
+        });
+      }
+    });
+
+    it('should reject credential-bearing cloud app URLs in the response schema', () => {
+      expect(() =>
+        UserSchemas.CloudConfig.Response.parse({
+          appUrl: 'https://user:password@example.com',
+          isEnabled: true,
+          isEnterprise: false,
+        }),
+      ).toThrow();
+    });
+
+    it('should detect enterprise deployment even when cloud is not configured', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(false);
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://enterprise.company.com');
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        appUrl: 'https://enterprise.company.com',
+        isEnabled: false,
+        isEnterprise: true,
+      });
+    });
+
+    it('should handle cloud config errors without exposing details', async () => {
+      mockedCloudConfig.isEnabled.mockImplementation(() => {
+        throw new Error('test error');
+      });
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        error: 'Failed to get cloud config',
+      });
     });
   });
 });

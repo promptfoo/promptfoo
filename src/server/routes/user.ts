@@ -8,11 +8,11 @@ import {
   getUserId,
   setUserEmail,
 } from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
+import { cloudConfig, isHostedCloudHost } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { UserSchemas } from '../../types/api/user';
-import { replyValidationError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -111,6 +111,41 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
+/** Returns a URL only when it is safe to expose as a browser navigation target. */
+function getBrowserSafeHttpUrl(url: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const appUrl = url.trim();
+    const parsedUrl = new URL(appUrl);
+
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return null;
+    }
+
+    if (parsedUrl.username || parsedUrl.password) {
+      return null;
+    }
+
+    return appUrl;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Determines if a URL represents an enterprise deployment — anything that
+ * is not a known hosted Promptfoo Cloud hostname (app or API). Invalid
+ * URLs and absent values are treated as non-enterprise so the caller can
+ * fall through to "not configured" rather than mislabel a missing config
+ * as enterprise.
+ */
+function isEnterprise(url: string | null): boolean {
+  return Boolean(url) && !isHostedCloudHost(url);
+}
+
 // New API key authentication endpoint that mirrors CLI behavior
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
@@ -197,14 +232,22 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
  */
 userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
+    cloudConfig.reload();
+    const isEnabled = cloudConfig.isEnabled();
+    const appUrl = getBrowserSafeHttpUrl(cloudConfig.getAppUrl());
+    const apiHost = getBrowserSafeHttpUrl(cloudConfig.getApiHost());
+    const hasEnterpriseAppUrl = isEnterprise(appUrl);
+    const hasEnterpriseApiHost = isEnterprise(apiHost);
+    const browserAppUrl = hasEnterpriseApiHost && !hasEnterpriseAppUrl ? null : appUrl;
+
     res.json(
       UserSchemas.CloudConfig.Response.parse({
-        appUrl: cloudConfig.getAppUrl(),
-        isEnabled: cloudConfig.isEnabled(),
+        appUrl: browserAppUrl,
+        isEnabled,
+        isEnterprise: hasEnterpriseAppUrl || hasEnterpriseApiHost,
       }),
     );
   } catch (error) {
-    logger.error(`Error getting cloud config: ${error}`);
-    res.status(500).json({ error: 'Failed to get cloud config' });
+    sendError(res, 500, 'Failed to get cloud config', error);
   }
 });

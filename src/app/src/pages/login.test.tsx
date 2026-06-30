@@ -39,6 +39,11 @@ vi.mock('@app/utils/api', () => ({
   callApi: (...args: any[]) => callApiMock(...args),
 }));
 
+const invalidateCloudConfigMock = vi.fn();
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  useInvalidateCloudConfig: () => invalidateCloudConfigMock,
+}));
+
 describe('LoginPage', () => {
   const createUserStoreState = (overrides = {}) => ({
     email: null,
@@ -60,6 +65,7 @@ describe('LoginPage', () => {
     mockNavigate.mockReset();
     useUserStoreMock.mockReset();
     callApiMock.mockReset();
+    invalidateCloudConfigMock.mockReset();
     mockLocationSearch = '';
     mockActionState = { success: false };
     mockIsPending = false;
@@ -180,6 +186,7 @@ describe('LoginPage', () => {
     );
 
     await waitFor(() => expect(setEmail).toHaveBeenCalledWith('test@example.com'));
+    expect(invalidateCloudConfigMock).toHaveBeenCalledOnce();
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 

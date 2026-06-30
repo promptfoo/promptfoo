@@ -1,5 +1,5 @@
 import { getEnvString } from '../envars';
-import { CloudConfig } from '../globalConfig/cloud';
+import { CloudConfig, isHostedCloudHost } from '../globalConfig/cloud';
 import logger from '../logger';
 import { fetchWithTimeout } from './fetch/index';
 
@@ -56,9 +56,16 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     const data = await response.json();
 
     if (data.status === 'OK') {
+      // Only annotate "(using custom endpoint)" when the configured API host
+      // is genuinely not a hosted Promptfoo domain. A logged-in user on
+      // hosted Cloud was previously labeled as custom because the suffix
+      // was gated on `isEnabled()` (i.e. any configured API key) rather
+      // than on whether the host itself was custom.
+      const usingCustomEndpoint =
+        cloudConfig.isEnabled() && !isHostedCloudHost(cloudConfig.getApiHost());
       return {
         status: 'OK',
-        message: cloudConfig.isEnabled()
+        message: usingCustomEndpoint
           ? 'Cloud API is healthy (using custom endpoint)'
           : 'Cloud API is healthy',
       };

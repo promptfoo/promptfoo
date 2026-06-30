@@ -1,60 +1,66 @@
-import { useEffect, useState } from 'react';
+import { useCallback } from 'react';
 
-import { callApi } from '../utils/api';
+import useApiConfig from '@app/stores/apiConfig';
+import { useUserStore } from '@app/stores/userStore';
+import { callApi } from '@app/utils/api';
+import { type CloudConfigResponse, CloudConfigResponseSchema } from '@promptfoo/types/api/user';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-export type CloudConfigData = {
-  appUrl: string;
-  isEnabled: boolean;
-};
+export type CloudConfigData = CloudConfigResponse;
+
+// Older local servers did not include `isEnterprise`; keep the client tolerant
+// while the server/OpenAPI response contract remains strict.
+const LegacyCloudConfigResponseSchema = CloudConfigResponseSchema.extend({
+  isEnterprise: CloudConfigResponseSchema.shape.isEnterprise.optional(),
+});
+
+// Keyed on apiBaseUrl + signed-in email so a change to either invalidates
+// the cached config automatically — replaces the previous manual
+// event-bus + dual Zustand-subscription dance.
+function useCloudConfigQueryKey() {
+  const apiBaseUrl = useApiConfig((s) => s.apiBaseUrl);
+  const email = useUserStore((s) => s.email);
+  return ['cloudConfig', apiBaseUrl, email] as const;
+}
+
+async function fetchCloudConfig(): Promise<CloudConfigData> {
+  const response = await callApi('/user/cloud-config');
+  if (!response.ok) {
+    throw new Error('Failed to fetch cloud config');
+  }
+  const parsed = LegacyCloudConfigResponseSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new Error('Invalid cloud config response');
+  }
+  return {
+    appUrl: parsed.data.appUrl,
+    isEnabled: parsed.data.isEnabled,
+    isEnterprise: parsed.data.isEnterprise ?? false,
+  };
+}
 
 /**
- * Loads the current user's cloud config from the API. Useful for getting the Cloud app's URL
- * in order to redirect the user to something in Cloud.
+ * Returns a function that invalidates the cached Promptfoo Cloud config so
+ * the next render fetches fresh data. Call after flows that change local
+ * cloud state (login, logout) — the API base URL and signed-in email
+ * already invalidate automatically via the query key.
  */
-export default function useCloudConfig(): {
-  data: CloudConfigData | null;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => void;
-} {
-  const [data, setData] = useState<CloudConfigData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+export function useInvalidateCloudConfig(): () => void {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['cloudConfig'] });
+  }, [queryClient]);
+}
 
-  /**
-   * Fetches the cloud config from the API.
-   */
-  const fetchCloudConfig = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await callApi('/user/cloud-config');
-      if (!response.ok) {
-        throw new Error('Failed to fetch cloud config');
-      }
-      const responseData = await response.json();
-      setData(responseData);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      console.error('Error fetching cloud config:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Fetch on mount.
-   */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-  useEffect(() => {
-    fetchCloudConfig();
-  }, []);
-
-  return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchCloudConfig,
-  };
+/**
+ * Loads the local Promptfoo Cloud configuration for links and status UI.
+ */
+export default function useCloudConfig() {
+  const queryKey = useCloudConfigQueryKey();
+  return useQuery<CloudConfigData, Error>({
+    queryKey,
+    queryFn: fetchCloudConfig,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
 }

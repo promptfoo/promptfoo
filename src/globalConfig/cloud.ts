@@ -6,19 +6,35 @@ export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
 export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
-const CLOUD_HOSTNAMES = new Set([
-  new URL(CLOUD_API_HOST).hostname,
-  new URL('https://www.promptfoo.app').hostname,
-  new URL('https://promptfoo.app').hostname,
-]);
-
 // Free customers created before this date are grandfathered into auto-share.
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
 
-function isPromptfooCloudHost(url: string): boolean {
+// Hostnames served by hosted Promptfoo Cloud — both the app/dashboard and
+// the API. Older or manually saved configs may put a hosted app hostname in
+// `apiHost`, so either kind of hostname must be recognized as hosted
+// regardless of which slot it lands in.
+export const HOSTED_CLOUD_HOSTNAMES = new Set([
+  'promptfoo.app',
+  'www.promptfoo.app',
+  'app.promptfoo.app',
+  // Legacy hosted app domain — still appears in older locally-saved configs.
+  'app.promptfoo.com',
+  'api.promptfoo.app',
+]);
+
+/**
+ * True when `url` points at a known hosted Promptfoo domain (app or API).
+ * Invalid URLs and absent values are treated as not-hosted, matching the
+ * "we don't recognize this, treat as enterprise" fallthrough used by
+ * callers.
+ */
+export function isHostedCloudHost(url: string | null | undefined): boolean {
+  if (!url) {
+    return false;
+  }
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
-    return CLOUD_HOSTNAMES.has(hostname);
+    return HOSTED_CLOUD_HOSTNAMES.has(hostname);
   } catch {
     return false;
   }
@@ -172,7 +188,11 @@ export class CloudConfig {
     this.reload();
   }
 
-  private reload(): void {
+  /**
+   * Reload persisted cloud settings so long-running processes observe changes
+   * made by a separate CLI authentication command.
+   */
+  reload(): void {
     const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
@@ -200,7 +220,7 @@ export class CloudConfig {
     // auto-sharing to the on-prem Report Server when the server omits the field
     // or returns false because it has no licence-check logic. The validated app
     // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
-    const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
+    const isPublicCloud = isHostedCloudHost(apiHost) || isHostedCloudHost(app.url);
     if (!isPublicCloud) {
       this.setSharing(true);
     } else if (typeof hasActiveLicense === 'boolean') {

@@ -13,6 +13,13 @@ const Providers =
       defaultOptions: {
         queries: {
           retry: false,
+          // Test-friendly defaults so useQuery does not schedule background
+          // staleness/GC/refocus timers — those would otherwise leak into
+          // tests that assert active-timer counts or unmount cleanup.
+          gcTime: Infinity,
+          staleTime: Infinity,
+          refetchOnWindowFocus: false,
+          refetchOnReconnect: false,
         },
       },
     });
