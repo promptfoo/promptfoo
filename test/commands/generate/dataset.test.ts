@@ -7,6 +7,7 @@ import { doGenerateDataset } from '../../../src/commands/generate/dataset';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { resolveConfigs } from '../../../src/util/config/load';
+import { setupEnv } from '../../../src/util/index';
 
 import type { TestSuite, VarMapping } from '../../../src/types/index';
 
@@ -133,6 +134,29 @@ describe('dataset generation', () => {
       });
 
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', 'yaml content');
+    });
+
+    it('preserves the common envPath option as an explicit config override', async () => {
+      const envPath = ['cli.env'];
+
+      await doGenerateDataset({
+        cache: true,
+        config: 'config.yaml',
+        envPath,
+        numPersonas: '5',
+        numTestCasesPerPersona: '3',
+        output: 'output.yaml',
+        write: false,
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      });
+
+      expect(setupEnv).toHaveBeenCalledWith(envPath);
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['config.yaml'], envPath },
+        {},
+        'DatasetGeneration',
+      );
     });
 
     it('should write CSV output', async () => {

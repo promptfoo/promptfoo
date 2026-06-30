@@ -7,6 +7,7 @@ import { disableCache } from '../../../src/cache';
 import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
+import { setupEnv } from '../../../src/util/index';
 
 import type { Assertion, TestSuite } from '../../../src/types/index';
 
@@ -145,6 +146,29 @@ describe('assertion generation', () => {
       });
 
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', 'yaml content');
+    });
+
+    it('preserves the common envPath option as an explicit config override', async () => {
+      const envPath = ['cli.env'];
+
+      await doGenerateAssertions({
+        cache: true,
+        config: 'config.yaml',
+        envPath,
+        numAssertions: '2',
+        type: 'pi',
+        output: 'output.yaml',
+        write: false,
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      });
+
+      expect(setupEnv).toHaveBeenCalledWith(envPath);
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['config.yaml'], envPath },
+        {},
+        'AssertionGeneration',
+      );
     });
 
     it('should throw error for unsupported file type', async () => {

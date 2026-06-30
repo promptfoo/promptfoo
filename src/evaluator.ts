@@ -65,6 +65,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
+  type TestCase,
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
@@ -128,6 +129,13 @@ export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
     super(message);
     this.name = 'PromptSuggestionsRejectedError';
+  }
+}
+
+export class StrictConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StrictConfigError';
   }
 }
 
@@ -2122,6 +2130,83 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
+/**
+ * Returns test indices with no runnable assertions, including assertions inherited from defaults.
+ */
+export function findTestsWithoutAssertions(
+  tests: TestCase[],
+  defaultTest?: Partial<TestCase>,
+): number[] {
+  const offenders: number[] = [];
+  for (let i = 0; i < tests.length; i++) {
+    const test = tests[i];
+    if (!test) {
+      continue;
+    }
+    const inheritsDefaultAssertions = test.options?.disableDefaultAsserts !== true;
+    if (
+      hasEffectiveAssertions(test.assert) ||
+      (inheritsDefaultAssertions && hasEffectiveAssertions(defaultTest?.assert))
+    ) {
+      continue;
+    }
+    offenders.push(i);
+  }
+  return offenders;
+}
+
+function hasEffectiveAssertions(
+  assertions: AssertionOrSet[] | undefined,
+  nestedInAssertionSet = false,
+): boolean {
+  return (
+    Array.isArray(assertions) &&
+    assertions.some((assertion) => {
+      if (assertion.type === 'assert-set') {
+        return hasEffectiveAssertions(assertion.assert, true);
+      }
+      if (
+        nestedInAssertionSet &&
+        (assertion.type.startsWith('select-') || assertion.type === 'max-score')
+      ) {
+        return false;
+      }
+      return true;
+    })
+  );
+}
+
+function enforceStrictAssertionsOnEvaluatedRows(
+  runEvalOptions: RunEvalOptions[],
+  options: InternalEvaluateOptions,
+) {
+  const strictConfigEnabled = options.strictConfigEnabled ?? getEnvBool('PROMPTFOO_STRICT_CONFIG');
+  if (options.skipStrictAssertionValidation || !strictConfigEnabled) {
+    return;
+  }
+  const offenders = [
+    ...new Set(
+      runEvalOptions
+        .filter(({ test }) => findTestsWithoutAssertions([test]).length > 0)
+        .map(({ testIdx }) => testIdx),
+    ),
+  ];
+  if (offenders.length === 0) {
+    return;
+  }
+  const previewIndices = offenders.slice(0, 5);
+  const indexList = previewIndices.join(', ');
+  const more =
+    offenders.length > previewIndices.length
+      ? ` (and ${offenders.length - previewIndices.length} more)`
+      : '';
+  throw new StrictConfigError(
+    `Strict config: ${offenders.length} evaluated test row${offenders.length === 1 ? '' : 's'} ` +
+      `[indices ${indexList}${more}] ${offenders.length === 1 ? 'has' : 'have'} no effective assertions. ` +
+      'Add an `assert:` block to each test or `defaultTest.assert`, or unset PROMPTFOO_STRICT_CONFIG.',
+  );
+}
+
 function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   const tests = getInitialTests(testSuite);
   if (!testSuite.scenarios?.length) {
@@ -3351,6 +3436,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (testSuite.extensions?.length) {
+      enforceStrictAssertionsOnEvaluatedRows([evalStep], this.options);
+    }
 
     const rows = await runEvalInternal({
       ...evalStep,
@@ -4579,6 +4667,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
+    if (!testSuite.extensions?.length) {
+      enforceStrictAssertionsOnEvaluatedRows(runEvalOptions, options);
+    }
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,

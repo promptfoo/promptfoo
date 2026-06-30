@@ -7,16 +7,16 @@ import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutp
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
 import telemetry from './telemetry';
+import { setExplicitCliEnvPath, setupEnv } from './util/env';
 import { clearAgentCache } from './util/fetch/index';
-import { setupEnv } from './util/index';
 import type { Command } from 'commander';
 
 // Tracks the last env path loaded to prevent double-loading.
 // setupEnvFilesFromArgv() runs early (before Commander parses) with shouldLog=false,
 // then the preAction hook may call loadEnvPathOnce again with shouldLog=true.
-// If the paths match, the second call is a no-op (including its log), which is intentional:
-// the env vars are already in process.env, and logging before Commander sets --verbose
-// would be invisible anyway.
+// Matching paths refresh the explicit CLI-path tracker but skip reloading and logging:
+// the env vars are already in process.env, and logging before Commander sets --verbose would be
+// invisible anyway.
 let loadedEnvPathKey: string | undefined;
 
 function normalizeEnvPaths(input: string | string[] | undefined): string | string[] | undefined {
@@ -45,10 +45,12 @@ function getEnvPathKey(envPath: string | string[]): string {
 function loadEnvPathOnce(envPath: string | string[], shouldLog: boolean): void {
   const envPathKey = getEnvPathKey(envPath);
   if (loadedEnvPathKey === envPathKey) {
+    setExplicitCliEnvPath(envPath);
     return;
   }
 
   setupEnv(envPath);
+  setExplicitCliEnvPath(envPath);
   loadedEnvPathKey = envPathKey;
 
   if (shouldLog) {
@@ -58,6 +60,7 @@ function loadEnvPathOnce(envPath: string | string[], shouldLog: boolean): void {
 }
 
 export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): void {
+  setExplicitCliEnvPath(undefined);
   const envFileValues: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -163,8 +166,7 @@ export function addCommonOptionsRecursively(command: Command) {
     command.option(
       '--env-file, --env-path <path>',
       'Path(s) to .env file(s). Repeat the flag or use comma-separated values for multiple files.',
-      (value: string, previous: string[]) => [...previous, value],
-      [],
+      (value: string, previous: string[] = []) => [...previous, value],
     );
   }
 
@@ -178,10 +180,14 @@ export function addCommonOptionsRecursively(command: Command) {
       logger.debug('Verbose mode enabled via --verbose flag');
     }
 
-    const rawEnvPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    const rawEnvPath = thisCommand.opts().envFile ?? thisCommand.opts().envPath;
     const envPath = normalizeEnvPaths(rawEnvPath);
     if (envPath) {
       loadEnvPathOnce(envPath, true);
+      // The common option exists at every command level, and Commander may assign a value
+      // supplied after a subcommand to an ancestor while leaving the action command's value
+      // unset. Forward the normalized value so action schemas preserve CLI precedence.
+      actionCommand.setOptionValue('envPath', envPath);
     }
 
     if (thisCommand === actionCommand) {

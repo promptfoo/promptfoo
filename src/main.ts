@@ -66,7 +66,9 @@ async function main() {
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
     ? { defaultConfig: {}, defaultConfigPath: undefined }
-    : await loadDefaultConfig();
+    : await loadDefaultConfig(undefined, 'promptfooconfig', {
+        deferUnknownKeyValidation: true,
+      });
 
   const program = new Command('promptfoo');
   program
@@ -119,7 +121,7 @@ async function main() {
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
     skipDefaultConfigLoading
       ? { defaultConfig: {}, defaultConfigPath: undefined }
-      : await loadDefaultConfig(undefined, 'redteam');
+      : await loadDefaultConfig(undefined, 'redteam', { deferUnknownKeyValidation: true });
 
   redteamInitCommand(redteamBaseCommand);
   evalCommand(

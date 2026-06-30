@@ -14,7 +14,10 @@ import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
-import { readConfig } from '../../util/config/load';
+import {
+  enforceUnknownConfigKeyDiagnosticsForConfig,
+  maybeReadConfig,
+} from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
@@ -77,6 +80,8 @@ export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
 export const ArgsSchema = z
   .object({
     config: z.string().optional(),
+    envFile: z.union([z.string(), z.array(z.string())]).optional(),
+    envPath: z.union([z.string(), z.array(z.string())]).optional(),
     target: z.string().optional(),
   })
   // Config and target are mutually exclusive:
@@ -402,7 +407,6 @@ export function discoverCommand(
       // Record telemetry:
       telemetry.record('redteam discover', {});
 
-      let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
@@ -423,11 +427,15 @@ export function discoverCommand(
           throw new Error(`Config not found at ${args.config}`);
         }
 
-        config = await readConfig(args.config);
-
+        const config = await maybeReadConfig(args.config, true);
         if (!config) {
           throw new Error(`Config is invalid at ${args.config}`);
         }
+        enforceUnknownConfigKeyDiagnosticsForConfig(
+          config,
+          args.config,
+          args.envFile ?? args.envPath,
+        );
 
         if (!config.providers) {
           throw new Error('Config must contain a target');
@@ -449,6 +457,11 @@ export function discoverCommand(
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
+        enforceUnknownConfigKeyDiagnosticsForConfig(
+          defaultConfig,
+          defaultConfigPath,
+          args.envFile ?? args.envPath,
+        );
         if (!defaultConfig.providers) {
           throw new Error('Config must contain a target or provider');
         }

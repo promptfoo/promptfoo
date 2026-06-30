@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import dotenv from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
-import { setupEnv } from '../../src/util/env';
+import { getExplicitCliEnvPath, setExplicitCliEnvPath, setupEnv } from '../../src/util/env';
 import { mockProcessEnv } from './utils';
 
 vi.mock('fs', async () => {
@@ -11,6 +11,18 @@ vi.mock('fs', async () => {
     ...actual,
     existsSync: vi.fn(),
   };
+});
+
+describe('explicit CLI env path', () => {
+  afterEach(() => {
+    setExplicitCliEnvPath(undefined);
+  });
+
+  it('tracks the env path selected explicitly by the CLI', () => {
+    setExplicitCliEnvPath(['cli.env']);
+
+    expect(getExplicitCliEnvPath()).toEqual(['cli.env']);
+  });
 });
 
 describe('setupEnv', () => {
@@ -127,6 +139,30 @@ describe('setupEnv', () => {
 
       expect(() => setupEnv(['.env', '.env.missing'])).toThrow();
       expect(dotenvConfigSpy).not.toHaveBeenCalled();
+    });
+
+    it('should restore process.env and throw when an explicit env file cannot be loaded', () => {
+      const error = Object.assign(new Error('Unable to load explicit env file'), {
+        code: 'MISSING_DATA' as const,
+      });
+      dotenvConfigSpy.mockImplementationOnce(() => {
+        mockProcessEnv({ PR9449_PARTIAL_ENV: 'should-not-leak' });
+        return { error };
+      });
+
+      expect(() => setupEnv('.env-directory')).toThrow(error);
+      expect(process.env.PR9449_PARTIAL_ENV).toBeUndefined();
+    });
+
+    it('should restore process.env when explicit env loading throws after a partial load', () => {
+      const error = new Error('DECRYPTION_FAILED');
+      dotenvConfigSpy.mockImplementationOnce(() => {
+        mockProcessEnv({ PR9449_PARTIAL_ENV: 'should-not-leak' });
+        throw error;
+      });
+
+      expect(() => setupEnv('.env.vault')).toThrow(error);
+      expect(process.env.PR9449_PARTIAL_ENV).toBeUndefined();
     });
 
     it('should filter out empty strings from array', () => {

@@ -16,7 +16,8 @@ import type { Command } from 'commander';
 interface DatasetGenerateOptions {
   cache: boolean;
   config?: string;
-  envFile?: string;
+  envFile?: string | string[];
+  envPath?: string | string[];
   instructions?: string;
   numPersonas: string;
   numTestCasesPerPersona: string;
@@ -28,7 +29,8 @@ interface DatasetGenerateOptions {
 }
 
 export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
-  setupEnv(options.envFile);
+  const explicitEnvPath = options.envFile ?? options.envPath;
+  setupEnv(explicitEnvPath);
   if (!options.cache) {
     logger.info('Cache is disabled.');
     disableCache();
@@ -40,6 +42,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        envPath: explicitEnvPath,
       },
       options.defaultConfig,
       'DatasetGeneration',

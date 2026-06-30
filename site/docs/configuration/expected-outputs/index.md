@@ -19,6 +19,8 @@ keywords:
 
 Assertions are used to compare the LLM output against expected values or conditions. While assertions are not required to run an eval, they are a useful way to automate your analysis.
 
+Set [`PROMPTFOO_STRICT_CONFIG=true`](/docs/usage/command-line) to fail scheduled eval rows that have no runnable assertions. This opt-in check runs after filtering and extension hooks, before that row's provider call. Weight-zero metric assertions still count because they execute and feed metrics, even though they cannot make a row fail; strict mode verifies assertion presence, not assertion quality.
+
 Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
 
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
@@ -561,6 +563,8 @@ derivedMetrics:
 ```
 
 ### Example: F1 score
+
+Assertions with `weight: 0` still execute and satisfy strict assertion-presence checks. Use them for metric-only inputs as below, but add a positive-weight assertion if each row must be able to fail.
 
 ```yaml
 defaultTest:

@@ -63,7 +63,15 @@ import type { EvaluateOptions, EvaluateTestSuite } from '../types';
  * @see runAssertion for testing specific outputs
  */
 export async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
-  return evaluateWithSource(testSuite, { ...options, eventSource: 'library' });
+  const {
+    skipStrictAssertionValidation: _ignoredSkipStrictAssertionValidation,
+    strictConfigEnabled: _ignoredStrictConfigEnabled,
+    ...publicOptions
+  } = options as EvaluateOptions & {
+    skipStrictAssertionValidation?: unknown;
+    strictConfigEnabled?: unknown;
+  };
+  return evaluateWithSource(testSuite, { ...publicOptions, eventSource: 'library' });
 }
 
 export { evaluateWithSource };

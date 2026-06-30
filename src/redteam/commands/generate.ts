@@ -34,6 +34,7 @@ import {
   ConfigResolutionError,
   logConfigResolutionError,
   resolveConfigs,
+  validateUnknownConfigKeysForConfigPaths,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
@@ -267,10 +268,22 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
+function getExplicitEnvPath(
+  envFile: string | string[] | undefined,
+  envPath: string | string[] | undefined,
+): string | string[] | undefined {
+  const envFiles = Array.isArray(envFile) ? envFile : envFile ? [envFile] : [];
+  const hasEnvFile = envFiles.some((value) =>
+    value.split(',').some((path) => path.trim().length > 0),
+  );
+  return hasEnvFile ? envFile : envPath;
+}
+
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
-  setupEnv(options.envFile);
+  const explicitEnvPath = getExplicitEnvPath(options.envFile, options.envPath);
+  setupEnv(explicitEnvPath);
   const cacheOverride = options.cache === false ? false : undefined;
   if (cacheOverride === false) {
     logger.info('Cache is disabled');
@@ -282,6 +295,7 @@ export async function doGenerateRedteam(
 async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
+  const explicitEnvPath = getExplicitEnvPath(options.envFile, options.envPath);
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
@@ -318,7 +332,8 @@ async function doGenerateRedteamInternal(
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Skip generation when a YAML output already matches the current config hash.
+  // Skip generation when a YAML output already matches the current config hash. Strict unknown-key
+  // validation still runs because environment files are not part of the generation cache key.
   if (
     !options.force &&
     !options.configFromCloud &&
@@ -334,6 +349,7 @@ async function doGenerateRedteamInternal(
     const currentHash = await getConfigHash(configPath, options);
 
     if (storedHash === currentHash) {
+      await validateUnknownConfigKeysForConfigPaths([configPath], explicitEnvPath);
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );
@@ -348,6 +364,7 @@ async function doGenerateRedteamInternal(
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        envPath: explicitEnvPath,
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
       },
@@ -1152,6 +1169,7 @@ export function redteamGenerateCommand(
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           ...overrides,
+          envFile: getExplicitEnvPath(opts.envFile, opts.envPath),
           defaultConfig,
           defaultConfigPath,
         });

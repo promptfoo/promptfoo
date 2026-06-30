@@ -1,11 +1,12 @@
 import * as fs from 'fs';
+import os from 'os';
 import * as path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { isCI } from '../../../src/envars';
+import { getEnvBool, isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
@@ -15,11 +16,14 @@ import {
   ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
+  enforceUnknownConfigKeyDiagnosticsForConfig,
   logConfigResolutionError,
   maybeReadConfig,
   readConfig,
   resolveCliProvidersWithConfig,
   resolveConfigs,
+  resolveStrictConfigEnabled,
+  validateUnknownConfigKeysForConfigPaths,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
@@ -2603,6 +2607,325 @@ describe('resolveConfigs with external defaultTest', () => {
         vars: inlineDefaultTest.vars,
       }),
     );
+  });
+});
+
+describe('PROMPTFOO_STRICT_CONFIG', () => {
+  let previousCliConfig: typeof cliState.config;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+
+    // vi.fn() mocks survive `vi.clearAllMocks()` / `vi.restoreAllMocks()`; their
+    // implementations are only cleared by `mockReset()`. Without this, an implementation set
+    // inside one of the strict-mode tests below leaks to later tests in this file (they run in
+    // random order) and causes `readConfig` to throw for any unknown top-level key.
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    previousCliConfig = cliState.config;
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+  });
+
+  afterEach(() => {
+    cliState.config = previousCliConfig;
+    vi.mocked(getEnvBool).mockReset();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('readConfig emits a warning when unknown top-level keys are present', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      // typo: this assert block should live under defaultTest.assert
+      assert: [{ type: 'contains', value: 'world' }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual(mockConfig);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Unknown top-level config key(s) found'),
+      {
+        configPath: 'config.json',
+        unknownTopLevelKeys: ['assert'],
+      },
+    );
+  });
+
+  it('readConfig fails fast on unknown top-level keys when strict mode is enabled', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      assert: [{ type: 'contains', value: 'world' }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
+    );
+  });
+
+  it('readConfig leaves valid configs untouched even in strict mode', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).resolves.toEqual(mockConfig);
+  });
+
+  it('uses the current config env override instead of stale cliState', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    cliState.config = {
+      env: { PROMPTFOO_STRICT_CONFIG: 'false' },
+    } as typeof cliState.config;
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+      assert: [{ type: 'contains', value: 'world' }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).rejects.toThrow(/Unknown top-level config key/);
+  });
+
+  it('falls back to process env instead of a previous config override', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    cliState.config = {
+      env: { PROMPTFOO_STRICT_CONFIG: 'false' },
+    } as typeof cliState.config;
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      assert: [{ type: 'contains', value: 'world' }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).rejects.toThrow(/Unknown top-level config key/);
+  });
+
+  it('detects __proto__ before rendering can turn it into inherited config', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(
+      '{"__proto__":{"providers":["echo"],"prompts":["hello"],"tests":[{}]}}',
+    );
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).rejects.toThrow(/"__proto__"/);
+  });
+
+  it('detects unknown keys introduced by a root $ref', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.spyOn(fs, 'readFileSync').mockReturnValue('{"$ref":"/tmp/shared.json"}');
+    mockDereference.mockResolvedValue({
+      providers: ['echo'],
+      prompts: ['hello'],
+      assert: [{ type: 'contains', value: 'hello' }],
+    });
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).rejects.toThrow(/"assert"/);
+  });
+
+  it('detects inherited JavaScript keys materialized during rendering', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const mockConfig = Object.create({ outptPath: '/tmp/ignored.json' }) as UnifiedConfig;
+    Object.assign(mockConfig, {
+      providers: ['echo'],
+      prompts: ['hello'],
+      tests: [{ vars: { case: 'inherited-key' } }],
+    });
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    await expect(readConfig('config.js')).rejects.toThrow(/"outptPath"/);
+  });
+
+  it('applies an inherited strict setting materialized during rendering', async () => {
+    const mockConfig = Object.create({
+      env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+      outptPath: '/tmp/ignored.json',
+    }) as UnifiedConfig;
+    Object.assign(mockConfig, {
+      providers: ['echo'],
+      prompts: ['hello'],
+      tests: [{ vars: { case: 'inherited-env' } }],
+    });
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    await expect(readConfig('config.js')).rejects.toThrow(/"outptPath"/);
+  });
+
+  it('applies the effective merged env setting to every config file', async () => {
+    const configs: Record<string, UnifiedConfig & { assert?: unknown[] }> = {
+      'base.json': {
+        env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+        providers: ['echo'],
+        prompts: ['hello'],
+        tests: [{ assert: [{ type: 'contains', value: 'hello' }] }],
+      },
+      'tests.json': {
+        providers: ['echo'],
+        prompts: ['hello'],
+        tests: [{ assert: [{ type: 'contains', value: 'hello' }] }],
+        assert: [{ type: 'contains', value: 'hello' }],
+      },
+    };
+    vi.mocked(globSync).mockImplementation((configPath) => [String(configPath)]);
+    vi.spyOn(fs, 'readFileSync').mockImplementation((configPath) => {
+      const config = configs[path.basename(String(configPath))];
+      return JSON.stringify(config);
+    });
+
+    await expect(combineConfigs(['base.json', 'tests.json'])).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
+    );
+  });
+
+  it('applies a config-selected env file when enforcing deferred diagnostics', async () => {
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const strictEnvDir = actualFs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-strict-config-'));
+    const strictEnvPath = path.join(strictEnvDir, '.env');
+    const mockConfig = {
+      commandLineOptions: { envPath: strictEnvPath },
+      providers: ['echo'],
+      prompts: ['hello'],
+      outptPath: '/tmp/results.json',
+    };
+    vi.stubEnv('PR9449_SENTINEL', 'ambient');
+    actualFs.writeFileSync(
+      strictEnvPath,
+      'PROMPTFOO_STRICT_CONFIG=true\nPR9449_SENTINEL=from-config',
+    );
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    try {
+      const config = await maybeReadConfig('config.json', true);
+
+      expect(() =>
+        enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json', undefined, true),
+      ).toThrow(/Unknown top-level config key\(s\) "outptPath"/);
+      expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+      expect(process.env.PR9449_SENTINEL).toBe('ambient');
+    } finally {
+      actualFs.rmSync(strictEnvDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a config-selected env active for callers that use it after diagnostics', async () => {
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const envDir = actualFs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-config-env-'));
+    const envPath = path.join(envDir, '.env');
+    const mockConfig = {
+      commandLineOptions: { envPath },
+      providers: ['echo'],
+      prompts: ['hello'],
+      outptPath: '/tmp/results.json',
+    };
+    vi.stubEnv('PR9449_SENTINEL', 'ambient');
+    actualFs.writeFileSync(envPath, 'PROMPTFOO_STRICT_CONFIG=false\nPR9449_SENTINEL=from-config');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    try {
+      const config = await maybeReadConfig('config.json', true);
+
+      expect(() =>
+        enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json'),
+      ).not.toThrow();
+      expect(process.env.PR9449_SENTINEL).toBe('from-config');
+    } finally {
+      actualFs.rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not load a config-selected env file when there are no deferred diagnostics', async () => {
+    const mockConfig = {
+      commandLineOptions: { envPath: '/tmp/missing-strict-config.env' },
+      providers: ['echo'],
+      prompts: ['hello'],
+    };
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const config = await maybeReadConfig('config.json', true);
+
+    expect(() => enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json')).not.toThrow();
+  });
+
+  it('does not resolve external tests on a diagnostics-only config path', async () => {
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['hello'],
+      tests: 'file://missing-tests.yaml',
+    };
+    vi.mocked(globSync).mockReturnValue(['config.json']);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(validateUnknownConfigKeysForConfigPaths(['config.json'])).resolves.toBeUndefined();
+
+    expect(readTests).not.toHaveBeenCalled();
+  });
+
+  it('falls back to process strictness when an env override is undefined', () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+
+    expect(
+      resolveStrictConfigEnabled({
+        PROMPTFOO_STRICT_CONFIG: undefined,
+      } as UnifiedConfig['env']),
+    ).toBe(true);
+  });
+
+  it('escapes control characters in strict config errors', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const maliciousKey = 'bad\n::error file=config.json::forged';
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(
+      JSON.stringify({
+        providers: ['echo'],
+        prompts: ['hello'],
+        [maliciousKey]: true,
+      }),
+    );
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    let caught: unknown;
+    try {
+      await readConfig('config.json');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ConfigResolutionError);
+    if (!(caught instanceof Error)) {
+      throw new Error('Expected readConfig to throw');
+    }
+    expect(caught.message).toContain('bad\\n::error');
+    expect(caught.message).not.toContain(maliciousKey);
   });
 });
 

@@ -35,6 +35,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
+import { restoreProcessEnv, setupEnv } from '../../util/env';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -48,6 +49,25 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+
+const KNOWN_TOP_LEVEL_CONFIG_KEYS: ReadonlySet<string> = new Set([
+  ...Object.keys(TestSuiteConfigSchema.shape),
+  // Keys added by UnifiedConfigSchema.extend(...).
+  'evaluateOptions',
+  'commandLineOptions',
+  'targets',
+  // JSON Schema metadata and reusable definition containers ignored by this typo heuristic.
+  '$schema',
+  '$ref',
+  '$defs',
+  'definitions',
+  'assertionTemplates',
+  // Deprecated aliases auto-migrated by the loader.
+  'plugins',
+  'strategies',
+]);
+
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'yup', 'yeppers']);
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -125,6 +145,151 @@ function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined)
 
   const inputs = firstProvider.inputs;
   return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Finds top-level keys that are not part of the unified config shape. This intentionally operates
+ * on the parsed object before dereferencing, templating, or schema normalization can remove keys.
+ */
+export function findUnknownTopLevelKeys(rawConfig: unknown): string[] {
+  if (!isRecord(rawConfig)) {
+    return [];
+  }
+  return Object.keys(rawConfig).filter(
+    (key) => !KNOWN_TOP_LEVEL_CONFIG_KEYS.has(key) && !key.startsWith('x-'),
+  );
+}
+
+function parseEnvBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return value !== undefined && TRUE_ENV_VALUES.has(String(value).toLowerCase());
+}
+
+export interface UnknownConfigKeyDiagnostic {
+  configPath: string;
+  unknownTopLevelKeys: string[];
+}
+
+const unknownConfigKeyDiagnosticsByConfig = new WeakMap<object, UnknownConfigKeyDiagnostic[]>();
+
+function getUnknownConfigKeyDiagnostics(
+  config: Partial<UnifiedConfig> | undefined,
+): UnknownConfigKeyDiagnostic[] | undefined {
+  return config ? unknownConfigKeyDiagnosticsByConfig.get(config) : undefined;
+}
+
+export function enforceUnknownConfigKeyDiagnosticsForConfig(
+  config: Partial<UnifiedConfig> | undefined,
+  configPath?: string,
+  explicitEnvPath?: string | string[],
+  shouldRestoreProcessEnv = false,
+): void {
+  const diagnostics = getUnknownConfigKeyDiagnostics(config);
+  if (!diagnostics?.length) {
+    return;
+  }
+  if (!configPath) {
+    enforceUnknownConfigKeyDiagnostics(diagnostics, config?.env);
+    return;
+  }
+
+  const commandLineOptions = normalizeConfiguredCommandLineOptions(
+    config?.commandLineOptions,
+    `configuration file ${configPath}`,
+  );
+  const { strictConfigEnabled } = resolveConfiguredEnvStrictness(
+    commandLineOptions,
+    path.dirname(configPath),
+    explicitEnvPath,
+    config?.env,
+    shouldRestoreProcessEnv,
+  );
+  reportUnknownConfigKeyDiagnostics(diagnostics, strictConfigEnabled);
+}
+
+/**
+ * Resolves strictness from the config currently being loaded, then process.env. In particular,
+ * this must not consult cliState.config because watch mode may still hold the previous config.
+ */
+function isStrictConfigEnabled(renderedConfig: unknown): boolean {
+  const renderedEnv =
+    isRecord(renderedConfig) && isRecord(renderedConfig.env)
+      ? (renderedConfig.env as UnifiedConfig['env'])
+      : undefined;
+  return resolveStrictConfigEnabled(renderedEnv);
+}
+
+export function resolveStrictConfigEnabled(env: UnifiedConfig['env'] | undefined): boolean {
+  if (isRecord(env)) {
+    const override = (env as Record<string, unknown>).PROMPTFOO_STRICT_CONFIG;
+    if (override !== undefined) {
+      return parseEnvBoolean(override);
+    }
+  }
+  return parseEnvBoolean(process.env.PROMPTFOO_STRICT_CONFIG);
+}
+
+function collectUnknownTopLevelKeys(
+  rawConfig: unknown,
+  dereferencedConfig: unknown,
+  renderedConfig: unknown,
+  configPath: string,
+): UnknownConfigKeyDiagnostic | undefined {
+  const unknownTopLevelKeys = [
+    ...new Set([
+      ...findUnknownTopLevelKeys(rawConfig),
+      ...findUnknownTopLevelKeys(dereferencedConfig),
+      ...findUnknownTopLevelKeys(renderedConfig),
+    ]),
+  ];
+  if (unknownTopLevelKeys.length === 0) {
+    return undefined;
+  }
+
+  return { configPath, unknownTopLevelKeys };
+}
+
+export function formatUnknownConfigKeyDiagnostic(diagnostic: UnknownConfigKeyDiagnostic): string {
+  const keyList = diagnostic.unknownTopLevelKeys.map((key) => JSON.stringify(key)).join(', ');
+  return (
+    `Unknown top-level config key(s) ${keyList} in ${JSON.stringify(diagnostic.configPath)}. ` +
+    'Did you mean to nest these under another field (e.g. `defaultTest.assert`)?'
+  );
+}
+
+function reportUnknownConfigKeyDiagnostics(
+  diagnostics: readonly UnknownConfigKeyDiagnostic[],
+  strictConfigEnabled: boolean,
+): void {
+  if (diagnostics.length === 0) {
+    return;
+  }
+  if (strictConfigEnabled) {
+    failConfigResolution(diagnostics.map(formatUnknownConfigKeyDiagnostic).join('\n'));
+  }
+  for (const { configPath, unknownTopLevelKeys } of diagnostics) {
+    logger.warn(
+      'Unknown top-level config key(s) found. Did you mean to nest these under another field ' +
+        '(e.g. `defaultTest.assert`)? Set PROMPTFOO_STRICT_CONFIG=true to fail on this.',
+      { configPath, unknownTopLevelKeys },
+    );
+  }
+}
+
+/** Re-check deferred config-key diagnostics after a configured env file has been loaded. */
+export function enforceUnknownConfigKeyDiagnostics(
+  diagnostics: readonly UnknownConfigKeyDiagnostic[] | undefined,
+  env: UnifiedConfig['env'] | undefined,
+): void {
+  if (diagnostics?.length) {
+    reportUnknownConfigKeyDiagnostics(diagnostics, resolveStrictConfigEnabled(env));
+  }
 }
 
 /**
@@ -322,12 +487,21 @@ function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(co
   return renderEnvOnlyInObject(config, filteredConfigEnv);
 }
 
-export async function readConfig(configPath: string): Promise<UnifiedConfig> {
+interface ReadConfigResult {
+  config: UnifiedConfig;
+  unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[];
+}
+
+async function readConfigWithDiagnostics(
+  configPath: string,
+  deferUnknownKeyValidation = false,
+): Promise<ReadConfigResult> {
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
     plugins?: RedteamPluginObject[];
     strategies?: RedteamStrategyObject[];
   };
+  const unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
@@ -337,6 +511,21 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // This allows env vars to be used in paths and other config values.
     // Runtime templates like {{ vars.x }} are preserved for later evaluation.
     const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
+    const diagnostic = collectUnknownTopLevelKeys(
+      rawConfig,
+      dereferencedConfig,
+      renderedConfig,
+      configPath,
+    );
+    if (diagnostic) {
+      unknownConfigKeyDiagnostics.push(diagnostic);
+      if (!deferUnknownKeyValidation) {
+        reportUnknownConfigKeyDiagnostics(
+          unknownConfigKeyDiagnostics,
+          isStrictConfigEnabled(renderedConfig),
+        );
+      }
+    }
     const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
       renderedConfig.commandLineOptions,
       `configuration file ${configPath}`,
@@ -378,6 +567,16 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // Render environment variable templates for JS configs too.
     // This ensures consistent behavior across config file types.
     const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
+    const diagnostic = collectUnknownTopLevelKeys(imported, imported, renderedConfig, configPath);
+    if (diagnostic) {
+      unknownConfigKeyDiagnostics.push(diagnostic);
+      if (!deferUnknownKeyValidation) {
+        reportUnknownConfigKeyDiagnostics(
+          unknownConfigKeyDiagnostics,
+          isStrictConfigEnabled(renderedConfig),
+        );
+      }
+    }
     const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
       renderedConfig.commandLineOptions,
       `configuration file ${configPath}`,
@@ -436,12 +635,20 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     }
     ret.prompts = ['{{prompt}}'];
   }
-  return ret;
+  unknownConfigKeyDiagnosticsByConfig.set(ret, unknownConfigKeyDiagnostics);
+  return { config: ret, unknownConfigKeyDiagnostics };
 }
 
-export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
+export async function readConfig(configPath: string): Promise<UnifiedConfig> {
+  return (await readConfigWithDiagnostics(configPath)).config;
+}
+
+export async function maybeReadConfig(
+  configPath: string,
+  deferUnknownKeyValidation = false,
+): Promise<UnifiedConfig | undefined> {
   try {
-    return await readConfig(configPath);
+    return (await readConfigWithDiagnostics(configPath, deferUnknownKeyValidation)).config;
   } catch (error) {
     // If file doesn't exist, return undefined
     // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
@@ -491,8 +698,17 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
  * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
  * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
  */
-export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+interface CombineConfigsResult {
+  config: UnifiedConfig;
+  unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[];
+}
+
+async function readConfigsWithDiagnostics(configPaths: string[]): Promise<{
+  configs: UnifiedConfig[];
+  unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[];
+}> {
   const configs: UnifiedConfig[] = [];
+  const unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -506,10 +722,20 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       );
     }
     for (const globPath of globPaths) {
-      const config = await readConfig(globPath);
+      const { config, unknownConfigKeyDiagnostics: configDiagnostics } =
+        await readConfigWithDiagnostics(globPath, true);
       configs.push(config);
+      unknownConfigKeyDiagnostics.push(...configDiagnostics);
     }
   }
+  return { configs, unknownConfigKeyDiagnostics };
+}
+
+async function combineConfigsWithDiagnostics(
+  configPaths: string[],
+  deferUnknownKeyValidation = false,
+): Promise<CombineConfigsResult> {
+  const { configs, unknownConfigKeyDiagnostics } = await readConfigsWithDiagnostics(configPaths);
 
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
@@ -725,7 +951,97 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  return combinedConfig;
+  if (!deferUnknownKeyValidation) {
+    reportUnknownConfigKeyDiagnostics(
+      unknownConfigKeyDiagnostics,
+      resolveStrictConfigEnabled(combinedConfig.env),
+    );
+  }
+
+  unknownConfigKeyDiagnosticsByConfig.set(combinedConfig, unknownConfigKeyDiagnostics);
+  return { config: combinedConfig, unknownConfigKeyDiagnostics };
+}
+
+export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  return (await combineConfigsWithDiagnostics(configPaths)).config;
+}
+
+function resolveConfiguredEnvStrictness(
+  commandLineOptions: ReturnType<typeof normalizeConfiguredCommandLineOptions>,
+  basePath: string,
+  explicitEnvPath: string | string[] | undefined,
+  configEnv: UnifiedConfig['env'] | undefined,
+  shouldRestoreProcessEnv = false,
+): {
+  commandLineOptions: ReturnType<typeof normalizeConfiguredCommandLineOptions>;
+  strictConfigEnabled: boolean;
+} {
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+    const resolvedPaths = envPaths.map((envPath) =>
+      path.isAbsolute(envPath) ? envPath : path.resolve(basePath, envPath),
+    );
+    commandLineOptions = {
+      ...commandLineOptions,
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
+    };
+  }
+
+  const hasExplicitEnvPath = Array.isArray(explicitEnvPath)
+    ? explicitEnvPath.length > 0
+    : Boolean(explicitEnvPath);
+  const previousProcessEnv = shouldRestoreProcessEnv ? { ...process.env } : undefined;
+  const previousProcessStrictConfig = process.env.PROMPTFOO_STRICT_CONFIG;
+  let strictConfigEnabled: boolean;
+  if (!hasExplicitEnvPath && commandLineOptions?.envPath) {
+    logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+    try {
+      setupEnv(commandLineOptions.envPath);
+      strictConfigEnabled = resolveStrictConfigEnabled(configEnv);
+    } finally {
+      if (previousProcessEnv) {
+        restoreProcessEnv(previousProcessEnv);
+      } else if (previousProcessStrictConfig === undefined) {
+        Reflect.deleteProperty(process.env, 'PROMPTFOO_STRICT_CONFIG');
+      } else {
+        Reflect.set(process.env, 'PROMPTFOO_STRICT_CONFIG', previousProcessStrictConfig);
+      }
+    }
+  } else {
+    strictConfigEnabled = resolveStrictConfigEnabled(configEnv);
+  }
+
+  return { commandLineOptions, strictConfigEnabled };
+}
+
+/** Validate unknown keys on a cache-hit path without instantiating providers. */
+export async function validateUnknownConfigKeysForConfigPaths(
+  configPaths: string[],
+  explicitEnvPath?: string | string[],
+): Promise<void> {
+  const { configs, unknownConfigKeyDiagnostics } = await readConfigsWithDiagnostics(configPaths);
+  if (unknownConfigKeyDiagnostics.length === 0) {
+    return;
+  }
+
+  const configEnv = configs.reduce<UnifiedConfig['env']>(
+    (previous, config) => ({ ...previous, ...config.env }),
+    {},
+  );
+  const commandLineOptions = normalizeConfiguredCommandLineOptions(
+    configs.reduce((previous, config) => ({ ...previous, ...config.commandLineOptions }), {}),
+    `configuration file ${configPaths[0]}`,
+  );
+  const { strictConfigEnabled } = resolveConfiguredEnvStrictness(
+    commandLineOptions,
+    path.dirname(configPaths[0]),
+    explicitEnvPath,
+    configEnv,
+    true,
+  );
+  reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
 }
 
 /**
@@ -742,14 +1058,21 @@ export async function resolveConfigs(
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
+  strictConfigEnabled?: boolean;
+  unknownConfigKeyDiagnostics?: UnknownConfigKeyDiagnostic[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
+  let unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    const combined = await combineConfigsWithDiagnostics(configPaths, true);
+    fileConfig = combined.config;
+    unknownConfigKeyDiagnostics = combined.unknownConfigKeyDiagnostics;
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
+  } else {
+    unknownConfigKeyDiagnostics = getUnknownConfigKeyDiagnostics(defaultConfig) ?? [];
   }
   // Standalone assertion mode
   if (cmdObj.assertions) {
@@ -790,6 +1113,18 @@ export async function resolveConfigs(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
   );
+
+  const resolvedStrictness = resolveConfiguredEnvStrictness(
+    commandLineOptions,
+    basePath,
+    cmdObj.envPath,
+    fileConfig.env || defaultConfig.env,
+  );
+  commandLineOptions = resolvedStrictness.commandLineOptions;
+  const { strictConfigEnabled } = resolvedStrictness;
+  if (unknownConfigKeyDiagnostics.length > 0) {
+    reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
+  }
 
   cliState.basePath = basePath;
 
@@ -1048,27 +1383,13 @@ export async function resolveConfigs(
   cliState.config = config;
   cliState.selectedProviderConfigs = filteredProviderConfigs;
 
-  // Extract commandLineOptions from either explicit config files or default config
-  // Resolve relative envPath(s) against the config file directory
-  if (commandLineOptions?.envPath && basePath) {
-    const envPaths = Array.isArray(commandLineOptions.envPath)
-      ? commandLineOptions.envPath
-      : [commandLineOptions.envPath];
-
-    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
-
-    commandLineOptions = {
-      ...commandLineOptions,
-      // Keep as single string if only one path, array otherwise
-      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
-    };
-  }
-
   return {
     config,
     testSuite,
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
+    strictConfigEnabled,
+    unknownConfigKeyDiagnostics,
   };
 }
