@@ -8,7 +8,9 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { OpenAiSharedOptions } from './types';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './types';
+
+type ReasoningModelConfig = Pick<OpenAiCompletionOptions, 'isReasoningModel'>;
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
 export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
@@ -151,8 +153,24 @@ export class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
-  protected supportsTemperature(): boolean {
-    return !this.isReasoningModel();
+  /** Resolve an explicit request override before falling back to provider-specific detection. */
+  protected resolveReasoningModel(
+    config: ReasoningModelConfig = this.config as ReasoningModelConfig,
+    detected = this.isReasoningModel(),
+  ): boolean {
+    if (config.isReasoningModel !== undefined) {
+      if (typeof config.isReasoningModel !== 'boolean') {
+        throw new Error('isReasoningModel must be a boolean');
+      }
+      return config.isReasoningModel;
+    }
+    return detected;
+  }
+
+  protected supportsTemperature(
+    config: ReasoningModelConfig = this.config as ReasoningModelConfig,
+  ): boolean {
+    return !this.resolveReasoningModel(config);
   }
 
   protected getBillingModelName(_config: OpenAiSharedOptions): string {

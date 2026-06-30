@@ -2,6 +2,7 @@ import { OpenAiChatCompletionProvider } from '../openai/chat';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
+import type { OpenAiCompletionOptions } from '../openai/types';
 import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -26,12 +27,12 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
     // Groq's reasoning models support temperature, unlike OpenAI's o1 models
     if (groqSupportsTemperature(this.modelName)) {
       return true;
     }
-    return super.supportsTemperature();
+    return super.supportsTemperature(config);
   }
 
   constructor(modelName: string, providerOptions: GroqProviderOptions) {

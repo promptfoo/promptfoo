@@ -70,6 +70,43 @@ describe('TrueFoundry', () => {
         const provider = new TrueFoundryProvider('vertex-ai/gemini-2.5-pro', {});
         expect((provider as any).isReasoningModel()).toBe(false);
       });
+
+      it('should honor true for an arbitrary gateway alias', async () => {
+        const provider = new TrueFoundryProvider('team/reasoning-deployment', {
+          config: {
+            isReasoningModel: true,
+            max_completion_tokens: 64,
+            reasoning_effort: 'medium',
+            temperature: 0.7,
+          },
+        });
+
+        const { body } = await provider.getOpenAiBody('Test prompt');
+
+        expect(body).toMatchObject({
+          max_completion_tokens: 64,
+          reasoning_effort: 'medium',
+        });
+        expect(body.max_tokens).toBeUndefined();
+        expect(body.temperature).toBeUndefined();
+      });
+
+      it('should honor false for a reasoning-looking gateway alias', async () => {
+        const provider = new TrueFoundryProvider('openai/o3-mini', {
+          config: {
+            isReasoningModel: false,
+            max_tokens: 128,
+            reasoning_effort: 'high',
+            temperature: 0.6,
+          },
+        });
+
+        const { body } = await provider.getOpenAiBody('Test prompt');
+
+        expect(body).toMatchObject({ max_tokens: 128, temperature: 0.6 });
+        expect(body.max_completion_tokens).toBeUndefined();
+        expect(body.reasoning_effort).toBeUndefined();
+      });
     });
 
     it('should return correct id', () => {

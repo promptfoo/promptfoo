@@ -192,6 +192,28 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
       expect(body.temperature).toBe(0.5);
     });
 
+    it('should let isReasoningModel: false override Azure reasoning detection', async () => {
+      mockAzureSuccessResponse();
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          isReasoningModel: false,
+          max_output_tokens: 256,
+          reasoning: { effort: 'medium' },
+          temperature: 0.7,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+      const body = getRequestBody();
+
+      expect(body.reasoning).toBeUndefined();
+      expect(body.max_output_tokens).toBe(256);
+      expect(body.temperature).toBe(0.7);
+      expect(body.isReasoningModel).toBeUndefined();
+    });
+
     it('should not trigger Azure reasoning detection when openai.azure.com appears outside the host', async () => {
       const provider = new OpenAiResponsesProvider('custom-model', {
         config: {

@@ -1,6 +1,7 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';
 
+import type { OpenAiCompletionOptions } from '../openai/types';
 import type { GroqResponsesProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -29,12 +30,12 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
     // Groq's reasoning models support temperature, unlike OpenAI's o1 models
     if (groqSupportsTemperature(this.modelName)) {
       return true;
     }
-    return super.supportsTemperature();
+    return super.supportsTemperature(config);
   }
 
   constructor(modelName: string, providerOptions: GroqResponsesProviderOptions) {

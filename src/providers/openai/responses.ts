@@ -211,8 +211,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
-    const isReasoningModel =
-      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
+    const isReasoningModel = this.resolveReasoningModel(
+      config,
+      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig,
+    );
     const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
@@ -266,6 +268,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
+      isReasoningModel &&
       isAzureResponsesDeploymentWithReasoningConfig &&
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';
@@ -276,7 +279,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      this.supportsTemperature() && !hasAzureReasoningEffort
+      this.supportsTemperature(config) && !hasAzureReasoningEffort
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;

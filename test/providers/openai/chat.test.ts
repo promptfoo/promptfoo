@@ -1758,6 +1758,204 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
+    it('should force reasoning model behavior via config.isReasoningModel override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'forced reasoning output' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // Non-reasoning model name, but forced to reasoning by config
+      const forcedProvider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          isReasoningModel: true,
+          reasoning_effort: 'medium',
+          max_completion_tokens: 2048,
+        },
+      });
+      // Standard non-reasoning model without override
+      const normalProvider = new OpenAiChatCompletionProvider('gpt-4o');
+
+      expect(forcedProvider['supportsTemperature']()).toBe(false);
+      expect(normalProvider['isReasoningModel']()).toBe(false);
+      expect(normalProvider['supportsTemperature']()).toBe(true);
+
+      // Verify the request body reflects reasoning model behavior
+      await forcedProvider.callApi('Test prompt');
+      const forcedCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(forcedCall[1].body);
+      expect(requestBody.reasoning_effort).toBe('medium');
+      expect(requestBody.max_completion_tokens).toBe(2048);
+      expect(requestBody.temperature).toBeUndefined();
+      expect(requestBody.max_tokens).toBeUndefined();
+      expect(requestBody.isReasoningModel).toBeUndefined();
+    });
+
+    it('should disable reasoning model behavior via config.isReasoningModel: false', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'non-reasoning output' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // Reasoning model name, but forced to non-reasoning by config
+      const provider = new OpenAiChatCompletionProvider('o3-mini', {
+        config: { isReasoningModel: false, temperature: 0.7 },
+      });
+
+      expect(provider['supportsTemperature']()).toBe(true);
+
+      // Verify the request body reflects non-reasoning behavior
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.temperature).toBe(0.7);
+      expect(requestBody.reasoning_effort).toBeUndefined();
+      expect(requestBody.max_tokens).toBe(1024);
+      expect(requestBody.max_completion_tokens).toBeUndefined();
+    });
+
+    it('should honor prompt-level isReasoningModel: true over provider config', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: { isReasoningModel: false, max_tokens: 512, temperature: 0.8 },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: { effort: 'medium' },
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            isReasoningModel: true,
+            max_completion_tokens: 2048,
+            reasoning: { effort: 'medium' },
+            reasoning_effort: '{{ effort }}' as any,
+          },
+        },
+      });
+
+      expect(body.max_completion_tokens).toBe(2048);
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBe('medium');
+      expect(body.temperature).toBeUndefined();
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should honor prompt-level isReasoningModel: false over model-name detection', async () => {
+      const provider = new OpenAiChatCompletionProvider('o3-mini', {
+        config: {
+          isReasoningModel: true,
+          max_completion_tokens: 2048,
+          reasoning: { effort: 'high' },
+          reasoning_effort: 'high',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            isReasoningModel: false,
+            max_tokens: 256,
+            temperature: 0.6,
+          },
+        },
+      });
+
+      expect(body.max_tokens).toBe(256);
+      expect(body.temperature).toBe(0.6);
+      expect(body.max_completion_tokens).toBeUndefined();
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBeUndefined();
+    });
+
+    it('should honor isReasoningModel: false for GPT-5 token and temperature parameters', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5', {
+        config: {
+          isReasoningModel: false,
+          max_tokens: 256,
+          temperature: 0.6,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.max_tokens).toBe(256);
+      expect(body.temperature).toBe(0.6);
+      expect(body.max_completion_tokens).toBeUndefined();
+      expect(body.reasoning_effort).toBeUndefined();
+    });
+
+    it('should not send Responses-style nested reasoning for GPT-5 chat models', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5', {
+        config: {
+          reasoning: { effort: 'medium' },
+          reasoning_effort: 'medium',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBe('medium');
+    });
+
+    it('should render legacy GPT-OSS reasoning_effort without changing token semantics', async () => {
+      const provider = new OpenAiChatCompletionProvider('openai/gpt-oss-120b', {
+        config: {
+          reasoning_effort: '{{ effort }}' as any,
+          max_tokens: 256,
+          temperature: 0.6,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: { effort: 'high' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      });
+
+      expect(body.reasoning_effort).toBe('high');
+      expect(body.max_tokens).toBe(256);
+      expect(body.temperature).toBe(0.6);
+    });
+
+    it('should let an explicit false disable legacy GPT-OSS reasoning_effort', async () => {
+      const provider = new OpenAiChatCompletionProvider('openai/gpt-oss-120b', {
+        config: {
+          isReasoningModel: false,
+          reasoning_effort: 'high',
+          max_tokens: 256,
+          temperature: 0.6,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.max_tokens).toBe(256);
+      expect(body.temperature).toBe(0.6);
+    });
+
+    it.each(['false', null])('should reject malformed isReasoningModel value %j', async (value) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: { isReasoningModel: value as unknown as boolean },
+      });
+
+      await expect(provider.getOpenAiBody('Test prompt')).rejects.toThrow(
+        'isReasoningModel must be a boolean',
+      );
+    });
+
     it('should identify GPT-5 models correctly including prefixed names', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');

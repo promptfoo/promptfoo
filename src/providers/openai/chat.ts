@@ -201,7 +201,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const isReasoningModel = this.isReasoningModel();
+    const isReasoningModel = this.resolveReasoningModel(config);
     const isGPT5Model = this.isGPT5Model();
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
@@ -211,15 +211,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxTokens =
-      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
+    const maxTokens = isReasoningModel ? undefined : (config.max_tokens ?? maxTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
+    const temperature = this.supportsTemperature(config)
       ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
@@ -296,13 +295,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
-      body.reasoning_effort = config.reasoning_effort;
+    // GPT-OSS accepts reasoning_effort without OpenAI's reasoning-model token semantics.
+    // Keep that compatibility behavior unless the caller explicitly disables reasoning.
+    if (
+      config.reasoning_effort &&
+      !isReasoningModel &&
+      config.isReasoningModel !== false &&
+      this.modelName.includes('gpt-oss')
+    ) {
+      body.reasoning_effort = renderVarsInObject(
+        config.reasoning_effort,
+        context?.vars,
+      ) as ReasoningEffort;
     }
 
+    // Preserve the existing nested reasoning extension for explicitly named o-series
+    // compatible deployments. OpenAI Chat Completions itself uses reasoning_effort.
     if (
       config.reasoning &&
+      isReasoningModel &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
         this.modelName.startsWith('o4') ||
@@ -327,10 +338,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
-    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
+    // Sanitize body for reasoning models that reject max_tokens.
     // This catches max_tokens introduced via passthrough or YAML anchors that bypass
     // the normal maxTokens variable logic above.
-    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+    if (isReasoningModel && 'max_tokens' in body) {
       delete body.max_tokens;
     }
 

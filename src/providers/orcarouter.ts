@@ -9,6 +9,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
 } from '../types/providers';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
  * OrcaRouter provider — OpenAI-compatible meta-router (https://www.orcarouter.ai).
@@ -151,13 +152,14 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     if (route !== undefined) {
       body.route = renderVarsInObject(route, context?.vars);
     }
-    // Always render reasoning_effort when set — for OpenAI-family OrcaRouter
-    // upstreams (e.g. orcarouter:openai/gpt-5.5), the base getOpenAiBody
-    // unconditionally overwrites `body.reasoning_effort` with the RAW config
-    // value at the end of body construction, clobbering the rendered version
-    // it set earlier. Re-render here so Nunjucks templates like `{{ effort }}`
-    // never reach the wire literal.
-    if (config.reasoning_effort !== undefined) {
+    // Preserve OrcaRouter's legacy support for reasoning_effort on non-OpenAI
+    // upstreams without re-adding it after an explicit false override or
+    // replacing the base builder's already-rendered value.
+    if (
+      config.isReasoningModel !== false &&
+      body.reasoning_effort === undefined &&
+      config.reasoning_effort !== undefined
+    ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
@@ -169,7 +171,10 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       (body.models as unknown[]).some(
         (m) => typeof m === 'string' && reasoningUpstreamRejectsTemperature(m),
       );
-    if ('temperature' in body && (!this.supportsTemperature() || anyFallbackRejectsTemperature)) {
+    if (
+      'temperature' in body &&
+      (!this.supportsTemperature(config) || anyFallbackRejectsTemperature)
+    ) {
       delete body.temperature;
     }
 
@@ -183,8 +188,8 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
    * OpenAI-style `temperature` is the parameter they reject.
    * Reference: https://docs.orcarouter.ai/advanced/reasoning
    */
-  protected supportsTemperature(): boolean {
-    if (!super.supportsTemperature()) {
+  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
+    if (!super.supportsTemperature(config)) {
       return false;
     }
     return !reasoningUpstreamRejectsTemperature(this.modelName);

@@ -626,6 +626,22 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('does not re-add reasoning_effort after an explicit false override', async () => {
+      const p = new OrcaRouterProvider('openai/gpt-5.5', {
+        config: {
+          isReasoningModel: false,
+          reasoning_effort: 'high',
+          max_tokens: 33,
+          temperature: 0.5,
+        },
+      });
+
+      const { body } = await p.getOpenAiBody('Hi');
+
+      expect(body).toMatchObject({ max_tokens: 33, temperature: 0.5 });
+      expect(body.reasoning_effort).toBeUndefined();
+    });
+
     it('omits temperature when a fallback model rejects it, even if the primary is non-reasoning', async () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       try {
@@ -754,12 +770,8 @@ describe('OrcaRouter', () => {
     });
 
     it('actually renders Nunjucks templates end-to-end for reasoning_effort on OpenAI-family upstreams', async () => {
-      // Regression: the base OpenAi chat builder unconditionally overwrites
-      // body.reasoning_effort with the raw config value for reasoning models
-      // (`openai/gpt-5.5` is one), clobbering the rendered version. The
-      // OrcaRouter override now re-renders unconditionally. This test asserts
-      // the rendered VALUE reaches the wire — verifying the real Nunjucks
-      // engine, not just that `renderVarsInObject` was called.
+      // Assert the rendered value reaches the wire through the inherited
+      // OpenAI-family request path, not just that renderVarsInObject was called.
       const utilModule = await import('../../src/util');
       const realUtilModule =
         await vi.importActual<typeof import('../../src/util')>('../../src/util');

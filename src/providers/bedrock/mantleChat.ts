@@ -7,6 +7,8 @@ import {
   resolveBedrockMantleRegion,
 } from './mantle';
 
+import type { OpenAiCompletionOptions } from '../openai/types';
+
 type OpenAiChatProviderOptions = NonNullable<
   ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]
 >;
@@ -66,8 +68,8 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return isBedrockGrokModel(this.modelName) || super.isReasoningModel();
   }
 
-  protected supportsTemperature(): boolean {
-    return isBedrockGrokModel(this.modelName) || super.supportsTemperature();
+  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
+    return isBedrockGrokModel(this.modelName) || super.supportsTemperature(config);
   }
 
   async getOpenAiBody(
@@ -80,7 +82,9 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     // model detection does not recognize its Bedrock model id.
     if (
       this.modelName.startsWith('google.gemma-4-') &&
-      result.config.reasoning_effort !== undefined
+      result.config.isReasoningModel !== false &&
+      result.config.reasoning_effort !== undefined &&
+      result.body.reasoning_effort === undefined
     ) {
       result.body.reasoning_effort = result.config.reasoning_effort;
     }
