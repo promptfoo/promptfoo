@@ -3,6 +3,7 @@ import { rm } from 'fs/promises';
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../src/logger';
 import {
   createDummyFiles,
   initializeProject,
@@ -282,6 +283,7 @@ describe('initializeProject', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.exitCode = originalExitCode;
   });
 
@@ -299,5 +301,27 @@ describe('initializeProject', () => {
     await expect(initializeProject(null, true)).resolves.toBeUndefined();
 
     expect(process.exitCode).toBe(130);
+  });
+
+  it('should print current-directory next steps for the redteam path', async () => {
+    // `promptfoo init` with no directory arg, choosing "Run a red team evaluation".
+    mockSelect.mockResolvedValueOnce('redteam');
+
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+
+    await initializeProject(null, true);
+
+    const messages = infoSpy.mock.calls.map((call) => String(call[0]));
+
+    // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
+    // output interpolated `undefined` instead of using the current-directory flow.
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Setup complete! Next steps:'),
+        expect.stringContaining('to evaluate your prompts'),
+        expect.stringContaining('to view results in your browser'),
+      ]),
+    );
+    expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
   });
 });
