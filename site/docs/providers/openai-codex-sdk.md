@@ -634,6 +634,10 @@ Promptfoo validates the allowed enum values, but model-specific support is ultim
 
 `max` and `ultra` are public GPT-5.6 preview options. `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value.
 
+:::warning `max`/`ultra` depend on the Codex runtime catalog
+`max` and `ultra` only take effect when the installed Codex runtime recognizes the selected GPT-5.6 model for your account. If the bundled Codex model catalog does not include GPT-5.6, Codex **silently falls back to its default reasoning** — the value is ignored and **no error is raised**, so an eval may run at a lower reasoning level than requested. Promptfoo logs a warning when you use `max`/`ultra`; confirm the effective reasoning with request tracing. For `max`, the [Responses API](/docs/providers/openai#gpt-56-limited-preview) path (`openai:responses:gpt-5.6-sol`) applies it directly and is the more reliable option.
+:::
+
 ## Additional Directories
 
 Allow the Codex agent to access directories beyond the main working directory:

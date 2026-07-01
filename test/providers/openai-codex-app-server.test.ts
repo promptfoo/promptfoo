@@ -3,6 +3,7 @@ import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -252,6 +253,35 @@ describe('OpenAICodexAppServerProvider', () => {
           } as any,
         }),
     ).toThrow(/Invalid OpenAI Codex app-server config: personality/);
+  });
+
+  it.each([
+    'max',
+    'ultra',
+  ] as const)('warns that %s reasoning depends on the Codex runtime catalog', (effort) => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    new OpenAICodexAppServerProvider({
+      config: { apiKey: 'test-api-key', model: 'gpt-5.6-sol', model_reasoning_effort: effort },
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`Reasoning effort '${effort}' is a GPT-5.6 preview level`),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn about preview reasoning for standard reasoning efforts', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    new OpenAICodexAppServerProvider({
+      config: { apiKey: 'test-api-key', model: 'gpt-5.6-sol', model_reasoning_effort: 'high' },
+    });
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('is a GPT-5.6 preview level'));
+
+    warnSpy.mockRestore();
   });
 
   it('runs a complete stdio app-server turn and normalizes the response', async () => {

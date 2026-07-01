@@ -253,6 +253,35 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it.each([
+      'max',
+      'ultra',
+    ] as const)('should warn that %s reasoning depends on the Codex runtime catalog', (effort) => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      new OpenAICodexSDKProvider({
+        config: { model: 'gpt-5.6-sol', model_reasoning_effort: effort },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Reasoning effort '${effort}' is a GPT-5.6 preview level`),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not warn about preview reasoning for standard reasoning efforts', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      new OpenAICodexSDKProvider({
+        config: { model: 'gpt-5.6-sol', model_reasoning_effort: 'high' },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
     it('should treat model_provider case-insensitively (OpenAI is not a custom provider)', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
