@@ -51,6 +51,14 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     cost: GEMINI_3_PRO_COST,
     tieredCost: GEMINI_3_PRO_TIERED_COST,
   })),
+  // gemini-pro-latest is a Google-maintained alias that resolves server-side to the
+  // current Gemini Pro snapshot (currently gemini-3.1-pro-preview). Pricing tracks the
+  // Gemini 3 Pro tier.
+  {
+    id: 'gemini-pro-latest',
+    cost: GEMINI_3_PRO_COST,
+    tieredCost: GEMINI_3_PRO_TIERED_COST,
+  },
   // gemini-3.1-flash-lite (GA) and its preview alias share Flash-Lite pricing.
   ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview'].map((id) => ({
     id,
@@ -165,17 +173,18 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
   },
 
-  // Gemini Robotics
+  // Gemini Robotics (1.5-preview is intentionally excluded as a shutdown model;
+  // see the shutdown-models test in test/providers/google/util.test.ts)
   {
     id: 'gemini-robotics-er-1.6-preview',
     cost: { input: 1.0 / 1e6, output: 5.0 / 1e6 },
   },
 
   // Gemini Embedding
-  {
-    id: 'gemini-embedding-2',
+  ...['gemini-embedding-2', 'gemini-embedding-2-preview'].map((id) => ({
+    id,
     cost: { input: 0.2 / 1e6, output: 0 },
-  },
+  })),
   {
     id: 'gemini-embedding-001',
     cost: { input: 0.15 / 1e6, output: 0 },
