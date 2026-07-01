@@ -48,14 +48,14 @@ describe('setupEnv', () => {
     vi.resetAllMocks();
   });
 
-  it('should call dotenv.config with quiet=true when envPath is undefined', async () => {
+  it('should call dotenv.config with quiet=true when envPath is undefined', () => {
     setupEnv(undefined);
 
     expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
     expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
   });
 
-  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', async () => {
+  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', () => {
     const testEnvPath = '.env.test';
 
     setupEnv(testEnvPath);
@@ -69,7 +69,7 @@ describe('setupEnv', () => {
     expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env.test');
   });
 
-  it('should load environment variables with override when specified env file has conflicting values', async () => {
+  it('should load environment variables with override when specified env file has conflicting values', () => {
     // Mock dotenv.config to simulate loading variables
     dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
       if (options?.path === '.env.production') {
