@@ -38,14 +38,18 @@ interface GeminiImageOptions {
  * with resolution-tiered pricing key on '0.5K' (Google's `512px`), '1K', '2K',
  * and '4K'; the resolution comes from the request's `imageSize` (default 1K).
  */
+// A model and its `-preview` alias share the same resolution-tiered prices.
+const FLASH_IMAGE_PRICING = { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 }; // Nano Banana 2
+const PRO_IMAGE_PRICING = { '1K': 0.134, '2K': 0.134, '4K': 0.24 }; // Nano Banana Pro
+
 const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
   'gemini-2.5-flash-image': { default: 0.039 }, // Nano Banana
   'gemini-2.5-flash-preview-image-generation': { default: 0.039 }, // Deprecated alias
   'gemini-3.1-flash-lite-image': { default: 0.0336 }, // Nano Banana 2 Lite (1K only)
-  'gemini-3.1-flash-image': { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 }, // Nano Banana 2
-  'gemini-3.1-flash-image-preview': { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 },
-  'gemini-3-pro-image': { '1K': 0.134, '2K': 0.134, '4K': 0.24 }, // Nano Banana Pro
-  'gemini-3-pro-image-preview': { '1K': 0.134, '2K': 0.134, '4K': 0.24 },
+  'gemini-3.1-flash-image': FLASH_IMAGE_PRICING,
+  'gemini-3.1-flash-image-preview': FLASH_IMAGE_PRICING,
+  'gemini-3-pro-image': PRO_IMAGE_PRICING,
+  'gemini-3-pro-image-preview': PRO_IMAGE_PRICING,
 };
 const DEFAULT_IMAGE_COST = 0.04;
 
@@ -428,7 +432,7 @@ export class GeminiImageProvider implements ApiProvider {
     // Resolution-tiered models: bill by the requested imageSize (default 1K).
     // '512px' is Google's label for the 0.5K tier.
     const raw = (this.config.imageSize ?? '1K').toUpperCase();
-    const resolution = raw === '512PX' || raw === '0.5K' ? '0.5K' : raw;
+    const resolution = raw === '512PX' ? '0.5K' : raw;
     return pricing[resolution] ?? pricing['1K'] ?? DEFAULT_IMAGE_COST;
   }
 }
