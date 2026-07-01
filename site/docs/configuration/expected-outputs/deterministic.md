@@ -1323,6 +1323,8 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
 
+Output that is empty after GLEU normalization (including empty, whitespace-only, or period-only text) contains no n-grams and receives a score of `0` rather than causing the evaluation to error. Tokenless reference strings likewise score `0`.
+
 **When to use GLEU:**
 
 - **Single response evaluation**: Evaluating individual chatbot or model responses

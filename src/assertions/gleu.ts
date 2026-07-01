@@ -3,6 +3,16 @@ import { getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function tokenizeForGleu(text: string): string[] {
+  const words = text
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/\.+$/, ''));
+
+  return words.some(Boolean) ? words : [];
+}
+
 /**
  * Calculates the Google-BLEU (GLEU) score for a candidate string against reference strings.
  *
@@ -23,7 +33,8 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * Implementation details:
  * - n-grams from n=1 to n=4 are considered by default
  * - The calculation is case-insensitive
- * - Identical strings will always receive a score of 1
+ * - Identical strings with at least one normalized token will always receive a score of 1
+ * - Text that is empty after normalization has no n-grams and scores 0
  * - If there are no n-grams in common, the score will be 0
  *
  * @param candidate - The string to evaluate
@@ -31,7 +42,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * @param minN - Minimum n-gram length to consider (default: 1)
  * @param maxN - Maximum n-gram length to consider (default: 4)
  * @returns GLEU score between 0 and 1, where higher scores indicate better matches
- * @throws When candidate or references are invalid
+ * @throws When the candidate is null/undefined or there are no references
  */
 export function calculateGleuScore(
   candidate: string,
@@ -39,23 +50,18 @@ export function calculateGleuScore(
   minN: number = 1,
   maxN: number = 4,
 ): number {
-  if (!candidate || references.length === 0) {
+  if (candidate == null || references.length === 0) {
     throw new Error('Invalid inputs');
   }
 
-  const candidateWords = candidate
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .map((word) => word.replace(/\.+$/, ''));
+  const candidateWords = tokenizeForGleu(candidate);
+  if (candidateWords.length === 0) {
+    return 0;
+  }
 
   // For each reference, calculate a GLEU score and later take the maximum
   const referenceScores = references.map((reference) => {
-    const referenceWords = reference
-      .toLowerCase()
-      .trim()
-      .split(/\s+/)
-      .map((word) => word.replace(/\.+$/, ''));
+    const referenceWords = tokenizeForGleu(reference);
 
     // For identical strings, return 1 directly
     if (
@@ -168,7 +174,7 @@ export function handleGleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater than or equal to' : 'less than'} threshold ${threshold}`,
     assertion,
   };
 }
