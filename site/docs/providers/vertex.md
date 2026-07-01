@@ -44,7 +44,8 @@ Anthropic's Claude models are available with the following versions:
 
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
-Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
+Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
+Claude models — Fable 5, Mythos 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,

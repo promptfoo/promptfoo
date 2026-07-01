@@ -14,7 +14,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import {
-  applyClaude5RegionalPremium,
+  applyClaudeRegionalPremium,
   calculateAnthropicCost,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -425,7 +425,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const pricingConfig =
         this.getRegion() === 'global'
           ? this.config
-          : applyClaude5RegionalPremium(normalizedModelName, this.config);
+          : applyClaudeRegionalPremium(normalizedModelName, this.config);
       const response = {
         cached: false,
         output,

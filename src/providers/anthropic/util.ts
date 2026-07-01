@@ -176,10 +176,10 @@ export const ANTHROPIC_MODELS = [
 
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
 // `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure deployment
-// names. The leading `(^|[^a-z0-9])` boundary and trailing `(?![0-9])` guard keep a family
-// from matching a longer neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and
-// `claude-sonnet-4-5` is not Sonnet 5) while still matching dated snapshots like
-// `claude-opus-4-8-20260528`.
+// names. The leading `(^|[^a-z0-9])` boundary and a trailing lookahead guard (`(?![0-9])`,
+// or `(?![a-z0-9])` for the dateless Fable/Mythos IDs) keep a family from matching a longer
+// neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and `claude-sonnet-4-5` is not Sonnet 5)
+// while still matching dated snapshots like `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
@@ -326,26 +326,25 @@ export function normalizeClaudeThinkingConfig<
 
 // Bedrock and Vertex bill Claude 4.5+ regional/geo endpoints at this premium over
 // the global endpoint (see isClaudeRegionalPremiumModel).
-export const CLAUDE_5_REGIONAL_PREMIUM = 1.1;
+export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
 
 /**
- * Fill premium-multiplied list rates into a cost config for the Claude models that carry
- * the regional endpoint premium (see isClaudeRegionalPremiumModel), unless the user
- * supplied a `cost` override. Callers decide whether the request is regional; this helper
- * owns the rates so they stay derived from ANTHROPIC_MODELS.
+ * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
+ * unless the user supplied an explicit `cost`/`inputCost`/`outputCost` override. The premium is a
+ * flat multiplier that calculateAnthropicCost applies to the *final* computed cost, so it composes
+ * correctly with tiered long-context pricing (the >200K tier is selected first, then multiplied)
+ * and with cache pricing. Callers decide whether the request is regional.
  */
-export function applyClaude5RegionalPremium(modelName: string, config: any): any {
-  const modelInfo = ANTHROPIC_MODELS.find(
-    (model) => model.id === normalizeAnthropicModelName(modelName),
-  );
-  if (!isClaudeRegionalPremiumModel(modelName) || !modelInfo || config.cost != null) {
+export function applyClaudeRegionalPremium(modelName: string, config: any): any {
+  if (
+    !isClaudeRegionalPremiumModel(modelName) ||
+    config.cost != null ||
+    config.inputCost != null ||
+    config.outputCost != null
+  ) {
     return config;
   }
-  return {
-    ...config,
-    inputCost: config.inputCost ?? modelInfo.cost.input * CLAUDE_5_REGIONAL_PREMIUM,
-    outputCost: config.outputCost ?? modelInfo.cost.output * CLAUDE_5_REGIONAL_PREMIUM,
-  };
+  return { ...config, regionalPremiumMultiplier: CLAUDE_REGIONAL_ENDPOINT_PREMIUM };
 }
 
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
@@ -521,20 +520,27 @@ export function calculateAnthropicCost(
   const usesRegionalBedrockPricing =
     pricingModelName !== modelName && !modelName.startsWith('global.');
   const effectiveConfig = usesRegionalBedrockPricing
-    ? applyClaude5RegionalPremium(modelName, config)
+    ? applyClaudeRegionalPremium(modelName, config)
     : config;
+  // Apply the regional endpoint premium (if any) as a flat multiplier on the final cost, so it
+  // composes with tiered long-context and cache pricing rather than overriding either.
+  const regionalPremiumMultiplier: number = effectiveConfig.regionalPremiumMultiplier ?? 1;
+  const withRegionalPremium = (cost: number | undefined): number | undefined =>
+    cost == null ? cost : cost * regionalPremiumMultiplier;
 
   if (
     effectiveConfig.cost != null &&
     effectiveConfig.inputCost == null &&
     effectiveConfig.outputCost == null
   ) {
-    return calculateCostBase(
-      pricingModelName,
-      effectiveConfig,
-      promptTokens,
-      completionTokens,
-      ANTHROPIC_MODELS,
+    return withRegionalPremium(
+      calculateCostBase(
+        pricingModelName,
+        effectiveConfig,
+        promptTokens,
+        completionTokens,
+        ANTHROPIC_MODELS,
+      ),
     );
   }
 
@@ -544,12 +550,14 @@ export function calculateAnthropicCost(
     typeof promptTokens === 'undefined' ||
     typeof completionTokens === 'undefined'
   ) {
-    return calculateCostBase(
-      pricingModelName,
-      effectiveConfig,
-      promptTokens,
-      completionTokens,
-      ANTHROPIC_MODELS,
+    return withRegionalPremium(
+      calculateCostBase(
+        pricingModelName,
+        effectiveConfig,
+        promptTokens,
+        completionTokens,
+        ANTHROPIC_MODELS,
+      ),
     );
   }
 
@@ -575,9 +583,9 @@ export function calculateAnthropicCost(
     const outputRate =
       effectiveConfig.outputCost ?? effectiveConfig.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
 
-    return (
+    return withRegionalPremium(
       calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
-      completionTokens * outputRate
+        completionTokens * outputRate,
     );
   }
 
@@ -587,19 +595,21 @@ export function calculateAnthropicCost(
       const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
       const outputCost =
         effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
-      return (
+      return withRegionalPremium(
         calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
-        completionTokens * outputCost
+          completionTokens * outputCost,
       );
     }
   }
 
-  return calculateCostBase(
-    pricingModelName,
-    effectiveConfig,
-    promptTokens,
-    completionTokens,
-    ANTHROPIC_MODELS,
+  return withRegionalPremium(
+    calculateCostBase(
+      pricingModelName,
+      effectiveConfig,
+      promptTokens,
+      completionTokens,
+      ANTHROPIC_MODELS,
+    ),
   );
 }
 

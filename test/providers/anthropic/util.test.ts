@@ -1854,6 +1854,22 @@ describe('Anthropic utilities', () => {
         8,
       );
     });
+
+    it('composes the regional premium with the Sonnet 4.5/4.6 long-context tier', () => {
+      // Regression: the regional premium must multiply the tier-selected rate, not override it.
+      // >200K regional Sonnet 4.6 bills at 1.1x the $6/$22.5 long-context tier.
+      expect(
+        calculateAnthropicCost('us.anthropic.claude-sonnet-4-6', {}, 300_000, 20_000),
+      ).toBeCloseTo(((300_000 / 1e6) * 6 + (20_000 / 1e6) * 22.5) * 1.1, 6);
+      // <=200K regional bills at 1.1x the $3/$15 base tier.
+      expect(
+        calculateAnthropicCost('eu.anthropic.claude-sonnet-4-6', {}, 150_000, 10_000),
+      ).toBeCloseTo(((150_000 / 1e6) * 3 + (10_000 / 1e6) * 15) * 1.1, 6);
+      // The global endpoint bills at the tier rate with no premium.
+      expect(
+        calculateAnthropicCost('global.anthropic.claude-sonnet-4-6', {}, 300_000, 20_000),
+      ).toBeCloseTo((300_000 / 1e6) * 6 + (20_000 / 1e6) * 22.5, 6);
+    });
   });
 
   describe('sampling-params-deprecated model detection', () => {

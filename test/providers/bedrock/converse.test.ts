@@ -2228,6 +2228,51 @@ Third line`;
       );
     });
 
+    it('strips raw sampling fields for Claude Sonnet 5 and preserves disabled thinking', async () => {
+      // Sonnet 5 is sampling-deprecated (rejects temperature/top_p/top_k) but NOT always-on,
+      // so raw additionalModelRequestFields must have those stripped and manual thinking
+      // converted to adaptive — while `thinking: { type: 'disabled' }` is preserved (unlike Fable).
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: {
+            temperature: 0.5,
+            top_p: 0.9,
+            top_k: 40,
+            thinking: { type: 'enabled', budget_tokens: 16000 },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'adaptive' } },
+        }),
+      );
+
+      const disabledProvider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: { top_k: 40, thinking: { type: 'disabled' } },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await disabledProvider.callApi('Test');
+
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'disabled' } },
+        }),
+      );
+    });
+
     it('should keep manual thinking enabled for non-deprecated Claude models', async () => {
       // claude-3-5-sonnet is not in the sampling-params-deprecated set, so an
       // explicit budget_tokens thinking config must pass through untouched

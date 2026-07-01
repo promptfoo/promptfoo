@@ -1,5 +1,5 @@
 import {
-  CLAUDE_5_REGIONAL_PREMIUM,
+  CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
   isClaudeRegionalPremiumModel,
@@ -397,7 +397,7 @@ export function calculateBedrockCost(
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
     isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
-      ? CLAUDE_5_REGIONAL_PREMIUM
+      ? CLAUDE_REGIONAL_ENDPOINT_PREMIUM
       : 1;
   const serviceTierMultiplier =
     serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1;
