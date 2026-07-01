@@ -247,9 +247,8 @@ export default function UpdateBanner() {
     const element = bannerRef.current;
 
     if (!element) {
-      return () => {
-        document.documentElement.style.removeProperty('--update-banner-height');
-      };
+      document.documentElement.style.removeProperty('--update-banner-height');
+      return;
     }
 
     const updateHeight = () => {

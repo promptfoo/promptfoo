@@ -54,7 +54,7 @@ describe('UpdateBanner', () => {
     renderWithProviders(<UpdateBanner />);
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
-    expect(screen.getByText(/\(current: v1.9.0\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/current: v1.9.0/i)).toBeInTheDocument();
 
     const releaseNotesLink = screen.getByRole('link', { name: /Release Notes/i });
     expect(releaseNotesLink).toBeInTheDocument();
@@ -984,6 +984,40 @@ describe('UpdateBanner', () => {
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
     expect(copyCommandButton).toBeInTheDocument();
+  });
+
+  it('should publish and clear the banner height CSS variable', async () => {
+    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    };
+    mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
+
+    const { unmount } = renderWithProviders(<UpdateBanner />);
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe(
+        '48px',
+      );
+    });
+
+    unmount();
+
+    expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
   });
 
   it('should measure the banner when it becomes visible after loading', async () => {

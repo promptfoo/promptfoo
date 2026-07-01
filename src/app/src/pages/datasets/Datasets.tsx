@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
-import { PageContainer } from '@app/components/layout/PageContainer';
+import { FIXED_PAGE_CONTAINER_TOP, PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
@@ -153,7 +153,10 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   };
 
   return (
-    <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer
+      className="fixed left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0"
+      style={{ top: FIXED_PAGE_CONTAINER_TOP }}
+    >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-bold tracking-tight">Datasets</h1>
