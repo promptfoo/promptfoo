@@ -195,8 +195,8 @@ redteam:
     - prompt-extraction
 
   strategies:
+    - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
 ```
 
 Run the baseline and save results:
@@ -277,8 +277,8 @@ redteam:
     - bfla
 
   strategies:
+    - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
     - crescendo
 ```
 
@@ -312,8 +312,8 @@ redteam:
     - harmful:privacy
 
   strategies:
+    - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
 ```
 
 The report shows side-by-side vulnerability rates:
@@ -345,8 +345,8 @@ redteam:
     - excessive-agency
 
   strategies:
+    - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
 ```
 
 A significantly higher failure rate on the fine-tuned model indicates the fine-tuning process degraded safety training.
@@ -367,7 +367,7 @@ redteam:
     - indirect-prompt-injection
 
   strategies:
-    - prompt-injection
+    - jailbreak:composite
 ```
 
 See the [RAG security guide](./rag.md) for comprehensive coverage.
@@ -385,8 +385,8 @@ redteam:
     - ssrf
 
   strategies:
+    - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
 ```
 
 See the [MCP security testing guide](./mcp-security-testing.md) for details.

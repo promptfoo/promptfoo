@@ -38,8 +38,8 @@ redteam:
   plugins:
     - owasp:agentic
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
     - crescendo
 ```
 
@@ -75,8 +75,7 @@ redteam:
     - indirect-prompt-injection
     - intent
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
     - jailbreak:composite
 ```
 
@@ -99,8 +98,8 @@ redteam:
     - mcp
     - tool-discovery
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
 ```
 
 ## ASI03: Identity and Privilege Abuse
@@ -123,8 +122,8 @@ redteam:
     - bola
     - imitation
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
 ```
 
 ## ASI04: Agentic Supply Chain Vulnerabilities
@@ -145,7 +144,7 @@ redteam:
     - indirect-prompt-injection
     - mcp
   strategies:
-    - prompt-injection
+    - jailbreak:composite
 ```
 
 ## ASI05: Unexpected Code Execution
@@ -168,8 +167,8 @@ redteam:
     - harmful:cybercrime:malicious-code
     - ssrf
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
 ```
 
 ## ASI06: Memory and Context Poisoning
@@ -191,7 +190,7 @@ redteam:
     - cross-session-leak
     - indirect-prompt-injection
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - crescendo
 ```
 
@@ -214,7 +213,7 @@ redteam:
     - hijacking
     - imitation
   strategies:
-    - prompt-injection
+    - jailbreak:composite
 ```
 
 ## ASI08: Cascading Failures
@@ -236,8 +235,8 @@ redteam:
     - harmful:misinformation-disinformation
     - divergent-repetition
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
 ```
 
 ## ASI09: Human Agent Trust Exploitation
@@ -282,7 +281,7 @@ redteam:
     - rbac
     - goal-misalignment
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - crescendo
 ```
 
@@ -307,8 +306,8 @@ redteam:
     - owasp:agentic
     - owasp:llm
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
     - crescendo
 ```
 

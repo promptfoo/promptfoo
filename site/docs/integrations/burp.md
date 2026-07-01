@@ -74,9 +74,8 @@ redteam:
   plugins:
     - harmful
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
 ```
 
 Generate Burp-compatible payloads:
