@@ -131,4 +131,21 @@ describe('calculateBedrockCost', () => {
       calculateBedrockInvokeModelCost('zai.glm-5', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
     ).toBeCloseTo(costAtRates(1, 3.2), 6);
   });
+
+  it('reports InvokeModel cost for Claude Sonnet 5 (a Claude 5 model) but not legacy Sonnet 4.x', () => {
+    // Live QA found the default `bedrock:` (InvokeModel) path reported `cost: 0` for Sonnet 5
+    // because the allowlist only covered Fable/Mythos. Sonnet 5 is a Claude 5 model with a
+    // verified rate, so it must report cost on the base ID and regional profiles; Sonnet 4.6
+    // (legacy Claude 4.x) stays fail-closed.
+    const expected = (100 / 1e6) * 3 + (200 / 1e6) * 15;
+    expect(
+      calculateBedrockInvokeModelCost('anthropic.claude-sonnet-5', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeCloseTo(expected, 10);
+    expect(
+      calculateBedrockInvokeModelCost('us.anthropic.claude-sonnet-5', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeCloseTo(expected, 10);
+    expect(
+      calculateBedrockInvokeModelCost('anthropic.claude-sonnet-4-6', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeUndefined();
+  });
 });

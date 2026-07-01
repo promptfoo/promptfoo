@@ -2,6 +2,7 @@ import {
   CLAUDE_5_REGIONAL_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeSonnet5Model,
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
@@ -415,6 +416,10 @@ export function calculateBedrockCost(
  * stale or refer to different variants. Before this shared calculator existed, InvokeModel only
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
+ *
+ * Claude 5 models (Fable 5, Mythos 5, and Sonnet 5) have verified Runtime rates, so they report
+ * cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-sonnet-5`
+ * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
 export function calculateBedrockInvokeModelCost(
   modelId: string,
@@ -427,6 +432,7 @@ export function calculateBedrockInvokeModelCost(
   const normalizedModelId = modelId.toLowerCase();
   if (
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {
     return undefined;
