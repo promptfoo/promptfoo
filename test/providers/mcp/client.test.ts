@@ -155,12 +155,18 @@ describe('MCPClient', () => {
     });
     mockClient.callTool.mockReset();
     mockClient.close.mockReset().mockResolvedValue(undefined);
-    for (const transport of [mockStdioTransport, mockStreamableHTTPTransport, mockSSETransport]) {
-      transport.close.mockReset().mockResolvedValue(undefined);
-      transport.connect.mockReset();
-      transport.start.mockReset();
-      transport.send.mockReset();
-    }
+    mockStdioTransport.close.mockReset().mockResolvedValue(undefined);
+    mockStdioTransport.connect.mockReset();
+    mockStdioTransport.start.mockReset();
+    mockStdioTransport.send.mockReset();
+    mockStreamableHTTPTransport.close.mockReset().mockResolvedValue(undefined);
+    mockStreamableHTTPTransport.connect.mockReset();
+    mockStreamableHTTPTransport.start.mockReset();
+    mockStreamableHTTPTransport.send.mockReset();
+    mockSSETransport.close.mockReset().mockResolvedValue(undefined);
+    mockSSETransport.connect.mockReset();
+    mockSSETransport.start.mockReset();
+    mockSSETransport.send.mockReset();
     mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
     // Reset the OAuth token mock to return a valid token by default
