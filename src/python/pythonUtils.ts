@@ -5,10 +5,9 @@ import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
-import { getWrapperDir } from '../esm';
+import { getWrapperDir, redactPathsAndIdentifierFromText } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { redactPathsAndIdentifierFromText } from '../util/pathUtils';
 import {
   createSecureTempDirectory,
   removeSecureTempDirectory,

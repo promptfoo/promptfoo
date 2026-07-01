@@ -172,7 +172,7 @@ describe('logger', () => {
     });
 
     it('should apply an async-scoped log redactor', async () => {
-      const { withLogRedaction } = await import('../src/util/logRedaction');
+      const { withLogRedaction } = await import('../src/cliState');
       const privateValue = 'PR8237_PRIVATE_LOG_VALUE';
 
       await withLogRedaction(
@@ -187,7 +187,7 @@ describe('logger', () => {
     });
 
     it('should compose nested async-scoped log redactors', async () => {
-      const { withLogRedaction } = await import('../src/util/logRedaction');
+      const { withLogRedaction } = await import('../src/cliState');
 
       await withLogRedaction(
         (message) => message.replaceAll('SECRET_A', '[A]'),

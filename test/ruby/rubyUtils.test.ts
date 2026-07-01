@@ -32,9 +32,13 @@ vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),
 }));
 
-vi.mock('../../src/esm', () => ({
-  getWrapperDir: vi.fn(() => '/wrappers'),
-}));
+vi.mock('../../src/esm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
+  return {
+    ...actual,
+    getWrapperDir: vi.fn(() => '/wrappers'),
+  };
+});
 
 vi.mock('../../src/logger', () => ({
   default: {

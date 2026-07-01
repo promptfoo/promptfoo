@@ -10,17 +10,23 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import { redactLogMessage } from '../../src/util/logRedaction';
 import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 vi.mock('fs');
 vi.mock('path');
-vi.mock('../../src/cliState');
-vi.mock('../../src/esm', () => ({
-  importModule: vi.fn(),
-}));
+vi.mock('../../src/cliState', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+  return actual;
+});
+vi.mock('../../src/esm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
+  return {
+    ...actual,
+    importModule: vi.fn(),
+  };
+});
 
 describe('processFileReference', () => {
   beforeEach(() => {
@@ -268,7 +274,7 @@ describe('loadFromJavaScriptFile', () => {
     const message = `Loading ${privatePath}:${privateMethod}`;
     const mockFn = vi.fn().mockReturnValue('result');
     vi.mocked(importModule).mockImplementation(async () => {
-      expect(redactLogMessage(message)).toBe(
+      expect(cliState.redactLogMessage?.(message) ?? message).toBe(
         'Loading [redacted module path]:[redacted module export]',
       );
       return mockFn;
@@ -277,7 +283,7 @@ describe('loadFromJavaScriptFile', () => {
     await expect(
       loadFromJavaScriptFile(privatePath, privateMethod, [], { redactPath: true }),
     ).resolves.toBe('result');
-    expect(redactLogMessage(message)).toBe(message);
+    expect(cliState.redactLogMessage?.(message) ?? message).toBe(message);
     expect(importModule).toHaveBeenCalledWith(privatePath, privateMethod);
   });
 

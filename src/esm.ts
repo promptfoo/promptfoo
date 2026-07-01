@@ -7,7 +7,7 @@ import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
 import logger from './logger';
-import { safeResolve } from './util/pathUtils';
+import { redactPathsAndIdentifierFromText, safeResolve } from './util/pathUtils';
 
 /**
  * Supported wrapper script types for language-specific providers.
@@ -73,6 +73,8 @@ export function getWrapperDir(type: WrapperType): string {
  * Clears the wrapper directory cache.
  * Primarily useful for testing to ensure fresh path resolution.
  */
+export { redactPathsAndIdentifierFromText };
+
 export function clearWrapperDirCache(): void {
   for (const key of Object.keys(wrapperDirCache) as WrapperType[]) {
     delete wrapperDirCache[key];

@@ -4,6 +4,21 @@ import { setEnvOverridesProvider } from './envOverrides';
 
 import type { UnifiedConfig } from './types/index';
 
+type LogRedactor = (message: string) => string;
+const logRedactionStorage = new AsyncLocalStorage<LogRedactor>();
+
+export function withLogRedaction<T>(redactor: LogRedactor, callback: () => T): T {
+  const inheritedRedactor = logRedactionStorage.getStore();
+  const combinedRedactor = inheritedRedactor
+    ? (message: string) => redactor(inheritedRedactor(message))
+    : redactor;
+  return logRedactionStorage.run(combinedRedactor, callback);
+}
+
+export function redactLogMessage(message: string): string {
+  return logRedactionStorage.getStore()?.(message) ?? message;
+}
+
 interface CliState {
   basePath?: string;
   config?: Partial<UnifiedConfig>;
@@ -50,6 +65,8 @@ interface CliState {
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
 
+  redactLogMessage(message: string): string;
+  withLogRedaction<T>(redactor: LogRedactor, callback: () => T): T;
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
 }
 
@@ -57,6 +74,16 @@ const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | u
 let globalMaxConcurrency: number | undefined;
 
 const state: CliState = {
+  redactLogMessage(message: string) {
+    return logRedactionStorage.getStore()?.(message) ?? message;
+  },
+  withLogRedaction<T>(redactor: LogRedactor, callback: () => T): T {
+    const inheritedRedactor = logRedactionStorage.getStore();
+    const combinedRedactor = inheritedRedactor
+      ? (message: string) => redactor(inheritedRedactor(message))
+      : redactor;
+    return logRedactionStorage.run(combinedRedactor, callback);
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
