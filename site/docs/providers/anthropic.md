@@ -554,11 +554,12 @@ controls at the model level:
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
 
-Sonnet 5 uses a 1M-token context window with tiered long-context pricing: $3 per
-million input / $15 per million output at or below 200K prompt tokens, and $6 / $22.5
-above 200K (matching Sonnet 4.6). Anthropic's launch introductory pricing
-($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set an
-explicit `cost` in your provider config if you want to track the introductory rate.
+Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input /
+$15 per million output** — the full context window bills at the standard rate, with no
+
+> 200K long-context surcharge (a 900K-token request bills at the same per-token rate as
+> a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set an explicit `cost` in your
+> provider config if you want to track the introductory rate.
 
 ### Claude Opus 4.8 notes
 

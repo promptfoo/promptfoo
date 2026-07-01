@@ -99,9 +99,11 @@ describe('calculateBedrockCost', () => {
     );
   });
 
-  it('uses Claude Sonnet 5 long-context rates above 200k effective input tokens', () => {
-    expect(calculateBedrockCost('anthropic.claude-sonnet-5', 200_001, 1_000)).toBeCloseTo(
-      (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+  it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+    // Unlike Sonnet 4.5/4.6, Sonnet 5 bills its full 1M context at the standard rate,
+    // so a >200K request must NOT switch to the $6/$22.5 tier.
+    expect(calculateBedrockCost('anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
+      (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
       6,
     );
   });

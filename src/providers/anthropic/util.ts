@@ -24,8 +24,11 @@ export const ANTHROPIC_MODELS = [
   })),
   // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
   // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
-  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. Long-context
-  // (>200k) tiered pricing is handled by `hasTieredPricing` in calculateAnthropicCost.
+  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. Per Anthropic's
+  // pricing docs, Sonnet 5 bills its FULL 1M context at the standard rate — there is
+  // no >200K long-context tier (a 900k-token request bills at the same per-token rate
+  // as a 9k-token request), so it is intentionally left OUT of `hasTieredPricing`
+  // below. (This differs from Sonnet 4.5, which does carry the >200K tier.)
   ...['claude-sonnet-5'].map((model) => ({
     id: model,
     cost: {
@@ -202,7 +205,7 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
 
 /**
  * Matches Claude Sonnet 5 model IDs across Anthropic, Bedrock (including the
- * `us.`/`eu.`/`apac.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * `us.`/`eu.`/`global.` inference-profile prefixes), Vertex, and Azure
  * deployment names. The trailing `(?![0-9])` guard keeps a hypothetical
  * higher-numbered `claude-sonnet-50` from matching "sonnet 5" while still
  * matching dated snapshots like `claude-sonnet-5-20260630`. Note this does NOT
@@ -508,7 +511,6 @@ export function calculateAnthropicCost(
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-6',
     'claude-sonnet-4-6-latest',
-    'claude-sonnet-5',
   ].includes(pricingModelName);
 
   if (hasTieredPricing) {

@@ -219,15 +219,17 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
     });
 
-    it('should calculate tiered cost for Claude Sonnet 5 with prompt <= 200k tokens', () => {
+    it('should calculate standard cost for Claude Sonnet 5 at or below 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
       expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
     });
 
-    it('should calculate tiered cost for Claude Sonnet 5 with prompt > 200k tokens', () => {
+    it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+      // Per Anthropic pricing, Sonnet 5 bills its full 1M context at the standard rate —
+      // unlike Sonnet 4.5, there is no >200K surcharge.
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
-      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
-      expect(cost).toBe(2.25);
+      // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2 (NOT the 2.25 tiered rate)
+      expect(cost).toBe(1.2);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
@@ -1924,7 +1926,6 @@ describe('Anthropic utilities', () => {
         'anthropic.claude-sonnet-5',
         'us.anthropic.claude-sonnet-5',
         'eu.anthropic.claude-sonnet-5',
-        'apac.anthropic.claude-sonnet-5',
         'global.anthropic.claude-sonnet-5',
         // A trailing date snapshot is a real, supported form and must match.
         'claude-sonnet-5-20260630',

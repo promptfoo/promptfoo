@@ -2432,7 +2432,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2579,6 +2578,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // Claude Fable 5 base, global, and geo inference profiles.
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
+  // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
+  'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html

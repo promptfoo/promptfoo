@@ -3294,10 +3294,11 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
+    // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-sonnet-5']).toBe(
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-sonnet-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(getHandlerForModel('us.anthropic.claude-sonnet-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
