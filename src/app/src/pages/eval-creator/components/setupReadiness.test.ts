@@ -19,6 +19,7 @@ describe('setupReadiness', () => {
         id: 'openai:gpt-4.1',
         label: 'GPT-4.1',
         config: { temperature: 0 },
+        transformCanSetTestResult: true,
         customHeader: 'x-trace-id',
       };
 

@@ -12,6 +12,7 @@ import {
   CommandLineOptionsSchema,
   GradingConfigSchema,
   isGradingResult,
+  isTransformReturnWithTestResult,
   MAX_SUGGESTIONS_COUNT,
   OutputConfigSchema,
   TestCaseSchema,
@@ -155,6 +156,7 @@ describe('isGradingResult', () => {
       reason: 'Test failed',
       namedScores: { accuracy: 0.5 },
       tokensUsed: { total: 100 },
+      countAsAssertionRequest: false,
       componentResults: [],
       assertion: { type: 'equals', value: 'expected' },
       comment: 'Needs improvement',
@@ -167,6 +169,7 @@ describe('isGradingResult', () => {
       { pass: true, score: 1, reason: 'Perfect' },
       { pass: false, score: 0, reason: 'Failed', namedScores: { accuracy: 0 } },
       { pass: true, score: 0.5, reason: 'Partial', tokensUsed: { total: 100 } },
+      { pass: true, score: 1, reason: 'External result', countAsAssertionRequest: false },
       { pass: true, score: 1, reason: 'Good', componentResults: [] },
       { pass: false, score: 0, reason: 'Bad' },
       { pass: true, score: 1, reason: 'Excellent', comment: 'Great job!' },
@@ -201,6 +204,7 @@ describe('isGradingResult', () => {
       { pass: true, score: 1, reason: 42 },
       { pass: true, score: 1, reason: 'Valid', namedScores: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', tokensUsed: 'invalid' },
+      { pass: true, score: 1, reason: 'Valid', countAsAssertionRequest: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', componentResults: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', assertion: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', comment: 42 },
@@ -232,6 +236,46 @@ describe('isGradingResult', () => {
         componentResults: 'invalid',
         assertion: 'invalid',
         comment: 123,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('isTransformReturnWithTestResult', () => {
+  it('accepts valid transform-controlled test results', () => {
+    expect(
+      isTransformReturnWithTestResult({
+        output: 'display output',
+        testResult: {
+          pass: true,
+          score: 0.75,
+          reason: 'accepted',
+          namedScores: { guardrail: 0.75 },
+          metadata: { source: 'transform' },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects malformed or inherited test results', () => {
+    const inherited = Object.create({
+      testResult: { pass: true, score: 1, reason: 'inherited' },
+    });
+
+    expect(isTransformReturnWithTestResult(inherited)).toBe(false);
+    expect(
+      isTransformReturnWithTestResult({
+        testResult: { pass: true, score: Number.NaN, reason: 'invalid score' },
+      }),
+    ).toBe(false);
+    expect(
+      isTransformReturnWithTestResult({
+        testResult: {
+          pass: true,
+          score: 1,
+          reason: 'invalid metrics',
+          namedScores: { x: Infinity },
+        },
       }),
     ).toBe(false);
   });
@@ -335,6 +379,7 @@ describe('TestCaseSchema options (merged schema properties)', () => {
       vars: { input: 'test' },
       options: {
         transform: 'output.toUpperCase()',
+        transformCanSetTestResult: true,
         storeOutputAs: 'myOutput',
       },
     };
@@ -386,6 +431,7 @@ describe('TestCaseSchema options (merged schema properties)', () => {
         suffix: 'Be concise.',
         // From OutputConfigSchema
         transform: 'output.trim()',
+        transformCanSetTestResult: true,
         storeOutputAs: 'answer',
         // From GradingConfigSchema
         provider: 'openai:gpt-4o-mini',

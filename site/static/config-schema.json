@@ -141,6 +141,9 @@
         "transform": {
           "type": "string"
         },
+        "transformCanSetTestResult": {
+          "type": "boolean"
+        },
         "delay": {
           "type": "number"
         },
@@ -801,6 +804,9 @@
             "transform": {
               "type": "string"
             },
+            "transformCanSetTestResult": {
+              "type": "boolean"
+            },
             "delay": {
               "type": "number"
             },
@@ -1097,6 +1103,9 @@
         },
         "transform": {
           "type": "string"
+        },
+        "transformCanSetTestResult": {
+          "type": "boolean"
         },
         "transformVars": {
           "type": "string"
@@ -1555,6 +1564,9 @@
                 "transform": {
                   "type": "string"
                 },
+                "transformCanSetTestResult": {
+                  "type": "boolean"
+                },
                 "delay": {
                   "type": "number"
                 },
@@ -1628,6 +1640,9 @@
                 },
                 "transform": {
                   "type": "string"
+                },
+                "transformCanSetTestResult": {
+                  "type": "boolean"
                 },
                 "delay": {
                   "type": "number"

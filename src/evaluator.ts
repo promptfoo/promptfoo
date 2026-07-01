@@ -60,12 +60,15 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  isTransformReturnWithTestResult,
   MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  type TransformReturnWithTestResult,
+  type TransformTestResult,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
@@ -123,6 +126,7 @@ import type {
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
+import type { TransformContext } from './types/transform';
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
@@ -381,6 +385,47 @@ function updateAssertionMetrics(
   }
 }
 
+function getTransformReturnWithTestResult(
+  value: unknown,
+  enabled: boolean | undefined,
+  source: 'Provider' | 'Test',
+): TransformReturnWithTestResult | null {
+  if (
+    !enabled ||
+    typeof value !== 'object' ||
+    value === null ||
+    !Object.prototype.hasOwnProperty.call(value, 'testResult')
+  ) {
+    return null;
+  }
+  if (!isTransformReturnWithTestResult(value)) {
+    throw new Error(
+      `${source} transform returned an invalid testResult. Expected pass:boolean, score:finite number, reason:string, and optional finite namedScores.`,
+    );
+  }
+  return value;
+}
+
+function createOutputTransformContext(
+  response: ProviderResponse,
+  prompt: Prompt,
+  vars: Vars,
+): TransformContext {
+  const metadata =
+    response.metadata || response.guardrails
+      ? {
+          ...response.metadata,
+          ...(response.guardrails ? { guardrails: response.guardrails } : {}),
+        }
+      : undefined;
+
+  return {
+    vars,
+    prompt,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
  * prompt references. Providers and tests can be configured with a `prompts` attribute,
@@ -587,7 +632,9 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage.assertions) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
-  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed);
+  if (checkResult.countAsAssertionRequest !== false) {
+    accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed);
+  }
   row.gradingResult = checkResult;
 }
 
@@ -1226,16 +1273,33 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
-    evalId,
-    prompt,
-    promptIdx,
-    provider,
-    response,
-    test,
-    testIdx,
-    vars,
-  });
+  const { processedResponse, providerTransformedOutput, transformTestResult } =
+    await transformRunEvalResponse({
+      evalId,
+      prompt,
+      promptIdx,
+      provider,
+      response,
+      test,
+      testIdx,
+      vars,
+    });
+
+  if (transformTestResult) {
+    const checkResult: GradingResult = {
+      pass: transformTestResult.pass,
+      score: transformTestResult.score,
+      reason: transformTestResult.reason,
+      namedScores: transformTestResult.namedScores || {},
+      componentResults: [],
+      metadata: transformTestResult.metadata,
+      countAsAssertionRequest: false,
+    };
+    applyGradingResult(ret, checkResult);
+    ret.response = processedResponse;
+    return;
+  }
+
   const traceId = getTraceId(traceContext);
   if (traceId && hasTraceAwareAssertions(test.assert)) {
     await flushOtel();
@@ -1308,23 +1372,49 @@ async function transformRunEvalResponse({
 }): Promise<{
   processedResponse: ProviderResponse;
   providerTransformedOutput: ProviderResponse['output'];
+  transformTestResult: TransformTestResult | null;
 }> {
   const processedResponse = { ...response };
+  let transformTestResult: TransformTestResult | null = null;
+
   if (provider.transform) {
-    processedResponse.output = await transform(provider.transform, processedResponse.output, {
-      vars,
-      prompt,
-    });
+    const transformed = await transform(
+      provider.transform,
+      processedResponse.output,
+      createOutputTransformContext(response, prompt, vars),
+    );
+    const controlledResult = getTransformReturnWithTestResult(
+      transformed,
+      provider.transformCanSetTestResult,
+      'Provider',
+    );
+    if (controlledResult) {
+      transformTestResult = controlledResult.testResult;
+      processedResponse.output = controlledResult.output ?? processedResponse.output;
+    } else {
+      processedResponse.output = transformed;
+    }
   }
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
-  if (testTransform) {
-    processedResponse.output = await transform(testTransform, processedResponse.output, {
-      vars,
-      prompt,
-      ...(response && response.metadata && { metadata: response.metadata }),
-    });
+  if (testTransform && !transformTestResult) {
+    const transformed = await transform(
+      testTransform,
+      processedResponse.output,
+      createOutputTransformContext(response, prompt, vars),
+    );
+    const controlledResult = getTransformReturnWithTestResult(
+      transformed,
+      test.options?.transformCanSetTestResult,
+      'Test',
+    );
+    if (controlledResult) {
+      transformTestResult = controlledResult.testResult;
+      processedResponse.output = controlledResult.output ?? processedResponse.output;
+    } else {
+      processedResponse.output = transformed;
+    }
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
@@ -1337,6 +1427,7 @@ async function transformRunEvalResponse({
   return {
     processedResponse: blobbedResponse || processedResponse,
     providerTransformedOutput,
+    transformTestResult,
   };
 }
 

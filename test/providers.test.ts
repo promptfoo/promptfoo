@@ -271,6 +271,7 @@ describe('loadApiProvider', () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
       id: 'file://adapters/wrapper.py:call_model',
       transform: 'response.cloudTransform',
+      transformCanSetTestResult: false,
       config: {
         apiKey: 'test-key',
       },
@@ -279,11 +280,13 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
       options: {
         transform: 'response.localTransform',
+        transformCanSetTestResult: true,
       },
     });
 
     expect(provider).toBeDefined();
     expect(provider.transform).toBe('response.localTransform');
+    expect(provider.transformCanSetTestResult).toBe(true);
   });
 
   it('should override cloud provider delay with local delay', async () => {
@@ -387,6 +390,7 @@ describe('loadApiProvider', () => {
       id: 'file://enterprise/secure_llm.py:invoke',
       label: 'Cloud Label',
       transform: 'response.transform',
+      transformCanSetTestResult: true,
       delay: 500,
       config: {
         apiKey: 'cloud-key',
@@ -408,6 +412,7 @@ describe('loadApiProvider', () => {
       }),
     );
     expect(provider.transform).toBe('response.transform');
+    expect(provider.transformCanSetTestResult).toBe(true);
     expect(provider.delay).toBe(500);
   });
 

@@ -327,6 +327,41 @@ describe('config-schema.json', () => {
       );
     });
 
+    it('should require transformCanSetTestResult to be boolean', () => {
+      const validate = ajv.compile(schema);
+
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: [{ id: 'echo', transformCanSetTestResult: true }],
+          tests: [{ options: { transform: 'output.trim()', transformCanSetTestResult: true } }],
+        }),
+      ).toBe(true);
+
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: ['echo'],
+          tests: [
+            {
+              options: {
+                transform: 'output.trim()',
+                transformCanSetTestResult: 'true',
+              },
+            },
+          ],
+        }),
+      ).toBe(false);
+      expect(validate.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            instancePath: '/tests/0/options/transformCanSetTestResult',
+            keyword: 'type',
+          }),
+        ]),
+      );
+    });
+
     it('emits string-only types for every transform field in the JSON schema', () => {
       // Guard against the StringOrFunctionSchema leaking into the generated
       // config-schema.json via a `z.custom` → `{}` (any) branch. Every transform
