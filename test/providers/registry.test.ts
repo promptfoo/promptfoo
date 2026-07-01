@@ -719,6 +719,33 @@ describe('Provider Registry', () => {
       }
     });
 
+    it.each([
+      [
+        'mistral:mistral-large-latest',
+        'MistralChatCompletionProvider',
+        'mistral:mistral-large-latest',
+      ],
+      ['mistral:embedding', 'MistralEmbeddingProvider', 'mistral:embedding:mistral-embed'],
+      [
+        'mistral:embeddings:mistral-embed',
+        'MistralEmbeddingProvider',
+        'mistral:embedding:mistral-embed',
+      ],
+      [
+        'mistral:embedding:codestral-embed',
+        'MistralEmbeddingProvider',
+        'mistral:embedding:codestral-embed',
+      ],
+    ])('should route %s correctly', async (path, expectedProviderName, expectedId) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(path, { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe(expectedProviderName);
+      expect(provider.id()).toBe(expectedId);
+    });
+
     it('should handle bedrock Luma Ray video provider with model version', async () => {
       const factories = await getProviderFactories('bedrock:luma.ray-v2:0');
       const factory = factories.find((f) => f.test('bedrock:luma.ray-v2:0'));

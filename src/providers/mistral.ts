@@ -44,41 +44,50 @@ const MISTRAL_CHAT_MODELS = [
       output: 3 / 1000000,
     },
   },
-  ...['mistral-small-2506', 'mistral-small-latest'].map((id) => ({
-    id,
+  // Mistral Small 3.2 (deprecated 2026-07-30) — historical pricing for cached results
+  {
+    id: 'mistral-small-2506',
     cost: {
       input: 0.1 / 1000000,
       output: 0.3 / 1000000,
     },
-  })),
-  {
-    id: 'mistral-small-2603',
+  },
+  // Mistral Small 4 — `mistral-small-latest` and `magistral-small-latest` (Magistral Small
+  // was folded into Mistral Small 4) both resolve to `mistral-small-2603`
+  ...['mistral-small-2603', 'mistral-small-latest', 'magistral-small-latest'].map((id) => ({
+    id,
     cost: {
       input: 0.15 / 1000000,
       output: 0.6 / 1000000,
     },
-  },
-  ...['mistral-medium-2312', 'mistral-medium'].map((id) => ({
-    id,
+  })),
+  // Mistral Medium 1 (retired) — historical pricing for cached results
+  {
+    id: 'mistral-medium-2312',
     cost: {
       input: 2.7 / 1000000,
       output: 8.1 / 1000000,
     },
-  })),
-  ...['mistral-medium-2505', 'mistral-medium-2508', 'mistral-medium-latest'].map((id) => ({
+  },
+  // Mistral Medium 3 / 3.1 (deprecated) — historical pricing for cached results
+  ...['mistral-medium-2505', 'mistral-medium-2508'].map((id) => ({
     id,
     cost: {
       input: 0.4 / 1000000,
       output: 2 / 1000000,
     },
   })),
-  {
-    id: 'mistral-medium-3.5',
-    cost: {
-      input: 1.5 / 1000000,
-      output: 7.5 / 1000000,
-    },
-  },
+  // Mistral Medium 3.5 — `mistral-medium-latest` and bare `mistral-medium` now resolve
+  // to `mistral-medium-2604`
+  ...['mistral-medium-2604', 'mistral-medium-3.5', 'mistral-medium-latest', 'mistral-medium'].map(
+    (id) => ({
+      id,
+      cost: {
+        input: 1.5 / 1000000,
+        output: 7.5 / 1000000,
+      },
+    }),
+  ),
   {
     id: 'mistral-large-2402',
     cost: {
@@ -135,12 +144,9 @@ const MISTRAL_CHAT_MODELS = [
       output: 6 / 1000000,
     },
   })),
-  ...[
-    'magistral-small-2506',
-    'magistral-small-2507',
-    'magistral-small-2509',
-    'magistral-small-latest',
-  ].map((id) => ({
+  // Magistral Small standalone reasoning snapshots. `magistral-small-latest` was
+  // repointed to Mistral Small 4 (priced above); 2506/2507 retired, 2509 deprecated.
+  ...['magistral-small-2506', 'magistral-small-2507', 'magistral-small-2509'].map((id) => ({
     id,
     cost: {
       input: 0.5 / 1000000,
@@ -180,7 +186,7 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.2 / 1000000,
     },
   })),
-  ...['devstral-2512', 'devstral-latest'].map((id) => ({
+  ...['devstral-2512', 'devstral-latest', 'devstral-medium-latest'].map((id) => ({
     id,
     cost: {
       input: 0.4 / 1000000,
@@ -198,13 +204,20 @@ const MISTRAL_CHAT_MODELS = [
 ];
 
 const MISTRAL_EMBEDDING_MODELS = [
-  {
-    id: 'mistral-embed',
+  ...['mistral-embed', 'mistral-embed-2312'].map((id) => ({
+    id,
     cost: {
       input: 0.1 / 1000000,
       output: 0.1 / 1000000,
     },
-  },
+  })),
+  ...['codestral-embed', 'codestral-embed-2505'].map((id) => ({
+    id,
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
+    },
+  })),
 ];
 
 interface MistralChatCompletionOptions {
@@ -241,6 +254,7 @@ interface MistralChatCompletionOptions {
       };
   prompt_mode?: 'reasoning' | null;
   reasoning_effort?: 'high' | 'none';
+  prompt_cache_key?: string;
   prediction?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
   guardrails?: Array<Record<string, unknown>> | null;
@@ -411,6 +425,7 @@ function buildMistralChatParams(
     random_seed: config.random_seed ?? null,
     ...('prompt_mode' in config ? { prompt_mode: config.prompt_mode } : {}),
     ...(config.reasoning_effort === undefined ? {} : { reasoning_effort: config.reasoning_effort }),
+    ...(config.prompt_cache_key === undefined ? {} : { prompt_cache_key: config.prompt_cache_key }),
     ...('prediction' in config ? { prediction: config.prediction } : {}),
     ...('metadata' in config ? { metadata: config.metadata } : {}),
     ...('guardrails' in config ? { guardrails: config.guardrails } : {}),
@@ -720,11 +735,21 @@ export class MistralEmbeddingProvider implements ApiProvider {
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;
 
+  static MISTRAL_EMBEDDING_MODELS_NAMES = MISTRAL_EMBEDDING_MODELS.map((model) => model.id);
+
   constructor(
-    options: { config?: MistralChatCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      modelName?: string;
+      config?: MistralChatCompletionOptions;
+      id?: string;
+      env?: EnvOverrides;
+    } = {},
   ) {
-    const { config, env } = options;
-    this.modelName = 'mistral-embed';
+    const { modelName, config, env } = options;
+    this.modelName = modelName || 'mistral-embed';
+    if (!MistralEmbeddingProvider.MISTRAL_EMBEDDING_MODELS_NAMES.includes(this.modelName)) {
+      logger.warn(`Using unknown Mistral embedding model: ${this.modelName}`);
+    }
     this.config = config || {};
     this.env = env;
   }

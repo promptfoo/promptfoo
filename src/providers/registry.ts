@@ -786,7 +786,10 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new MistralEmbeddingProvider(providerOptions);
+        return new MistralEmbeddingProvider({
+          ...providerOptions,
+          modelName: modelName || undefined,
+        });
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
     },

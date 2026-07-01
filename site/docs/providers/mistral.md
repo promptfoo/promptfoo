@@ -69,6 +69,7 @@ providers:
       n: 1 # Number of completions
       reasoning_effort: high # high | none on adjustable reasoning models
       prompt_mode: reasoning # reasoning | null on native reasoning models
+      prompt_cache_key: shared-prefix # Reuse Mistral's server-side prompt cache across requests
 ```
 
 `safe_prompt` is still accepted for compatibility, but Mistral now recommends inline
@@ -186,35 +187,54 @@ You can specify which Mistral model to use in your configuration. The following 
 
 #### Current Models
 
-| Model                     | Context | Input Price | Output Price | Best For                               |
-| ------------------------- | ------- | ----------- | ------------ | -------------------------------------- |
-| `mistral-medium-3.5`      | 256k    | $1.50/1M    | $7.50/1M     | Agentic and coding-heavy workloads     |
-| `mistral-large-latest`    | 256k    | $0.50/1M    | $1.50/1M     | General-purpose multimodal tasks       |
-| `mistral-medium-latest`   | 128k    | $0.40/1M    | $2.00/1M     | Balanced multimodal workloads          |
-| `mistral-small-latest`    | 128k    | $0.10/1M    | $0.30/1M     | Cost-sensitive general tasks           |
-| `mistral-small-2603`      | 256k    | $0.15/1M    | $0.60/1M     | Hybrid instruct, reasoning, and coding |
-| `codestral-latest`        | 128k    | $0.30/1M    | $0.90/1M     | Code generation and FIM                |
-| `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning                       |
-| `open-mistral-nemo-2407`  | 128k    | $0.15/1M    | $0.15/1M     | Multilingual and research workloads    |
-| `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Compact multimodal deployments         |
+| Model                     | Context | Input Price | Output Price | Best For (resolves to)                                    |
+| ------------------------- | ------- | ----------- | ------------ | --------------------------------------------------------- |
+| `mistral-medium-latest`   | 256k    | $1.50/1M    | $7.50/1M     | Agentic and coding-heavy workloads (Medium 3.5, `-2604`)  |
+| `mistral-large-latest`    | 256k    | $0.50/1M    | $1.50/1M     | General-purpose multimodal tasks (Large 3, `-2512`)       |
+| `mistral-small-latest`    | 256k    | $0.15/1M    | $0.60/1M     | Hybrid instruct, reasoning, and coding (Small 4, `-2603`) |
+| `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning (Magistral Medium, `-2509`)              |
+| `codestral-latest`        | 256k    | $0.30/1M    | $0.90/1M     | Code generation and FIM (`codestral-2508`)                |
+| `devstral-medium-latest`  | 256k    | $0.40/1M    | $2.00/1M     | Software-engineering agents (Devstral 2, `devstral-2512`) |
+| `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Compact multimodal deployments                            |
+| `ministral-8b-latest`     | 256k    | $0.15/1M    | $0.15/1M     | Efficient on-prem/edge deployments                        |
+| `ministral-3b-latest`     | 128k    | $0.10/1M    | $0.10/1M     | Smallest multimodal deployments                           |
+| `open-mistral-nemo`       | 128k    | $0.15/1M    | $0.15/1M     | Multilingual and research workloads                       |
+
+:::note
+
+`*-latest` and bare aliases follow whatever snapshot Mistral currently points them at, so
+their price tracks the resolved model. Both `mistral-medium-latest` and bare `mistral-medium`
+now resolve to Mistral Medium 3.5, and `magistral-small-latest` was folded into Mistral Small 4.
+Pin a dated snapshot (e.g. `mistral-medium-2604`) for stable pricing and behavior.
+
+:::
 
 #### Legacy Models (Deprecated)
 
 1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312`
 2. `mistral-tiny-2407`, `mistral-tiny-latest`
 3. `mistral-small-2402`
-4. `mistral-medium-2312`, `mistral-medium`
+4. `mistral-medium-2312` (bare `mistral-medium` now resolves to Mistral Medium 3.5)
 5. `mistral-large-2402`
 6. `mistral-large-2407`
 7. `codestral-2405`
 8. `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest`
 9. `open-mixtral-8x7b`, `mistral-small`, `mistral-small-2312`
 10. `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`
-11. `magistral-small-latest`, `magistral-small-2509` - deprecated after April 30, 2026
+11. `magistral-small-2506`, `magistral-small-2507`, `magistral-small-2509` - reasoning snapshots deprecated after April 30, 2026 (`magistral-small-latest` now resolves to Mistral Small 4)
 
-### Embedding Model
+### Embedding Models
 
 - `mistral-embed` - $0.10/1M tokens - 8k context
+- `codestral-embed` (`codestral-embed-2505`) - $0.15/1M tokens - code-optimized embeddings
+
+Select an embedding model with the `mistral:embedding:` prefix:
+
+```yaml
+providers:
+  - mistral:embedding:mistral-embed
+  - mistral:embedding:codestral-embed
+```
 
 Here's an example config that compares different Mistral models:
 
