@@ -187,6 +187,7 @@ const redTeamSidebar = [
         items: [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
+          'red-team/strategies/odcv',
           'red-team/strategies/mischievous-user',
         ],
       },

@@ -37,7 +37,7 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 
 ### Mode 2: Agentic + Per-Turn Transforms
 
-When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:
+When the **first step** is an agentic strategy (hydra, crescendo, goat, odcv, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:
 
 1. **Agentic Orchestration**: The agentic strategy controls the attack loop
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
@@ -72,7 +72,7 @@ redteam:
 
 ## Ordering Rules
 
-Agentic strategies (hydra, crescendo, goat, jailbreak) must come first (max 1), and multi-modal strategies (audio, image) must come last (max 1). Text transforms (base64, rot13, leetspeak) can be chained in between.
+Agentic strategies (hydra, crescendo, goat, odcv, jailbreak) must come first (max 1), and multi-modal strategies (audio, image) must come last (max 1). Text transforms (base64, rot13, leetspeak) can be chained in between.
 
 ### Valid Patterns
 
@@ -446,6 +446,7 @@ The following strategies can be used as the first step with per-turn transforms:
 | `jailbreak:hydra` | Multi-turn    | Branching conversation attack     |
 | `crescendo`       | Multi-turn    | Gradual escalation attack         |
 | `goat`            | Multi-turn    | Goal-oriented adversarial testing |
+| `odcv`            | Multi-turn    | Business-pressure attack testing  |
 | `custom`          | Multi-turn    | Custom multi-turn strategy        |
 | `jailbreak`       | Multi-attempt | Iterative single-turn attempts    |
 | `jailbreak:meta`  | Multi-attempt | Meta-agent attack generation      |

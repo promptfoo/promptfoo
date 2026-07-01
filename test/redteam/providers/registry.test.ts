@@ -53,6 +53,7 @@ describe('redteamProviderFactories', () => {
     { path: 'promptfoo:redteam:custom', expectedId: 'promptfoo:redteam:custom' },
     { path: 'promptfoo:redteam:custom:my-strategy', expectedId: 'promptfoo:redteam:custom' },
     { path: 'promptfoo:redteam:goat', expectedId: 'promptfoo:redteam:goat' },
+    { path: 'promptfoo:redteam:odcv', expectedId: 'promptfoo:redteam:odcv' },
     { path: 'promptfoo:redteam:hydra', expectedId: 'promptfoo:redteam:hydra' },
     {
       path: 'promptfoo:redteam:indirect-web-pwn',
@@ -112,6 +113,7 @@ describe('redteamProviderFactories', () => {
       'promptfoo:redteam:crescendo',
       'promptfoo:redteam:custom',
       'promptfoo:redteam:custom:my-strategy',
+      'promptfoo:redteam:odcv',
     ])('dispatches %s to at least one factory', (path) => {
       const factory = redteamProviderFactories.find((f) => f.test(path));
       expect(factory).toBeDefined();

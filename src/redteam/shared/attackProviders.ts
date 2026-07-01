@@ -36,6 +36,7 @@ export const ATTACK_PROVIDER_IDS = [
   'hydra', // jailbreak:hydra
   'crescendo',
   'goat',
+  'odcv',
   'custom',
   // Multi-attempt single-turn (direct transform, no history)
   'iterative', // jailbreak (base)
