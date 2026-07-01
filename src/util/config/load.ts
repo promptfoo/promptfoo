@@ -331,7 +331,13 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const configContents = await fsPromises.readFile(configPath, 'utf-8');
-    const rawConfig = configContents.trim() === '' ? {} : (yaml.load(configContents) ?? {});
+    const rawConfig =
+      configContents.trim() === ''
+        ? {}
+        : (yaml.load(configContents, {
+            // Preserve js-yaml v4's support for YAML merge keys in user configs.
+            schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
+          }) ?? {});
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
