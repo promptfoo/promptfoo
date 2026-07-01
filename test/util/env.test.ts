@@ -2,6 +2,8 @@ import * as fs from 'fs';
 
 import dotenv from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import logger from '../../src/logger';
+import * as configManage from '../../src/util/config/manage';
 import {
   getConfigDirectoryPath,
   refreshConfigDirectoryPathFromEnv,
@@ -23,6 +25,7 @@ describe('setupEnv', () => {
   let dotenvConfigSpy: MockInstance<
     (options?: dotenv.DotenvConfigOptions) => dotenv.DotenvConfigOutput
   >;
+  let loggerInfoSpy: MockInstance;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
@@ -33,6 +36,7 @@ describe('setupEnv', () => {
     setConfigDirectoryPath(undefined);
     // Spy on dotenv.config to verify it's called with the right parameters
     dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     // Mock file existence check - default to true for backward compat with existing tests
     vi.mocked(fs.existsSync).mockReturnValue(true);
   });
@@ -62,6 +66,7 @@ describe('setupEnv', () => {
       override: true,
       quiet: true,
     });
+    expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env.test');
   });
 
   it('should load environment variables with override when specified env file has conflicting values', async () => {
@@ -92,12 +97,14 @@ describe('setupEnv', () => {
   });
 
   it('should refresh the config directory after early env loading and freeze later changes', () => {
+    const refreshConfigDirectorySpy = vi.spyOn(configManage, 'refreshConfigDirectoryPathFromEnv');
     dotenvConfigSpy.mockImplementation(() => {
       mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/early/config' });
       return { parsed: {} };
     });
 
     setupEnv('.env.early', { refreshConfigDirectory: true });
+    expect(refreshConfigDirectorySpy).toHaveBeenCalledTimes(1);
     expect(getConfigDirectoryPath()).toBe('/early/config');
 
     mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/late/config' });
@@ -116,6 +123,9 @@ describe('setupEnv', () => {
         override: true,
         quiet: true,
       });
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'Loading environment variables from: .env, .env.local',
+      );
     });
 
     it('should call dotenv.config with single path (not array) when one file specified as array', () => {
@@ -129,6 +139,7 @@ describe('setupEnv', () => {
         override: true,
         quiet: true,
       });
+      expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env');
     });
 
     it('should throw error when specified file does not exist', () => {
@@ -160,6 +171,7 @@ describe('setupEnv', () => {
         override: true,
         quiet: true,
       });
+      expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env');
     });
 
     it('should call default dotenv.config when array contains only empty strings', () => {
