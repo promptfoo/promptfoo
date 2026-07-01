@@ -10,7 +10,7 @@ function getSheetIndex(sheetSpecifier: string | undefined, sheetNames: string[])
   // when the whole string is numeric; otherwise it's a sheet name. parseInt would
   // prefix-parse names like "2024-Q1" or "1H" into a number and mis-route them.
   const trimmedSpecifier = sheetSpecifier.trim();
-  const parsedSheetIndex = /^-?\d+$/.test(trimmedSpecifier) ? Number(trimmedSpecifier) : NaN;
+  const parsedSheetIndex = /^[+-]?\d+$/.test(trimmedSpecifier) ? Number(trimmedSpecifier) : NaN;
   if (isNaN(parsedSheetIndex)) {
     // It's a sheet name
     const sheetIndex = sheetNames.indexOf(sheetSpecifier) + 1;

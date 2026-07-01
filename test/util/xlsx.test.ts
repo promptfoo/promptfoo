@@ -170,6 +170,23 @@ describe('parseXlsxFile', () => {
       expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
     });
 
+    it('should select sheet by index when the index has a leading plus sign', async () => {
+      const mockRows = [
+        ['col1', 'col2'],
+        ['sheet2data', 'value2'],
+      ];
+
+      mockReadXlsxFile.mockResolvedValue([
+        createMockSheet('Sheet1'),
+        createMockSheet('Sheet2', mockRows),
+      ]);
+
+      const result = await parseXlsxFile('test.xlsx#+2');
+
+      expect(result).toEqual([{ col1: 'sheet2data', col2: 'value2' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
+    });
+
     it('should throw error when sheet name does not exist', async () => {
       mockReadXlsxFile.mockResolvedValue([
         createMockSheet('Sheet1'),
@@ -242,7 +259,11 @@ describe('parseXlsxFile', () => {
       expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
     });
 
-    it('should select sheet by name when the name starts with digits', async () => {
+    it.each([
+      '2024-Q1',
+      '1H-results',
+      '2.9',
+    ])('should select sheet by name when the name starts with digits: %s', async (sheetName) => {
       const mockRows = [
         ['col1', 'col2'],
         ['data', 'value'],
@@ -250,12 +271,10 @@ describe('parseXlsxFile', () => {
 
       mockReadXlsxFile.mockResolvedValue([
         createMockSheet('Summary'),
-        createMockSheet('2024-Q1', mockRows),
-        createMockSheet('1H-results'),
+        createMockSheet(sheetName, mockRows),
       ]);
 
-      // parseInt('2024-Q1') is 2024, so this used to be treated as an index.
-      const result = await parseXlsxFile('test.xlsx#2024-Q1');
+      const result = await parseXlsxFile(`test.xlsx#${sheetName}`);
 
       expect(result).toEqual([{ col1: 'data', col2: 'value' }]);
       expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');

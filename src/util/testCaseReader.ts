@@ -35,7 +35,6 @@ type StandaloneTestsFileMetadata = {
   pathWithoutFunction: string;
   maybeFunctionName: string | undefined;
   fileExtension: string;
-  extensionWithoutSheet: string;
 };
 
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
@@ -179,13 +178,8 @@ async function readLocalStandaloneTestsFile(
   basePath: string,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
-  const {
-    resolvedVarsPath,
-    pathWithoutFunction,
-    maybeFunctionName,
-    fileExtension,
-    extensionWithoutSheet,
-  } = getStandaloneTestsFileMetadata(varsPath, basePath);
+  const { resolvedVarsPath, pathWithoutFunction, maybeFunctionName, fileExtension } =
+    getStandaloneTestsFileMetadata(varsPath, basePath);
 
   if (isJavascriptFile(pathWithoutFunction)) {
     telemetry.record('feature_used', {
@@ -206,7 +200,7 @@ async function readLocalStandaloneTestsFile(
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
   }
-  if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
+  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -265,16 +259,16 @@ function getStandaloneTestsFileMetadata(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
-  const extensionWithoutSheet = fileExtension.split('#')[0];
+  // Remove an xlsx/xls sheet specifier before detecting the file extension. Sheet names can
+  // contain dots, so parsing the extension first would misread `file.xlsx#2.9` as a `.9` file.
+  const pathWithoutSheet = pathWithoutFunction.split('#')[0];
+  const fileExtension = parsePath(pathWithoutSheet).ext.slice(1);
 
   return {
     resolvedVarsPath,
     pathWithoutFunction,
     maybeFunctionName,
     fileExtension,
-    extensionWithoutSheet,
   };
 }
 

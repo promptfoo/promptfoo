@@ -1595,6 +1595,18 @@ describe('readTests', () => {
     expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
   });
 
+  it('should handle xlsx sheet names containing dots in array format', async () => {
+    const mockData = [{ name: 'decimal-sheet', value: 'result' }];
+    const parseXlsxFileMock = vi.fn().mockResolvedValue(mockData);
+    mockParseXlsxFileState.implementation = parseXlsxFileMock;
+
+    const result = await readTests(['file://test.xlsx#2.9']);
+
+    expect(parseXlsxFileMock).toHaveBeenCalledWith(expect.stringContaining('test.xlsx#2.9'));
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ name: 'decimal-sheet', value: 'result' });
+  });
+
   it('should handle xls files in array format', async () => {
     // Mock parseXlsxFile to return processed CsvRow[] data
     const mockData = [{ col1: 'data1', col2: 'data2' }];
