@@ -380,6 +380,46 @@ describe('evaluator', () => {
       expect(summary?.passRate).toBe(100);
     });
 
+    it('preserves metric-derived test counts after a partial persistence failure', async () => {
+      const eval_ = await Eval.create({}, [], {
+        completedPrompts: [
+          createCompletedPrompt('prompt zero', {
+            metrics: createPromptMetrics({
+              score: 2,
+              testPassCount: 2,
+              testFailCount: 0,
+              testErrorCount: 0,
+            }),
+          }),
+        ],
+      });
+      await eval_.setResults([
+        new EvalResult({
+          id: `partial-${eval_.id}`,
+          evalId: eval_.id,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: {} },
+          prompt: { raw: 'prompt zero', label: 'prompt zero' },
+          provider: { id: 'test-provider' },
+          response: { output: 'persisted result' },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        }),
+      ]);
+
+      const summary = (await getEvalSummaries()).find((row) => row.evalId === eval_.id);
+
+      expect(summary?.numTests).toBe(2);
+      expect(summary?.passRate).toBe(100);
+    });
+
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();

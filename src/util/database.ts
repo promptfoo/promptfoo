@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -645,11 +645,11 @@ async function recomputeDerivedMetrics(
   }
 
   for (const metric of derivedMetrics) {
+    if (typeof metric.value !== 'string') {
+      continue;
+    }
     try {
-      const value =
-        typeof metric.value === 'function'
-          ? metric.value(evalContext, {} as Parameters<typeof metric.value>[1])
-          : math.evaluate(metric.value, evalContext);
+      const value = math.evaluate(metric.value, evalContext);
       if (isFiniteNumber(value)) {
         metrics.namedScores[metric.name] = value;
         evalContext[metric.name] = value;
@@ -717,11 +717,74 @@ function valueUsesBlobHash(
   );
 }
 
-function resultUsesBlobHash(result: BlobUsageResult, blobHash: string): boolean {
+function resultMentionsBlobHash(result: BlobUsageResult, blobHash: string): boolean {
   const normalizedBlobHash = blobHash.toLowerCase();
   return [result.response, result.testCase, result.metadata, result.gradingResult].some((value) =>
     valueUsesBlobHash(value, normalizedBlobHash),
   );
+}
+
+function valueUsesStructuredBlobRef(
+  value: unknown,
+  blobHash: string,
+  visited = new WeakSet<object>(),
+  depth = 0,
+): boolean {
+  if (depth > BLOB_SCAN_MAX_DEPTH || !value || typeof value !== 'object') {
+    return false;
+  }
+  if (visited.has(value)) {
+    return false;
+  }
+  visited.add(value);
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.hash === 'string' &&
+    candidate.hash.toLowerCase() === blobHash &&
+    typeof candidate.uri === 'string' &&
+    candidate.uri.toLowerCase() === `${BLOB_URI_PREFIX}${blobHash}` &&
+    typeof candidate.mimeType === 'string' &&
+    typeof candidate.sizeBytes === 'number' &&
+    Number.isFinite(candidate.sizeBytes) &&
+    typeof candidate.provider === 'string'
+  ) {
+    return true;
+  }
+
+  return Object.values(candidate).some((child) =>
+    valueUsesStructuredBlobRef(child, blobHash, visited, depth + 1),
+  );
+}
+
+function resultUsesStructuredBlobRef(result: BlobUsageResult, blobHash: string): boolean {
+  const normalizedBlobHash = blobHash.toLowerCase();
+  return [result.response, result.testCase, result.metadata, result.gradingResult].some((value) =>
+    valueUsesStructuredBlobRef(value, normalizedBlobHash),
+  );
+}
+
+async function traceUsesBlobHash(
+  tx: DatabaseTransaction,
+  evalId: string,
+  blobHash: string,
+): Promise<boolean> {
+  const uriPattern = `%${BLOB_URI_PREFIX}${blobHash.toLowerCase()}%`;
+  const row = await tx
+    .select({ id: tracesTable.id })
+    .from(tracesTable)
+    .leftJoin(spansTable, eq(spansTable.traceId, tracesTable.traceId))
+    .where(
+      and(
+        eq(tracesTable.evaluationId, evalId),
+        or(
+          sql`lower(cast(${tracesTable.metadata} as text)) like ${uriPattern}`,
+          sql`lower(cast(${spansTable.attributes} as text)) like ${uriPattern}`,
+        ),
+      ),
+    )
+    .get();
+  return Boolean(row);
 }
 
 async function findSurvivingResultUsingBlobHash(
@@ -761,7 +824,9 @@ async function findSurvivingResultUsingBlobHash(
       .offset(offset)
       .all();
 
-    const match = rows.find((survivingResult) => resultUsesBlobHash(survivingResult, blobHash));
+    const match = rows.find((survivingResult) =>
+      resultUsesStructuredBlobRef(survivingResult, blobHash),
+    );
     if (match || rows.length < BLOB_SURVIVOR_SCAN_BATCH_SIZE) {
       return match;
     }
@@ -817,7 +882,12 @@ async function updatePromptMetricsForDeletedResult(
   const survivingAssertionCounts = resultAssertionCounts
     ? undefined
     : getSurvivingAssertionCounts(survivingPromptResults ?? []);
-  const survivingAssertionTokenUsage = shouldRecomputeAssertionTokenUsage
+  const canRecomputeAssertionTokenUsage =
+    shouldRecomputeAssertionTokenUsage &&
+    (survivingPromptResults ?? []).every(
+      (survivingResult) => survivingResult.gradingResult != null,
+    );
+  const survivingAssertionTokenUsage = canRecomputeAssertionTokenUsage
     ? recomputeAssertionTokenUsageFromResults(survivingPromptResults ?? [])
     : undefined;
   const survivingNamedMetricResults =
@@ -886,7 +956,7 @@ async function cleanupBlobReferencesForDeletedResult(
 
   for (const blobReference of blobReferences) {
     const isEvalLevelReference = blobReference.testIdx === null && blobReference.promptIdx === null;
-    if (isEvalLevelReference && !resultUsesBlobHash(result, blobReference.blobHash)) {
+    if (isEvalLevelReference && !resultMentionsBlobHash(result, blobReference.blobHash)) {
       continue;
     }
 
@@ -914,6 +984,14 @@ async function cleanupBlobReferencesForDeletedResult(
             testIdx: survivingBlobResult.testIdx,
             promptIdx: survivingBlobResult.promptIdx,
           })
+          .where(eq(blobReferencesTable.id, blobReference.id))
+          .run();
+      }
+    } else if (await traceUsesBlobHash(tx, evalId, blobReference.blobHash)) {
+      if (!isEvalLevelReference) {
+        await tx
+          .update(blobReferencesTable)
+          .set({ testIdx: null, promptIdx: null, location: 'trace' })
           .where(eq(blobReferencesTable.id, blobReference.id))
           .run();
       }

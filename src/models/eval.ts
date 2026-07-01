@@ -1814,9 +1814,11 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    const testCount =
-      distinctTestCountsByEvalId.get(result.evalId) ??
-      (testCounts.length > 0 ? Math.max(...testCounts) : 0);
+    const metricDerivedTestCount = testCounts.length > 0 ? Math.max(...testCounts) : 0;
+    const testCount = Math.max(
+      distinctTestCountsByEvalId.get(result.evalId) ?? 0,
+      metricDerivedTestCount,
+    );
     const testRunCount = testCounts.reduce((sum, count) => sum + count, 0);
 
     // Construct an array of providers

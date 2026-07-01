@@ -495,6 +495,51 @@ describe('database eval deletion', () => {
       ]);
     });
 
+    it('does not transfer trusted blob provenance to copied URI text', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const db = await getDb();
+      const blobHash = 'e'.repeat(64);
+      const blobRef = {
+        hash: blobHash,
+        uri: `promptfoo://blob/${blobHash}`,
+        mimeType: 'image/png',
+        sizeBytes: 123,
+        provider: 'test-provider',
+      };
+      await db.insert(blobAssetsTable).values({
+        hash: blobHash,
+        sizeBytes: 123,
+        mimeType: 'image/png',
+        provider: 'test-provider',
+      });
+      await db.insert(blobReferencesTable).values({
+        id: 'trusted-blob-ref',
+        blobHash,
+        evalId: eval_.id,
+        testIdx: target.testIdx,
+        promptIdx: target.promptIdx,
+        location: 'response.images[0].blobRef',
+        kind: 'image',
+      });
+      await dbUpdateResult(target.id, {
+        response: {
+          ...target.response,
+          images: [{ blobRef }],
+        },
+      });
+      await dbUpdateResult(survivor.id, {
+        response: {
+          ...survivor.response,
+          output: `copied text: ${blobRef.uri}`,
+        },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(await db.select().from(blobReferencesTable).all()).toHaveLength(0);
+    });
+
     it('removes same-cell blob references when the survivor does not use that blob', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
       const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
@@ -557,6 +602,50 @@ describe('database eval deletion', () => {
       await deleteEvalResult(eval_.id, target.id);
 
       expect(await db.select().from(blobReferencesTable).all()).toHaveLength(0);
+    });
+
+    it('keeps imported blob references used by surviving traces', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const db = await getDb();
+      const blobHash = 'f'.repeat(64);
+      const blobUri = `promptfoo://blob/${blobHash}`;
+      await db.insert(blobAssetsTable).values({
+        hash: blobHash,
+        sizeBytes: 123,
+        mimeType: 'image/png',
+        provider: 'test-provider',
+      });
+      await db.insert(blobReferencesTable).values({
+        id: 'trace-imported-blob-ref',
+        blobHash,
+        evalId: eval_.id,
+        location: 'import',
+        kind: 'image',
+      });
+      await dbUpdateResult(target.id, {
+        response: {
+          ...target.response,
+          output: `![imported](${blobUri})`,
+        },
+      });
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: 'trace-with-imported-blob',
+        evaluationId: eval_.id,
+        testCaseId: 'trace-media-case',
+        metadata: { attachment: blobUri },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(await db.select().from(blobReferencesTable).all()).toEqual([
+        expect.objectContaining({
+          id: 'trace-imported-blob-ref',
+          blobHash,
+          evalId: eval_.id,
+        }),
+      ]);
     });
 
     it('scans surviving blob usage in bounded batches', async () => {
@@ -631,6 +720,42 @@ describe('database eval deletion', () => {
       const after = await Eval.findById(eval_.id);
       expect(after?.prompts[0]?.metrics?.namedScores?.accuracy).toBeCloseTo(0.7, 5);
       expect(after?.prompts[0]?.metrics?.namedScores?.accuracy_avg).toBeCloseTo(0.7, 5);
+    });
+
+    it('preserves function-derived metrics that cannot round-trip through persisted config', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.config = {
+        ...reloaded.config,
+        derivedMetrics: [
+          {
+            name: 'runtime_only_metric',
+            value: () => 42,
+          },
+        ],
+      };
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            namedScores: {
+              ...reloaded.prompts[0].metrics?.namedScores,
+              runtime_only_metric: 42,
+            },
+          },
+        },
+      ];
+      await reloaded.save();
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      expect(after?.prompts[0]?.metrics?.namedScores?.runtime_only_metric).toBe(42);
     });
 
     it('preserves assertion debits when grading results were stripped before storage', async () => {
@@ -717,6 +842,51 @@ describe('database eval deletion', () => {
         completion: 4,
         cached: 0,
         numRequests: 1,
+      });
+    });
+
+    it('does not erase assertion token usage when every surviving grading result was stripped', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              assertions: {
+                total: 21,
+                prompt: 11,
+                completion: 10,
+                cached: 0,
+                numRequests: 2,
+              },
+            },
+          },
+        },
+      ];
+      await reloaded.save();
+      for (const result of [target, survivor]) {
+        await dbUpdateResult(result.id, { gradingResult: null });
+      }
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      expect(after?.prompts[0]?.metrics?.tokenUsage?.assertions).toMatchObject({
+        total: 21,
+        prompt: 11,
+        completion: 10,
+        cached: 0,
+        numRequests: 2,
       });
     });
 
