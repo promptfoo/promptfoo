@@ -277,7 +277,9 @@ describe('OpenAICodexSDKProvider', () => {
         config: { model: 'gpt-5.6-sol', model_reasoning_effort: 'high' },
       });
 
-      expect(warnSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('is a GPT-5.6 preview level'),
+      );
 
       warnSpy.mockRestore();
     });

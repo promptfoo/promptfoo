@@ -30,6 +30,7 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
+import { warnIfPreviewReasoningEffort } from './codexReasoning';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -703,18 +704,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
 
-    if (
-      this.config.model_reasoning_effort === 'max' ||
-      this.config.model_reasoning_effort === 'ultra'
-    ) {
-      logger.warn(
-        `[CodexSDK] Reasoning effort '${this.config.model_reasoning_effort}' is a GPT-5.6 preview level. ` +
-          'It only takes effect when the installed Codex runtime recognizes the selected model for your ' +
-          'account; if the runtime model catalog lacks GPT-5.6, Codex silently falls back to its default ' +
-          'reasoning and this value is ignored (no error is raised). Confirm the effective reasoning via ' +
-          "request tracing, or use the Responses API (openai:responses:gpt-5.6-sol) for 'max'.",
-      );
-    }
+    warnIfPreviewReasoningEffort(this.config.model_reasoning_effort, '[CodexSDK]');
   }
 
   id(): string {

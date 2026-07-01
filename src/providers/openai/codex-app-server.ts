@@ -25,6 +25,7 @@ import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
+import { warnIfPreviewReasoningEffort } from './codexReasoning';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -1105,18 +1106,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.providerId = options.id ?? this.providerId;
     providerRegistry.register(this);
 
-    if (
-      this.config.model_reasoning_effort === 'max' ||
-      this.config.model_reasoning_effort === 'ultra'
-    ) {
-      logger.warn(
-        `[CodexAppServer] Reasoning effort '${this.config.model_reasoning_effort}' is a GPT-5.6 preview level. ` +
-          'It only takes effect when the installed Codex runtime recognizes the selected model for your ' +
-          'account; if the runtime model catalog lacks GPT-5.6, Codex silently falls back to its default ' +
-          'reasoning and this value is ignored (no error is raised). Confirm the effective reasoning via ' +
-          "request tracing, or use the Responses API (openai:responses:gpt-5.6-sol) for 'max'.",
-      );
-    }
+    warnIfPreviewReasoningEffort(this.config.model_reasoning_effort, '[CodexAppServer]');
   }
 
   id(): string {
