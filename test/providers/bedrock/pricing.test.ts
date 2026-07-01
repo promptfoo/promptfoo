@@ -91,6 +91,30 @@ describe('calculateBedrockCost', () => {
     );
   });
 
+  it('prices Claude Sonnet 5 at standard base rates at or below 200k tokens', () => {
+    // $3/MTok input, $15/MTok output — matches Sonnet 4.6 base pricing.
+    expect(calculateBedrockCost('anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+      6,
+    );
+  });
+
+  it('uses Claude Sonnet 5 long-context rates above 200k effective input tokens', () => {
+    expect(calculateBedrockCost('anthropic.claude-sonnet-5', 200_001, 1_000)).toBeCloseTo(
+      (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+      6,
+    );
+  });
+
+  it('applies the regional (non-global) premium to Claude Sonnet 5 base rates', () => {
+    // Sonnet 5 is not a Fable/Mythos model, so the 10% Claude 5 regional premium
+    // does not apply — a `us.` profile bills at the same base rate as the bare ID.
+    expect(calculateBedrockCost('us.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+      6,
+    );
+  });
+
   it.each([
     'mistral.mistral-large-3-675b-instruct',
     'qwen.qwen3-coder-480b-a35b-v1:0',

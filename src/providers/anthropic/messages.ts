@@ -29,6 +29,7 @@ import {
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeSonnet5Model,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -598,6 +599,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // controls reasoning depth on these models.
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
+    const isSonnet5 = isClaudeSonnet5Model(this.modelName);
     let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
     if (
       samplingParamsDeprecated &&
@@ -607,7 +609,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.warn(
         alwaysOnAdaptiveThinking
           ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
-          : 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
+          : isSonnet5
+            ? 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Sonnet 5 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.'
+            : 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
       );
       this.manualThinkingConversionWarned = true;
     }
@@ -707,7 +711,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.warn(
         alwaysOnAdaptiveThinking
           ? 'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5 and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
-          : 'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+          : isSonnet5
+            ? 'temperature is deprecated on Claude Sonnet 5 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
+            : 'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
       );
       this.samplingParamsDeprecationWarned = true;
     }

@@ -8,6 +8,7 @@ import {
   isClaudeFableOrMythos5Model,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
+  isClaudeSonnet5Model,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
@@ -211,6 +212,22 @@ describe('Anthropic utilities', () => {
     it('should calculate tiered cost for Claude Sonnet 4.6 latest alias', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
       expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+    });
+
+    it('should calculate default cost for Claude Sonnet 5 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 5 with prompt <= 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 5 with prompt > 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
+      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
+      expect(cost).toBe(2.25);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
@@ -1898,6 +1915,40 @@ describe('Anthropic utilities', () => {
       for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
+    });
+
+    it('detects Claude Sonnet 5 across provider naming schemes', () => {
+      for (const id of [
+        'claude-sonnet-5',
+        'anthropic:messages:claude-sonnet-5',
+        'anthropic.claude-sonnet-5',
+        'us.anthropic.claude-sonnet-5',
+        'eu.anthropic.claude-sonnet-5',
+        'apac.anthropic.claude-sonnet-5',
+        'global.anthropic.claude-sonnet-5',
+        // A trailing date snapshot is a real, supported form and must match.
+        'claude-sonnet-5-20260630',
+      ]) {
+        expect(isClaudeSonnet5Model(id)).toBe(true);
+        // Sonnet 5 deprecates sampling params (verified against the live API)...
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+        // ...but is NOT always-on adaptive thinking (thinking can still be disabled).
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('does not treat Sonnet 4.x or hypothetical Sonnet 50 as Sonnet 5', () => {
+      for (const id of [
+        'claude-sonnet-4-5',
+        'claude-sonnet-4-5-20250929',
+        'claude-sonnet-4-6',
+        // Boundary: a hypothetical higher-numbered "50" must not match "5".
+        'claude-sonnet-50',
+      ]) {
+        expect(isClaudeSonnet5Model(id)).toBe(false);
+      }
+      // Sonnet 4.5/4.6 keep sampling-param support.
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-sonnet-4-6')).toBe(false);
     });
   });
 });

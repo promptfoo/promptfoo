@@ -24,6 +24,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
+  // Claude Sonnet 5 (standard list pricing; long-context >200k handled below)
+  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4/4.5
   'anthropic.claude-sonnet-4': { input: 3, output: 15 },
   // Claude Haiku 4.5
@@ -375,7 +377,7 @@ export function calculateBedrockCost(
 
   const normalizedModelId = modelId.toLowerCase();
   const isLongContextClaudeSonnet =
-    /anthropic\.claude-sonnet-4-(?:5|6)(?!\d)/.test(normalizedModelId) &&
+    /anthropic\.claude-sonnet-(?:4-[56]|5)(?!\d)/.test(normalizedModelId) &&
     promptTokens + cacheReadTokens + cacheWriteTokens > 200_000;
   const pricing = isLongContextClaudeSonnet
     ? { input: 6, output: 22.5 }

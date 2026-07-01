@@ -22,6 +22,17 @@ export const ANTHROPIC_MODELS = [
       output: 50 / 1e6, // $50 / MTok
     },
   })),
+  // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
+  // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
+  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. Long-context
+  // (>200k) tiered pricing is handled by `hasTieredPricing` in calculateAnthropicCost.
+  ...['claude-sonnet-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6, // $3 / MTok
+      output: 15 / 1e6, // $15 / MTok
+    },
+  })),
   // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
   ...['claude-mythos-preview'].map((model) => ({
     id: model,
@@ -189,6 +200,19 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
   return /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i.test(modelId);
 }
 
+/**
+ * Matches Claude Sonnet 5 model IDs across Anthropic, Bedrock (including the
+ * `us.`/`eu.`/`apac.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * deployment names. The trailing `(?![0-9])` guard keeps a hypothetical
+ * higher-numbered `claude-sonnet-50` from matching "sonnet 5" while still
+ * matching dated snapshots like `claude-sonnet-5-20260630`. Note this does NOT
+ * match `claude-sonnet-4-5` (that literal substring is `sonnet-4-5`, not
+ * `sonnet-5`), so the 4.5 line keeps its own behavior.
+ */
+export function isClaudeSonnet5Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i.test(modelId);
+}
+
 export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean {
   return isClaudeFableOrMythos5Model(modelId);
 }
@@ -198,19 +222,24 @@ export function normalizeAnthropicModelName(modelName: string): string {
 }
 
 /**
- * Claude Opus 4.7+ and Claude 5 Fable/Mythos deprecate manual sampling controls
- * at the model level
+ * Claude Opus 4.7+, Claude 5 Fable/Mythos, and Claude Sonnet 5 deprecate manual
+ * sampling controls at the model level
  * — `temperature`, `top_p`, and `top_k` are adaptive, and a request that pins
  * any of them returns 400 `invalid_request_error` (including promptfoo's
  * built-in `temperature` default of 0). Centralizes the "omit sampling params"
  * decision shared by the Anthropic, Bedrock, Vertex, and Azure providers so
  * support for future models lands in one place.
+ *
+ * NOTE: Sonnet 5 is included here (verified against the live Anthropic API,
+ * which rejects `temperature` for it) even though older Sonnet-tier models
+ * (4.5/4.6) still accept sampling params.
  */
 export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
   return (
     isClaudeOpus47Model(modelId) ||
     isClaudeOpus48Model(modelId) ||
-    isClaudeFableOrMythos5Model(modelId)
+    isClaudeFableOrMythos5Model(modelId) ||
+    isClaudeSonnet5Model(modelId)
   );
 }
 
@@ -479,6 +508,7 @@ export function calculateAnthropicCost(
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-6',
     'claude-sonnet-4-6-latest',
+    'claude-sonnet-5',
   ].includes(pricingModelName);
 
   if (hasTieredPricing) {
