@@ -341,7 +341,18 @@ async function askForPermissionToOverwrite({
   return hasPermissionToWrite;
 }
 
-export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
+interface InitProjectResult {
+  numPrompts: number;
+  providerPrefixes: string[];
+  action: string;
+  language: string;
+  outDirectory: string;
+}
+
+export async function createDummyFiles(
+  directory: string | null,
+  interactive: boolean = true,
+): Promise<InitProjectResult> {
   const outDirectory = directory || '.';
   const outDirAbsolute = path.join(process.cwd(), outDirectory);
 
@@ -436,6 +447,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         providerPrefixes: [],
         action: 'redteam',
         language: 'not_applicable',
+        outDirectory,
       };
     }
 

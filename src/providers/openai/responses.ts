@@ -149,44 +149,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
-  /**
-   * Model id used for OpenAI capability and billing lookups. Defaults to the request model
-   * name. Subclasses (e.g. Bedrock frontier models, which carry an `openai.` prefix) override
-   * this to strip a vendor prefix so gpt-5 / o-series detection and the billing tables still
-   * match, while the request itself still sends the real `this.modelName`.
-   */
-  protected getCapabilityModelName(): string {
-    return this.modelName;
-  }
-
-  protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    const model = this.getCapabilityModelName();
-    return model.startsWith('gpt-5') || model.includes('/gpt-5');
-  }
-
   protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName();
-    return (
-      model.startsWith('o1') ||
-      model.startsWith('o3') ||
-      model.startsWith('o4') ||
-      model.includes('/o1') ||
-      model.includes('/o3') ||
-      model.includes('/o4') ||
-      model === 'codex-mini-latest' ||
-      this.isGPT5Model()
-    );
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.getCapabilityModelName();
+    return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -565,7 +529,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         },
         timeout,
         'json',
-        context?.bustCache ?? context?.debug,
+        this.shouldBustCache(context),
         this.config.maxRetries,
       ));
 

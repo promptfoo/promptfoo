@@ -71,8 +71,14 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     expect(contexts[0]!.bustCache).toBeFalsy();
   });
 
-  it('isolates manual provider cache entries by repeat index', async () => {
+  it('isolates per-test repeat provider cache entries from the default namespace', async () => {
     await clearCache();
+
+    const baselineResponse: ProviderResponse = {
+      output: 'baseline-result',
+      tokenUsage: createEmptyTokenUsage(),
+    };
+    await getCache().set('manual-provider-key', baselineResponse);
 
     let cacheMissCount = 0;
     const provider: ApiProvider = {
@@ -103,11 +109,11 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{}],
+      tests: [{ options: { repeat: 2 } }],
     };
 
     const firstEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, firstEval, { maxConcurrency: 1, repeat: 2 });
+    await evaluate(testSuite, firstEval, { maxConcurrency: 1 });
     const firstSummary = await firstEval.toEvaluateSummary();
 
     expect(cacheMissCount).toBe(2);
@@ -118,7 +124,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     expect(firstSummary.results.map((result) => result.response?.cached)).toEqual([false, false]);
 
     const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, secondEval, { maxConcurrency: 1, repeat: 2 });
+    await evaluate(testSuite, secondEval, { maxConcurrency: 1 });
     const secondSummary = await secondEval.toEvaluateSummary();
 
     expect(cacheMissCount).toBe(2);
@@ -127,6 +133,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(secondSummary.results.map((result) => result.response?.cached)).toEqual([true, true]);
+    expect(await getCache().get('manual-provider-key')).toEqual(baselineResponse);
   });
 
   it('isolates beforeEach extension cache entries by repeat index', async () => {
