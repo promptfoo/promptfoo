@@ -985,17 +985,17 @@ describe('Provider Registry', () => {
     });
 
     it('should handle groq provider correctly', async () => {
-      const factory = providerMap.find((f) => f.test('groq:llama-3.3-70b-versatile'));
+      const factory = providerMap.find((f) => f.test('groq:openai/gpt-oss-120b'));
       expect(factory).toBeDefined();
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:llama-3.3-70b-versatile', groqOptions, {
+      const provider = await factory!.create('groq:openai/gpt-oss-120b', groqOptions, {
         ...mockContext,
         options: groqOptions,
       });
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('groq:llama-3.3-70b-versatile');
+      expect(provider.id()).toBe('groq:openai/gpt-oss-120b');
 
       // Test error case with missing model
       await expect(factory!.create('groq:', groqOptions, mockContext)).rejects.toThrow(
@@ -1030,7 +1030,7 @@ describe('Provider Registry', () => {
 
     it('should handle groq:responses provider correctly', async () => {
       // groq:responses: is handled by the same factory as groq:
-      const factory = providerMap.find((f) => f.test('groq:responses:llama-3.3-70b-versatile'));
+      const factory = providerMap.find((f) => f.test('groq:responses:openai/gpt-oss-120b'));
       expect(factory).toBeDefined();
 
       // Use options without id to verify the provider generates its own id

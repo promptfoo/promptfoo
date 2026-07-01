@@ -657,7 +657,7 @@ export const providerMap: ProviderFactory[] = [
         if (!modelName) {
           throw new Error(
             `Invalid groq:responses provider path: "${providerPath}". ` +
-              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+              'Use format groq:responses:<model> (e.g., groq:responses:openai/gpt-oss-120b)',
           );
         }
         return new GroqResponsesProvider(modelName, providerOptions);
@@ -668,7 +668,7 @@ export const providerMap: ProviderFactory[] = [
       if (!modelName) {
         throw new Error(
           `Invalid groq provider path: "${providerPath}". ` +
-            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+            'Use format groq:<model> (e.g., groq:openai/gpt-oss-120b)',
         );
       }
       return new GroqProvider(modelName, providerOptions);

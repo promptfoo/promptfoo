@@ -9,6 +9,12 @@ description: Configure Groq's ultra-fast LLM inference API for high-performance 
 
 Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 
+:::warning Model availability changes frequently
+
+Groq has deprecated its Llama chat models (including `llama-3.3-70b-versatile` and `llama-3.1-8b-instant`). For general-purpose and reasoning workloads, use `openai/gpt-oss-120b` or the smaller `openai/gpt-oss-20b`. Check the [Groq deprecations page](https://console.groq.com/docs/deprecations) for current shutdown dates before selecting a model.
+
+:::
+
 ## Quick Reference
 
 | Feature          | Description                                      | Provider Prefix   | Key Config          |
@@ -47,7 +53,7 @@ Configure the Groq provider in your promptfoo configuration file:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: groq:llama-3.3-70b-versatile
+  - id: groq:openai/gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 100
@@ -79,16 +85,34 @@ Key configuration options:
 
 ## Supported Models
 
-Groq provides access to models across several categories. For the current list of available models and their specifications, see the [Groq Models documentation](https://console.groq.com/docs/models).
+Groq provides access to models across several categories: reasoning models, agentic compound systems, multimodal (vision) models, speech models, and safety/guard models.
 
-### Model Categories
+:::info Model availability is authoritative on Groq's site
 
-- **Reasoning Models** - Models with chain-of-thought capabilities (e.g., GPT-OSS, Qwen, DeepSeek R1 variants)
-- **Compound Models** - Models with built-in tools for code execution and web search (`groq/compound`)
-- **Standard Chat Models** - General-purpose models (e.g., Llama variants)
-- **Long Context Models** - Models with extended context windows (100k+ tokens)
-- **Vision Models** - Multi-modal models that can process images
-- **Speech Models** - Whisper models for speech-to-text
+Groq updates its lineup frequently. The [Groq Models page](https://console.groq.com/docs/models) is always the source of truth for currently-available models and their specifications, and the [Groq deprecations page](https://console.groq.com/docs/deprecations) tracks models being retired. Treat the snapshot below as a convenience reference and verify against those pages before depending on a specific model.
+
+:::
+
+### Current models
+
+| Model ID                              | Type                                         | Tier       |
+| ------------------------------------- | -------------------------------------------- | ---------- |
+| `openai/gpt-oss-120b`                 | Reasoning / general-purpose, tool use        | Production |
+| `openai/gpt-oss-20b`                  | Reasoning / general-purpose, tool use        | Production |
+| `groq/compound`                       | Agentic system (web search + code execution) | Production |
+| `groq/compound-mini`                  | Agentic system (lower latency)               | Production |
+| `whisper-large-v3`                    | Speech-to-text                               | Production |
+| `whisper-large-v3-turbo`              | Speech-to-text (faster)                      | Production |
+| `qwen/qwen3.6-27b`                    | Multimodal (reasoning + vision)              | Preview    |
+| `openai/gpt-oss-safeguard-20b`        | Safety / content moderation                  | Preview    |
+| `meta-llama/llama-prompt-guard-2-86m` | Safety / prompt-injection guard              | Preview    |
+| `meta-llama/llama-prompt-guard-2-22m` | Safety / prompt-injection guard              | Preview    |
+| `canopylabs/orpheus-v1-english`       | Text-to-speech (English)                     | Preview    |
+| `canopylabs/orpheus-arabic-saudi`     | Text-to-speech (Arabic)                      | Preview    |
+
+Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on.
+
+**Being retired:** Groq has deprecated its Llama chat models (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) along with `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct`. See the [deprecations page](https://console.groq.com/docs/deprecations) for shutdown dates, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
 
 ### Using Groq Models
 
@@ -97,13 +121,13 @@ Use any model from Groq's model library with the `groq:` prefix:
 ```yaml
 providers:
   # Standard chat model
-  - id: groq:llama-3.3-70b-versatile
+  - id: groq:openai/gpt-oss-20b
     config:
       temperature: 0.7
       max_completion_tokens: 4096
 
   # Reasoning model
-  - id: groq:deepseek-r1-distill-llama-70b
+  - id: groq:openai/gpt-oss-120b
     config:
       temperature: 0.6
       include_reasoning: true
@@ -118,7 +142,7 @@ Groq supports tool use, allowing models to call predefined functions. Configure 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: groq:llama-3.3-70b-versatile
+  - id: groq:openai/gpt-oss-120b
     config:
       tools:
         - type: function
@@ -145,6 +169,12 @@ providers:
 
 Groq provides vision models that can process both text and image inputs. These models support tool use and JSON mode. See the [Groq Vision documentation](https://console.groq.com/docs/vision) for current model availability and specifications.
 
+:::note
+
+Groq's multimodal lineup changes frequently. `qwen/qwen3.6-27b` is the current vision-capable model used in the example below, but Groq serves it as a **preview** model (intended for evaluation, not production). Check the [Groq Vision documentation](https://console.groq.com/docs/vision) for the latest production-ready vision options before deploying.
+
+:::
+
 ### Image Input Guidelines
 
 - **Image URLs:** Maximum allowed size is 20MB
@@ -169,7 +199,7 @@ Specify a vision model ID in your provider configuration and include images in O
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://openai-compatible-prompt-format.yaml
 providers:
-  - id: groq:meta-llama/llama-4-scout-17b-16e-instruct
+  - id: groq:qwen/qwen3.6-27b
     config:
       temperature: 1
       max_completion_tokens: 1024
@@ -184,7 +214,7 @@ tests:
 
 ## Reasoning
 
-Groq provides access to reasoning models that excel at complex problem-solving tasks requiring step-by-step analysis. These include GPT-OSS variants, Qwen models, and DeepSeek R1 variants. Check the [Groq Models documentation](https://console.groq.com/docs/models) for current reasoning model availability.
+Groq provides access to reasoning models that excel at complex problem-solving tasks requiring step-by-step analysis. These include GPT-OSS variants and Qwen models. Check the [Groq Models documentation](https://console.groq.com/docs/models) for current reasoning model availability.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -194,11 +224,11 @@ prompts:
     Your task is to analyze the following question with careful reasoning and rigor:
     {{ question }}
 providers:
-  - id: groq:deepseek-r1-distill-llama-70b
+  - id: groq:openai/gpt-oss-120b
     config:
       temperature: 0.6
       max_completion_tokens: 25000
-      reasoning_format: parsed # 'parsed', 'raw', or 'hidden'
+      include_reasoning: true # Show reasoning/thinking output
 tests:
   - vars:
       question: |
@@ -221,12 +251,12 @@ Example to hide reasoning:
 
 ```yaml
 providers:
-  - id: groq:deepseek-r1-distill-llama-70b
+  - id: groq:openai/gpt-oss-120b
     config:
-      reasoning_format: hidden # Hide thinking output
+      include_reasoning: false # Hide thinking output
 ```
 
-For **other reasoning models** (e.g., Qwen, DeepSeek), use `reasoning_format`:
+For **other reasoning models** (e.g., Qwen), use `reasoning_format`:
 
 | Format   | Description                                | Best For                       |
 | -------- | ------------------------------------------ | ------------------------------ |
@@ -259,7 +289,7 @@ prompts:
     ]
 
 providers:
-  - id: groq:llama-3.3-70b-versatile
+  - id: groq:openai/gpt-oss-120b
     config:
       stop: '```' # Stop at closing code fence
 
@@ -299,7 +329,7 @@ Groq's Responses API provides a structured approach to conversational AI, with b
 
 ```yaml
 providers:
-  - id: groq:responses:llama-3.3-70b-versatile
+  - id: groq:responses:openai/gpt-oss-120b
     config:
       temperature: 0.6
       max_output_tokens: 1000
@@ -313,7 +343,7 @@ The Responses API makes it easy to get structured JSON outputs:
 
 ```yaml
 providers:
-  - id: groq:responses:llama-3.3-70b-versatile
+  - id: groq:responses:openai/gpt-oss-120b
     config:
       response_format:
         type: 'json_schema'
@@ -491,7 +521,7 @@ Some reasoning models on Groq support a browser search tool that must be explici
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: groq:compound-beta # or other models with browser_search support
+  - id: groq:openai/gpt-oss-120b # or other reasoning models with browser_search support
     config:
       temperature: 0.6
       max_completion_tokens: 3000
