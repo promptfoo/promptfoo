@@ -331,4 +331,76 @@ describe('handleContextFaithfulness', () => {
       undefined,
     );
   });
+
+  it('should pass not-context-faithfulness when faithfulness is below the default threshold', async () => {
+    // `not-context-faithfulness` routes here with inverse: true. A low
+    // faithfulness score is below the default 0.7 threshold, so the matcher
+    // fails but the inverted assertion should pass.
+    const mockResult = { pass: false, score: 0.3, reason: 'Faithfulness 0.30 is < 0.7' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: {
+        type: 'not-context-faithfulness',
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris and it has a population of 50 million.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      inverse: true,
+      outputString: 'The capital of France is Paris and it has a population of 50 million.',
+      providerResponse: null,
+    } as any);
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBeCloseTo(0.7);
+    expect(result.reason).toBe('Assertion passed');
+    expect(result.metadata!.context).toBe('test context');
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'The capital of France is Paris and it has a population of 50 million.',
+      'test context',
+      0.7,
+      {},
+      expect.any(Object),
+      undefined,
+    );
+  });
+
+  it('should fail not-context-faithfulness when faithfulness is above the default threshold', async () => {
+    const mockResult = { pass: true, score: 0.9, reason: 'Faithfulness 0.90 is >= 0.7' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: {
+        type: 'not-context-faithfulness',
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      inverse: true,
+      outputString: 'The capital of France is Paris.',
+      providerResponse: null,
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(result.reason).toBe('Faithfulness 0.90 is >= 0.7');
+    expect(result.metadata!.context).toBe('test context');
+  });
 });
