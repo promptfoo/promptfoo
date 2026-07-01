@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.5, GPT-5.4, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.5, GPT-5.4, GPT-4.1, o-series reasoning, embeddings, and assistants for AI evals'
 ---
 
 # OpenAI
@@ -56,7 +56,7 @@ providers:
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `max_tokens`, `max_completion_tokens`, `functions`, and `tools`, which can be used to customize model behavior like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
@@ -81,7 +81,7 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 The `providers` list takes a `config` key that allows you to set parameters like `temperature` for non-reasoning models, `max_tokens`, `max_completion_tokens` for GPT-5 family chat models, and [others](https://platform.openai.com/docs/api-reference/chat/create). For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
@@ -293,7 +293,7 @@ GPT-5.1 introduces several improvements over GPT-5:
 
 Fast, low-latency responses:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -304,7 +304,7 @@ providers:
 
 Complex coding and reasoning tasks:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -347,7 +347,7 @@ GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1-codex-max
     config:
@@ -358,7 +358,7 @@ providers:
 
 For latency-insensitive tasks requiring maximum quality:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1-codex-max
     config:
@@ -419,7 +419,7 @@ Standard GPT-5.2 variants are available via both the Chat Completions API and Re
 
 **Chat Completions API:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.2-chat-latest
     config:
@@ -434,7 +434,7 @@ providers:
 
 **Responses API:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.2-codex
     config:
@@ -450,7 +450,7 @@ providers:
 
 Fast, low-latency responses (no reasoning):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Chat API
   - id: openai:chat:gpt-5.2
@@ -468,7 +468,7 @@ providers:
 
 GPT-5.2-pro (including dated snapshots) is best used via the Responses API:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.2-pro
     config:
@@ -510,7 +510,7 @@ GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.3-chat-latest
     config:
@@ -529,7 +529,7 @@ providers:
 
 ### GPT-5.5
 
-GPT-5.5 is the latest GPT-5 family model for high-capability reasoning, professional work, and agentic workflows.
+GPT-5.5 is a GPT-5 family model for high-capability reasoning, professional work, and agentic workflows.
 
 #### Available Models
 
@@ -553,7 +553,7 @@ GPT-5.5 is the latest GPT-5 family model for high-capability reasoning, professi
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.5
     config:
@@ -602,7 +602,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.4-mini
     config:
@@ -646,7 +646,7 @@ Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large
 
 When using reasoning models, there are important differences in how tokens are handled:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:o1
     config:
@@ -719,7 +719,7 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
-- `gpt-image-2` - OpenAI's latest image generation model with flexible custom sizes
+- `gpt-image-2` - OpenAI's image generation model with flexible custom sizes
 - `gpt-image-1.5` - High-quality GPT Image model with strong instruction following
 - `gpt-image-1` - High-quality image generation model
 - `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
@@ -732,9 +732,9 @@ See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo
 
 #### GPT Image 2
 
-GPT Image 2 is OpenAI's latest image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
+GPT Image 2 is OpenAI's image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-2
     config:
@@ -775,7 +775,7 @@ These are output image estimates. Input text tokens may also apply, and OpenAI m
 
 GPT Image 1.5 is a high-quality image generation model with strong instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1.5
     config:
@@ -810,7 +810,7 @@ GPT Image 1.5 uses token-based pricing at $5/1M input text tokens, $10/1M output
 
 GPT Image 1 is a high-quality image generation model with superior instruction following, text rendering, and real-world knowledge.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1
     config:
@@ -843,7 +843,7 @@ providers:
 
 GPT Image 1 Mini is a cost-efficient version of GPT Image 1 with the same capabilities at lower cost.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1-mini
     config:
@@ -896,9 +896,17 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models in
 - `sora-2` - OpenAI's video generation model ($0.10/second)
 - `sora-2-pro` - Higher quality video generation ($0.30/second)
 
+:::warning Scheduled deprecation
+
+OpenAI has announced that Sora 2, Sora 2 Pro, and the Videos API will shut down on
+September 24, 2026. Keep existing evals only while that API remains available and plan to
+migrate before the shutdown date.
+
+:::
+
 ### Basic Usage
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -922,6 +930,7 @@ providers:
 ### Example Configuration
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'A cinematic shot of: {{scene}}'
 
@@ -946,7 +955,7 @@ tests:
 
 Generate videos starting from a source image using `input_reference`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -963,7 +972,7 @@ The `input_reference` accepts either a `file://` path or base64-encoded image da
 
 Remix an existing Sora video with a new prompt using `remix_video_id`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -1004,7 +1013,7 @@ The OpenAI Responses API supports both the standard `web_search` tool and the `w
 
 To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add either the standard `web_search` tool or the preview `web_search_preview` tool to your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -1107,8 +1116,7 @@ export async function getTools() {
 
 :::
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.txt
 providers:
@@ -1164,7 +1172,7 @@ Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-open
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       city: Boston
@@ -1229,8 +1237,7 @@ They can also include functions that dynamically reference vars:
 
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.txt
 providers:
@@ -1274,7 +1281,7 @@ Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       city: Boston
@@ -1307,14 +1314,14 @@ Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
 You can also use a pattern to load multiple files:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - file://./path/to/provider_*.yaml
 ```
@@ -1351,7 +1358,7 @@ Promptfoo supports the `response_format` parameter, which allows you to specify 
 
 #### Prompt config example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -1363,7 +1370,7 @@ prompts:
 
 #### Provider config example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.4-mini
     config:
@@ -1439,7 +1446,7 @@ npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 
 You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - 'Answer this question: {{question}}'
 
@@ -1524,8 +1531,7 @@ The following properties can be overwritten in provider config:
 
 Here's an example of a more detailed config:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
@@ -1654,7 +1660,7 @@ You can include audio files in your prompts using the following format:
 
 With a corresponding configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - id: file://audio-input.json
     label: Audio Input
@@ -1708,7 +1714,7 @@ OpenAI provides dedicated transcription models for converting speech to text. Th
 
 To use transcription models, specify the provider format `openai:transcription:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - file://sample-audio.mp3
 
@@ -1753,7 +1759,7 @@ Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
 
 The diarization model identifies different speakers in the audio:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - file://interview.mp3
 
@@ -1798,7 +1804,7 @@ Prefer the current `gpt-realtime*` models for new evals. OpenAI removed several 
 
 To use the OpenAI Realtime API, use the provider format `openai:realtime:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:realtime:gpt-realtime-1.5
     config:
@@ -1861,7 +1867,7 @@ The Realtime API supports function calling via tools, similar to the Chat API. H
 
 Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. The native Realtime format matches the OpenAI docs: function tools use top-level fields, and `tool_choice` is passed through in the Realtime shape you provide.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:realtime:gpt-realtime-1.5
     config:
@@ -1954,7 +1960,8 @@ The Realtime API supports multi-turn conversations with persistent context. For 
 
 ## Responses API
 
-OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1, o3, and o4 series.
+OpenAI's Responses API supports text and image inputs, function calling, and conversation state.
+It can be used with compatible GPT and reasoning models.
 
 ### Supported Responses Models
 
@@ -1980,13 +1987,13 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
 - `gpt-5.2-codex` - GPT-5.2 coding variant
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($15/$120 per 1M tokens)
-- `o1` - Powerful reasoning model
+- `o1` - Reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
-- `o1-pro` - Enhanced reasoning model with more compute
-- `o3-pro` - Highest-tier reasoning model
-- `o3` - OpenAI's most powerful reasoning model
+- `o1-pro` - Higher-compute reasoning model
+- `o3-pro` - Reasoning model
+- `o3` - Reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
-- `o4-mini` - Latest fast, cost-effective reasoning model
+- `o4-mini` - Fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 - `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 - `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
@@ -1995,7 +2002,7 @@ The Responses API supports a wide range of models, including:
 
 To use the OpenAI Responses API, use the provider format `openai:responses:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2028,7 +2035,7 @@ The Responses API supports OpenAI's MCP integration, allowing models to use remo
 
 To use MCP tools with the Responses API, add them to the `tools` array:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2054,7 +2061,7 @@ providers:
 
 Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2071,7 +2078,7 @@ providers:
 
 To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2087,7 +2094,7 @@ providers:
 
 By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # Never require approval for all tools
 providers:
   - id: openai:responses:gpt-5
@@ -2146,7 +2153,7 @@ npx promptfoo@latest init --example openai-mcp
 
 When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3
     config:
@@ -2177,7 +2184,7 @@ For current specifications and pricing information, refer to [OpenAI's pricing p
 
 Example configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3
     config:
@@ -2198,7 +2205,7 @@ Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specializ
 
 Available models:
 
-- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
+- `o3-deep-research` - Deep research model ($10/1M input, $40/1M output)
 - `o3-deep-research-2025-06-26` - Snapshot version
 - `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
 - `o4-mini-deep-research-2025-06-26` - Snapshot version
@@ -2213,7 +2220,7 @@ All deep research models:
 
 Example configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
@@ -2224,7 +2231,7 @@ providers:
 
 #### Advanced Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3-deep-research
     config:
@@ -2417,7 +2424,7 @@ The `include` option requests extra structured payloads in the raw Responses obj
 For example, `web_search_call.results` returns search results when you need to inspect
 them in assertions or downstream tooling:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.5
     config:
@@ -2432,7 +2439,7 @@ providers:
 
 The Responses API supports tool and function calling, similar to the Chat API:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2468,7 +2475,7 @@ providers:
 
 Legacy `apiHost`, newer `apiBaseUrl`, and OpenAI endpoint environment variable Azure configurations all support the same Responses reasoning and verbosity options.
 
-For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
+For Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 
@@ -2504,7 +2511,7 @@ Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/provid
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts

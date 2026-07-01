@@ -28,7 +28,7 @@ NVIDIA_API_KEY=your_api_key_here
 2. Open any model card (for example, [Llama 3.3 70B Instruct](https://build.nvidia.com/meta/llama-3_3-70b-instruct)).
 3. Click **Get API Key**. The key starts with `nvapi-`.
 
-NVIDIA's developer program currently grants a recurring allowance of free request credits per account, which is usually enough for prompt iteration and small evals before any paid usage is needed. Current credit limits and pricing are documented at [build.nvidia.com](https://build.nvidia.com); check there for what is in effect today rather than assuming the value listed in any blog post.
+NVIDIA's developer program grants a recurring allowance of free request credits per account, which is usually enough for prompt iteration and small evals before any paid usage is needed. Credit limits and pricing are documented at [build.nvidia.com](https://build.nvidia.com); check there for what is in effect rather than assuming the value listed in any blog post.
 
 ## Configuration
 
@@ -65,32 +65,26 @@ providers:
 
 ## A few common models
 
-The full list is on [build.nvidia.com](https://build.nvidia.com). Some commonly used ids:
-
-| Model                           | Provider format                                 |
-| ------------------------------- | ----------------------------------------------- |
-| Llama 3.3 70B Instruct          | `nvidia:meta/llama-3.3-70b-instruct`            |
-| Llama 3.1 405B Instruct         | `nvidia:meta/llama-3.1-405b-instruct`           |
-| Llama 3.2 90B Vision Instruct   | `nvidia:meta/llama-3.2-90b-vision-instruct`     |
-| Llama 3.1 Nemotron 70B Instruct | `nvidia:nvidia/llama-3.1-nemotron-70b-instruct` |
-| Mistral Large 2 Instruct        | `nvidia:mistralai/mistral-large-2-instruct`     |
-| Mixtral 8x22B Instruct          | `nvidia:mistralai/mixtral-8x22b-instruct-v0.1`  |
-| Qwen 2.5 Coder 32B Instruct     | `nvidia:qwen/qwen2.5-coder-32b-instruct`        |
-| DeepSeek R1                     | `nvidia:deepseek-ai/deepseek-r1`                |
+The catalog changes over time. Copy the exact publisher/model ID from
+[build.nvidia.com](https://build.nvidia.com/models) or NVIDIA's
+[LLM API reference](https://docs.api.nvidia.com/nim/reference/llm-apis) before adding it to a
+long-lived config.
 
 ## Example
 
 A minimal eval comparing two NIM-hosted models. Uses deterministic assertions so the example runs end-to-end with only `NVIDIA_API_KEY` configured — `llm-rubric` would otherwise fall back to promptfoo's default OpenAI grader and require a separate `OPENAI_API_KEY`.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: nvidia:meta/llama-3.3-70b-instruct
     config:
       temperature: 0.2
       max_tokens: 256
-  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - id: nvidia:nvidia/nemotron-3-super-120b-a12b
     config:
-      temperature: 0.2
+      temperature: 1.0
+      top_p: 0.95
       max_tokens: 256
 
 prompts:

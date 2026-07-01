@@ -19,7 +19,7 @@ context.
 ## Setup
 
 To use the A2A provider, you need an A2A server that supports the HTTP+JSON REST binding. The
-current provider supports:
+provider supports:
 
 - `POST /message:send`
 - `POST /message:stream`
@@ -32,7 +32,7 @@ JSON-RPC, gRPC, and push-notification webhooks are not supported in this provide
 
 The simplest configuration points promptfoo at the base URL for the A2A HTTP+JSON interface:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: a2a:https://agent.example.com/a2a/v1
     config:
@@ -49,7 +49,7 @@ The `a2a:<url>` shorthand sets `config.url`. Promptfoo appends the operation pat
 If your agent publishes an Agent Card, you can configure `agentCardUrl` instead of hardcoding the
 A2A endpoint:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: a2a
     config:
@@ -386,7 +386,7 @@ A2A targets work with normal promptfoo red team configuration. When `agentCardUr
 the provider can add Agent Card skills and capabilities to the generated attack context, helping
 promptfoo produce probes that are specific to the target agent.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 description: A2A travel agent red team
 
 providers:
@@ -429,7 +429,7 @@ The A2A provider returns provider errors for common failure cases:
 - JSON-RPC and gRPC bindings are not supported yet
 - Push-notification webhooks are not supported because promptfoo evals require a synchronous result
 - Streaming is consumed into a single final `ProviderResponse`; token-by-token UI streaming is not exposed
-- Agent Card discovery currently selects the first `HTTP+JSON` supported interface
+- Agent Card discovery selects the first `HTTP+JSON` supported interface
 
 ## See Also
 

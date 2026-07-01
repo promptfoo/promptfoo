@@ -1,6 +1,6 @@
 ---
 sidebar_label: Custom Go (Golang)
-description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for seamless evaluation
+description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for evaluation
 ---
 
 # Custom Go Provider
@@ -8,7 +8,7 @@ description: Configure custom Go providers to integrate your own Go-based LLM cl
 The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
 
 :::info
-The golang provider currently experimental
+The golang provider is experimental
 :::
 
 ## Quick Start

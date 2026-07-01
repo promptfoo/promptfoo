@@ -18,7 +18,7 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 **Gemini 3.5:**
 
-- `vertex:gemini-3.5-flash` - Latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash` - Frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 
 **Gemini 3.1:**
 
@@ -67,7 +67,7 @@ and the model ID because Google does not publish one in its public model catalog
 
 **Claude 4.8:**
 
-- `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+- `vertex:claude-opus-4-8` - Claude 4.8 Opus for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
 
 **Claude 4.7:**
 
@@ -82,7 +82,7 @@ and the model ID because Google does not publish one in its public model catalog
 
 - `vertex:claude-opus-4-5@20251101` - Claude 4.5 Opus for agentic coding, agents, and computer use
 - `vertex:claude-sonnet-4-5@20250929` - Claude 4.5 Sonnet for agents, coding, and computer use
-- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for fast, cost-effective use cases
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for lower-latency use cases
 
 **Claude 4:**
 
@@ -215,7 +215,7 @@ providers:
 
 ### Gemini Model Specifications
 
-Current Gemini models on Vertex AI (2.5 and 3.x):
+Gemini models on Vertex AI (2.5 and 3.x):
 
 - Input context: up to 1M tokens
 - Supports: Text, code, images, audio, video, and PDF inputs
@@ -456,7 +456,8 @@ providers:
 
 After completing authentication, create a simple evaluation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - vertex:gemini-2.5-flash
@@ -487,7 +488,8 @@ promptfoo eval
 
 Compare different models available on Vertex AI:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   # Google models
   - id: vertex:gemini-2.5-pro
@@ -495,14 +497,9 @@ providers:
       region: us-central1
 
   # Claude models (require specific region)
-  - id: vertex:claude-3-5-sonnet-v2@20241022
+  - id: vertex:claude-sonnet-4-5@20250929
     config:
       region: us-east5
-
-  # Llama models
-  - id: vertex:llama-3.3-70b-instruct-maas
-    config:
-      region: us-central1
 
 prompts:
   - 'Write a Python function to {{task}}'

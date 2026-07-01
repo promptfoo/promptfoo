@@ -1,13 +1,14 @@
 ---
 sidebar_label: Cerebras
-description: Configure Cerebras' Llama 4 Scout and Llama 3 models through their OpenAI-compatible API for enterprise-grade inference with advanced MoE architecture support
+description: Configure Cerebras models through its OpenAI-compatible inference API
 ---
 
 # Cerebras
 
 This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).
 
-Cerebras offers an OpenAI-compatible API for various large language models including Llama models, DeepSeek, and more. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
+Cerebras offers an OpenAI-compatible chat completions API. Use a model ID returned by the
+Cerebras model catalog or `/models` endpoint.
 
 ## Setup
 
@@ -21,7 +22,7 @@ Or in your config:
 
 ```yaml
 providers:
-  - id: cerebras:llama3.1-8b
+  - id: cerebras:gpt-oss-120b
     config:
       apiKey: your_api_key_here
 ```
@@ -34,14 +35,8 @@ The Cerebras provider uses a simple format:
 
 ## Available Models
 
-The Cerebras Inference API officially supports these models:
-
-- `llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model with 16 expert MoE
-- `llama3.1-8b` - Llama 3.1 8B model
-- `llama-3.3-70b` - Llama 3.3 70B model
-- `deepSeek-r1-distill-llama-70B` (private preview)
-
-To get the current list of available models, use the `/models` endpoint:
+The Cerebras model catalog changes as models are added and retired. Use the `/models` endpoint as
+the source of truth before pinning a model in a long-lived config:
 
 ```bash
 curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer your_api_key_here"
@@ -63,13 +58,13 @@ The provider accepts standard OpenAI chat parameters:
 
 ### Structured Outputs
 
-Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build reliable applications that can process AI outputs programmatically.
+Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build applications that can process AI outputs programmatically.
 
 To use structured outputs, set the `response_format` parameter to include a JSON schema:
 
 ```yaml
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       response_format:
         type: 'json_schema'
@@ -94,7 +89,7 @@ Cerebras models support tool use (function calling), enabling LLMs to programmat
 
 ```yaml
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       tools:
         - type: 'function'
@@ -115,17 +110,17 @@ When using tool calling, you'll need to process the model's response and handle 
 
 ## Example Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Cerebras model evaluation
 prompts:
   - You are an expert in {{topic}}. Explain {{question}} in simple terms.
 providers:
-  - id: cerebras:llama3.1-8b
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:llama-3.3-70b
+  - id: cerebras:zai-glm-4.7
     config:
       temperature: 0.7
       max_completion_tokens: 1024

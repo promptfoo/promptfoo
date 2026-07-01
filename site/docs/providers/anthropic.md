@@ -166,6 +166,7 @@ The Anthropic provider supports several options to customize the behavior of the
 Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -206,7 +207,7 @@ providers:
 
 The Anthropic provider supports tool calling (function calling). Here's an example configuration for defining tools.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -317,7 +318,7 @@ providers:
 
 ##### Combined Web Search and Web Fetch
 
-You can use both tools together for comprehensive web information gathering:
+You can use both tools together for web information gathering:
 
 ```yaml
 providers:
@@ -376,7 +377,7 @@ providers:
 
 The Anthropic Messages provider can connect to any [MCP server](https://modelcontextprotocol.io) — stdio, SSE, or streamable HTTP — and execute the model's `tool_use` blocks against that server, feeding the `tool_result` back into the conversation until Claude produces a final reply.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-6
     config:
@@ -428,6 +429,7 @@ Claude supports prompt caching to optimize API usage and reduce costs for repeti
 Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -475,6 +477,7 @@ See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/pr
 Claude can provide detailed citations when answering questions about documents. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -561,7 +564,7 @@ The same guidance applies when you reach Opus 4.7 through AWS Bedrock, GCP Verte
 
 Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Adaptive thinking (recommended for Claude Opus 4.7)
   - id: anthropic:messages:claude-opus-4-7
@@ -651,7 +654,7 @@ Example response with thinking enabled:
 
 By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -846,7 +849,7 @@ You can override the grading provider in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider: anthropic:messages:claude-sonnet-4-5-20250929

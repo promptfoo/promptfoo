@@ -1,11 +1,12 @@
 ---
 sidebar_label: AI/ML API
-description: "Access 200+ open-source AI models via AIML API's unified interface with consistent pricing and simplified integration"
+description: "Access models through AI/ML API's unified OpenAI-compatible interface"
 ---
 
 # AI/ML API
 
-[AI/ML API](https://aimlapi.com) provides access to 300+ AI models through a unified OpenAI-compatible interface, including state-of-the-art models from OpenAI, Anthropic, Google, Meta, and more.
+[AI/ML API](https://aimlapi.com) provides access to models from multiple developers through a
+unified OpenAI-compatible interface.
 
 ## OpenAI Compatibility
 
@@ -55,10 +56,9 @@ aimlapi:<model_name>
 
 Configure the provider in your promptfoo configuration file:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - id: aimlapi:chat:deepseek-r1
+  - id: aimlapi:chat:deepseek/deepseek-r1
     config:
       temperature: 0.7
       max_tokens: 2000
@@ -82,39 +82,28 @@ All standard OpenAI parameters are supported:
 
 ## Popular Models
 
-AI/ML API offers models from multiple providers. Here are some of the most popular models by category:
+AI/ML API adds and retires model IDs independently of promptfoo. Use its
+[model database](https://docs.aimlapi.com/api-references/model-database) as the source of truth.
 
 ### Reasoning Models
 
-- **DeepSeek R1**: `deepseek-r1` - Advanced reasoning with chain-of-thought capabilities
-- **OpenAI o3 Mini**: `openai/o3-mini` - Efficient reasoning model
-- **OpenAI o4 Mini**: `openai/o4-mini` - Latest compact reasoning model
-- **QwQ-32B**: `qwen/qwq-32b` - Alibaba's reasoning model
+Filter the model database for models that expose reasoning controls, then copy the exact ID from
+the linked API reference.
 
 ### Advanced Language Models
 
-- **GPT-4.1**: `openai/gpt-5` - Latest GPT with 1M token context
-- **GPT-4.1 Mini**: `gpt-5-mini` - 83% cheaper than GPT-4o with comparable performance
-- **Claude 4 Sonnet**: `anthropic/claude-4-sonnet` - Balanced speed and capability
-- **Claude 4 Opus**: `anthropic/claude-4-opus` - Claude 4 Opus model
-- **Gemini 2.5 Pro**: `google/gemini-2.5-pro-preview` - Google's versatile multimodal model
-- **Gemini 2.5 Flash**: `google/gemini-2.5-flash` - Ultra-fast streaming responses
-- **Grok 3 Beta**: `x-ai/grok-3-beta` - xAI's most advanced model
+The model database lists the exact provider-qualified IDs accepted by the API.
 
 ### Open Source Models
 
-- **DeepSeek V3**: `deepseek-v3` - Powerful open-source alternative
-- **Llama 4 Maverick**: `meta-llama/llama-4-maverick` - Latest Llama model
-- **Qwen Max**: `qwen/qwen-max-2025-01-25` - Alibaba's efficient MoE model
-- **Mistral Codestral**: `mistral/codestral-2501` - Specialized for coding
+Use the model database's developer and modality filters instead of copying a dated static list.
 
 ### Embedding Models
 
-- **Text Embedding 3 Large**: `text-embedding-3-large` - OpenAI's latest embedding model
-- **Voyage Large 2**: `voyage-large-2` - High-quality embeddings
-- **BGE M3**: `bge-m3` - Multilingual embeddings
+Choose an embedding model from the model database and use its exact ID after the
+`aimlapi:embedding:` prefix.
 
-For a complete list of all 300+ available models, visit the [AI/ML API Models page](https://aimlapi.com/models?utm_source=promptfoo&utm_medium=github&utm_campaign=integration).
+You can also browse the [AI/ML API Models page](https://aimlapi.com/models?utm_source=promptfoo&utm_medium=github&utm_campaign=integration).
 
 ## Example Configurations
 
@@ -123,9 +112,9 @@ For a complete list of all 300+ available models, visit the [AI/ML API Models pa
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - aimlapi:chat:deepseek-r1
-  - aimlapi:chat:gpt-5-mini
-  - aimlapi:chat:claude-4-sonnet
+  - aimlapi:chat:deepseek/deepseek-r1
+  - aimlapi:chat:openai/gpt-5-mini-2025-08-07
+  - aimlapi:chat:anthropic/claude-sonnet-4-6
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -144,28 +133,28 @@ tests:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   # Reasoning model with low temperature
-  - id: aimlapi:chat:deepseek-r1
+  - id: aimlapi:chat:deepseek/deepseek-r1
     label: 'DeepSeek R1 (Reasoning)'
     config:
       temperature: 0.1
       max_tokens: 4000
 
   # General purpose model
-  - id: aimlapi:chat:openai/gpt-5
-    label: 'GPT-4.1'
+  - id: aimlapi:chat:openai/gpt-5-2025-08-07
+    label: 'GPT-5'
     config:
       temperature: 0.7
       max_tokens: 2000
 
-  # Fast, cost-effective model
-  - id: aimlapi:chat:gemini-2.5-flash
+  # Additional general-purpose model
+  - id: aimlapi:chat:google/gemini-2.5-flash
     label: 'Gemini 2.5 Flash'
     config:
       temperature: 0.5
       stream: true
 
 prompts:
-  - file://prompts/coding_task.txt
+  - 'Implement the following task and return only Python code: {{task}}'
 
 tests:
   - vars:
@@ -189,20 +178,20 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: aimlapi:embedding:text-embedding-3-large
-    config:
-      dimensions: 3072 # Optional: reduce embedding dimensions
+  - echo
 
 prompts:
-  - '{{text}}'
+  - 'The quick brown fox jumps over the lazy dog'
 
 tests:
-  - vars:
-      text: 'The quick brown fox jumps over the lazy dog'
-    assert:
-      - type: is-valid-embedding
-      - type: embedding-dimension
-        value: 3072
+  - assert:
+      - type: similar
+        value: 'The quick brown fox jumps over the lazy dog'
+        threshold: 0.9
+        provider:
+          id: aimlapi:embedding:text-embedding-3-large
+          config:
+            dimensions: 3072
 ```
 
 ### JSON Mode Example
@@ -210,7 +199,7 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: aimlapi:chat:gpt-5
+  - id: aimlapi:chat:openai/gpt-5-2025-08-07
     config:
       response_format: { type: 'json_object' }
       temperature: 0.0
@@ -250,9 +239,8 @@ This includes tested configurations for comparing multiple models, evaluating re
 ## Notes
 
 - **API Key Required**: Sign up at [aimlapi.com](https://aimlapi.com) to get your API key
-- **Free Credits**: New users receive free credits to explore the platform
 - **Rate Limits**: Vary by subscription tier
-- **Model Updates**: New models are added regularly - check the [models page](https://aimlapi.com/models) for the latest additions
+- **Model Updates**: New models are added regularly - check the [models page](https://aimlapi.com/models) for the current list
 - **Unified Billing**: Pay for all models through a single account
 
 For detailed pricing information, visit [aimlapi.com/pricing](https://aimlapi.com/pricing).

@@ -34,7 +34,7 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent:
         name: Customer Support Agent
@@ -43,7 +43,9 @@ providers:
       maxTurns: 10
 ```
 
-For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model, currently `gpt-5.4-mini`, and that upstream default can change over time.
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with
+`config.model`. The SDK's fallback model can change between releases, so do not treat an
+implicit default as a stable eval input.
 
 ## Configuration Options
 
@@ -71,7 +73,7 @@ Load agent and tools from external files:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -159,7 +161,7 @@ Transfer conversations between specialized agents:
 
 ```yaml
 providers:
-  - openai:agents:triage
+  - id: openai:agents:triage
     config:
       agent:
         name: Triage Agent
@@ -179,7 +181,7 @@ Validate tool inputs and outputs with guardrails:
 
 ```yaml
 providers:
-  - openai:agents:secure-agent
+  - id: openai:agents:secure-agent
     config:
       agent: file://./agents/secure-agent.ts
       inputGuardrails: file://./guardrails/input-guardrails.ts
@@ -194,7 +196,7 @@ OpenAI Agents SDK sessions keep conversation history across agent runs. Promptfo
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session:
@@ -214,7 +216,7 @@ For more control, export an SDK `Session` instance or a factory from a file:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/support-session.ts
@@ -226,7 +228,7 @@ If you need the full `run()` surface, use `runOptions`. Promptfoo reserves `cont
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       runOptions:
@@ -265,7 +267,7 @@ Use `transformVars` to stamp each test with a stable per-test session ID, then e
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/redteam-session.ts
@@ -325,7 +327,7 @@ export default new SandboxAgent({
 
 ```yaml
 providers:
-  - openai:agents:workspace-agent
+  - id: openai:agents:workspace-agent
     config:
       agent: file://./agents/workspace-agent.ts
       sandbox:
@@ -369,7 +371,7 @@ OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Pro
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       modelSettings:
@@ -398,7 +400,7 @@ Use mocked tool outputs when you want deterministic evals without calling extern
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -415,7 +417,7 @@ Enable OpenTelemetry tracing to debug agent execution:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true # Exports to http://localhost:4318
@@ -425,7 +427,7 @@ With a custom OTLP endpoint:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true
@@ -474,7 +476,9 @@ See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you wa
 
 ## Example: D&D Dungeon Master
 
-Full working example with D&D mechanics, dice rolling, and character management:
+The complete example, including its agent and tool files, is available in
+[examples/openai-agents-basic](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-basic).
+Its config uses the following file references:
 
 ```yaml
 description: D&D Adventure with AI Dungeon Master

@@ -76,7 +76,7 @@ Requires `gateway.http.endpoints.chatCompletions.enabled=true`.
 - `openclaw:main` - Explicitly targets the main agent
 - `openclaw:<agent-id>` - Targets a specific agent by ID
 
-Promptfoo sends OpenClaw's current slash-style model id (`openclaw/<agent-id>`) to the gateway
+Promptfoo sends OpenClaw's slash-style model id (`openclaw/<agent-id>`) to the gateway
 while keeping the `openclaw:<agent-id>` promptfoo provider syntax for compatibility.
 
 ### Responses
@@ -154,7 +154,7 @@ includes:
 - `gateway.tls.enabled` for `https://` / `wss://`
 - `gateway.mode=remote` via `gateway.remote.url`
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - openclaw:main
 ```
@@ -163,7 +163,7 @@ providers:
 
 Override auto-detection with explicit config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openclaw:main
     config:
@@ -189,7 +189,7 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 # export OPENCLAW_GATEWAY_PASSWORD=your-password-here
 ```
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - openclaw:main
 ```
@@ -226,6 +226,7 @@ providers:
 ### Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'What is the capital of {{country}}?'
 
@@ -247,6 +248,7 @@ tests:
 the upstream provider/model combination.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Analyze the pros and cons of {{topic}}'
 
@@ -265,6 +267,7 @@ tests:
 ### Using Responses API
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Summarize: {{text}}'
 
@@ -279,17 +282,22 @@ tests:
 ### Using Embeddings
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - '{{text}}'
+  - 'Promptfoo routes this through OpenClaw.'
 
 providers:
-  - id: openclaw:embedding:main
-    config:
-      backend_model: openai/text-embedding-3-small
+  - echo
 
 tests:
-  - vars:
-      text: Promptfoo routes this through OpenClaw.
+  - assert:
+      - type: similar
+        value: 'Promptfoo routes this through OpenClaw.'
+        threshold: 0.9
+        provider:
+          id: openclaw:embedding:main
+          config:
+            backend_model: openai/text-embedding-3-small
 ```
 
 ### Backend Model Override
@@ -297,7 +305,7 @@ tests:
 Use `backend_model` when you want the selected OpenClaw agent to run a specific provider/model for
 this eval without changing the agent's normal default model.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openclaw:main
     config:
@@ -315,6 +323,7 @@ not expose enough information to price that request safely.
 Promptfoo uses an isolated session key per call unless you set `session_key` explicitly.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{task}}'
 
@@ -332,6 +341,7 @@ tests:
 ### Tool Invoke
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{}'
 
@@ -347,6 +357,7 @@ tests:
 If a tool exposes sub-actions, add `config.action`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{}'
 

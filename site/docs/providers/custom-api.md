@@ -326,7 +326,7 @@ Custom providers handle multimodal content the same way whether the media comes 
 
 For standard evals, provide the media value through `tests[].vars`, `defaultTest.vars`, a dataset column, or a dynamic variable:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - '{{image}} {{question}}'
 
@@ -346,7 +346,7 @@ For red team runs, [image](/docs/red-team/strategies/image), [audio](/docs/red-t
 | `audio`           | Raw MP3 base64 from remote generation, no `data:` prefix | `context.test.metadata.originalText`                            | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
 | `video`           | Raw MP4 base64 when local FFmpeg generation succeeds     | `context.vars.video_text`, `context.test.metadata.originalText` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
 
-Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+Audio and video have opposite generation requirements: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
 
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
@@ -438,7 +438,7 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ### Provider Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI

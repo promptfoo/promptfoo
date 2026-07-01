@@ -5,14 +5,14 @@ description: Configure TrueFoundry's enterprise-grade AI Gateway (LLM, MCP, and 
 
 # TrueFoundry
 
-[TrueFoundry](https://www.truefoundry.com/ai-gateway) provides an enterprise-grade AI Gateway that encompasses an LLM Gateway, MCP Gateway, and Agent Gateway. This enables enterprises to connect, observe, and govern agentic AI applications across providers from a single control plane. TrueFoundry's gateway is OpenAI-compatible and integrates seamlessly with promptfoo for testing and evaluation.
+[TrueFoundry](https://www.truefoundry.com/ai-gateway) provides an enterprise-grade AI Gateway that encompasses an LLM Gateway, MCP Gateway, and Agent Gateway. This enables enterprises to connect, observe, and govern agentic AI applications across providers from a single control plane. TrueFoundry's gateway is OpenAI-compatible and integrates with promptfoo for testing and evaluation.
 
 The TrueFoundry provider supports:
 
 - Chat completions from multiple LLM providers (OpenAI, Anthropic, Google Gemini, Groq, Mistral, and more)
 - Embeddings
 - Tool use and function calling
-- MCP (Model Context Protocol) servers for enhanced capabilities
+- MCP (Model Context Protocol) servers
 - Custom metadata and logging configuration
 - Real-time observability and monitoring
 
@@ -69,8 +69,7 @@ The TrueFoundry provider supports all standard OpenAI configuration options:
 
 For self-hosted or enterprise deployments, you can specify a custom API base URL:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/gpt-5
     config:
@@ -84,8 +83,7 @@ If not specified, the default URL `https://llm-gateway.truefoundry.com` is used.
 
 TrueFoundry provides additional configuration options for metadata tracking and logging:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/gpt-5
     config:
@@ -149,8 +147,7 @@ providers:
 
 TrueFoundry supports embedding models through the same unified API:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/text-embedding-3-large
     config:
@@ -169,8 +166,7 @@ tests:
 
 When using Cohere models, you must specify the `input_type` parameter:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:cohere-main/embed-english-v3.0
     config:
@@ -183,8 +179,7 @@ providers:
 
 TrueFoundry supports multimodal embeddings for images and videos through Vertex AI:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:vertex-ai-main/multimodalembedding@001
     config:
@@ -229,7 +224,7 @@ tests:
 
 ## MCP Servers (Model Context Protocol)
 
-TrueFoundry supports MCP servers for enhanced tool capabilities. MCP servers provide access to integrated tools like web search, code execution, and more:
+TrueFoundry supports MCP servers for tool capabilities. MCP servers provide access to integrated tools like web search, code execution, and more:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -272,7 +267,7 @@ Common integrations include:
 
 ## Complete Example
 
-Here's a comprehensive example demonstrating TrueFoundry's capabilities:
+Here's an example demonstrating TrueFoundry's capabilities:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

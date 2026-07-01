@@ -72,13 +72,13 @@ const MISTRAL_CHAT_MODELS = [
       output: 2 / 1000000,
     },
   })),
-  {
-    id: 'mistral-medium-3.5',
+  ...['mistral-medium-3.5', 'mistral-medium-3-5'].map((id) => ({
+    id,
     cost: {
       input: 1.5 / 1000000,
       output: 7.5 / 1000000,
     },
-  },
+  })),
   {
     id: 'mistral-large-2402',
     cost: {

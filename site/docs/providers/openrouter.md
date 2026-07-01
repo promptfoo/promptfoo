@@ -14,7 +14,7 @@ description: "Access 300+ models through OpenRouter's unified API gateway with c
 
 ## Popular current models
 
-OpenRouter's catalog changes quickly. These are current popular and recent model IDs that work well as starting points. Context lengths are from the OpenRouter catalog at time of writing — check [OpenRouter Models](https://openrouter.ai/models) (or `GET /api/v1/models`) for live values.
+OpenRouter's catalog changes quickly. These are popular model IDs that work well as starting points. Context lengths are from the OpenRouter catalog — check [OpenRouter Models](https://openrouter.ai/models) (or `GET /api/v1/models`) for live values.
 
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
@@ -29,12 +29,11 @@ OpenRouter's catalog changes quickly. These are current popular and recent model
 | [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) |          128,000 | Compact Mistral general use        |
 | [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     |           40,960 | Strong open multilingual model     |
 
-For the full catalog of 300+ models and current pricing, visit [OpenRouter Models](https://openrouter.ai/models).
+For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https://openrouter.ai/models).
 
 ## Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: openrouter:openai/gpt-5.4
     config:
@@ -55,7 +54,7 @@ If you route OpenRouter traffic through a proxy or OpenRouter-compatible gateway
 
 The same pattern applies to `apiKeyEnvar` — set it to read your API key from a custom environment variable name (default `OPENROUTER_API_KEY`).
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openrouter:openai/gpt-5.4
     config:
@@ -75,7 +74,7 @@ providers:
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openrouter:google/gemini-2.5-pro
     config:

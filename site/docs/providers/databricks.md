@@ -1,11 +1,11 @@
 ---
 sidebar_label: Databricks
-description: Configure Databricks Foundation Model APIs with Llama-3, Claude, and custom endpoints for unified access to hosted and external LLMs through OpenAI-compatible interface
+description: Configure Databricks Foundation Model APIs with hosted and custom endpoints through an OpenAI-compatible interface
 ---
 
 # Databricks Foundation Model APIs
 
-The Databricks provider integrates with Databricks' Foundation Model APIs, offering access to state-of-the-art models through a unified OpenAI-compatible interface. It supports multiple deployment modes to match your specific use case and performance requirements.
+The Databricks provider integrates with Databricks' Foundation Model APIs, offering access to models through a unified OpenAI-compatible interface. It supports multiple deployment modes to match your specific use case and performance requirements.
 
 ## Overview
 
@@ -34,7 +34,7 @@ export DATABRICKS_TOKEN=your-token-here
 
 Access pre-configured Foundation Model endpoints with simple configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: databricks:databricks-meta-llama-3-3-70b-instruct
     config:
@@ -42,12 +42,14 @@ providers:
       workspaceUrl: https://your-workspace.cloud.databricks.com
 ```
 
-Available pay-per-token models include:
+The pay-per-token catalog changes over time. Current examples include:
 
-- `databricks-meta-llama-3-3-70b-instruct` - Meta's latest Llama model
-- `databricks-claude-3-7-sonnet` - Anthropic Claude with reasoning capabilities
+- `databricks-meta-llama-3-3-70b-instruct` - Meta's Llama model
+- `databricks-claude-sonnet-4-6` - Anthropic Claude model with text and image input
 - `databricks-gte-large-en` - Text embeddings model
-- `databricks-dbrx-instruct` - Databricks' own foundation model
+
+Check the [Databricks Foundation Model APIs catalog](https://docs.databricks.com/aws/en/machine-learning/model-serving/foundation-model-overview)
+before pinning an endpoint name in a long-lived config.
 
 ### Provisioned Throughput Endpoints
 
@@ -87,9 +89,9 @@ The Databricks provider extends the [OpenAI configuration options](/docs/provide
 
 ### Advanced Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4-6
     config:
       isPayPerToken: true
       workspaceUrl: https://your-workspace.cloud.databricks.com
@@ -125,11 +127,12 @@ providers:
 Vision models on Databricks require structured JSON prompts similar to OpenAI's format. Here's how to use them:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://vision-prompt.json
 
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4-6
     config:
       isPayPerToken: true
 
@@ -225,6 +228,7 @@ Usage data is available through Databricks system tables:
 ## Example: Multi-Model Comparison
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Explain quantum computing to a 10-year-old'
 

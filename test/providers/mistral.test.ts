@@ -94,9 +94,13 @@ describe('Mistral', () => {
       expect(new MistralChatCompletionProvider('mistral-medium-3.5').modelName).toBe(
         'mistral-medium-3.5',
       );
+      expect(new MistralChatCompletionProvider('mistral-medium-3-5').modelName).toBe(
+        'mistral-medium-3-5',
+      );
       expect(new MistralChatCompletionProvider('ministral-14b-latest').modelName).toBe(
         'ministral-14b-latest',
       );
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should support Pixtral multimodal model', () => {
@@ -351,6 +355,26 @@ describe('Mistral', () => {
 
       // mistral-large-latest currently tracks mistral-large-2512 pricing: $0.5/M in, $1.5/M out
       expect(result.cost).toBeCloseTo(0.0011, 6);
+    });
+
+    it('should calculate cost correctly for the current Mistral Medium 3.5 slug', async () => {
+      const currentProvider = new MistralChatCompletionProvider('mistral-medium-3-5');
+      vi.spyOn(currentProvider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Current model response' } }],
+          usage: { total_tokens: 300, prompt_tokens: 100, completion_tokens: 200 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await currentProvider.callApi('Test current model pricing');
+
+      // $1.50/M input and $7.50/M output: 100 * 1.5e-6 + 200 * 7.5e-6.
+      expect(result.cost).toBeCloseTo(0.00165, 8);
     });
 
     it('should use cache when enabled', async () => {

@@ -41,8 +41,7 @@ Provider config values take precedence over environment variables.
 
 ## Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: abliteration:abliterated-model
     config:

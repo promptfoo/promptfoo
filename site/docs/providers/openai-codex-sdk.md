@@ -93,7 +93,7 @@ export CODEX_API_KEY=your_api_key_here
 
 :::note
 
-ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now use that provider automatically for default text grading and synthesis when Codex is signed in and no higher-priority API credentials are set. Explicit `openai:chat`, `openai:responses`, embedding, and moderation providers still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
+ChatGPT login support is specific to the Codex SDK provider. Promptfoo can use that provider automatically for default text grading and synthesis when Codex is signed in and no higher-priority API credentials are set. Explicit `openai:chat`, `openai:responses`, embedding, and moderation providers still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
 
 :::
 
@@ -102,6 +102,7 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -136,6 +137,7 @@ Credentials placed in `cli_env` are exposed to the Codex agent's shell environme
 By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. When you set `working_dir`, relative values are resolved from the directory containing the config file. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -152,6 +154,7 @@ The provider creates an ephemeral thread for each eval test case.
 Specify which OpenAI model to use for code generation:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - openai:codex:gpt-5.5
 
@@ -173,6 +176,7 @@ providers:
 Specify a custom working directory for the Codex SDK to operate in. The directory can be a repository subdirectory as long as one of its parent directories contains `.git`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -189,6 +193,7 @@ This allows you to prepare a directory with files before running your tests.
 If you need to run in a non-Git directory, you can bypass the Git repository requirement:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -260,7 +265,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-The SDK supports various OpenAI models. Use `gpt-5.5` for the latest frontier model:
+The SDK supports various OpenAI models. Use `gpt-5.5` for the frontier model:
 
 ```yaml
 providers:
@@ -346,6 +351,7 @@ providers:
 The Codex SDK supports JSON schema output. Specify an `output_schema` to get structured responses:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -413,7 +419,7 @@ The Codex SDK provider supports two levels of tracing:
 
 Enable `enable_streaming` to capture Codex operations as OpenTelemetry spans:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   otlp:
@@ -671,7 +677,7 @@ providers:
         PFQA_SECRET_ENV_READ: '{{secretEnvValue}}'
 ```
 
-By default, promptfoo now passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.
+By default, promptfoo passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.
 
 Common Codex home and certificate process variables such as `CODEX_HOME` and `SSL_CERT_FILE` are also omitted from that minimal default unless you set them in `cli_env` or enable `inherit_process_env: true`. If those variables are present in the parent process and not forwarded, the provider emits a one-time warning so custom-home or TLS-sensitive evals do not fail silently. SSH agent variables such as `SSH_AUTH_SOCK` and `GIT_SSH_COMMAND` are only included in that warning when network access or live web search is enabled.
 
@@ -699,6 +705,7 @@ Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each e
 | `source` | string | Evidence source. For Codex this is always `heuristic` |
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Codex skill eval
 
 prompts:
@@ -741,6 +748,7 @@ Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attr
 To trace what Codex does inside a skill, enable `deep_tracing` on the provider and root-level OTLP tracing in your config. That lets you assert on traced shell commands, MCP tool calls, search steps, and reasoning with the standard trace and trajectory assertions:
 
 ```yaml title="promptfooconfig.tracing.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Codex skill trace eval
 
 prompts:
@@ -828,6 +836,7 @@ tests:
 Review multiple files in a codebase with enhanced reasoning:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -854,6 +863,7 @@ tests:
 Generate structured bug reports from code:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -893,6 +903,7 @@ prompts:
 Use persistent threads for multi-turn conversations:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:

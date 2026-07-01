@@ -139,7 +139,7 @@ For the complete list of models with pricing, see the [Azure model catalog](http
 
 ## Azure Responses API
 
-The Azure OpenAI Responses API is a stateful API that brings together the best capabilities from chat completions and assistants API in one unified experience. It provides advanced features like MCP servers, code interpreter, and background tasks.
+The Azure OpenAI Responses API is a stateful API that brings together capabilities from chat completions and assistants API in one unified experience. It provides features like MCP servers, code interpreter, and background tasks.
 
 ### Using the Responses API
 
@@ -358,21 +358,32 @@ config:
 
 ### Complete Responses API Example
 
-Here's a comprehensive example using multiple Azure Responses API features:
+Here's an example using multiple Azure Responses API features:
 
-```yaml
-# promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Azure Responses API evaluation
 
 providers:
-  # Using the new azure:responses alias (recommended)
+  # Using the azure:responses alias (recommended)
   - id: azure:responses:gpt-4.1-deployment
     label: azure-gpt-4.1
     config:
       temperature: 0.7
       max_output_tokens: 2000
       instructions: 'You are a helpful AI assistant.'
-      response_format: file://./response-format.json
+      response_format:
+        type: json_schema
+        name: structured_output
+        schema:
+          type: object
+          properties:
+            result:
+              type: string
+            confidence:
+              type: number
+          required: [result, confidence]
+          additionalProperties: false
       tools:
         - type: code_interpreter
           container:
@@ -392,12 +403,11 @@ providers:
       max_output_tokens: 4000
 
 prompts:
-  - 'Analyze this data and provide insights: {{data}}'
-  - 'Write a Python function to solve: {{problem}}'
+  - '{{task}}'
 
 tests:
   - vars:
-      data: 'Sales increased by 25% in Q3 compared to Q2'
+      task: 'Analyze this data and provide insights: Sales increased by 25% in Q3 compared to Q2'
     assert:
       - type: contains
         value: 'growth'
@@ -405,10 +415,13 @@ tests:
         value: '25%'
 
   - vars:
-      problem: 'Calculate fibonacci sequence up to n terms'
+      task: 'Write a Python function to solve: Calculate fibonacci sequence up to n terms'
     assert:
       - type: javascript
-        value: 'output.includes("def fibonacci") || output.includes("function fibonacci")'
+        value: |
+          const text = typeof output === 'string' ? output : output.result;
+          return typeof text === 'string' &&
+            (text.includes('def fibonacci') || text.includes('function fibonacci'));
       - type: contains
         value: 'recursive'
 ```
@@ -448,7 +461,7 @@ config:
 
 ### Responses API Limitations
 
-- Web search tool support is still in development
+- Web search tool support is in development
 - PDF file upload with `purpose: user_data` requires workaround (use `purpose: assistants`)
 - Background mode requires `store: true`
 - Some features may have region-specific availability
@@ -526,7 +539,7 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-small
 
 This deployment will automatically be used whenever embeddings are required, such as for similarity comparisons or dataset generation. You can also override the embedding provider in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -630,7 +643,7 @@ The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not 
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -673,7 +686,7 @@ tests:
 
 When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Azure deployments for each type using the **provider type map** pattern:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -696,7 +709,7 @@ The `similar` assertion type requires an embedding model such as `text-embedding
 
 For example, override the embedding deployment in your config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -838,7 +851,8 @@ providers:
 
 You can use variables in your configuration to dynamically adjust the reasoning effort based on your test cases:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Configure different reasoning efforts based on test variables
 prompts:
   - 'Solve this complex math problem: {{problem}}'
@@ -943,7 +957,7 @@ Azure AI Foundry exposes Claude through two endpoint families. Pick the one that
 
 Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic sampling-parameter suppression for Fable 5 and Opus 4.7/4.8 (`temperature`/`top_p`/`top_k`), and Anthropic list pricing (note that Bedrock regional/geo endpoints and non-global Vertex regions carry a 10% premium for Claude 5 models):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-opus-4-8
     config:
@@ -958,7 +972,7 @@ Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseU
 
 The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:claude-opus-4-7
     config:
@@ -1010,6 +1024,7 @@ command has no flag for it yet, so create the deployment via the REST API
 ### Claude Configuration Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Azure Claude evaluation
 
 providers:
@@ -1036,7 +1051,7 @@ tests:
 
 Azure AI Foundry provides access to Meta's Llama models, including Llama 4:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
     config:
@@ -1062,7 +1077,7 @@ Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning mode
 2. Use `max_completion_tokens` instead of `max_tokens`
 3. Set API version to '2025-04-01-preview' (or later)
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:DeepSeek-R1
     config:
@@ -1093,8 +1108,8 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
-- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
-- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
+- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all in **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
+- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited — see [Reasoning chat](#reasoning-chat-azurechat).
 
 Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
 
@@ -1143,7 +1158,7 @@ MAI text models run through the standard `azure:chat` provider. **Availability i
 
 promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:mai-thinking-1
     config:
@@ -1251,7 +1266,8 @@ Key requirements:
 
 Here's an example of a simple full assistant eval:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -1428,7 +1444,8 @@ In that example, the request tells the runtime that file search is available, bu
 
 Here's a complete example configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Azure Foundry Agent evaluation'
 
 providers:
@@ -1460,7 +1477,7 @@ tests:
 
 ### Error Handling
 
-The Azure Foundry Agent provider includes comprehensive error handling:
+The Azure Foundry Agent provider includes error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
 - **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
@@ -1557,7 +1574,8 @@ providers:
 
 ### Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - azure:video:sora
 
@@ -1567,7 +1585,8 @@ prompts:
 tests:
   - vars: {}
     assert:
-      - type: is-video
+      - type: javascript
+        value: context.providerResponse?.video?.format === 'mp4'
 ```
 
 ### Environment Variables

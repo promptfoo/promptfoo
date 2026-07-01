@@ -6,7 +6,7 @@ description: Run and evaluate AI models locally with Docker Model Runner for con
 
 # Docker Model Runner
 
-[Docker Model Runner](https://docs.docker.com/ai/model-runner/) makes it easy to manage, run, and deploy AI models using Docker. Designed for developers, Docker Model Runner streamlines the process of pulling, running, and serving large language models (LLMs) and other AI models directly from Docker Hub or any OCI-compliant registry.
+[Docker Model Runner](https://docs.docker.com/ai/model-runner/) lets you manage, run, and deploy AI models using Docker. Docker Model Runner pulls, runs, and serves large language models (LLMs) and other AI models directly from Docker Hub or any OCI-compliant registry.
 
 ## Quick Start
 
@@ -55,8 +55,7 @@ docker:hf.co/<model_name>             # Defaults to chat
 
 Configure the provider in your promptfoo configuration file:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: docker:ai/smollm3:Q4_K_M
     config:
@@ -84,4 +83,4 @@ Standard OpenAI parameters are supported:
 
 ## Notes
 
-- To conserve system resources, consider running evaluations serially with `promptfoo eval -j 1`.
+- To conserve system resources, consider running evals serially with `promptfoo eval -j 1`.

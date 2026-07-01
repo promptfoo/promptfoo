@@ -24,7 +24,7 @@ The provider keeps Fireworks credentials isolated from OpenAI's: it reads `FIREW
 - `fireworks:<model>` — chat completions, e.g. `fireworks:accounts/fireworks/models/gpt-oss-120b`
 - `fireworks:embedding:<model>` — embeddings, e.g. `fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b`
 
-Model identifiers use Fireworks's account-scoped path (`accounts/fireworks/models/<model>`). Browse the [serverless catalogue](https://fireworks.ai/models?deployment=serverless) for currently available ids — the serverless tier rotates, so a model that returns a 404 has likely been retired.
+Model identifiers use Fireworks's account-scoped path (`accounts/fireworks/models/<model>`). Browse the [serverless catalogue](https://fireworks.ai/models?deployment=serverless) for available ids — the serverless tier rotates, so a model that returns a 404 has likely been retired.
 
 ## Example Usage
 

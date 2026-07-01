@@ -184,7 +184,8 @@ providers:
 
 ### Basic Human Feedback Collection
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Collect human feedback on AI responses
 
 providers:
@@ -208,7 +209,8 @@ tests:
 
 ### Expert Review with Specific User
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Get expert feedback from specific team member
 
 providers:
@@ -220,7 +222,10 @@ providers:
       timeout: 600000 # 10 minutes
 
 prompts:
-  - file://prompts/technical-review.txt
+  - |
+    Review the following code for correctness, security, and maintainability:
+
+    {{code}}
 
 tests:
   - vars:
@@ -233,7 +238,11 @@ tests:
 
 ### Thread-based Conversations
 
+`threadTs` posts into an existing thread, but the provider does not poll that thread for replies.
+Treat this as a configuration reference rather than a complete response-collection example.
+
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Continue conversation in thread
 
 providers:
@@ -295,7 +304,7 @@ module.exports = {
 
 ## Testing Other Slack Bots
 
-The Slack provider is excellent for testing other Slack bots in their native environment. This allows you to:
+The Slack provider supports testing other Slack bots in their native environment. This allows you to:
 
 - Evaluate bot responses to various prompts
 - Compare different bot implementations
@@ -338,7 +347,8 @@ The Slack provider is excellent for testing other Slack bots in their native env
 
 ### Example: Testing a Customer Support Bot
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Test our customer support bot
 
 providers:
@@ -348,19 +358,14 @@ providers:
       channel: C_TEST_CHANNEL
       timeout: 15000
       responseStrategy: user
-      userId: U_SUPPORT_BOT_ID
-      messageFormatter: |
-        <@U_SUPPORT_BOT_ID> {{prompt}}
+      waitForUser: U_SUPPORT_BOT_ID
 
 prompts:
-  - 'How do I reset my password?'
-  - 'What are your business hours?'
-  - 'I need to speak to a human'
-  - "My order hasn't arrived yet, order #12345"
+  - '{{message}}'
 
 tests:
   - vars:
-      expected_intent: password_reset
+      message: '<@U_SUPPORT_BOT_ID> How do I reset my password?'
     assert:
       - type: contains
         value: 'reset'
@@ -368,19 +373,19 @@ tests:
         value: 'password'
 
   - vars:
-      expected_intent: business_hours
+      message: '<@U_SUPPORT_BOT_ID> What are your business hours?'
     assert:
       - type: contains-any
         value: ['hours', 'open', 'closed', 'Monday', 'schedule']
 
   - vars:
-      expected_intent: human_handoff
+      message: '<@U_SUPPORT_BOT_ID> I need to speak to a human'
     assert:
       - type: contains-any
         value: ['agent', 'representative', 'transfer', 'human']
 
   - vars:
-      expected_intent: order_status
+      message: "<@U_SUPPORT_BOT_ID> My order hasn't arrived yet, order #12345"
     assert:
       - type: contains
         value: '12345'
@@ -427,26 +432,32 @@ promptfoo eval -c bot-test-config.yaml -j 10
 
 Compare multiple bot implementations:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: slack
     label: bot-v1
     config:
       channel: C_CHANNEL_V1
-      userId: U_BOT_V1
+      responseStrategy: user
+      waitForUser: U_BOT_V1
 
   - id: slack
     label: bot-v2
     config:
       channel: C_CHANNEL_V2
-      userId: U_BOT_V2
+      responseStrategy: user
+      waitForUser: U_BOT_V2
 
 prompts:
   - "What's your return policy?"
 
-assert:
-  - type: llm-rubric
-    value: 'Response should be helpful, accurate, and mention the 30-day return window'
+defaultTest:
+  assert:
+    - type: regex
+      value: '30[- ]day'
+    - type: icontains
+      value: 'return'
 ```
 
 ### Best Practices for Bot Testing
@@ -511,7 +522,8 @@ async function findBotId() {
 
 ## Complete Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Human evaluation of customer service responses
 description: Compare AI and human customer service responses
 
@@ -526,14 +538,14 @@ providers:
     config:
       responseStrategy: 'first'
       timeout: 180000 # 3 minutes
-      formatMessage: (prompt) =>
-        `📋 *Customer Service Evaluation*\n\n${prompt}\n\n_How would you respond to this customer?_`
 
 prompts:
   - |
+    📋 Customer Service Evaluation
+
     Customer message: "{{message}}"
 
-    Please provide a helpful and empathetic response.
+    How would you respond to this customer? Please provide a helpful and empathetic response.
 
 tests:
   - vars:
@@ -565,7 +577,8 @@ tests:
 2. Invite your bot to the channel: `/invite @YourBotName`
 3. Create a simple test config:
 
-   ```yaml
+   ```yaml title="promptfooconfig.yaml"
+   # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
    providers:
      - id: slack:YOUR_CHANNEL_ID
        config:

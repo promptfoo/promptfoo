@@ -23,7 +23,7 @@ To use the MCP provider, you need to have an MCP server running. This can be a l
 
 The most basic MCP provider configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: mcp
     config:
@@ -413,10 +413,9 @@ tests:
 
 ## Red Team Testing with MCP
 
-The MCP provider is particularly powerful for red team testing of agentic systems. Here's a recommended configuration for comprehensive security testing:
+The MCP provider is useful for red team testing of agentic systems. Here's a recommended configuration for security testing:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 description: MCP Red Team Security Testing
 
 providers:

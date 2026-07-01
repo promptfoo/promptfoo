@@ -6,9 +6,9 @@ description: Evaluate Codex app-server with streamed agent events, approvals, sa
 
 # OpenAI Codex App Server
 
-This provider starts `codex app-server` as a local child process and drives the Codex app-server JSON-RPC protocol from promptfoo. Use it when you need to eval the rich client surface of Codex: streamed agent items, approvals, skills, plugins, app connector events, command/file trajectories, and thread lifecycle metadata.
+This provider starts `codex app-server` as a local child process and drives the Codex app-server JSON-RPC protocol from promptfoo. Use it when you need to eval the client surface of Codex: streamed agent items, approvals, skills, plugins, app connector events, command/file trajectories, and thread lifecycle metadata.
 
-For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./openai-codex-sdk.md). The app-server protocol is experimental, broader than the SDK, and designed for rich product integrations.
+For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./openai-codex-sdk.md). The app-server protocol is experimental, broader than the SDK, and designed for product integrations.
 
 ## Provider IDs
 
@@ -73,7 +73,7 @@ Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible eval
 
 Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:codex-app-server
     config:
@@ -92,6 +92,7 @@ The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-app-server:gpt-5.5
     config:
@@ -223,7 +224,7 @@ providers:
           multi_agent: true
 ```
 
-`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default, so set it explicitly only to pin that default or disable it with `false` (run `codex features list` to confirm the default for the build you target).
 
 ## Server Request Policy
 
@@ -280,6 +281,7 @@ Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled
 ## Structured Output
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-app-server:gpt-5.5
     config:

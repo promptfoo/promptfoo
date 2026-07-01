@@ -34,7 +34,7 @@ providers:
 ### Configuration Options
 
 - `temperature` - Range `(0.0, 1.0]`, cannot be 0
-- `max_completion_tokens` - Maximum completion tokens; the OpenAI-compatible API currently allows up to `2048`. Legacy `max_tokens` config is translated to this field for compatibility.
+- `max_completion_tokens` - Maximum completion tokens; the OpenAI-compatible API allows up to `2048`. Legacy `max_tokens` config is translated to this field for compatibility.
 - `apiBaseUrl` - Optional custom MiniMax-compatible proxy endpoint
 - `top_p`
 - `tools` and `tool_choice` - Use these for tool calling. MiniMax rejects the deprecated `function_call` parameter.
@@ -45,7 +45,7 @@ When MiniMax reports prompt-cache reads, promptfoo calculates cost using the ret
 
 ### MiniMax-M3 (Default)
 
-- Latest flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
+- Flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
 - Multimodal: supports text, image, and video input
 - Input: $0.12/1M (cache hit), $0.6/1M (cache miss)
 - Output: $2.4/1M
@@ -74,7 +74,8 @@ M3 is the default and costs roughly 2x M2.7 per token. For cost-sensitive worklo
 
 Here's an example comparing MiniMax with OpenAI:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: minimax:MiniMax-M3
     config:

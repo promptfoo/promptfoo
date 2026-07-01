@@ -7,7 +7,7 @@ keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, promptfo
 
 # fal.ai
 
-The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the [fal-js](https://github.com/fal-ai/fal-js) client, providing a native experience for using fal.ai models in your evaluations.
+The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the [fal-js](https://github.com/fal-ai/fal-js) client, providing a native experience for using fal.ai models in your evals.
 
 ## Setup
 
@@ -36,7 +36,7 @@ To run a model, specify the model type and model name: `fal:<model_type>:<model_
 
 :::info
 
-Browse the complete [model gallery](https://fal.ai/models) for the latest models and detailed specifications. Model availability and capabilities are frequently updated.
+Browse the complete [model gallery](https://fal.ai/models) for available models and detailed specifications. Model availability and capabilities are updated over time.
 
 :::
 
@@ -65,7 +65,7 @@ Provider config values are sent to the fal model as input, except for `apiKey` a
 
 For example, `@fal-ai/client` proxy URLs are browser-only when passed as a string. To route promptfoo's Node.js CLI requests through a proxy, use the object form and set `when: always`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: fal:image:fal-ai/flux/schnell
     config:
@@ -87,7 +87,7 @@ Configuration parameters vary by model. For example, `fast-sdxl` supports additi
 
 ### Basic Setup
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: fal:image:fal-ai/flux/schnell
     config:
@@ -101,7 +101,7 @@ providers:
 
 ### Advanced Options
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: fal:image:fal-ai/flux/dev
     config:

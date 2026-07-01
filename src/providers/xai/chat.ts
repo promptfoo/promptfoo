@@ -98,10 +98,28 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
+type XAIModelCost = {
+  input: number;
+  output: number;
+  cache_read?: number;
+  longContext?: {
+    threshold: number;
+    input: number;
+    output: number;
+    cache_read?: number;
+  };
+};
+
+type XAIChatModel = {
+  id: string;
+  cost: XAIModelCost;
+  aliases?: string[];
+};
+
 // Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
 // reports per-token prices in "ticks" (1 tick = $1e-10). The same scale is used
 // by `usage.cost_in_usd_ticks` on chat/responses results.
-export const XAI_CHAT_MODELS = [
+export const XAI_CHAT_MODELS: XAIChatModel[] = [
   // Grok 4.20 Models
   {
     id: 'grok-4.20-0309-reasoning',
@@ -191,23 +209,21 @@ export const XAI_CHAT_MODELS = [
     },
     aliases: ['grok-4-1-fast-non-reasoning-latest'],
   },
-  // Grok Code Fast Models
+  // Grok Build 0.1 (the retired Grok Code Fast slugs are aliases)
   {
-    id: 'grok-code-fast-1',
+    id: 'grok-build-0.1',
     cost: {
-      input: 0.2 / 1e6,
-      output: 1.5 / 1e6,
-      cache_read: 0.02 / 1e6,
+      input: 1.0 / 1e6,
+      output: 2.0 / 1e6,
+      cache_read: 0.2 / 1e6,
+      longContext: {
+        threshold: 200_000,
+        input: 2.0 / 1e6,
+        output: 4.0 / 1e6,
+        cache_read: 0.4 / 1e6,
+      },
     },
-    aliases: ['grok-code-fast'],
-  },
-  {
-    id: 'grok-code-fast-1-0825',
-    cost: {
-      input: 0.2 / 1e6,
-      output: 1.5 / 1e6,
-      cache_read: 0.02 / 1e6,
-    },
+    aliases: ['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'],
   },
   // Grok-4 Fast Models (2M context window)
   {
@@ -309,14 +325,13 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
-// xAI's May 15, 2026 (12:00 PM PT) retirement email confirms the following
-// behaviour for the listed legacy chat slugs: requests continue to work after
+// xAI's May 15, 2026 migration guide confirms the following behaviour for the
+// listed legacy chat slugs: requests continue to work after
 // the cutoff but redirect to grok-4.3 (low reasoning effort for the reasoning
 // variants, none for the non-reasoning variants) and are billed at standard
 // grok-4.3 pricing ($1.25 / 1M input, $2.50 / 1M output). The set mirrors
-// every id/alias pair xAI lists on `/v1/language-models` for the retired
-// models so that any spelling a user might have in their config maps to the
-// correct post-retirement billing target.
+// the retired model families that share that target. Grok Code Fast is excluded:
+// its aliases route to Grok Build 0.1 instead.
 const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
   // grok-4-1-fast-{reasoning,non-reasoning} family
   'grok-4-1-fast-reasoning',
@@ -336,10 +351,6 @@ const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
   'grok-4-0709',
   'grok-4',
   'grok-4-latest',
-  // grok-code-fast-1 family — xAI's catalog also exposes a dated slug.
-  'grok-code-fast-1',
-  'grok-code-fast',
-  'grok-code-fast-1-0825',
   // grok-3 family — xAI's catalog collapses every -beta/-fast variant into
   // the same id, so they all share the post-retirement billing target.
   'grok-3',
@@ -406,6 +417,7 @@ export const GROK_REASONING_MODELS = [
   'grok-4-1-fast-latest',
   'grok-4-1-fast-reasoning-latest',
   // Grok Code Fast
+  'grok-build-0.1',
   'grok-code-fast-1',
   'grok-code-fast',
   'grok-code-fast-1-0825',
@@ -472,6 +484,11 @@ export const GROK_4_MODELS = [
   'grok-4-1-fast-reasoning-latest',
   'grok-4-1-fast-non-reasoning',
   'grok-4-1-fast-non-reasoning-latest',
+  // Grok Build and retired Grok Code Fast aliases
+  'grok-build-0.1',
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-code-fast-1-0825',
   // Grok 4 Fast
   'grok-4-fast-reasoning',
   'grok-4-fast',
@@ -517,11 +534,22 @@ export function calculateXAICost(
     return undefined;
   }
 
+  // xAI's `long_context_threshold` API field applies long-context rates at or
+  // above the threshold. Prompt tokens include cached tokens here.
+  const longContextCost =
+    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
+      ? model.cost.longContext
+      : undefined;
   const inputCostOverride = config.inputCost ?? config.cost;
-  const inputCost = inputCostOverride ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const inputCost = inputCostOverride ?? longContextCost?.input ?? model.cost.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   const cacheReadCost =
-    config.cacheReadCost ?? inputCostOverride ?? model.cost.cache_read ?? inputCost;
+    config.cacheReadCost ??
+    inputCostOverride ??
+    longContextCost?.cache_read ??
+    model.cost.cache_read ??
+    inputCost;
 
   const billableCachedTokens = Number.isFinite(cachedTokens)
     ? Math.min(Math.max(cachedTokens!, 0), promptTokens)
