@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
@@ -162,6 +162,9 @@ export function maybeLoadFromExternalFile(
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
+        if (contents.trim() === '') {
+          continue; // js-yaml v5 throws for empty input
+        }
         const parsed = yaml.load(contents);
         if (parsed === null || parsed === undefined) {
           continue; // Skip empty files

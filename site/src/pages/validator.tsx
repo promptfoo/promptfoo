@@ -10,7 +10,7 @@ import Typography from '@mui/material/Typography';
 import { AggregateAjvError } from '@segment/ajv-human-errors';
 import Layout from '@theme/Layout';
 import Ajv from 'ajv';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 const DEFAULT_INPUT = `prompts:
   - "Write a tweet about {{topic}}"

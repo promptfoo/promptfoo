@@ -9,7 +9,7 @@ import { useToast } from '@app/hooks/useToast';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import type { UnifiedConfig } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
 

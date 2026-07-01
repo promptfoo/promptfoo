@@ -28,7 +28,7 @@ import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import {
   Brain,
   ClipboardCheck,

@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 
 import chalk from 'chalk';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';

@@ -7,7 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 

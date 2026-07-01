@@ -3,7 +3,7 @@ import React from 'react';
 import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 

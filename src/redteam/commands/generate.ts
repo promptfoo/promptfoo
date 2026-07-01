@@ -4,7 +4,7 @@ import path from 'path';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';

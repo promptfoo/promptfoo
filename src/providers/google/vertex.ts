@@ -267,7 +267,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     if (prompt.trim().startsWith('- role:')) {
       try {
         const yaml = await import('js-yaml');
-        const parsed = yaml.default.load(prompt);
+        const parsed = yaml.load(prompt);
         normalizedPrompt = JSON.stringify(parsed);
       } catch (err) {
         return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };

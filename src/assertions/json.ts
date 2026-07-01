@@ -1,4 +1,4 @@
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
 import type { ValidateFunction } from 'ajv';

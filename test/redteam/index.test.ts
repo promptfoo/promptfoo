@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';

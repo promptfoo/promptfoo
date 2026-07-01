@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getConfigDirectoryPath,

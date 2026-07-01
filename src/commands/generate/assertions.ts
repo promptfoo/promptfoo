@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 
 import chalk from 'chalk';
 import { InvalidArgumentError } from 'commander';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
 import logger from '../../logger';

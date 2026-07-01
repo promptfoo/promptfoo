@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { ProviderOptionsSchema } from '../../validators/providers';

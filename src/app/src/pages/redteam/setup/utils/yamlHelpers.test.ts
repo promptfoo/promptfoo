@@ -23,7 +23,7 @@ vi.mock('js-yaml', () => ({
 }));
 
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 describe('yamlHelpers', () => {
   beforeEach(() => {
