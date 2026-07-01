@@ -5,6 +5,28 @@ import { getNunjucksEngine } from './templates';
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
+export function isConfigTemplatingDisabled(): boolean {
+  return getEnvBool('PROMPTFOO_DISABLE_TEMPLATING');
+}
+
+export function getProcessEnvForTemplates(): EnvOverrides {
+  const processEnvDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+  return processEnvDisabled ? {} : (process.env as EnvOverrides);
+}
+
+/** Render config-level environment overrides against process.env before using them as templates. */
+export function renderEnvOverrides(envOverrides?: EnvOverrides): EnvOverrides | undefined {
+  if (!envOverrides) {
+    return undefined;
+  }
+
+  const rendered = renderEnvOnlyInObject(envOverrides, getProcessEnvForTemplates(), true);
+  return Object.fromEntries(Object.entries(rendered).filter(([, value]) => value !== undefined));
+}
+
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
  * This allows env vars to be resolved at provider load time while preserving runtime var templates.
@@ -33,7 +55,7 @@ export function renderEnvOnlyInObject<T>(
   envOverrides?: EnvOverrides,
   replaceBase?: boolean,
 ): T {
-  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+  if (isConfigTemplatingDisabled()) {
     return obj;
   }
 
@@ -116,7 +138,7 @@ export function renderEnvOnlyInObject<T>(
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
   // Renders nunjucks template strings with context variables
-  if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+  if (!vars || isConfigTemplatingDisabled()) {
     return obj;
   }
   if (typeof obj === 'string') {

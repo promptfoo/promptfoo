@@ -8,7 +8,11 @@ import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '..
 import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { loadDefaultConfig } from '../util/config/default';
+import {
+  dereferenceConfig,
+  loadDefaultConfig,
+  renderConfigEnvTemplates,
+} from '../util/config/default';
 import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -19,6 +23,15 @@ import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
+
+export async function dereferenceLiveRedteamConfig(
+  config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const dereferencedConfig = (await dereferenceConfig(
+    structuredClone(config) as Parameters<typeof dereferenceConfig>[0],
+  )) as unknown as Record<string, unknown>;
+  return renderConfigEnvTemplates(dereferencedConfig as { env?: Record<string, string> });
+}
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);
@@ -91,24 +104,44 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // reusable generated redteam.yaml (which feeds `doGenerateRedteam`). The tags still reach
     // the eval below via `evalOptions`, which is destructured from the untouched `options`
     // object (see the `doEval` call), where they are persisted onto the eval result.
-    const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
+    const {
+      filterProviders: explicitFilterProviders,
+      filterTargets: explicitFilterTargets,
+      maxConcurrency,
+      tags: _runtimeTags,
+      ...passThroughOptions
+    } = options;
+    const {
+      filterProviders: configuredFilterProviders,
+      filterTargets: configuredFilterTargets,
+      ...configuredCommandLineOptions
+    } = options.liveRedteamConfig?.commandLineOptions ?? {};
+    const effectiveFilterProviders =
+      explicitFilterProviders ??
+      explicitFilterTargets ??
+      configuredFilterProviders ??
+      configuredFilterTargets;
 
+    const generationOptions = {
+      ...passThroughOptions,
+      ...configuredCommandLineOptions,
+      ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
+      ...(effectiveFilterProviders === undefined
+        ? {}
+        : { filterProviders: effectiveFilterProviders }),
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    };
     let redteamConfig;
     const generationStartTime = Date.now();
     try {
-      redteamConfig = await doGenerateRedteam({
-        ...passThroughOptions,
-        ...(options.liveRedteamConfig?.commandLineOptions || {}),
-        ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
-        config: configPath,
-        output: redteamPath,
-        force: options.force,
-        verbose: options.verbose,
-        delay: options.delay,
-        inRedteamRun: true,
-        abortSignal: options.abortSignal,
-        progressBar: options.progressBar,
-      });
+      redteamConfig = await doGenerateRedteam(generationOptions);
     } catch (error) {
       if (error instanceof PartialGenerationError) {
         // Log the detailed error message - this will be visible in CLI and UI (via logCallback)
@@ -132,7 +165,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     logger.info('Running scan...');
     const { defaultConfig } = await loadDefaultConfig();
     // Exclude 'description' from options to avoid conflict with Commander's description method
-    const { description: _description, ...evalOptions } = options;
+    const {
+      description: _description,
+      filterProviders: _evalFilterProviders,
+      filterTargets: _evalFilterTargets,
+      ...evalOptions
+    } = options;
     const evalResult = await doEval(
       {
         ...evalOptions,
@@ -141,8 +179,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         cache: true,
         write: true,
         filterPrompts: options.filterPrompts,
-        filterProviders: options.filterProviders,
-        filterTargets: options.filterTargets,
+        filterProviders: effectiveFilterProviders,
       },
       defaultConfig,
       redteamPath,

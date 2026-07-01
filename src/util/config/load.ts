@@ -68,6 +68,26 @@ export class ConfigResolutionError extends Error {
   }
 }
 
+export interface ResolveConfigsHooks {
+  beforeProviderLoad?: (context: {
+    providers: TestSuiteConfig['providers'];
+    redteam: UnifiedConfig['redteam'];
+    env: UnifiedConfig['env'];
+    basePath: string;
+  }) => Promise<void>;
+}
+
+const RESOLVE_CONFIGS_HOOKS = Symbol('resolveConfigsHooks');
+
+export function withResolveConfigsHooks<T extends object>(value: T, hooks: ResolveConfigsHooks): T {
+  Object.defineProperty(value, RESOLVE_CONFIGS_HOOKS, { configurable: true, value: hooks });
+  return value;
+}
+
+export function getResolveConfigsHooks(value: object): ResolveConfigsHooks | undefined {
+  return (value as { [RESOLVE_CONFIGS_HOOKS]?: ResolveConfigsHooks })[RESOLVE_CONFIGS_HOOKS];
+}
+
 export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
   logger[error.logLevel](prefix ? `${prefix}${error.cliMessage}` : error.cliMessage);
 }
@@ -297,7 +317,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
  * @param config - The config object to render
  * @returns The config with env templates rendered
  */
-function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
+export function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
   // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
   const processEnvDisabled = getEnvBool(
     'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
@@ -743,6 +763,10 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
 }> {
+  const hooks = getResolveConfigsHooks(_defaultConfig);
+  const previousBasePath = cliState.basePath;
+  const previousConfig = cliState.config;
+  const previousSelectedProviderConfigs = cliState.selectedProviderConfigs;
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
@@ -892,7 +916,11 @@ export async function resolveConfigs(
 
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
-  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filterOption =
+    cmdObj.filterProviders ??
+    cmdObj.filterTargets ??
+    commandLineOptions?.filterProviders ??
+    commandLineOptions?.filterTargets;
   const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
 
   if (
@@ -903,6 +931,24 @@ export async function resolveConfigs(
     logger.warn(
       `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
     );
+  }
+
+  try {
+    await hooks?.beforeProviderLoad?.({
+      providers: filteredProviderConfigs,
+      redteam: config.redteam,
+      env: config.env,
+      basePath,
+    });
+    // Keep hook callers on the same selected-provider view used for construction.
+    if (hooks?.beforeProviderLoad) {
+      config.providers = filteredProviderConfigs;
+    }
+  } catch (error) {
+    cliState.basePath = previousBasePath;
+    cliState.config = previousConfig;
+    cliState.selectedProviderConfigs = previousSelectedProviderConfigs;
+    throw error;
   }
 
   // Parse prompts, providers, and tests

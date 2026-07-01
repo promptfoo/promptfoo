@@ -12,6 +12,7 @@ import { useToast } from '@app/hooks/useToast';
 import {
   AGENTIC_STRATEGIES_SET,
   ALL_STRATEGIES,
+  DEFAULT_PLUGINS,
   MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
   MULTI_TURN_STRATEGY_SET,
@@ -31,6 +32,7 @@ import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import {
   getStrategyId,
+  hasPosteriorStrategy,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
@@ -44,6 +46,7 @@ const HERO_STRATEGY_IDS_SET: ReadonlySet<string> = new Set(HERO_STRATEGY_IDS);
 
 /** Strategies gated to enterprise only (always disabled in OSS) */
 const STRATEGIES_ENTERPRISE_ONLY = new Set(['gcg']);
+const POSTERIOR_UNAVAILABLE_MESSAGE = 'Posterior Attack supports single-input targets only.';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -90,6 +93,65 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
+  const targetInputs = config.target?.inputs ?? config.target?.config?.inputs;
+  const targetHasInputs =
+    targetInputs !== null &&
+    typeof targetInputs === 'object' &&
+    !Array.isArray(targetInputs) &&
+    Object.keys(targetInputs).length > 0;
+  const pluginsWithInputs = useMemo(
+    () =>
+      config.plugins.filter(
+        (plugin) =>
+          typeof plugin === 'object' &&
+          plugin.config?.inputs !== null &&
+          typeof plugin.config?.inputs === 'object' &&
+          !Array.isArray(plugin.config.inputs) &&
+          Object.keys(plugin.config.inputs).length > 0,
+      ),
+    [config.plugins],
+  );
+  const effectivePlugins = useMemo(
+    () => (config.plugins.length > 0 ? config.plugins : Array.from(DEFAULT_PLUGINS)),
+    [config.plugins],
+  );
+  const isPosteriorUnavailable = targetHasInputs || pluginsWithInputs.length > 0;
+  const compatibilityPlugins = targetHasInputs ? effectivePlugins : pluginsWithInputs;
+  const hasSelectedPosterior = useMemo(
+    () =>
+      hasPosteriorStrategy(config.strategies, compatibilityPlugins, {
+        pluginsUseTargetInputs: targetHasInputs,
+      }),
+    [compatibilityPlugins, config.strategies, targetHasInputs],
+  );
+  const isDirectPosteriorUnavailable =
+    isPosteriorUnavailable &&
+    hasPosteriorStrategy([{ id: 'posterior' }], compatibilityPlugins, {
+      pluginsUseTargetInputs: targetHasInputs,
+    });
+  const isLayerStepUnavailable = useCallback(
+    (
+      strategyId: string,
+      targetPlugins?: readonly string[],
+      existingSteps: readonly unknown[] = [],
+    ) => {
+      if (strategyId !== 'posterior' || !isPosteriorUnavailable) {
+        return false;
+      }
+      const candidateLayer = {
+        id: 'layer',
+        config: {
+          ...(targetPlugins && targetPlugins.length > 0 ? { plugins: [...targetPlugins] } : {}),
+          steps: [...existingSteps, { id: 'posterior' }],
+        },
+      } as RedteamStrategyObject;
+      return hasPosteriorStrategy([candidateLayer], compatibilityPlugins, {
+        pluginsUseTargetInputs: targetHasInputs,
+      });
+    },
+    [compatibilityPlugins, isPosteriorUnavailable, targetHasInputs],
+  );
+
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
       if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
@@ -98,9 +160,16 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       if (isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId)) {
         return true;
       }
+      if (
+        strategyId === 'posterior' &&
+        isDirectPosteriorUnavailable &&
+        !config.strategies.some((strategy) => getStrategyId(strategy) === strategyId)
+      ) {
+        return true;
+      }
       return false;
     },
-    [isRemoteGenerationDisabled],
+    [config.strategies, isDirectPosteriorUnavailable, isRemoteGenerationDisabled],
   );
 
   /** Whether a strategy is disabled specifically because it's enterprise only */
@@ -164,7 +233,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       // Allow deselection even when disabled, but block selection
       if (isStrategyDisabled(strategyId) && !isSelected) {
-        if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
+        if (strategyId === 'posterior' && isPosteriorUnavailable) {
+          toast.showToast(POSTERIOR_UNAVAILABLE_MESSAGE, 'error');
+        } else if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
           toast.showToast('This strategy is available in Promptfoo Enterprise.', 'error');
         } else {
           toast.showToast(
@@ -256,6 +327,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       isStrategyDisabled,
       toast,
       setConfigDialog,
+      isPosteriorUnavailable,
     ],
   );
 
@@ -358,12 +430,18 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   // Validation function to check if all selected strategies are properly configured
   const isStrategyConfigValid = useCallback(() => {
+    if (isPosteriorUnavailable && hasSelectedPosterior) {
+      return false;
+    }
     return config.strategies.every((strategy) =>
       isStrategyConfigured(getStrategyId(strategy), strategy),
     );
-  }, [config.strategies]);
+  }, [config.strategies, hasSelectedPosterior, isPosteriorUnavailable]);
 
   const getNextButtonTooltip = useCallback(() => {
+    if (isPosteriorUnavailable && hasSelectedPosterior) {
+      return 'Posterior Attack supports single-input targets only. Remove it or clear the configured target or plugin inputs.';
+    }
     if (!isStrategyConfigValid()) {
       const unconfiguredStrategies = config.strategies
         .filter((strategy) => {
@@ -377,7 +455,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
     }
     return '';
-  }, [config.strategies, isStrategyConfigValid]);
+  }, [config.strategies, hasSelectedPosterior, isPosteriorUnavailable, isStrategyConfigValid]);
+
+  const getTestCaseGenerationDisabledReason = useCallback(
+    (strategyId: string): string | undefined => {
+      if (!isPosteriorUnavailable) {
+        return undefined;
+      }
+      const strategy =
+        config.strategies.find((item) => getStrategyId(item) === strategyId) ??
+        ({ id: strategyId } as RedteamStrategyObject);
+      return hasPosteriorStrategy([strategy], compatibilityPlugins, {
+        includeDisabledStrategies: true,
+        pluginsUseTargetInputs: targetHasInputs,
+      })
+        ? POSTERIOR_UNAVAILABLE_MESSAGE
+        : undefined;
+    },
+    [compatibilityPlugins, config.strategies, isPosteriorUnavailable, targetHasInputs],
+  );
 
   // ----------------------------------------------
   // Derived states
@@ -453,6 +549,21 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           </AlertContent>
         </Alert>
       )}
+
+      {isPosteriorUnavailable &&
+        (hasSelectedPosterior || (isAdvancedOpen && isDirectPosteriorUnavailable)) && (
+          <Alert variant="warning" className="-mx-3 mb-3 rounded-none shadow-sm">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertTitle>Posterior Attack requires a single-input target</AlertTitle>
+              <AlertDescription>
+                {hasSelectedPosterior
+                  ? 'Remove Posterior Attack from the selected strategies or Layer steps, or clear the configured target or plugin inputs.'
+                  : 'Posterior Attack is unavailable while target or plugin inputs are configured.'}
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
 
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
@@ -545,6 +656,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
                   isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
+                  getTestCaseGenerationDisabledReason={getTestCaseGenerationDisabledReason}
                 />
               )}
 
@@ -583,6 +695,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             }
             selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
             allStrategies={config.strategies}
+            isLayerStepUnavailable={isLayerStepUnavailable}
           />
         </div>
       </TestCaseGenerationProvider>

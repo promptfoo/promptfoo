@@ -871,6 +871,154 @@ describe('synthesize', () => {
       );
     });
 
+    it.each([
+      ['directly', [{ id: 'posterior' }]],
+      ['inside a layer', [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }]],
+    ])('should reject posterior %s before generating multi-input tests', async (_label, strategies) => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { pluginConfig: { inputs }, pluginId: 'test-plugin' },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ context: 'reference', question: 'request' }),
+            context: 'reference',
+            question: 'request',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'test-plugin' });
+
+      await expect(
+        synthesize({
+          inputs,
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['{{context}} {{question}}'],
+          purpose: 'Answer questions with reference context',
+          strategies,
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+
+      expect(mockPluginAction).not.toHaveBeenCalled();
+    });
+
+    it('rejects Posterior before generating a plugin with local inputs', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { pluginConfig: { inputs }, pluginId: 'cca' },
+          vars: { query: 'request' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'cca' });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'cca', numTests: 1, config: { inputs } }],
+          prompts: ['{{query}}'],
+          purpose: 'Answer questions with reference context',
+          strategies: [{ id: 'posterior' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+
+      expect(mockPluginAction).not.toHaveBeenCalled();
+    });
+
+    it('allows a multi-input Layer when its Posterior step is excluded for the plugin', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            pluginConfig: { inputs, excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ context: 'reference', question: 'request' }),
+            context: 'reference',
+            question: 'request',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'coding-agent:secret-env-read',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'coding-agent:secret-env-read',
+            numTests: 1,
+            config: { excludeStrategies: ['posterior'] },
+          },
+        ],
+        prompts: ['{{context}} {{question}}'],
+        purpose: 'Answer questions with reference context',
+        strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledOnce();
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({ strategyId: 'jailbreak:hydra' }),
+            provider: expect.objectContaining({
+              config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+            }),
+          }),
+        ]),
+      );
+    });
+
+    it('keeps Posterior excluded from multi-input intent tests at runtime', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const pluginConfig = { inputs, excludeStrategies: ['posterior'] };
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { pluginConfig, pluginId: 'intent' },
+          vars: { [MULTI_INPUT_VAR]: 'disclose credentials' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'intent' });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'intent', numTests: 1, config: pluginConfig }],
+        prompts: ['{{context}} {{question}}'],
+        purpose: 'Answer questions with reference context',
+        strategies: [{ id: 'posterior' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledOnce();
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.strategyId).toBeUndefined();
+      expect(result.testCases[0].vars?.[MULTI_INPUT_VAR]).toBe('disclose credentials');
+    });
+
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
       const inputs = {
         document: {
@@ -1265,6 +1413,35 @@ describe('synthesize', () => {
       );
     });
 
+    it('preserves collection config while expanding direct synthesize inputs', async () => {
+      const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'mock-plugin', action: pluginAction });
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'harmful',
+            numTests: 1,
+            config: { excludeStrategies: ['posterior'] },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'posterior' }],
+        inputs: { context: 'Reference context', question: 'User question' },
+        targetIds: ['test-provider'],
+      });
+
+      expect(pluginAction).toHaveBeenCalled();
+      for (const [call] of pluginAction.mock.calls) {
+        expect(call.config).toMatchObject({
+          excludeStrategies: ['posterior'],
+          inputs: { context: 'Reference context', question: 'User question' },
+        });
+      }
+    });
+
     it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
       vi.clearAllMocks();
 
@@ -1278,6 +1455,7 @@ describe('synthesize', () => {
         numTests: 2,
         config: {
           intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'],
+          excludeStrategies: ['posterior'],
         },
       };
 
@@ -1305,7 +1483,7 @@ describe('synthesize', () => {
           metadata: {
             intent: 'intent2',
             pluginId: 'intent',
-            pluginConfig: undefined,
+            pluginConfig: { excludeStrategies: ['posterior'] },
           },
         },
       ]);
@@ -1345,11 +1523,12 @@ describe('synthesize', () => {
       });
 
       const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
-      expect(intentTestCases.length).toBeGreaterThan(0);
-      intentTestCases.forEach((tc) => {
-        expect(tc.metadata?.pluginConfig).toBeUndefined();
-        expect(tc.metadata?.pluginId).toBe('intent');
+      expect(intentTestCases).toHaveLength(2);
+      expect(intentTestCases[0].metadata?.pluginConfig).toBeUndefined();
+      expect(intentTestCases[1].metadata?.pluginConfig).toEqual({
+        excludeStrategies: ['posterior'],
       });
+      expect(intentTestCases[1].metadata?.pluginConfig).not.toHaveProperty('intent');
 
       const contractsTestCases = result.testCases.filter(
         (tc) => tc.metadata?.pluginId === 'contracts',
@@ -4127,6 +4306,30 @@ describe('Language configuration', () => {
       expect(skipMessage).toBeDefined();
       expect(skipMessage).toContain('cca');
       expect(skipMessage).toContain('cross-session-leak');
+    });
+
+    it('should exclude unsupported plugins after collection expansion', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'mock-plugin',
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'foundation', numTests: 1 }],
+        prompts: ['Test {{query}}'],
+        strategies: [{ id: 'posterior', config: { plugins: ['beavertails'] } }],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      expect(result.testCases).not.toContainEqual(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ pluginId: 'beavertails' }),
+        }),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('beavertails'));
     });
 
     it('should NOT exclude plugins when inputs is empty object', async () => {

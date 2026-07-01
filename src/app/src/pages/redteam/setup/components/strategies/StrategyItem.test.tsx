@@ -161,7 +161,7 @@ describe('StrategyItem', () => {
       renderStrategyItem({
         isDisabled: true,
         isRemoteGenerationDisabled: true,
-        strategy: baseStrategy,
+        strategy: { ...baseStrategy, id: 'citation' },
         isSelected: false,
         onToggle: mockOnToggle,
         onConfigClick: mockOnConfigClick,
@@ -177,7 +177,7 @@ describe('StrategyItem', () => {
       renderStrategyItem({
         isDisabled: true,
         isRemoteGenerationDisabled: true,
-        strategy: baseStrategy,
+        strategy: { ...baseStrategy, id: 'citation' },
         isSelected: false,
         onToggle: mockOnToggle,
         onConfigClick: mockOnConfigClick,
@@ -189,6 +189,19 @@ describe('StrategyItem', () => {
         /This strategy requires remote generation\./,
       );
       expect(remoteGenerationTooltips.length).toBeGreaterThan(0);
+    });
+
+    it('does not label a locally disabled strategy as requiring remote generation', () => {
+      renderStrategyItem({
+        isDisabled: true,
+        isRemoteGenerationDisabled: true,
+        strategy: { ...baseStrategy, id: 'posterior' },
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+
+      expect(screen.queryByText('Remote generation required')).not.toBeInTheDocument();
     });
 
     it('keeps the enterprise guidance tooltip hoverable for disabled strategies', async () => {

@@ -1,10 +1,7 @@
-import * as fs from 'fs';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -37,6 +34,7 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { resolvePluginConfig } from './pluginConfig';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -52,8 +50,13 @@ import {
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
-import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
-import { pluginMatchesStrategyTargets } from './strategies/util';
+import {
+  getStrategyCompatibilityError,
+  loadStrategy,
+  Strategies,
+  validateStrategies,
+} from './strategies/index';
+import { deduplicateStrategies, pluginMatchesStrategyTargets } from './strategies/util';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -70,6 +73,8 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from './types';
+
+export { getStrategyCompatibilityError, resolvePluginConfig };
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 
@@ -321,37 +326,6 @@ function generateReport(
   return `\nTest Generation Report:\n${table.toString()}`;
 }
 
-/**
- * Resolves top-level file paths in the plugin configuration.
- * @param config - The plugin configuration to resolve.
- * @returns The resolved plugin configuration.
- */
-export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
-  if (!config) {
-    return {};
-  }
-
-  for (const key in config) {
-    const value = config[key];
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = value.slice('file://'.length);
-
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filePath}`);
-      }
-
-      if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
-      }
-    }
-  }
-  return config;
-}
-
 function resolvePluginConfigWithMaxChars(
   config: Record<string, any> | undefined,
   maxCharsPerMessage?: number,
@@ -529,6 +503,12 @@ function addLanguageToPluginMetadata(
     Object.hasOwn(test.metadata, 'pluginConfig') &&
     test.metadata.pluginConfig === undefined
   );
+  const resolvedPluginConfig = resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage);
+  let pluginConfigForMetadata = resolvedPluginConfig;
+  if (plugin.id === 'intent' && resolvedPluginConfig) {
+    const { intent: _intent, ...withoutIntent } = resolvedPluginConfig;
+    pluginConfigForMetadata = withoutIntent;
+  }
 
   // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
   // then fall back to the original plugin.config?.modifiers
@@ -548,7 +528,7 @@ function addLanguageToPluginMetadata(
       pluginId: plugin.id,
       ...(includePluginConfig && {
         pluginConfig: {
-          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+          ...pluginConfigForMetadata,
           ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
         },
       }),
@@ -1029,35 +1009,9 @@ export async function synthesize({
     }
   });
 
-  // Deduplicate strategies by a key. For most strategies, the key is the id.
-  // For 'layer', use label if provided, otherwise include the ordered step ids.
-  const seen = new Set<string>();
-  const keyForStrategy = (s: (typeof strategies)[number]): string => {
-    if (s.id === 'layer' && s.config) {
-      const config = s.config as Record<string, unknown>;
-      // If label is provided, use it for uniqueness (allows multiple layer strategies)
-      if (typeof config.label === 'string' && config.label.trim()) {
-        return `layer/${config.label}`;
-      }
-      // Otherwise use steps for uniqueness
-      if (Array.isArray(config.steps)) {
-        const steps = (config.steps as Array<string | { id?: string }>).map((st) =>
-          typeof st === 'string' ? st : (st?.id ?? 'unknown'),
-        );
-        return `layer:${steps.join('->')}`;
-      }
-    }
-    return s.id;
-  };
-  strategies = expandedStrategies.filter((strategy) => {
-    const key = keyForStrategy(strategy);
-    if (seen.has(key)) {
-      logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
+  strategies = deduplicateStrategies(expandedStrategies, (key) =>
+    logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`),
+  );
 
   // Only extract intent/goal when strategies that need it are selected
   const needsGoalExtraction = strategies.some(
@@ -1065,6 +1019,11 @@ export async function synthesize({
   );
 
   await validateStrategies(strategies);
+  const hasMultipleInputs = Boolean(inputs && Object.keys(inputs).length > 0);
+  const compatibilityError = getStrategyCompatibilityError(strategies, inputs, { plugins });
+  if (compatibilityError) {
+    throw new Error(compatibilityError);
+  }
   await validateSharpDependency(strategies, plugins);
 
   const redteamProvider = await redteamProviderManager.getProvider({
@@ -1159,8 +1118,7 @@ export async function synthesize({
   );
 
   // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
-  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
-  if (hasMultipleInputs) {
+  if (hasMultipleInputs && inputs) {
     const inputKeys = Object.keys(inputs);
     logger.info(
       `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
@@ -1168,16 +1126,6 @@ export async function synthesize({
     // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
     // with user-defined input variable names
     injectVar = MULTI_INPUT_VAR;
-
-    // Some plugins don't support multi-input mode; skip them
-    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
-    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
-    if (removedPlugins.length > 0) {
-      logger.info(
-        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
-      );
-    }
   }
 
   // Determine injectVar if not explicitly set (only applies to single-input mode)
@@ -1199,7 +1147,7 @@ export async function synthesize({
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+      plugins.push(...categoryPlugins.map((id) => ({ ...plugin, id })));
     }
   }
 
@@ -1208,9 +1156,7 @@ export async function synthesize({
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
+    mapping.plugins.forEach((id: string) => expandedPlugins.push({ ...plugin, id }));
     strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 
@@ -1279,6 +1225,20 @@ export async function synthesize({
   // Validate all plugins upfront
   logger.debug('Validating plugins...');
   plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
+
+  // Collections can expand into plugins that do not support multi-input mode.
+  if (hasMultipleInputs) {
+    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+    const removedPlugins = plugins.filter((plugin) =>
+      multiInputExcluded.includes(plugin.id as any),
+    );
+    plugins = plugins.filter((plugin) => !multiInputExcluded.includes(plugin.id as any));
+    if (removedPlugins.length > 0) {
+      logger.info(
+        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((plugin) => plugin.id).join(', ')}`,
+      );
+    }
+  }
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {

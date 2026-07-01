@@ -33,7 +33,7 @@ import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
-import type { ProviderOptions } from '../../types/providers';
+import type { ProviderOptions, ProvidersConfig } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
 
@@ -52,10 +52,42 @@ export type RedteamProviderLoader = (
   providers: LoadableRedteamProvider[],
 ) => Promise<ApiProvider[]>;
 
+const getProviderModule = () => import('../../providers');
+
 const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) => {
-  const { loadApiProviders } = await import('../../providers');
+  const { loadApiProviders } = await getProviderModule();
   return loadApiProviders(providers);
 };
+
+export async function resolveRedteamTargetProviderInputMetadata(
+  providers: unknown,
+  basePath?: string,
+  env?: Record<string, string>,
+  filter?: string,
+  options: { loadDynamicProviders?: boolean } = {},
+): Promise<{ inputs: unknown[]; hasUnresolved: boolean }> {
+  const { isProviderInputMetadataUnresolved, resolveProviderInputsForValidation } =
+    await getProviderModule();
+  const inputs = await resolveProviderInputsForValidation(providers as ProvidersConfig, {
+    basePath,
+    env,
+    ...(filter === undefined ? {} : { filter }),
+    loadDynamicProviders: options.loadDynamicProviders,
+  });
+  return {
+    inputs,
+    hasUnresolved: inputs.some(isProviderInputMetadataUnresolved),
+  };
+}
+
+export async function resolveRedteamTargetProviderInputs(
+  providers: unknown,
+  basePath?: string,
+  env?: Record<string, string>,
+  filter?: string,
+): Promise<unknown[]> {
+  return (await resolveRedteamTargetProviderInputMetadata(providers, basePath, env, filter)).inputs;
+}
 
 let redteamProviderLoader = defaultRedteamProviderLoader;
 

@@ -1006,6 +1006,58 @@ describe('StrategyConfigDialog', () => {
       expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeInTheDocument();
     });
 
+    it('should omit strategies that are unavailable for the configured target', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          unavailableStrategies={['posterior']}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.queryByRole('option', { name: 'posterior' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
+
+    it('checks unavailable steps against the Layer plugin targets', async () => {
+      const user = userEvent.setup();
+      const isLayerStepUnavailable = vi.fn(
+        (strategyId: string, targetPlugins?: readonly string[]) =>
+          strategyId === 'posterior' && !targetPlugins?.includes('harmful:hate'),
+      );
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{
+            plugins: ['harmful:hate'],
+            steps: [{ id: 'base64', config: { plugins: ['policy'] } }],
+          }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          selectedPlugins={['policy', 'harmful:hate']}
+          isLayerStepUnavailable={isLayerStepUnavailable}
+        />,
+      );
+
+      await user.click(screen.getAllByRole('combobox')[1]);
+
+      expect(screen.getByRole('option', { name: 'posterior' })).toBeInTheDocument();
+      expect(isLayerStepUnavailable).toHaveBeenCalledWith(
+        'posterior',
+        ['harmful:hate'],
+        [{ id: 'base64', config: { plugins: ['policy'] } }],
+      );
+    });
+
     it('should save layer strategy with all plugins by default', async () => {
       const user = userEvent.setup();
       renderWithProviders(

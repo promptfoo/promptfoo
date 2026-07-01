@@ -3,9 +3,12 @@ import {
   getEstimatedDuration,
   getEstimatedProbes,
   getStrategyId,
+  hasAnyPosteriorStrategy,
+  hasPosteriorStrategy,
+  isPluginCompatibleWithStrategy,
   isStrategyConfigured,
 } from './utils';
-import type { RedteamStrategy } from '@promptfoo/redteam/types';
+import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
 
@@ -35,6 +38,225 @@ describe('getStrategyId', () => {
       config: {},
     };
     expect(getStrategyId(strategy)).toBe('jailbreak');
+  });
+});
+
+describe('hasPosteriorStrategy', () => {
+  it.each([
+    ['directly', [{ id: 'posterior' }]],
+    ['as a layer string step', [{ id: 'layer', config: { steps: ['base64', 'posterior'] } }]],
+    [
+      'as a layer object step',
+      [{ id: 'layer', config: { steps: [{ id: 'posterior', config: {} }] } }],
+    ],
+  ])('detects Posterior %s', (_label, strategies) => {
+    expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(true);
+  });
+
+  it('ignores disabled top-level Posterior configurations', () => {
+    const strategies = [
+      { id: 'posterior', config: { numTests: 0 } },
+      { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+    ] as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies)).toBe(false);
+    expect(hasAnyPosteriorStrategy(strategies)).toBe(true);
+  });
+
+  it('keeps first-wins runtime deduplication for differently configured direct strategies', () => {
+    const strategies = [
+      { id: 'posterior', config: { numTests: 0 } },
+      { id: 'posterior' },
+    ] as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies)).toBe(false);
+  });
+
+  it.each([
+    [
+      'active layer last',
+      [
+        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+        { id: 'layer', config: { steps: ['posterior'] } },
+      ],
+      true,
+    ],
+    [
+      'disabled layer last',
+      [
+        { id: 'layer', config: { steps: ['posterior'] } },
+        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+      ],
+      false,
+    ],
+  ])('matches config-schema last-wins deduplication for $label', (_label, strategies, expected) => {
+    expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(expected);
+  });
+
+  it('ignores unrelated strategies and unsupported aliases', () => {
+    const strategies = [
+      'base64',
+      { id: 'posterior:alias', config: {} },
+      { id: 'layer', config: { steps: ['rot13'] } },
+    ] as unknown as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies)).toBe(false);
+  });
+
+  it('handles cyclic layer configuration from YAML aliases', () => {
+    const layer = { id: 'layer', config: { steps: [] as unknown[] } };
+    layer.config.steps.push(layer);
+
+    expect(hasPosteriorStrategy([layer as RedteamStrategy])).toBe(false);
+  });
+
+  it('handles deeply nested and wide layer configuration iteratively', () => {
+    let nested: unknown = 'posterior';
+    for (let i = 0; i < 5000; i++) {
+      nested = { id: 'layer', config: { steps: [nested] } };
+    }
+    const wide = { id: 'layer', config: { steps: Array(150_000).fill('base64') } };
+
+    expect(hasPosteriorStrategy([nested as RedteamStrategy])).toBe(true);
+    expect(hasPosteriorStrategy([wide as RedteamStrategy])).toBe(false);
+  });
+
+  it('only detects Posterior when it applies to a configured plugin', () => {
+    const strategies = [
+      { id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } },
+    ] as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies, ['harmful:hate'])).toBe(true);
+    expect(hasPosteriorStrategy(strategies, ['coding-agent:secret-env-read'])).toBe(false);
+    expect(hasPosteriorStrategy(strategies, ['coding-agent:core'])).toBe(false);
+    expect(
+      hasPosteriorStrategy(strategies, [
+        { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
+      ]),
+    ).toBe(false);
+    expect(
+      hasPosteriorStrategy(
+        [{ id: 'posterior', config: { plugins: ['harmful'] } }] as RedteamStrategy[],
+        ['pii'],
+      ),
+    ).toBe(false);
+    expect(
+      hasPosteriorStrategy([{ id: 'posterior' }] as RedteamStrategy[], [
+        'cca',
+        { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
+      ]),
+    ).toBe(false);
+    expect(
+      hasPosteriorStrategy(
+        [{ id: 'posterior' }] as RedteamStrategy[],
+        [{ id: 'cca', config: { inputs: { context: 'Context', question: 'Question' } } }],
+        { pluginsUseTargetInputs: false },
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['intent sequence', { id: 'intent', config: { intent: 'file://intents.json' } }],
+    [
+      'strategy exclusions',
+      { id: 'harmful:hate', config: { excludeStrategies: 'file://exclusions.yaml' } },
+    ],
+    ['input metadata', { id: 'policy', config: { inputs: 'file://inputs.yaml' } }],
+  ])('defers file-backed %s compatibility to backend validation', (_label, plugin) => {
+    expect(
+      hasPosteriorStrategy(
+        [{ id: 'posterior' }] as RedteamStrategy[],
+        [plugin] as RedteamPlugin[],
+        {
+          pluginsUseTargetInputs: true,
+        },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('isPluginCompatibleWithStrategy', () => {
+  it('allows Basic previews for strategy-exempt plugins', () => {
+    expect(isPluginCompatibleWithStrategy('aegis', 'basic')).toBe(true);
+    expect(isPluginCompatibleWithStrategy('harmbench', 'basic')).toBe(true);
+  });
+
+  it('supports direct and category-prefix targeting', () => {
+    expect(
+      isPluginCompatibleWithStrategy('policy', 'layer', {
+        plugins: ['policy'],
+        steps: ['base64'],
+      }),
+    ).toBe(true);
+    expect(
+      isPluginCompatibleWithStrategy('harmful:hate', 'layer', {
+        plugins: ['harmful'],
+        steps: ['base64'],
+      }),
+    ).toBe(true);
+    expect(
+      isPluginCompatibleWithStrategy('pii:direct', 'layer', {
+        plugins: ['harmful'],
+        steps: ['base64'],
+      }),
+    ).toBe(false);
+  });
+
+  it('excludes plugins that disable the strategy', () => {
+    expect(
+      isPluginCompatibleWithStrategy(
+        { id: 'harmful:hate', config: { excludeStrategies: ['layer'] } },
+        'layer',
+        { plugins: ['harmful'], steps: ['base64'] },
+      ),
+    ).toBe(false);
+  });
+
+  it('checks exclusions on nested layer steps', () => {
+    expect(
+      isPluginCompatibleWithStrategy(
+        { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
+        'layer',
+        { plugins: ['harmful'], steps: ['posterior'] },
+      ),
+    ).toBe(false);
+  });
+
+  it('applies implicit coding-agent strategy exclusions', () => {
+    expect(isPluginCompatibleWithStrategy('coding-agent:secret-env-read', 'posterior')).toBe(false);
+  });
+
+  it.each([
+    'crescendo',
+    'goat',
+    'jailbreak:hydra',
+    'custom',
+    'mischievous-user',
+  ])('applies cross-session-leak default exclusion for %s previews', (strategyId) => {
+    expect(isPluginCompatibleWithStrategy('cross-session-leak', strategyId)).toBe(false);
+    expect(isPluginCompatibleWithStrategy('promptfoo:redteam:cross-session-leak', strategyId)).toBe(
+      false,
+    );
+  });
+
+  it('excludes sequence-only intent plugins from non-basic strategy previews', () => {
+    const sequenceOnlyIntent = {
+      id: 'intent',
+      config: { intent: [['first turn', 'second turn']] },
+    };
+
+    expect(isPluginCompatibleWithStrategy(sequenceOnlyIntent, 'posterior')).toBe(false);
+    expect(isPluginCompatibleWithStrategy(sequenceOnlyIntent, 'basic')).toBe(true);
+  });
+
+  it('rejects cyclic layer configurations without overflowing the stack', () => {
+    const layer: { id: string; config: { steps: unknown[] } } = {
+      id: 'layer',
+      config: { steps: [] },
+    };
+    layer.config.steps.push(layer);
+
+    expect(isPluginCompatibleWithStrategy('harmful:hate', 'layer', layer.config)).toBe(false);
   });
 });
 
@@ -99,6 +321,19 @@ describe('getEstimatedProbes', () => {
       strategies: ['basic'],
     } as Config;
     expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
+  });
+
+  // Regression: every Strategy must have a probe multiplier, or the estimate is NaN.
+  it('returns a finite probe estimate for the posterior strategy', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: ['posterior'], // multiplier 1
+    } as Config;
+    const probes = getEstimatedProbes(config);
+    expect(Number.isNaN(probes)).toBe(false);
+    expect(probes).toBe(10); // (5*1) + (5*1*1)
   });
 });
 

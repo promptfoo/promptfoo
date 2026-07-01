@@ -370,10 +370,13 @@ describe('API schema red-team coverage', () => {
       expect(RedteamSchemas.Run.Response.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
       expect(RedteamSchemas.Task.Params.safeParse({ taskId: 'x'.repeat(128) }).success).toBe(true);
       expect(RedteamSchemas.Task.Params.safeParse({ taskId: 'x'.repeat(129) }).success).toBe(false);
-      expect(RedteamSchemas.Status.Response.parse({ hasRunningJob: false, jobId: null })).toEqual({
-        hasRunningJob: false,
-        jobId: null,
-      });
+      expect(
+        RedteamSchemas.Status.Response.parse({
+          hasRunningJob: false,
+          hasPendingRun: false,
+          jobId: null,
+        }),
+      ).toEqual({ hasRunningJob: false, hasPendingRun: false, jobId: null });
     });
 
     it('preserves both single and batch generated-test responses without accepting malformed counts', () => {
