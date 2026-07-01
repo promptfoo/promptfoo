@@ -45,20 +45,15 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     cost: { input: 1.5 / 1e6, output: 9.0 / 1e6 },
   },
 
-  // Gemini 3.1 models
-  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'].map((id) => ({
-    id,
-    cost: GEMINI_3_PRO_COST,
-    tieredCost: GEMINI_3_PRO_TIERED_COST,
-  })),
-  // gemini-pro-latest is a Google-maintained alias that resolves server-side to the
-  // current Gemini Pro snapshot (currently gemini-3.1-pro-preview). Pricing tracks the
-  // Gemini 3 Pro tier.
-  {
-    id: 'gemini-pro-latest',
-    cost: GEMINI_3_PRO_COST,
-    tieredCost: GEMINI_3_PRO_TIERED_COST,
-  },
+  // Gemini 3.1 models. gemini-pro-latest is a Google-maintained alias that currently
+  // resolves server-side to gemini-3.1-pro-preview, so it tracks the Gemini 3 Pro tier.
+  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-pro-latest'].map(
+    (id) => ({
+      id,
+      cost: GEMINI_3_PRO_COST,
+      tieredCost: GEMINI_3_PRO_TIERED_COST,
+    }),
+  ),
   // gemini-3.1-flash-lite (GA) and its preview alias share Flash-Lite pricing.
   ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview'].map((id) => ({
     id,
