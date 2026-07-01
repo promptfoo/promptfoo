@@ -364,12 +364,12 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
-- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only)
-- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K)
+- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only; no Google Search grounding)
+- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K, more at higher resolutions)
+- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K, ~$0.24 at 4K)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
 
-Each Gemini 3.x image model also accepts its `-preview` alias (for example `google:gemini-3.1-flash-image-preview` or `google:gemini-3-pro-image-preview`), which resolves to the same model.
+`gemini-3.1-flash-image` and `gemini-3-pro-image` also accept their `-preview` aliases (`gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`), which resolve to the same models. Nano Banana 2 Lite has no `-preview` alias — use `gemini-3.1-flash-lite-image`.
 
 Configuration options:
 
@@ -389,9 +389,9 @@ Key differences from Imagen:
 - Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
-- Supports Google Search grounding via `tools`
+- Supports Google Search grounding via `tools` (on `gemini-3.1-flash-image` and `gemini-3-pro-image`; **not** `gemini-3.1-flash-lite-image`)
 
-Google Search grounding lets the model use real-time search results to inform image generation:
+Google Search grounding lets the model use real-time search results to inform image generation. It is supported by `gemini-3.1-flash-image` and `gemini-3-pro-image`, but not by Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`):
 
 ```yaml
 providers:

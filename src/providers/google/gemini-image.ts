@@ -31,6 +31,25 @@ interface GeminiImageOptions {
 }
 
 /**
+ * Per-image price (USD) by model id and output resolution, standard tier.
+ * Source: https://ai.google.dev/gemini-api/docs/pricing
+ *
+ * Models billed at a single flat per-image rate use the `default` key. Models
+ * with resolution-tiered pricing key on '0.5K' (Google's `512px`), '1K', '2K',
+ * and '4K'; the resolution comes from the request's `imageSize` (default 1K).
+ */
+const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
+  'gemini-2.5-flash-image': { default: 0.039 }, // Nano Banana
+  'gemini-2.5-flash-preview-image-generation': { default: 0.039 }, // Deprecated alias
+  'gemini-3.1-flash-lite-image': { default: 0.0336 }, // Nano Banana 2 Lite (1K only)
+  'gemini-3.1-flash-image': { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 }, // Nano Banana 2
+  'gemini-3.1-flash-image-preview': { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 },
+  'gemini-3-pro-image': { '1K': 0.134, '2K': 0.134, '4K': 0.24 }, // Nano Banana Pro
+  'gemini-3-pro-image-preview': { '1K': 0.134, '2K': 0.134, '4K': 0.24 },
+};
+const DEFAULT_IMAGE_COST = 0.04;
+
+/**
  * Gemini native image generation provider.
  *
  * Uses the Gemini generateContent API with responseModalities set to include images.
@@ -398,22 +417,18 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getCostPerImage(): number {
-    // Per-image pricing for Gemini native image generation (standard tier, 1K
-    // resolution). Prices from https://ai.google.dev/gemini-api/docs/pricing
-    // - Gemini 2.5 Flash Image (Nano Banana):        $0.039/image
-    // - Gemini 3.1 Flash-Lite Image (Nano Banana 2 Lite): $0.0336/image at 1K
-    // - Gemini 3.1 Flash Image (Nano Banana 2):      $0.067/image at 1K
-    // - Gemini 3 Pro Image (Nano Banana Pro):        $0.134/image at 1K/2K
-    const costMap: Record<string, number> = {
-      'gemini-2.5-flash-image': 0.039,
-      'gemini-2.5-flash-preview-image-generation': 0.039, // Deprecated alias
-      'gemini-3.1-flash-lite-image': 0.0336,
-      'gemini-3.1-flash-image': 0.067,
-      'gemini-3.1-flash-image-preview': 0.067, // Preview alias
-      'gemini-3-pro-image': 0.134,
-      'gemini-3-pro-image-preview': 0.134, // Preview alias
-    };
-
-    return costMap[this.modelName] || 0.04; // Default cost
+    const pricing = GEMINI_IMAGE_PRICING[this.modelName];
+    if (!pricing) {
+      return DEFAULT_IMAGE_COST;
+    }
+    // Flat-rate models (no resolution tiers).
+    if (pricing.default !== undefined) {
+      return pricing.default;
+    }
+    // Resolution-tiered models: bill by the requested imageSize (default 1K).
+    // '512px' is Google's label for the 0.5K tier.
+    const raw = (this.config.imageSize ?? '1K').toUpperCase();
+    const resolution = raw === '512PX' || raw === '0.5K' ? '0.5K' : raw;
+    return pricing[resolution] ?? pricing['1K'] ?? DEFAULT_IMAGE_COST;
   }
 }

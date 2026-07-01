@@ -894,6 +894,65 @@ describe('GeminiImageProvider', () => {
 
       expect(result.cost).toBe(0.134);
     });
+
+    it.each([
+      { model: 'gemini-3.1-flash-image', imageSize: '512px', expected: 0.045 },
+      { model: 'gemini-3.1-flash-image', imageSize: '1K', expected: 0.067 },
+      { model: 'gemini-3.1-flash-image', imageSize: '2K', expected: 0.101 },
+      { model: 'gemini-3.1-flash-image', imageSize: '4K', expected: 0.151 },
+      { model: 'gemini-3-pro-image', imageSize: '2K', expected: 0.134 },
+      { model: 'gemini-3-pro-image', imageSize: '4K', expected: 0.24 },
+    ] as const)('should scale per-image cost by imageSize ($model @ $imageSize)', async ({
+      model,
+      imageSize,
+      expected,
+    }) => {
+      const provider = new GeminiImageProvider(model, { config: { imageSize } });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(expected);
+    });
+
+    it('should default resolution-tiered cost to the 1K price when imageSize is unset', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.067);
+    });
   });
 
   describe('API key handling', () => {
