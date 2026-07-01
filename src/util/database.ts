@@ -800,6 +800,12 @@ async function findSurvivingResultUsingBlobHash(
   resultId: string,
   blobHash: string,
   cell?: { testIdx: number; promptIdx: number },
+  // Cell-scoped survivor lookups require a structured blob envelope so a
+  // survivor that merely echoes the URI as text cannot inherit the deleted
+  // row's trusted provenance. Imported eval-level references, by contrast,
+  // never carry a structured envelope in the persisted result — the import
+  // path stores only the raw URI — so they use a textual match.
+  scanMode: 'structured' | 'textual' = 'structured',
 ): Promise<BlobUsageResult | undefined> {
   let offset = 0;
   for (;;) {
@@ -831,9 +837,9 @@ async function findSurvivingResultUsingBlobHash(
       .offset(offset)
       .all();
 
-    const match = rows.find((survivingResult) =>
-      resultUsesStructuredBlobRef(survivingResult, blobHash),
-    );
+    const matcher =
+      scanMode === 'structured' ? resultUsesStructuredBlobRef : resultMentionsBlobHash;
+    const match = rows.find((survivingResult) => matcher(survivingResult, blobHash));
     if (match || rows.length < BLOB_SURVIVOR_SCAN_BATCH_SIZE) {
       return match;
     }
@@ -941,6 +947,7 @@ async function cleanupBlobReferencesForDeletedResult(
       blobHash: blobReferencesTable.blobHash,
       testIdx: blobReferencesTable.testIdx,
       promptIdx: blobReferencesTable.promptIdx,
+      location: blobReferencesTable.location,
     })
     .from(blobReferencesTable)
     .where(
@@ -982,6 +989,10 @@ async function cleanupBlobReferencesForDeletedResult(
       evalId,
       resultId,
       blobReference.blobHash,
+      undefined,
+      // Imported eval-level references never persist a structured envelope
+      // in the surviving result payload, so fall back to a URI-text scan.
+      isEvalLevelReference && blobReference.location === 'import' ? 'textual' : 'structured',
     );
     if (survivingBlobResult) {
       if (!isEvalLevelReference) {
@@ -1028,18 +1039,28 @@ function subtractResultFromPromptMetrics(
   survivingNamedMetricResults?: NamedMetricResult[],
   survivingAssertionTokenUsage?: ReturnType<typeof createEmptyAssertions>,
 ): void {
+  // Result-count buckets are semantic counts; clamp at 0 so an imported
+  // aggregate that under-credited this row can't be pushed impossibly
+  // negative. Score, latency, and cost are not count buckets, so leave
+  // their arithmetic semantics unchanged.
   if (result.success) {
-    metrics.testPassCount = subtractTrackedMetric(metrics.testPassCount, 1);
+    metrics.testPassCount = Math.max(0, subtractTrackedMetric(metrics.testPassCount, 1));
   } else if (result.failureReason === ResultFailureReason.ERROR) {
-    metrics.testErrorCount = subtractTrackedMetric(metrics.testErrorCount, 1);
+    metrics.testErrorCount = Math.max(0, subtractTrackedMetric(metrics.testErrorCount, 1));
   } else {
-    metrics.testFailCount = subtractTrackedMetric(metrics.testFailCount, 1);
+    metrics.testFailCount = Math.max(0, subtractTrackedMetric(metrics.testFailCount, 1));
   }
 
   const assertionCounts = getAssertionCounts(result);
   if (assertionCounts) {
-    metrics.assertPassCount = subtractTrackedMetric(metrics.assertPassCount, assertionCounts.pass);
-    metrics.assertFailCount = subtractTrackedMetric(metrics.assertFailCount, assertionCounts.fail);
+    metrics.assertPassCount = Math.max(
+      0,
+      subtractTrackedMetric(metrics.assertPassCount, assertionCounts.pass),
+    );
+    metrics.assertFailCount = Math.max(
+      0,
+      subtractTrackedMetric(metrics.assertFailCount, assertionCounts.fail),
+    );
   } else if (survivingAssertionCounts) {
     metrics.assertPassCount = survivingAssertionCounts.pass;
     metrics.assertFailCount = survivingAssertionCounts.fail;

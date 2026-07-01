@@ -207,7 +207,9 @@ export function subtractTokenUsage(
   }
 
   if (update.numRequests !== undefined && target.numRequests !== undefined) {
-    target.numRequests = subtractNumbers(target.numRequests, update.numRequests);
+    // Request counts are never negative; clamp so an under-credited imported
+    // aggregate can't turn into an impossible `-N` on delete.
+    target.numRequests = Math.max(0, subtractNumbers(target.numRequests, update.numRequests));
   }
 
   if (update.completionDetails) {
@@ -401,7 +403,7 @@ export function subtractResponseTokenUsage(
     if (countAsRequest) {
       subtractTokenUsage(target, response.tokenUsage);
       if (response.tokenUsage.numRequests === undefined && target.numRequests !== undefined) {
-        target.numRequests = (target.numRequests ?? 0) - 1;
+        target.numRequests = Math.max(0, target.numRequests - 1);
       }
     } else {
       const tokenUsageWithoutRequests: Partial<TokenUsage> = {
@@ -411,7 +413,7 @@ export function subtractResponseTokenUsage(
       subtractTokenUsage(target, tokenUsageWithoutRequests);
     }
   } else if (response && countAsRequest && target.numRequests !== undefined) {
-    target.numRequests = (target.numRequests ?? 0) - 1;
+    target.numRequests = Math.max(0, target.numRequests - 1);
   }
 }
 

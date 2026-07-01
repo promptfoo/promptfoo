@@ -1283,6 +1283,109 @@ describe('database eval deletion', () => {
       expect(await EvalResult.findById(target.id)).toBeNull();
     });
 
+    it('preserves imported eval-level blob references when a URI-only survivor still uses them', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const db = await getDb();
+      const blobHash = 'a'.repeat(64);
+      const blobUri = `promptfoo://blob/${blobHash}`;
+      await db.insert(blobAssetsTable).values({
+        hash: blobHash,
+        sizeBytes: 123,
+        mimeType: 'image/png',
+        provider: 'test-provider',
+      });
+      await db.insert(blobReferencesTable).values({
+        id: 'imported-shared-blob-ref',
+        blobHash,
+        evalId: eval_.id,
+        location: 'import',
+        kind: 'image',
+      });
+      // Imported evals only carry the URI as text — no structured envelope.
+      await dbUpdateResult(target.id, {
+        response: { ...target.response, output: `![t](${blobUri})` },
+      });
+      await dbUpdateResult(survivor.id, {
+        response: { ...survivor.response, output: `![s](${blobUri})` },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(await db.select().from(blobReferencesTable).all()).toHaveLength(1);
+    });
+
+    it('tolerates malformed componentResults when debiting named metrics', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            namedScores: { accuracy: 1 },
+            namedScoresCount: { accuracy: 1 },
+            namedScoreWeights: { accuracy: 1 },
+          },
+        },
+      ];
+      await reloaded.save();
+      await dbUpdateResult(target.id, {
+        namedScores: { accuracy: 1 },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'imported grading result with malformed components',
+          componentResults: [null, { pass: true }, 'bad'] as any,
+        } as any,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(await EvalResult.findById(target.id)).toBeNull();
+    });
+
+    it.each([
+      { resultType: 'success' as const, touched: ['testPassCount', 'assertPassCount'] as const },
+      { resultType: 'failure' as const, touched: ['testFailCount', 'assertFailCount'] as const },
+      { resultType: 'error' as const, touched: ['testErrorCount'] as const },
+    ])('clamps result-count buckets at zero when deleting a $resultType row from an under-credited legacy aggregate', async ({
+      resultType,
+      touched,
+    }) => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: [resultType] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 0,
+            assertPassCount: 0,
+            assertFailCount: 0,
+          },
+        },
+      ];
+      await reloaded.save();
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const metrics = (await Eval.findById(eval_.id))?.prompts[0]?.metrics;
+      for (const bucket of touched) {
+        expect(metrics?.[bucket]).toBe(0);
+      }
+    });
+
     it('does not create negative named metrics when the aggregate never tracked one', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
       const [target] = await EvalResult.findManyByEvalId(eval_.id);

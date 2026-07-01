@@ -23,8 +23,11 @@ function getContributingAssertionCount(
   metricName: string,
   testVars: Vars,
 ): number {
+  // Imported/saved V4 rows accept result records as `unknown`, so
+  // `componentResults` can contain `null` or non-object entries; skip those
+  // rather than throwing while dereferencing `componentResult.assertion`.
   const componentResults = Array.isArray(gradingResult?.componentResults)
-    ? gradingResult.componentResults
+    ? gradingResult.componentResults.filter((c) => c != null && typeof c === 'object')
     : [];
   const contributingAssertions =
     componentResults.reduce((count, componentResult) => {

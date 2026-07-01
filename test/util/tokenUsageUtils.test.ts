@@ -352,6 +352,30 @@ describe('tokenUsageUtils', () => {
       expect('completion' in target).toBe(false);
       expect('cached' in target).toBe(false);
     });
+
+    it('clamps numRequests at zero when an under-credited aggregate is debited', () => {
+      const target: TokenUsage = { total: 0, numRequests: 0 };
+
+      subtractResponseTokenUsage(target, { tokenUsage: { total: 0 } });
+
+      expect(target.numRequests).toBe(0);
+    });
+
+    it('clamps numRequests at zero when a request-only debit under-runs the aggregate', () => {
+      const target: TokenUsage = { total: 0, numRequests: 0 };
+
+      subtractResponseTokenUsage(target, {});
+
+      expect(target.numRequests).toBe(0);
+    });
+
+    it('clamps numRequests at zero when an explicit numRequests debit under-runs the aggregate', () => {
+      const target: TokenUsage = { total: 0, numRequests: 0 };
+
+      subtractResponseTokenUsage(target, { tokenUsage: { numRequests: 1 } });
+
+      expect(target.numRequests).toBe(0);
+    });
   });
 
   describe('accumulateGradingRequest', () => {
