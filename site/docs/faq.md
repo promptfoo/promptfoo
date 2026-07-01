@@ -13,7 +13,7 @@ Promptfoo is a local-first, open-source tool designed to help evaluate (eval) la
 2. Evaluate LLM outputs using various assertion types.
 3. Calculate metrics like accuracy, safety, and performance.
 4. Generate adversarial tests for LLM red teaming.
-5. Run as a command-line tool, a library, integrate with testing frameworks, run in your ci/cd pipeline, and view results in the browser.
+5. Run as a command-line tool, a library, integrate with testing frameworks, run in your CI/CD pipeline, and view results in the browser.
 
 ### What is LLM red teaming, and how does Promptfoo support it?
 
