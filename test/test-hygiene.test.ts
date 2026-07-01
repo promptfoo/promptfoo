@@ -739,9 +739,26 @@ type SetterExposureContext = {
   functionBindings: Map<ts.Node, ReadonlyMap<string, LexicalBinding>>;
   activeBindings: ReadonlySet<number>;
   activeFunctions: ReadonlySet<number>;
+  invocationPath: readonly number[];
   setterReceiverPath?: MockAccessPath;
   vitestNamespaces: ReadonlySet<string>;
 };
+
+type SetterExposure = {
+  instanceKey: string;
+  path: readonly string[];
+};
+
+function createSetterExposure(
+  setter: ts.CallExpression,
+  context: SetterExposureContext,
+  path: readonly string[],
+): SetterExposure {
+  return {
+    instanceKey: JSON.stringify([...context.invocationPath, setter.pos]),
+    path,
+  };
+}
 
 function findMockAccessSuffix(
   exposedPath: MockAccessPath,
@@ -759,9 +776,10 @@ function findMockAccessSuffix(
 
 function findSetterReceiverExposurePath(
   expression: ts.Expression,
+  setter: ts.CallExpression,
   context: SetterExposureContext,
   prefix: readonly string[],
-): string[] | undefined {
+): SetterExposure | undefined {
   if (!context.setterReceiverPath) {
     return undefined;
   }
@@ -772,7 +790,7 @@ function findSetterReceiverExposurePath(
   const suffix = resolvedCurrentPath
     ? findMockAccessSuffix(resolvedCurrentPath, context.setterReceiverPath)
     : undefined;
-  return suffix ? [...prefix, ...suffix] : undefined;
+  return suffix ? createSetterExposure(setter, context, [...prefix, ...suffix]) : undefined;
 }
 
 function findObjectSetterExposurePaths(
@@ -780,8 +798,8 @@ function findObjectSetterExposurePaths(
   setter: ts.CallExpression,
   context: SetterExposureContext,
   prefix: readonly string[],
-): string[][] {
-  const paths: string[][] = [];
+): SetterExposure[] {
+  const paths: SetterExposure[] = [];
   for (const property of object.properties) {
     if (ts.isShorthandPropertyAssignment(property)) {
       paths.push(
@@ -807,14 +825,15 @@ function findSetterExposurePaths(
   setter: ts.CallExpression,
   context: SetterExposureContext,
   prefix: readonly string[] = [],
-): string[][] {
+): SetterExposure[] {
   const current = unwrapExpression(expression);
   if (current === setter) {
-    return [[...prefix]];
+    return [createSetterExposure(setter, context, prefix)];
   }
 
   const receiverExposurePath = findSetterReceiverExposurePath(
     current as ts.Expression,
+    setter,
     context,
     prefix,
   );
@@ -882,6 +901,7 @@ function findSetterExposurePaths(
     const nextContext = {
       ...context,
       activeFunctions: new Set([...context.activeFunctions, invoked.pos]),
+      invocationPath: [...context.invocationPath, current.pos],
     };
     return collectFactoryReturnExpressions(invoked).flatMap((returned) =>
       findSetterExposurePaths(returned, setter, nextContext, prefix),
@@ -891,12 +911,12 @@ function findSetterExposurePaths(
   return [];
 }
 
-function findPersistentMockFactoryPaths(
+function findPersistentMockFactoryPathGroups(
   factoryNode: ts.Node,
   setter: ts.CallExpression,
   bindings: MockBindingIndex,
   vitestNamespaces: ReadonlySet<string>,
-): string[][] {
+): readonly (readonly (readonly string[])[])[] {
   const functionBindings = new Map<ts.Node, ReadonlyMap<string, LexicalBinding>>();
   const factory = resolveInvokedFunction(factoryNode, functionBindings);
   if (!factory?.body) {
@@ -915,14 +935,22 @@ function findPersistentMockFactoryPaths(
     functionBindings,
     activeBindings: new Set<number>(),
     activeFunctions: new Set([factory.pos]),
+    invocationPath: [],
     setterReceiverPath: setterReceiverPath
       ? resolveMockAccessPath(setterReceiverPath, bindings)
       : undefined,
     vitestNamespaces,
   };
-  return collectFactoryReturnExpressions(factory).flatMap((expression) =>
+  const exposures = collectFactoryReturnExpressions(factory).flatMap((expression) =>
     findSetterExposurePaths(expression, setter, context),
   );
+  const pathsByInstance = new Map<string, (readonly string[])[]>();
+  for (const exposure of exposures) {
+    const paths = pathsByInstance.get(exposure.instanceKey) ?? [];
+    paths.push(exposure.path);
+    pathsByInstance.set(exposure.instanceKey, paths);
+  }
+  return [...pathsByInstance.values()];
 }
 
 function bindFactoryPath(
@@ -973,12 +1001,21 @@ function hasMatchingHoistedReset(
     return false;
   }
 
-  return findPersistentMockFactoryPaths(factoryNode, setter, bindings, vitestNamespaces).some(
-    (factoryPath) => {
-      const boundPath = bindFactoryPath(declaration.name, factoryPath);
-      const resolvedPath = boundPath ? resolveMockAccessPath(boundPath, bindings) : undefined;
-      return resolvedPath ? resetPaths.has(mockAccessPathKey(resolvedPath)) : false;
-    },
+  const factoryPathGroups = findPersistentMockFactoryPathGroups(
+    factoryNode,
+    setter,
+    bindings,
+    vitestNamespaces,
+  );
+  return (
+    factoryPathGroups.length > 0 &&
+    factoryPathGroups.every((factoryPaths) =>
+      factoryPaths.some((factoryPath) => {
+        const boundPath = bindFactoryPath(declaration.name, factoryPath);
+        const resolvedPath = boundPath ? resolveMockAccessPath(boundPath, bindings) : undefined;
+        return resolvedPath ? resetPaths.has(mockAccessPathKey(resolvedPath)) : false;
+      }),
+    )
   );
 }
 
@@ -2502,6 +2539,28 @@ describe('root test hygiene', () => {
     ],
     [
       [
+        "function build() { return vi.fn().mockReturnValue('default'); }",
+        'const mocks = vi.hoisted(() => ({ safe: build(), unsafe: build() }));',
+        'beforeEach(() => {',
+        "  mocks.safe.mockReset().mockReturnValue('default');",
+        "  mocks.unsafe.mockReset().mockReturnValue('default');",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        "function build() { return vi.fn().mockReturnValue('default'); }",
+        'const mocks = vi.hoisted(() => {',
+        '  const shared = build();',
+        '  return { first: shared, second: shared };',
+        '});',
+        'beforeEach(() => {',
+        "  mocks.first.mockReset().mockReturnValue('default');",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
         'const mocks = vi.hoisted(() => {',
         "  const request = vi.fn().mockReturnValue('default');",
         '  const client = { request };',
@@ -2616,6 +2675,24 @@ describe('root test hygiene', () => {
         file: 'nested/fixture.test.ts',
         line: 3,
         snippet: "vi.fn().mockReturnValue('unsafe')",
+      }),
+    ]);
+  });
+
+  it('requires every mock produced by repeated helper calls to be reset', () => {
+    const source = [
+      "function build() { return vi.fn().mockReturnValue('default'); }",
+      'const mocks = vi.hoisted(() => ({ safe: build(), unsafe: build() }));',
+      'beforeEach(() => {',
+      "  mocks.safe.mockReset().mockReturnValue('default');",
+      '});',
+    ].join('\n');
+
+    expect(scanFixturePolicies(source, 'nested/fixture.test.ts').hoistedPersistentMock).toEqual([
+      expect.objectContaining({
+        file: 'nested/fixture.test.ts',
+        line: 1,
+        snippet: "vi.fn().mockReturnValue('default')",
       }),
     ]);
   });
