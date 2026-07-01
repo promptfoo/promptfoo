@@ -130,6 +130,13 @@ export function subtractNamedMetric(
     testVars,
   });
 
+  // Mirror the guard used for count/weight buckets below: if a legacy or
+  // imported aggregate never tracked this metric, seed it with the row's
+  // contribution before subtracting so the debit nets to zero instead of
+  // producing a negative value.
+  if (!Object.prototype.hasOwnProperty.call(accumulator.namedScores, metricName)) {
+    accumulator.namedScores[metricName] = weightedScoreTotal;
+  }
   accumulator.namedScores[metricName] =
     (accumulator.namedScores[metricName] ?? 0) - weightedScoreTotal;
   if (hadScoreCounts) {

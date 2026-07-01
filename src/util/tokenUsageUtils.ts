@@ -333,6 +333,25 @@ export function accumulateGradingRequest(
 }
 
 /**
+ * Inverse of {@link accumulateGradingRequest}: debit a single grading request
+ * and its token contribution. `numRequests` is only decremented when the
+ * aggregate was previously tracked (mirrors {@link subtractTokenUsage}'s
+ * treatment of `numRequests`), and clamps at 0 to avoid negative counts if
+ * an aggregate was under-credited. Mutates {@code assertions}.
+ */
+export function subtractGradingRequest(
+  assertions: NonNullable<TokenUsage['assertions']>,
+  tokensUsed: Partial<TokenUsage> | undefined,
+): void {
+  if (assertions.numRequests !== undefined) {
+    assertions.numRequests = Math.max(0, assertions.numRequests - 1);
+  }
+  if (tokensUsed) {
+    subtractAssertionTokenUsage(assertions, tokensUsed);
+  }
+}
+
+/**
  * Accumulate token usage from a response, handling the common pattern of
  * incrementing numRequests when no token usage is provided.
  * @param target Object to update

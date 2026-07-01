@@ -6,6 +6,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
   normalizeTokenUsage,
+  subtractGradingRequest,
   subtractResponseTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
@@ -370,6 +371,40 @@ describe('tokenUsageUtils', () => {
       expect(assertions.total).toBe(9);
       expect(assertions.prompt).toBe(5);
       expect(assertions.completion).toBe(4);
+    });
+  });
+
+  describe('subtractGradingRequest', () => {
+    it('is the inverse of accumulateGradingRequest for graded rows with tokens', () => {
+      const assertions = createEmptyAssertions();
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4 });
+      subtractGradingRequest(assertions, { total: 9, prompt: 5, completion: 4 });
+
+      expect(assertions).toEqual(createEmptyAssertions());
+    });
+
+    it('debits numRequests even when the graded row reported no tokens', () => {
+      const assertions = createEmptyAssertions();
+      accumulateGradingRequest(assertions, undefined);
+      accumulateGradingRequest(assertions, undefined);
+      subtractGradingRequest(assertions, undefined);
+
+      expect(assertions.numRequests).toBe(1);
+    });
+
+    it('leaves numRequests untouched when the aggregate never tracked it', () => {
+      const assertions = createEmptyAssertions();
+      delete (assertions as { numRequests?: number }).numRequests;
+      subtractGradingRequest(assertions, { total: 3 });
+
+      expect(assertions.numRequests).toBeUndefined();
+    });
+
+    it('clamps numRequests at zero to avoid negatives from under-credited aggregates', () => {
+      const assertions = createEmptyAssertions();
+      subtractGradingRequest(assertions, undefined);
+
+      expect(assertions.numRequests).toBe(0);
     });
   });
 

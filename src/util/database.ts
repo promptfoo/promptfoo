@@ -51,7 +51,7 @@ import {
 import {
   accumulateGradingRequest,
   createEmptyAssertions,
-  subtractAssertionTokenUsage,
+  subtractGradingRequest,
   subtractResponseTokenUsage,
 } from './tokenUsageUtils';
 
@@ -513,8 +513,12 @@ function getAssertionCounts(result: Pick<typeof evalResultsTable.$inferSelect, '
       ? null
       : { pass: gradingResult.pass ? 1 : 0, fail: gradingResult.pass ? 0 : 1 };
   }
-  const pass = componentResults.filter((r) => r.pass).length;
-  return { pass, fail: componentResults.length - pass };
+  // Imported/saved V4 rows accept result records as `unknown`, so
+  // `componentResults` can contain `null` or non-object entries. Skip
+  // malformed entries rather than throwing while dereferencing `r.pass`.
+  const validComponents = componentResults.filter((r) => r != null && typeof r === 'object');
+  const pass = validComponents.filter((r) => r.pass).length;
+  return { pass, fail: validComponents.length - pass };
 }
 
 function getSurvivingAssertionCounts(
@@ -605,11 +609,14 @@ function recomputeNamedMetricsFromResults(
 
     if (hadScoreWeights) {
       const weight = recomputed.namedScoreWeights?.[metricName];
-      if (weight) {
+      // A metric-only assertion legitimately carries weight `0`; distinguish
+      // "recomputed to zero" from "no surviving contribution" by property
+      // presence rather than truthiness.
+      if (weight === undefined) {
+        delete metrics.namedScoreWeights?.[metricName];
+      } else {
         metrics.namedScoreWeights ||= {};
         metrics.namedScoreWeights[metricName] = weight;
-      } else {
-        delete metrics.namedScoreWeights?.[metricName];
       }
     }
   }
@@ -1068,8 +1075,12 @@ function subtractResultFromPromptMetrics(
   // `numRequests` and `models/eval.ts:1411` `accumulateTokenUsage` into eval stats).
   if (metrics.tokenUsage) {
     subtractResponseTokenUsage(metrics.tokenUsage, result.response ?? undefined);
-    if (result.gradingResult?.tokensUsed && metrics.tokenUsage.assertions) {
-      subtractAssertionTokenUsage(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
+    if (result.gradingResult && metrics.tokenUsage.assertions) {
+      // Every graded row was credited one `numRequests` by
+      // `accumulateGradingRequest` (whether or not the grader reported tokens),
+      // so the delete inverse must debit `numRequests` even when `tokensUsed`
+      // is absent.
+      subtractGradingRequest(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
     } else if (survivingAssertionTokenUsage && metrics.tokenUsage.assertions) {
       metrics.tokenUsage.assertions = survivingAssertionTokenUsage;
     }

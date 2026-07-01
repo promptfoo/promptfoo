@@ -1139,6 +1139,185 @@ describe('database eval deletion', () => {
       expect(after?.prompts[0]?.metrics?.totalLatencyMs).toBe(20);
       expect(after?.prompts[0]?.metrics?.cost).toBe(30);
     });
+
+    it('debits assertions.numRequests when deleting a graded row', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              assertions: {
+                total: 18,
+                prompt: 10,
+                completion: 8,
+                cached: 0,
+                numRequests: 2,
+              },
+            },
+          },
+        },
+      ];
+      await reloaded.save();
+      await dbUpdateResult(target.id, {
+        gradingResult: {
+          ...target.gradingResult!,
+          tokensUsed: { total: 9, prompt: 5, completion: 4, cached: 0 },
+        },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      expect(after?.prompts[0]?.metrics?.tokenUsage?.assertions).toMatchObject({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        cached: 0,
+        numRequests: 1,
+      });
+    });
+
+    it('debits assertions.numRequests even when the graded row reported no tokens', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              assertions: {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                cached: 0,
+                numRequests: 2,
+              },
+            },
+          },
+        },
+      ];
+      await reloaded.save();
+      await dbUpdateResult(target.id, {
+        gradingResult: {
+          ...target.gradingResult!,
+          tokensUsed: undefined,
+        },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      expect(after?.prompts[0]?.metrics?.tokenUsage?.assertions?.numRequests).toBe(1);
+    });
+
+    it('preserves zero-weight named metrics during recompute after delete', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            namedScores: { accuracy: 0 },
+            namedScoresCount: { accuracy: 2 },
+            namedScoreWeights: { accuracy: 0 },
+          },
+        },
+      ];
+      await reloaded.save();
+      // Force the recompute branch by stripping the deleted row's gradingResult.
+      await dbUpdateResult(target.id, { gradingResult: null });
+      await dbUpdateResult(survivor.id, {
+        namedScores: { accuracy: 0 },
+        gradingResult: {
+          ...survivor.gradingResult!,
+          namedScores: { accuracy: 0 },
+          assertion: { type: 'javascript', metric: 'accuracy', weight: 0 },
+        } as any,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      expect(after?.prompts[0]?.metrics?.namedScoreWeights).toHaveProperty('accuracy', 0);
+    });
+
+    it('treats null entries inside componentResults as absent instead of throwing', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      await dbUpdateResult(target.id, {
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'imported grading result with malformed component entries',
+          componentResults: [null, { pass: true }, 'bad', { pass: false }] as any,
+        } as any,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(await EvalResult.findById(target.id)).toBeNull();
+    });
+
+    it('does not create negative named metrics when the aggregate never tracked one', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      // Legacy aggregate: named-metric buckets exist for other metrics but not
+      // for `accuracy`, so subtracting the deleted row's `accuracy` contribution
+      // must not introduce a negative value out of thin air.
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            namedScores: { fluency: 5 },
+            namedScoresCount: { fluency: 1 },
+            namedScoreWeights: { fluency: 1 },
+          },
+        },
+      ];
+      await reloaded.save();
+      await dbUpdateResult(target.id, {
+        namedScores: { accuracy: 1 },
+        gradingResult: {
+          ...target.gradingResult!,
+          namedScores: { accuracy: 1 },
+        } as any,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      expect(after?.prompts[0]?.metrics?.namedScores?.accuracy ?? 0).toBeGreaterThanOrEqual(0);
+    });
   });
 });
 
