@@ -70,6 +70,7 @@ export const ProviderEnvOverridesSchema = z.object({
   MISTRAL_API_KEY: z.string().optional(),
   MINIMAX_API_KEY: z.string().optional(),
   MOONSHOT_API_KEY: z.string().optional(),
+  ZHIPU_API_KEY: z.string().optional(),
   MLFLOW_GATEWAY_API_KEY: z.string().optional(),
   MLFLOW_GATEWAY_URL: z.string().optional(),
   MODELSLAB_API_KEY: z.string().optional(),
