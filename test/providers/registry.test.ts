@@ -322,6 +322,22 @@ describe('Provider Registry', () => {
       expect(body.max_tokens).toBeUndefined();
     });
 
+    it('should route zhipu providers through the registry to the right class', async () => {
+      const factory = providerMap.find((f) => f.test('zhipu:glm-5.2'));
+      expect(factory).toBeDefined();
+
+      const chatProvider = await factory!.create(
+        'zhipu:glm-5.2',
+        { ...mockProviderOptions, id: undefined, config: { temperature: 0.3 } },
+        mockContext,
+      );
+      expect(chatProvider.id()).toBe('zhipu:glm-5.2');
+      const chatConfig = (chatProvider as any).config;
+      expect(chatConfig.temperature).toBe(0.3);
+      expect(chatConfig.apiBaseUrl).toBe('https://api.z.ai/api/paas/v4');
+      expect(chatConfig.apiKeyEnvar).toBe('ZHIPU_API_KEY');
+    });
+
     it('should handle http/websocket providers correctly', async () => {
       const httpProvider = await registry.create('http://example.com', {
         options: {
