@@ -279,13 +279,44 @@ const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\
 const globalMockResetPattern = /\bvi\.resetAllMocks\s*\(/;
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
-function isViHoistedCall(node: ts.Node): node is ts.CallExpression {
+function findVitestNamespaceImports(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const namespaces = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== 'vitest' ||
+      !statement.importClause?.namedBindings ||
+      !ts.isNamespaceImport(statement.importClause.namedBindings)
+    ) {
+      continue;
+    }
+    namespaces.add(statement.importClause.namedBindings.name.text);
+  }
+
+  return namespaces;
+}
+
+function isViHoistedCall(
+  node: ts.Node,
+  vitestNamespaces: ReadonlySet<string>,
+): node is ts.CallExpression {
+  if (
+    !ts.isCallExpression(node) ||
+    !ts.isPropertyAccessExpression(node.expression) ||
+    node.expression.name.text !== 'hoisted'
+  ) {
+    return false;
+  }
+
+  const receiver = node.expression.expression;
   return (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    ts.isIdentifier(node.expression.expression) &&
-    node.expression.expression.text === 'vi' &&
-    node.expression.name.text === 'hoisted'
+    (ts.isIdentifier(receiver) && receiver.text === 'vi') ||
+    (ts.isPropertyAccessExpression(receiver) &&
+      receiver.name.text === 'vi' &&
+      ts.isIdentifier(receiver.expression) &&
+      vitestNamespaces.has(receiver.expression.text))
   );
 }
 
@@ -299,13 +330,14 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
   }
 
   let finding: ts.CallExpression | undefined;
+  const vitestNamespaces = findVitestNamespaceImports(file.sourceFile);
 
   function visit(node: ts.Node) {
     if (finding) {
       return;
     }
 
-    if (isViHoistedCall(node) && node.arguments.length > 0) {
+    if (isViHoistedCall(node, vitestNamespaces) && node.arguments.length > 0) {
       finding = findEvaluatedPersistentMockSetter(node.arguments[0], {
         enterRootFunction: true,
         followSynchronousCalls: true,
@@ -378,28 +410,40 @@ function setBinding(
   bindings: Map<string, LexicalBinding>,
   name: ts.BindingName,
   value: InvokableFunction | undefined,
+  preserveExisting = false,
 ) {
   if (ts.isIdentifier(name)) {
+    if (preserveExisting && bindings.has(name.text)) {
+      return;
+    }
     bindings.set(name.text, value ?? null);
     return;
   }
 
   for (const element of name.elements) {
     if (!ts.isOmittedExpression(element)) {
-      setBinding(bindings, element.name, undefined);
+      setBinding(bindings, element.name, undefined, preserveExisting);
     }
   }
 }
 
 function addVariableBindings(
   bindings: Map<string, LexicalBinding>,
-  declarations: ts.NodeArray<ts.VariableDeclaration>,
+  declarations: readonly ts.VariableDeclaration[],
+  {
+    preserveUninitialized = false,
+    resolveFunctionValues = true,
+  }: { preserveUninitialized?: boolean; resolveFunctionValues?: boolean } = {},
 ) {
   for (const declaration of declarations) {
-    const value = ts.isIdentifier(declaration.name)
-      ? getFunctionValue(declaration.initializer)
-      : undefined;
-    setBinding(bindings, declaration.name, value);
+    const value =
+      resolveFunctionValues && ts.isIdentifier(declaration.name)
+        ? getFunctionValue(declaration.initializer)
+        : undefined;
+    // A declaration-only `var name;` performs no assignment and must not
+    // erase an earlier initializer for the same function-scoped binding.
+    const preserveExisting = preserveUninitialized && declaration.initializer === undefined;
+    setBinding(bindings, declaration.name, value, preserveExisting);
   }
 }
 
@@ -426,14 +470,20 @@ function addImportBindings(bindings: Map<string, LexicalBinding>, statement: ts.
 
 function addStatementBindings(
   bindings: Map<string, LexicalBinding>,
-  statements: ts.NodeArray<ts.Statement>,
-  includeFunctionScopedVariables: boolean,
+  statements: readonly ts.Statement[],
+  {
+    includeFunctionScopedVariables,
+    resolveFunctionValues = true,
+  }: { includeFunctionScopedVariables: boolean; resolveFunctionValues?: boolean },
 ) {
   for (const statement of statements) {
     if (ts.isVariableStatement(statement)) {
       const isBlockScoped = (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0;
       if (includeFunctionScopedVariables || isBlockScoped) {
-        addVariableBindings(bindings, statement.declarationList.declarations);
+        addVariableBindings(bindings, statement.declarationList.declarations, {
+          preserveUninitialized: !isBlockScoped,
+          resolveFunctionValues,
+        });
       }
     } else if (ts.isFunctionDeclaration(statement) && statement.name) {
       bindings.set(statement.name.text, isInvokableFunction(statement) ? statement : null);
@@ -454,15 +504,22 @@ function addStatementBindings(
 
 function addFunctionScopedVariableBindings(
   bindings: Map<string, LexicalBinding>,
-  scope: ts.SourceFile | ts.FunctionLikeDeclaration,
+  scope: ts.Node,
+  resolveFunctionValues: boolean,
 ) {
   function visit(node: ts.Node, isRoot: boolean) {
-    if (!isRoot && isFunctionLikeNode(node)) {
+    if (
+      !isRoot &&
+      (isFunctionLikeNode(node) || ts.isClassStaticBlockDeclaration(node) || ts.isModuleBlock(node))
+    ) {
       return;
     }
 
     if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.BlockScoped) === 0) {
-      addVariableBindings(bindings, node.declarations);
+      addVariableBindings(bindings, node.declarations, {
+        preserveUninitialized: true,
+        resolveFunctionValues,
+      });
     }
 
     ts.forEachChild(node, (child) => visit(child, false));
@@ -482,10 +539,31 @@ function getLexicalBindings(
 
   const bindings = new Map<string, LexicalBinding>();
   if (ts.isSourceFile(scope)) {
-    addStatementBindings(bindings, scope.statements, true);
-    addFunctionScopedVariableBindings(bindings, scope);
-  } else if (ts.isBlock(scope) || ts.isModuleBlock(scope)) {
-    addStatementBindings(bindings, scope.statements, false);
+    // Vitest hoists vi.hoisted() callbacks above module variable initialization.
+    // Module function declarations are callable there, but function-valued
+    // const/let/var declarations are still unavailable (or undefined).
+    addStatementBindings(bindings, scope.statements, {
+      includeFunctionScopedVariables: true,
+      resolveFunctionValues: false,
+    });
+    addFunctionScopedVariableBindings(bindings, scope, false);
+  } else if (ts.isBlock(scope)) {
+    const ownsFunctionScopedVariables = ts.isClassStaticBlockDeclaration(scope.parent);
+    addStatementBindings(bindings, scope.statements, {
+      includeFunctionScopedVariables: ownsFunctionScopedVariables,
+    });
+    if (ownsFunctionScopedVariables) {
+      addFunctionScopedVariableBindings(bindings, scope, true);
+    }
+  } else if (ts.isModuleBlock(scope)) {
+    addStatementBindings(bindings, scope.statements, { includeFunctionScopedVariables: true });
+    addFunctionScopedVariableBindings(bindings, scope, true);
+  } else if (ts.isCaseBlock(scope)) {
+    addStatementBindings(
+      bindings,
+      scope.clauses.flatMap((clause) => [...clause.statements]),
+      { includeFunctionScopedVariables: false },
+    );
   } else if (isFunctionLikeNode(scope)) {
     if ((ts.isFunctionDeclaration(scope) || ts.isFunctionExpression(scope)) && scope.name) {
       bindings.set(scope.name.text, scope);
@@ -493,7 +571,7 @@ function getLexicalBindings(
     for (const parameter of scope.parameters) {
       setBinding(bindings, parameter.name, undefined);
     }
-    addFunctionScopedVariableBindings(bindings, scope);
+    addFunctionScopedVariableBindings(bindings, scope, true);
   } else if (ts.isCatchClause(scope) && scope.variableDeclaration) {
     setBinding(bindings, scope.variableDeclaration.name, undefined);
   } else if (
@@ -540,6 +618,151 @@ function resolveInvokedFunction(
   return undefined;
 }
 
+// Parameter defaults run only when the corresponding value is undefined.
+// Literal arguments and binding patterns are modeled exactly; dynamic values,
+// spreads, and accessors remain unknown and conservatively explore both paths.
+type StaticBindingValue =
+  | { kind: 'defined'; expression?: ts.Expression }
+  | { kind: 'missing' }
+  | { kind: 'unknown' };
+
+const missingBindingValue: StaticBindingValue = { kind: 'missing' };
+const unknownBindingValue: StaticBindingValue = { kind: 'unknown' };
+const definedBindingValue: StaticBindingValue = { kind: 'defined' };
+
+function isSyntacticUndefined(node: ts.Expression): boolean {
+  const unwrapped = unwrapExpression(node);
+  return (
+    (ts.isIdentifier(unwrapped) && unwrapped.text === 'undefined') || ts.isVoidExpression(unwrapped)
+  );
+}
+
+function toStaticBindingValue(node: ts.Expression): StaticBindingValue {
+  const unwrapped = unwrapExpression(node) as ts.Expression;
+  if (isSyntacticUndefined(unwrapped)) {
+    return missingBindingValue;
+  }
+  if (
+    ts.isArrayLiteralExpression(unwrapped) ||
+    ts.isObjectLiteralExpression(unwrapped) ||
+    ts.isArrowFunction(unwrapped) ||
+    ts.isFunctionExpression(unwrapped) ||
+    ts.isClassExpression(unwrapped) ||
+    ts.isNewExpression(unwrapped) ||
+    ts.isStringLiteralLike(unwrapped) ||
+    ts.isNumericLiteral(unwrapped) ||
+    ts.isBigIntLiteral(unwrapped) ||
+    ts.isRegularExpressionLiteral(unwrapped) ||
+    ts.isTemplateExpression(unwrapped) ||
+    unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
+    unwrapped.kind === ts.SyntaxKind.FalseKeyword ||
+    unwrapped.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return { kind: 'defined', expression: unwrapped };
+  }
+  return unknownBindingValue;
+}
+
+function getCallArgument(
+  args: readonly ts.Expression[],
+  parameterIndex: number,
+): StaticBindingValue {
+  for (let index = 0; index <= parameterIndex && index < args.length; index += 1) {
+    if (ts.isSpreadElement(args[index])) {
+      return unknownBindingValue;
+    }
+  }
+  const argument = args[parameterIndex];
+  return argument ? toStaticBindingValue(argument) : missingBindingValue;
+}
+
+function getPropertyNameText(name: ts.PropertyName | undefined): string | undefined {
+  if (!name) {
+    return undefined;
+  }
+  if (
+    ts.isIdentifier(name) ||
+    ts.isStringLiteralLike(name) ||
+    ts.isNumericLiteral(name) ||
+    ts.isBigIntLiteral(name)
+  ) {
+    return name.text;
+  }
+  if (
+    ts.isComputedPropertyName(name) &&
+    (ts.isStringLiteralLike(name.expression) || ts.isNumericLiteral(name.expression))
+  ) {
+    return name.expression.text;
+  }
+  return undefined;
+}
+
+function getObjectBindingValue(
+  element: ts.BindingElement,
+  value: StaticBindingValue,
+): StaticBindingValue {
+  if (value.kind !== 'defined' || !value.expression) {
+    return value.kind === 'missing' ? missingBindingValue : unknownBindingValue;
+  }
+
+  const expression = unwrapExpression(value.expression);
+  if (!ts.isObjectLiteralExpression(expression)) {
+    return unknownBindingValue;
+  }
+
+  const key = getPropertyNameText(
+    element.propertyName ?? (ts.isIdentifier(element.name) ? element.name : undefined),
+  );
+  if (!key) {
+    return unknownBindingValue;
+  }
+
+  for (let index = expression.properties.length - 1; index >= 0; index -= 1) {
+    const property = expression.properties[index];
+    if (ts.isSpreadAssignment(property)) {
+      return unknownBindingValue;
+    }
+    const propertyName = getPropertyNameText(property.name);
+    if (!propertyName) {
+      return unknownBindingValue;
+    }
+    if (propertyName !== key) {
+      continue;
+    }
+    if (ts.isPropertyAssignment(property)) {
+      return toStaticBindingValue(property.initializer);
+    }
+    if (ts.isShorthandPropertyAssignment(property)) {
+      return unknownBindingValue;
+    }
+    return ts.isMethodDeclaration(property) ? definedBindingValue : unknownBindingValue;
+  }
+
+  return missingBindingValue;
+}
+
+function getArrayBindingValue(elementIndex: number, value: StaticBindingValue): StaticBindingValue {
+  if (value.kind !== 'defined' || !value.expression) {
+    return value.kind === 'missing' ? missingBindingValue : unknownBindingValue;
+  }
+
+  const expression = unwrapExpression(value.expression);
+  if (!ts.isArrayLiteralExpression(expression)) {
+    return unknownBindingValue;
+  }
+
+  for (let index = 0; index <= elementIndex && index < expression.elements.length; index += 1) {
+    if (ts.isSpreadElement(expression.elements[index])) {
+      return unknownBindingValue;
+    }
+  }
+  const arrayElement = expression.elements[elementIndex];
+  if (!arrayElement || ts.isOmittedExpression(arrayElement)) {
+    return missingBindingValue;
+  }
+  return toStaticBindingValue(arrayElement);
+}
+
 function isViMockCall(node: ts.Node): node is ts.CallExpression {
   return (
     ts.isCallExpression(node) &&
@@ -561,26 +784,124 @@ function findEvaluatedPersistentMockSetter(
   opts: { enterRootFunction?: boolean; followSynchronousCalls?: boolean } = {},
 ): ts.CallExpression | undefined {
   let finding: ts.CallExpression | undefined;
-  const activeFunctions = new Set<InvokableFunction>();
+  const activeFunctionBodies = new Set<InvokableFunction>();
+  // Function bodies are argument-independent in this bounded traversal, while
+  // parameter defaults are evaluated separately for each direct call.
+  const completedFunctionBodies = new Set<InvokableFunction>();
+  const activeDefaultInitializers = new Set<ts.Expression>();
+  const completedDefaultInitializers = new Set<ts.Expression>();
   const bindingCache = new Map<ts.Node, ReadonlyMap<string, LexicalBinding>>();
 
-  function visitInvokedFunction(fn: InvokableFunction) {
-    if (finding || activeFunctions.has(fn)) {
+  function visitDefaultInitializer(initializer: ts.Expression) {
+    if (
+      finding ||
+      activeDefaultInitializers.has(initializer) ||
+      completedDefaultInitializers.has(initializer)
+    ) {
       return;
     }
 
-    activeFunctions.add(fn);
+    activeDefaultInitializers.add(initializer);
     try {
-      for (const parameter of fn.parameters) {
-        if (parameter.initializer) {
-          visit(parameter.initializer);
-        }
-      }
-      if (fn.body) {
-        visit(fn.body);
-      }
+      visit(initializer);
+      completedDefaultInitializers.add(initializer);
     } finally {
-      activeFunctions.delete(fn);
+      activeDefaultInitializers.delete(initializer);
+    }
+  }
+
+  function getEffectiveBindingValues(
+    initializer: ts.Expression | undefined,
+    value: StaticBindingValue,
+  ): StaticBindingValue[] {
+    if (value.kind === 'defined') {
+      return [value];
+    }
+
+    const effectiveValues: StaticBindingValue[] = [];
+    if (initializer) {
+      visitDefaultInitializer(initializer);
+      effectiveValues.push(toStaticBindingValue(initializer));
+    }
+    if (value.kind === 'unknown') {
+      effectiveValues.push(unknownBindingValue);
+    }
+    return effectiveValues;
+  }
+
+  function visitObjectBindingElements(
+    pattern: ts.ObjectBindingPattern,
+    effectiveValues: readonly StaticBindingValue[],
+  ) {
+    for (const effectiveValue of effectiveValues) {
+      for (const element of pattern.elements) {
+        const elementValue = element.dotDotDotToken
+          ? definedBindingValue
+          : getObjectBindingValue(element, effectiveValue);
+        visitBindingInitializers(element.name, element.initializer, elementValue);
+      }
+    }
+  }
+
+  function visitArrayBindingElements(
+    pattern: ts.ArrayBindingPattern,
+    effectiveValues: readonly StaticBindingValue[],
+  ) {
+    for (const effectiveValue of effectiveValues) {
+      for (const [index, element] of pattern.elements.entries()) {
+        if (ts.isOmittedExpression(element)) {
+          continue;
+        }
+        const elementValue = element.dotDotDotToken
+          ? definedBindingValue
+          : getArrayBindingValue(index, effectiveValue);
+        visitBindingInitializers(element.name, element.initializer, elementValue);
+      }
+    }
+  }
+
+  function visitBindingInitializers(
+    name: ts.BindingName,
+    initializer: ts.Expression | undefined,
+    value: StaticBindingValue,
+  ) {
+    if (finding) {
+      return;
+    }
+    if (ts.isIdentifier(name)) {
+      if (initializer && value.kind !== 'defined') {
+        visitDefaultInitializer(initializer);
+      }
+      return;
+    }
+
+    const effectiveValues = getEffectiveBindingValues(initializer, value);
+    if (ts.isObjectBindingPattern(name)) {
+      visitObjectBindingElements(name, effectiveValues);
+    } else {
+      visitArrayBindingElements(name, effectiveValues);
+    }
+  }
+
+  function visitInvokedFunction(fn: InvokableFunction, args: readonly ts.Expression[]) {
+    if (finding) {
+      return;
+    }
+
+    for (const [index, parameter] of fn.parameters.entries()) {
+      visitBindingInitializers(parameter.name, parameter.initializer, getCallArgument(args, index));
+    }
+
+    if (finding || activeFunctionBodies.has(fn) || completedFunctionBodies.has(fn) || !fn.body) {
+      return;
+    }
+
+    activeFunctionBodies.add(fn);
+    try {
+      visit(fn.body);
+      completedFunctionBodies.add(fn);
+    } finally {
+      activeFunctionBodies.delete(fn);
     }
   }
 
@@ -610,7 +931,7 @@ function findEvaluatedPersistentMockSetter(
       // Function literals encountered here remain boundaries.
       ts.forEachChild(current, visit);
       if (invokedFunction) {
-        visitInvokedFunction(invokedFunction);
+        visitInvokedFunction(invokedFunction, current.arguments);
       }
       return;
     }
@@ -621,7 +942,7 @@ function findEvaluatedPersistentMockSetter(
   if (opts.enterRootFunction) {
     const rootFunction = resolveInvokedFunction(node, bindingCache);
     if (rootFunction) {
-      visitInvokedFunction(rootFunction);
+      visitInvokedFunction(rootFunction, []);
     } else {
       visit(node);
     }
@@ -1280,7 +1601,7 @@ describe('root test hygiene', () => {
     [
       'callback identifier control',
       [
-        'const factory = () => vi.fn().mockReturnValue("default");',
+        'function factory() { return vi.fn().mockReturnValue("default"); }',
         'const mockClient = vi.hoisted(factory);',
       ].join('\n'),
     ],
@@ -1296,10 +1617,10 @@ describe('root test hygiene', () => {
       ].join('\n'),
     ],
     [
-      'module-scope function-valued variable',
+      'namespace-qualified vi.hoisted call',
       [
-        "const build = () => vi.fn().mockReturnValue('x');",
-        'const mock = vi.hoisted(() => build());',
+        "import * as vitest from 'vitest';",
+        "const mock = vitest.vi.hoisted(() => vitest.vi.fn().mockReturnValue('x'));",
       ].join('\n'),
     ],
     [
@@ -1317,6 +1638,76 @@ describe('root test hygiene', () => {
         'const mock = vi.hoisted(() => {',
         "  const build = () => vi.fn().mockReturnValue('x');",
         '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'object binding defaults',
+      [
+        "function build({ value = vi.fn().mockReturnValue('x') }) { return value; }",
+        'const mock = vi.hoisted(() => build({}));',
+      ].join('\n'),
+    ],
+    [
+      'array binding defaults',
+      [
+        "function build([value = vi.fn().mockReturnValue('x')]) { return value; }",
+        'const mock = vi.hoisted(() => build([]));',
+      ].join('\n'),
+    ],
+    [
+      'a default activated after an earlier supplied call',
+      [
+        "function build(value = vi.fn().mockReturnValue('x')) { return value; }",
+        'const mock = vi.hoisted(() => {',
+        "  build('safe');",
+        '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'an object binding default behind an unknown computed property',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  const key = 'value';",
+        "  function build({ value = vi.fn().mockReturnValue('x') }) { return value; }",
+        '  return build({ [key]: undefined });',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'declaration-only var redeclarations',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  var build = () => vi.fn().mockReturnValue('x');",
+        '  var build;',
+        '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'switch-scoped helpers',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  switch ('unsafe') {",
+        "    case 'unsafe':",
+        "      const build = () => vi.fn().mockReturnValue('x');",
+        '      return build();',
+        '  }',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'class-static-block helpers',
+      [
+        'const mock = vi.hoisted(() => {',
+        '  class Factory {',
+        '    static {',
+        "      var build = () => vi.fn().mockReturnValue('x');",
+        '      build();',
+        '    }',
+        '  }',
+        '  return vi.fn();',
         '});',
       ].join('\n'),
     ],
@@ -1426,7 +1817,82 @@ describe('root test hygiene', () => {
         'const mock = vi.hoisted(() => build());',
       ].join('\n'),
     ],
+    [
+      'a module-scope function-valued variable unavailable during Vitest hoisting',
+      [
+        "const build = () => vi.fn().mockReturnValue('x');",
+        'const mock = vi.hoisted(() => build());',
+      ].join('\n'),
+    ],
+    [
+      'a module-scope function-valued callback unavailable during Vitest hoisting',
+      [
+        "const factory = () => vi.fn().mockReturnValue('x');",
+        'const mock = vi.hoisted(factory);',
+      ].join('\n'),
+    ],
   ])('preserves deferred function boundaries for %s', (_case, source) => {
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toEqual([]);
+  });
+
+  it.each([
+    [
+      'a supplied object-binding value',
+      [
+        "function build({ value = vi.fn().mockReturnValue('x') }) { return value; }",
+        "const mock = vi.hoisted(() => build({ value: 'safe' }));",
+      ].join('\n'),
+    ],
+    [
+      'a supplied array-binding value',
+      [
+        "function build([value = vi.fn().mockReturnValue('x')]) { return value; }",
+        "const mock = vi.hoisted(() => build(['safe']));",
+      ].join('\n'),
+    ],
+    [
+      'a safe switch-scoped helper shadowing an unsafe outer helper',
+      [
+        "function build() { return vi.fn().mockReturnValue('x'); }",
+        'const mock = vi.hoisted(() => {',
+        "  switch ('safe') {",
+        "    case 'safe':",
+        '      const build = () => vi.fn();',
+        '      return build();',
+        '  }',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'a class-static-block var shadowing a safe callback var',
+      [
+        'const mock = vi.hoisted(() => {',
+        '  var build = () => vi.fn();',
+        '  class Factory {',
+        '    static {',
+        "      var build = () => vi.fn().mockReturnValue('x');",
+        '    }',
+        '  }',
+        '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+  ])('does not report a persistent setter that cannot execute through %s', (_case, source) => {
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toEqual([]);
+  });
+
+  it('bounds repeated synchronous helper expansion', () => {
+    const helperDepth = 24;
+    const helpers = ['function build0() { return vi.fn(); }'];
+    for (let depth = 1; depth <= helperDepth; depth += 1) {
+      helpers.push(
+        `function build${depth}(flag: boolean) { return flag ? build${depth - 1}(flag) : build${depth - 1}(flag); }`,
+      );
+    }
+    const source = [...helpers, `const mock = vi.hoisted(() => build${helperDepth}(true));`].join(
+      '\n',
+    );
+
     expect(scanFixturePolicies(source).hoistedPersistentMock).toEqual([]);
   });
 
