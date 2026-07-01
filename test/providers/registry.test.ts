@@ -1209,6 +1209,11 @@ describe('Provider Registry', () => {
         'google:gemini-2.5-flash-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],
+      // Nano Banana 2 Lite: bare google:<model> route dispatches on the '-image' substring.
+      [
+        'google:gemini-3.1-flash-lite-image-preview',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
       // Bare google:<model> default chat route (no service-type segment).
       [
         'google:gemini-2.5-flash',

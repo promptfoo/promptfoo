@@ -300,6 +300,51 @@ describe('GeminiImageProvider', () => {
         }),
       );
     });
+
+    it('should use global endpoint with v1 for gemini-3.1-flash-lite-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image-preview', {
+        config: {
+          projectId: 'test-project',
+          region: 'us-central1',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Nano Banana 2 Lite is a Gemini 3.x model and uses the global endpoint
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('https://aiplatform.googleapis.com/v1/'),
+        }),
+      );
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining(
+            '/publishers/google/models/gemini-3.1-flash-lite-image-preview:generateContent',
+          ),
+        }),
+      );
+    });
   });
 
   describe('Image configuration', () => {
@@ -392,6 +437,47 @@ describe('GeminiImageProvider', () => {
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '1:1',
         imageSize: '512px',
+      });
+    });
+
+    it('should pass imageSize config for gemini-3.1-flash-lite-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image-preview', {
+        config: {
+          imageAspectRatio: '16:9',
+          imageSize: '1K',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: 'base64data',
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.generationConfig.imageConfig).toEqual({
+        aspectRatio: '16:9',
+        imageSize: '1K',
       });
     });
 
@@ -728,6 +814,37 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.cost).toBe(0.067);
+    });
+
+    it('should return correct cost for gemini-3.1-flash-lite-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: 'base64data',
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.02);
     });
   });
 

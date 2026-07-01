@@ -70,7 +70,8 @@ export const googleProviderFactories: ProviderFactory[] = [
       const modelName = splits[1];
 
       // Check if this is a Gemini native image generation model
-      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image-preview)
+      // These models have 'image' in their name (e.g., gemini-2.5-flash-image,
+      // gemini-3.1-flash-image-preview, gemini-3.1-flash-lite-image-preview)
       if (modelName.includes('-image')) {
         const { GeminiImageProvider } = await import('../google/gemini-image');
         return new GeminiImageProvider(modelName, providerOptions);

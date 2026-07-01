@@ -365,6 +365,7 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
 - `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3.1-flash-lite-image-preview` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for fast, low-cost image generation (~$0.02/image, estimated)
 - `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
 

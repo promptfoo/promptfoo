@@ -40,6 +40,7 @@ interface GeminiImageOptions {
  * - gemini-2.5-flash-image
  * - gemini-3-pro-image-preview (Nano Banana Pro)
  * - gemini-3.1-flash-image-preview (Nano Banana 2)
+ * - gemini-3.1-flash-lite-image-preview (Nano Banana 2 Lite)
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
@@ -400,11 +401,14 @@ export class GeminiImageProvider implements ApiProvider {
     // Pricing for Gemini native image generation
     // Gemini 2.5 Flash Image: $0.039/image (1290 output tokens * $30/1M tokens)
     // Gemini 3.1 Flash Image Preview: $0.067/image at 1K resolution
+    // Gemini 3.1 Flash-Lite Image Preview (Nano Banana 2 Lite): cheaper Flash-Lite tier, estimate
     // Gemini 3 Pro Image: Pricing TBD, using estimate
     const costMap: Record<string, number> = {
       'gemini-2.5-flash-image': 0.039,
       'gemini-2.5-flash-preview-image-generation': 0.039, // Deprecated alias
       'gemini-3.1-flash-image-preview': 0.067,
+      'gemini-3.1-flash-lite-image-preview': 0.02, // Nano Banana 2 Lite, estimated
+      'gemini-3.1-flash-lite-image': 0.02, // GA alias for Nano Banana 2 Lite, estimated
       'gemini-3-pro-image-preview': 0.05, // Estimated
     };
 
