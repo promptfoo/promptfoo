@@ -504,11 +504,14 @@ export async function runAssertion({
         functionName = fileRef.slice(colonIndex + 1);
       }
 
+      const unresolvedFilePath = filePath;
       filePath = path.resolve(basePath, filePath);
+      const jsonSchemaGeneratorPathAliases =
+        unresolvedFilePath === filePath ? [filePath] : [filePath, unresolvedFilePath];
       const sanitizeJsonSchemaGeneratorError = (error: unknown): string => {
         return redactPathsAndIdentifierFromText(
           error instanceof Error ? error.message : String(error),
-          [filePath],
+          jsonSchemaGeneratorPathAliases,
           functionName,
           '[redacted schema generator path]',
           '[redacted schema generator method]',
@@ -520,6 +523,7 @@ export async function runAssertion({
           valueFromScript = redactJsonSchemaGeneratorPath
             ? await loadFromJavaScriptFile(filePath, functionName, [output, context], {
                 redactPath: true,
+                redactPathAliases: jsonSchemaGeneratorPathAliases,
               })
             : await loadFromJavaScriptFile(filePath, functionName, [output, context]);
           didResolveValueFromScript = true;

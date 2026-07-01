@@ -638,7 +638,7 @@ describe('Script value resolution', () => {
     });
 
     it('should redact a private JavaScript schema generator path from execution errors', async () => {
-      const privatePath = '/private/PR8237_JS_SCHEMA_PATH';
+      const privatePath = '../private/PR8237_JS_SCHEMA_PATH';
       const privateMethod = 'PR8237_SECRET_JS_METHOD';
       vi.mocked(importModule).mockRejectedValue(
         new Error(`Cannot load ${privatePath}/schema.cjs:${privateMethod}`),
@@ -673,7 +673,7 @@ describe('Script value resolution', () => {
           expect(error.message).not.toContain(privateMethod);
         }
         expect(importModule).toHaveBeenCalledWith(
-          path.resolve(privatePath, 'schema.cjs'),
+          path.resolve(cliState.basePath || '', `${privatePath}/schema.cjs`),
           privateMethod,
         );
       } finally {

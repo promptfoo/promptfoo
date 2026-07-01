@@ -186,6 +186,24 @@ describe('logger', () => {
       });
     });
 
+    it('should compose nested async-scoped log redactors', async () => {
+      const { withLogRedaction } = await import('../src/util/logRedaction');
+
+      await withLogRedaction(
+        (message) => message.replaceAll('SECRET_A', '[A]'),
+        async () =>
+          withLogRedaction(
+            (message) => message.replaceAll('SECRET_B', '[B]'),
+            async () => logger.default.debug('Loading SECRET_A and SECRET_B'),
+          ),
+      );
+
+      expect(mockLogger.debug).toHaveBeenCalledWith({
+        message: 'Loading [A] and [B]',
+        location: expect.any(String),
+      });
+    });
+
     it('should include location in debug mode', () => {
       logger.setLogLevel('debug');
 

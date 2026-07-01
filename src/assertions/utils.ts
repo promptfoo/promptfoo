@@ -42,7 +42,7 @@ export async function loadFromJavaScriptFile(
   filePath: string,
   functionName: string | undefined,
   args: unknown[],
-  options: { redactPath?: boolean } = {},
+  options: { redactPath?: boolean; redactPathAliases?: string[] } = {},
   // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<any> {
   const loadModule = () => importModule(filePath, functionName);
@@ -51,7 +51,7 @@ export async function loadFromJavaScriptFile(
         (message) =>
           redactPathsAndIdentifierFromText(
             message,
-            [filePath],
+            [filePath, ...(options.redactPathAliases || [])],
             functionName,
             '[redacted module path]',
             '[redacted module export]',
