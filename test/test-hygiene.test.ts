@@ -739,7 +739,68 @@ type SetterExposureContext = {
   functionBindings: Map<ts.Node, ReadonlyMap<string, LexicalBinding>>;
   activeBindings: ReadonlySet<number>;
   activeFunctions: ReadonlySet<number>;
+  setterReceiverPath?: MockAccessPath;
+  vitestNamespaces: ReadonlySet<string>;
 };
+
+function findMockAccessSuffix(
+  exposedPath: MockAccessPath,
+  targetPath: MockAccessPath,
+): readonly string[] | undefined {
+  if (
+    exposedPath.root.pos !== targetPath.root.pos ||
+    exposedPath.properties.length > targetPath.properties.length ||
+    exposedPath.properties.some((property, index) => targetPath.properties[index] !== property)
+  ) {
+    return undefined;
+  }
+  return targetPath.properties.slice(exposedPath.properties.length);
+}
+
+function findSetterReceiverExposurePath(
+  expression: ts.Expression,
+  context: SetterExposureContext,
+  prefix: readonly string[],
+): string[] | undefined {
+  if (!context.setterReceiverPath) {
+    return undefined;
+  }
+  const currentPath = getMockAccessPath(expression, context.vitestNamespaces);
+  const resolvedCurrentPath = currentPath
+    ? resolveMockAccessPath(currentPath, context.bindings)
+    : undefined;
+  const suffix = resolvedCurrentPath
+    ? findMockAccessSuffix(resolvedCurrentPath, context.setterReceiverPath)
+    : undefined;
+  return suffix ? [...prefix, ...suffix] : undefined;
+}
+
+function findObjectSetterExposurePaths(
+  object: ts.ObjectLiteralExpression,
+  setter: ts.CallExpression,
+  context: SetterExposureContext,
+  prefix: readonly string[],
+): string[][] {
+  const paths: string[][] = [];
+  for (const property of object.properties) {
+    if (ts.isShorthandPropertyAssignment(property)) {
+      paths.push(
+        ...findSetterExposurePaths(property.name, setter, context, [...prefix, property.name.text]),
+      );
+    } else if (ts.isPropertyAssignment(property)) {
+      const propertyName = getPropertyNameText(property.name);
+      if (propertyName !== undefined) {
+        paths.push(
+          ...findSetterExposurePaths(property.initializer, setter, context, [
+            ...prefix,
+            propertyName,
+          ]),
+        );
+      }
+    }
+  }
+  return paths;
+}
 
 function findSetterExposurePaths(
   expression: ts.Expression,
@@ -750,6 +811,15 @@ function findSetterExposurePaths(
   const current = unwrapExpression(expression);
   if (current === setter) {
     return [[...prefix]];
+  }
+
+  const receiverExposurePath = findSetterReceiverExposurePath(
+    current as ts.Expression,
+    context,
+    prefix,
+  );
+  if (receiverExposurePath) {
+    return [receiverExposurePath];
   }
 
   if (ts.isIdentifier(current)) {
@@ -776,28 +846,7 @@ function findSetterExposurePaths(
   }
 
   if (ts.isObjectLiteralExpression(current)) {
-    const paths: string[][] = [];
-    for (const property of current.properties) {
-      if (ts.isShorthandPropertyAssignment(property)) {
-        paths.push(
-          ...findSetterExposurePaths(property.name, setter, context, [
-            ...prefix,
-            property.name.text,
-          ]),
-        );
-      } else if (ts.isPropertyAssignment(property)) {
-        const propertyName = getPropertyNameText(property.name);
-        if (propertyName !== undefined) {
-          paths.push(
-            ...findSetterExposurePaths(property.initializer, setter, context, [
-              ...prefix,
-              propertyName,
-            ]),
-          );
-        }
-      }
-    }
-    return paths;
+    return findObjectSetterExposurePaths(current, setter, context, prefix);
   }
 
   if (ts.isArrayLiteralExpression(current)) {
@@ -846,6 +895,7 @@ function findPersistentMockFactoryPaths(
   factoryNode: ts.Node,
   setter: ts.CallExpression,
   bindings: MockBindingIndex,
+  vitestNamespaces: ReadonlySet<string>,
 ): string[][] {
   const functionBindings = new Map<ts.Node, ReadonlyMap<string, LexicalBinding>>();
   const factory = resolveInvokedFunction(factoryNode, functionBindings);
@@ -853,11 +903,22 @@ function findPersistentMockFactoryPaths(
     return [];
   }
 
+  const setterReceiver = ts.isPropertyAccessExpression(setter.expression)
+    ? setter.expression.expression
+    : undefined;
+  const setterReceiverPath = setterReceiver
+    ? getMockAccessPath(setterReceiver, vitestNamespaces)
+    : undefined;
+
   const context: SetterExposureContext = {
     bindings,
     functionBindings,
     activeBindings: new Set<number>(),
     activeFunctions: new Set([factory.pos]),
+    setterReceiverPath: setterReceiverPath
+      ? resolveMockAccessPath(setterReceiverPath, bindings)
+      : undefined,
+    vitestNamespaces,
   };
   return collectFactoryReturnExpressions(factory).flatMap((expression) =>
     findSetterExposurePaths(expression, setter, context),
@@ -905,17 +966,20 @@ function hasMatchingHoistedReset(
   setter: ts.CallExpression,
   bindings: MockBindingIndex,
   resetPaths: ReadonlySet<string>,
+  vitestNamespaces: ReadonlySet<string>,
 ): boolean {
   const declaration = findHoistedVariableDeclaration(hoistedCall);
   if (!declaration) {
     return false;
   }
 
-  return findPersistentMockFactoryPaths(factoryNode, setter, bindings).some((factoryPath) => {
-    const boundPath = bindFactoryPath(declaration.name, factoryPath);
-    const resolvedPath = boundPath ? resolveMockAccessPath(boundPath, bindings) : undefined;
-    return resolvedPath ? resetPaths.has(mockAccessPathKey(resolvedPath)) : false;
-  });
+  return findPersistentMockFactoryPaths(factoryNode, setter, bindings, vitestNamespaces).some(
+    (factoryPath) => {
+      const boundPath = bindFactoryPath(declaration.name, factoryPath);
+      const resolvedPath = boundPath ? resolveMockAccessPath(boundPath, bindings) : undefined;
+      return resolvedPath ? resetPaths.has(mockAccessPathKey(resolvedPath)) : false;
+    },
+  );
 }
 
 function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpression | undefined {
@@ -948,7 +1012,14 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
         enterRootFunction: true,
         followSynchronousCalls: true,
         ignorePersistentMockSetter: (setter) =>
-          hasMatchingHoistedReset(node, node.arguments[0], setter, bindings, resetPaths),
+          hasMatchingHoistedReset(
+            node,
+            node.arguments[0],
+            setter,
+            bindings,
+            resetPaths,
+            vitestNamespaces,
+          ),
       });
       if (finding) {
         return;
@@ -2444,6 +2515,30 @@ describe('root test hygiene', () => {
     ],
     [
       [
+        'const mocks = vi.hoisted(() => {',
+        '  const request = vi.fn();',
+        "  request.mockResolvedValue('default');",
+        '  return { request };',
+        '});',
+        'beforeEach(() => {',
+        "  mocks.request.mockReset().mockResolvedValue('default');",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        'const mocks = vi.hoisted(() => {',
+        '  const client = { request: vi.fn() };',
+        "  client.request.mockResolvedValue('default');",
+        '  return { client };',
+        '});',
+        'beforeEach(() => {',
+        "  mocks.client.request.mockReset().mockResolvedValue('default');",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
         'const mocks = vi.hoisted(() => ({',
         "  request: vi.fn().mockReturnValue('default'),",
         '}));',
@@ -2521,6 +2616,29 @@ describe('root test hygiene', () => {
         file: 'nested/fixture.test.ts',
         line: 3,
         snippet: "vi.fn().mockReturnValue('unsafe')",
+      }),
+    ]);
+  });
+
+  it('does not let a side-effect reset hide a sibling hoisted mock', () => {
+    const source = [
+      'const mocks = vi.hoisted(() => {',
+      '  const safe = vi.fn();',
+      "  safe.mockReturnValue('safe');",
+      '  const unsafe = vi.fn();',
+      "  unsafe.mockReturnValue('unsafe');",
+      '  return { safe, unsafe };',
+      '});',
+      'beforeEach(() => {',
+      "  mocks.safe.mockReset().mockReturnValue('safe');",
+      '});',
+    ].join('\n');
+
+    expect(scanFixturePolicies(source, 'nested/fixture.test.ts').hoistedPersistentMock).toEqual([
+      expect.objectContaining({
+        file: 'nested/fixture.test.ts',
+        line: 5,
+        snippet: "unsafe.mockReturnValue('unsafe')",
       }),
     ]);
   });
