@@ -12,6 +12,12 @@ keywords: [guardrails, adaptive guardrails, llm security, prompt filtering, red 
 
 Adaptive guardrails close the loop between red teaming and production defense by automatically turning identified vulnerabilities into context-aware filters that intercept adversarial prompts before they reach LLM endpoints.
 
+:::note
+
+This page describes Promptfoo Enterprise's runtime enforcement product. To test a target's provider-reported safety decision in an eval, see the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) and [guardrail testing guide](/docs/guides/testing-guardrails).
+
+:::
+
 ## What Makes Them Adaptive?
 
 Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application, like key features, target use case, and user personas, to strengthen defenses. As new vulnerabilities are discovered, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules and creating a living defense layer that grows stronger with each test cycle.
@@ -91,7 +97,14 @@ To integrate the guardrail into your application, select **Guardrails > Targets*
 Here, you'll find different ways of integrating your guardrail into your application. Initially, we suggest integrating it at the input and output steps of your application. At the bottom of this page you'll find the different placement options that you need to add to your requests. For your first integration, we suggest just setting up input and output calls, and integrating tool call input/output calls later.
 
 ```javascript
-const response = await fetch('http://localhost:3200/api/v1/guardrails/YOUR_GUARDRAIL_ID/evaluate', {
+const baseUrl = process.env.PROMPTFOO_API_BASE_URL ?? 'http://localhost:3200';
+const targetId = process.env.PROMPTFOO_TARGET_ID;
+
+if (!targetId) {
+  throw new Error('PROMPTFOO_TARGET_ID is required');
+}
+
+const response = await fetch(`${baseUrl}/api/v1/guardrails/${targetId}/evaluate`, {
   method: 'POST',
   headers: {
     Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}`,
@@ -104,8 +117,18 @@ const response = await fetch('http://localhost:3200/api/v1/guardrails/YOUR_GUARD
   }),
 });
 
+if (!response.ok) {
+  throw new Error(`Guardrail evaluation failed (${response.status}): ${await response.text()}`);
+}
+
 const result = await response.json();
+
+if (result.action === 'block' || result.action === 'error') {
+  // Do not send the input to the model.
+}
 ```
+
+Gate the model call on the aggregate `action`: `allow`, `log`, `warn`, `block`, or `error`. Choose an explicit policy for `warn` and `error`; do not let either fall through by accident. The endpoint evaluates every active guardrail attached to the target ID and also returns `severity`, `guardrailResults`, and `latencyMs`. A transforming policy can return `sanitizedContent`. Keep the per-guardrail results for audit and debugging instead of reducing the response to a boolean. See the [API reference](/docs/api-reference) for the complete schema.
 
 ### Parallel Execution
 
