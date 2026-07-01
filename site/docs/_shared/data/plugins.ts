@@ -633,6 +633,21 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Detects fabricated external references (GitHub repos, URLs, domains) by verifying them against live HTTP and GitHub APIs.',
+    label: 'security',
+    link: '/docs/red-team/plugins/domain-hallucination/',
+    name: 'Domain Hallucination',
+    pluginId: 'domain-hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+  },
+  {
     category: 'Dataset',
     description: 'Tests how well LLMs handle harmful queries using the DoNotAnswer dataset',
     label: 'technical',
