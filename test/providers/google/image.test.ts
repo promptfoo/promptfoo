@@ -230,6 +230,11 @@ describe('GoogleImageProvider', async () => {
   it('should return correct cost for different models', async () => {
     // Test costs through actual API responses
     const testCases = [
+      // Imagen 4 GA names
+      { model: 'imagen-4.0-ultra-generate-001', expectedCost: 0.06 },
+      { model: 'imagen-4.0-generate-001', expectedCost: 0.04 },
+      { model: 'imagen-4.0-fast-generate-001', expectedCost: 0.02 },
+      // Imagen 4 preview aliases
       { model: 'imagen-4.0-ultra-generate-preview-06-06', expectedCost: 0.06 },
       { model: 'imagen-4.0-generate-preview-06-06', expectedCost: 0.04 },
       { model: 'imagen-4.0-fast-generate-preview-06-06', expectedCost: 0.02 },

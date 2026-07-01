@@ -301,8 +301,8 @@ describe('GeminiImageProvider', () => {
       );
     });
 
-    it('should use global endpoint with v1 for gemini-3.1-flash-lite-image-preview', async () => {
-      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image-preview', {
+    it('should use global endpoint with v1 for gemini-3.1-flash-lite-image', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image', {
         config: {
           projectId: 'test-project',
           region: 'us-central1',
@@ -340,7 +340,7 @@ describe('GeminiImageProvider', () => {
       expect(mockClient.request).toHaveBeenCalledWith(
         expect.objectContaining({
           url: expect.stringContaining(
-            '/publishers/google/models/gemini-3.1-flash-lite-image-preview:generateContent',
+            '/publishers/google/models/gemini-3.1-flash-lite-image:generateContent',
           ),
         }),
       );
@@ -440,8 +440,8 @@ describe('GeminiImageProvider', () => {
       });
     });
 
-    it('should pass imageSize config for gemini-3.1-flash-lite-image-preview', async () => {
-      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image-preview', {
+    it('should pass imageSize config for gemini-3.1-flash-lite-image', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image', {
         config: {
           imageAspectRatio: '16:9',
           imageSize: '1K',
@@ -751,7 +751,7 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.05);
+      expect(result.cost).toBe(0.134);
     });
 
     it('should return correct cost for gemini-2.5-flash-image', async () => {
@@ -816,8 +816,8 @@ describe('GeminiImageProvider', () => {
       expect(result.cost).toBe(0.067);
     });
 
-    it('should return correct cost for gemini-3.1-flash-lite-image-preview', async () => {
-      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image-preview');
+    it('should return correct cost for gemini-3.1-flash-lite-image (Nano Banana 2 Lite)', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image');
 
       mockFetchWithCache.mockResolvedValueOnce({
         status: 200,
@@ -844,7 +844,55 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.02);
+      expect(result.cost).toBe(0.0336);
+    });
+
+    it('should return correct cost for gemini-3.1-flash-image (GA Nano Banana 2)', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.067);
+    });
+
+    it('should return correct cost for gemini-3-pro-image (GA Nano Banana Pro)', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.134);
     });
   });
 

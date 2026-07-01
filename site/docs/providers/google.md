@@ -364,16 +364,18 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
-- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3.1-flash-lite-image-preview` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for fast, low-cost image generation (~$0.02/image, estimated)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only)
+- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
+
+Each Gemini 3.x image model also accepts its `-preview` alias (for example `google:gemini-3.1-flash-image-preview` or `google:gemini-3-pro-image-preview`), which resolves to the same model.
 
 Configuration options:
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image-preview
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
       imageSize: '2K' # 512px (3.1 only), 1K, 2K, 4K
@@ -393,7 +395,7 @@ Google Search grounding lets the model use real-time search results to inform im
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image-preview
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9'
       tools:

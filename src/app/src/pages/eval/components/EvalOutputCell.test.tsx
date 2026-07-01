@@ -2360,7 +2360,7 @@ describe('isImageProvider helper function', () => {
   });
 
   it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
-    expect(isImageProvider('google:gemini-3.1-flash-lite-image-preview')).toBe(true);
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
   });
 
   it('should return false for text completion providers', () => {

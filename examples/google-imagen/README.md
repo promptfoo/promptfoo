@@ -76,10 +76,12 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ### Gemini Native Image Generation
 
-- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3.1-flash-lite-image-preview` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for fast, low-cost image generation (~$0.02/image, estimated)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.05/image, estimated)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only)
+- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) with native image generation (~$0.134/image at 1K/2K)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
+
+Each Gemini 3.x image model also accepts its `-preview` alias (e.g. `google:gemini-3.1-flash-image-preview`), which resolves to the same model.
 
 ## Running the Example
 
