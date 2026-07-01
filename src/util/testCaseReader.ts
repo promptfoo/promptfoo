@@ -259,10 +259,14 @@ function getStandaloneTestsFileMetadata(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  // Remove an xlsx/xls sheet specifier before detecting the file extension. Sheet names can
-  // contain dots, so parsing the extension first would misread `file.xlsx#2.9` as a `.9` file.
-  const pathWithoutSheet = pathWithoutFunction.split('#')[0];
-  const fileExtension = parsePath(pathWithoutSheet).ext.slice(1);
+  // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
+  // characters in parent directories and non-Excel filenames.
+  const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
+  const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
+  const fileExtension =
+    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
+      ? sheetAwareExtension
+      : parsePath(pathWithoutFunction).ext.slice(1);
 
   return {
     resolvedVarsPath,
