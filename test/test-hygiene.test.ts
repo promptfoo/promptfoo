@@ -275,7 +275,6 @@ const persistentMockImplementationPattern = new RegExp(
 // `vi.spyOn` mocks specifically — relying on it to reset module-scope
 // `vi.fn().mockReturnValue(...)` defaults is fragile, so it does not count.
 // See https://vitest.dev/api/vi#vi-restoreallmocks.
-const globalMockResetPattern = /\bvi\.resetAllMocks\s*\(/;
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
 function findVitestNamespaceImports(sourceFile: ts.SourceFile): ReadonlySet<string> {
@@ -320,6 +319,26 @@ function isViMethodCall(
   );
 }
 
+function hasViMethodCall(
+  sourceFile: ts.SourceFile,
+  method: string,
+  vitestNamespaces: ReadonlySet<string>,
+): boolean {
+  let found = false;
+  function visit(node: ts.Node) {
+    if (found) {
+      return;
+    }
+    if (isViMethodCall(node, method, vitestNamespaces)) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return found;
+}
+
 function isViHoistedCall(
   node: ts.Node,
   vitestNamespaces: ReadonlySet<string>,
@@ -328,14 +347,21 @@ function isViHoistedCall(
 }
 
 type MockAccessPath = {
-  root: string;
+  root: ts.Identifier;
   properties: readonly string[];
 };
 
-// Match resets to the exact mock exposed by a hoisted factory. Static property
-// paths and simple destructuring/property aliases are followed; computed or
-// ambiguous paths fail closed so an unrelated reset cannot suppress a finding.
-type MockAccessAlias = MockAccessPath | null;
+// Match resets to the exact lexical binding exposed by a hoisted factory.
+// Keeping declaration identities (rather than identifier text) prevents an
+// unrelated local shadow from invalidating or satisfying a module-level reset.
+type MockBinding = {
+  identifier: ts.Identifier;
+  initializer?: ts.Expression;
+  scope: ts.Node;
+  sourcePath?: MockAccessPath;
+};
+
+type MockBindingIndex = ReadonlyMap<string, readonly MockBinding[]>;
 
 function findHoistedVariableDeclaration(
   call: ts.CallExpression,
@@ -382,7 +408,7 @@ function getMockAccessPath(
 ): MockAccessPath | undefined {
   const current = unwrapExpression(node);
   if (ts.isIdentifier(current)) {
-    return { root: current.text, properties: [] };
+    return { root: current, properties: [] };
   }
   if (isViMethodCall(current, 'mocked', vitestNamespaces) && current.arguments[0]) {
     return getMockAccessPath(current.arguments[0], vitestNamespaces);
@@ -404,63 +430,136 @@ function getMockAccessPath(
 }
 
 function mockAccessPathKey(path: MockAccessPath): string {
-  return JSON.stringify([path.root, ...path.properties]);
+  return JSON.stringify([path.root.pos, ...path.properties]);
 }
 
 function resolveMockAccessPath(
   path: MockAccessPath,
-  aliases: ReadonlyMap<string, MockAccessAlias>,
+  bindings: MockBindingIndex,
+  seenBindings: ReadonlySet<number> = new Set<number>(),
 ): MockAccessPath | undefined {
-  let resolved = path;
-  const seen = new Set<string>();
-
-  while (aliases.has(resolved.root)) {
-    if (seen.has(resolved.root)) {
-      return undefined;
-    }
-    seen.add(resolved.root);
-    const alias = aliases.get(resolved.root);
-    if (!alias) {
-      return undefined;
-    }
-    resolved = {
-      root: alias.root,
-      properties: [...alias.properties, ...resolved.properties],
-    };
+  const binding = findVisibleMockBinding(path.root, bindings);
+  if (!binding) {
+    return path;
   }
-
-  return resolved;
+  if (seenBindings.has(binding.identifier.pos)) {
+    return undefined;
+  }
+  if (!binding.sourcePath) {
+    return { root: binding.identifier, properties: path.properties };
+  }
+  const resolvedSource = resolveMockAccessPath(
+    binding.sourcePath,
+    bindings,
+    new Set([...seenBindings, binding.identifier.pos]),
+  );
+  return resolvedSource
+    ? {
+        root: resolvedSource.root,
+        properties: [...resolvedSource.properties, ...path.properties],
+      }
+    : undefined;
 }
 
-function setMockAccessAlias(
-  aliases: Map<string, MockAccessAlias>,
-  name: string,
-  path: MockAccessPath,
+function findMockBindingScope(declaration: ts.VariableDeclaration): ts.Node {
+  if (ts.isCatchClause(declaration.parent)) {
+    return declaration.parent;
+  }
+  const declarationList = declaration.parent;
+  const isBlockScoped =
+    ts.isVariableDeclarationList(declarationList) &&
+    (declarationList.flags & ts.NodeFlags.BlockScoped) !== 0;
+  let current: ts.Node | undefined = declaration.parent;
+
+  while (current) {
+    if (ts.isSourceFile(current)) {
+      return current;
+    }
+    if (!isBlockScoped && isFunctionLikeNode(current)) {
+      return current;
+    }
+    if (
+      isBlockScoped &&
+      (ts.isBlock(current) ||
+        ts.isModuleBlock(current) ||
+        ts.isCaseBlock(current) ||
+        ts.isCatchClause(current) ||
+        ts.isForStatement(current) ||
+        ts.isForInStatement(current) ||
+        ts.isForOfStatement(current))
+    ) {
+      return current;
+    }
+    current = current.parent;
+  }
+  return declaration.getSourceFile();
+}
+
+function findBlockBindingScope(declaration: ts.Node): ts.Node {
+  let current: ts.Node | undefined = declaration.parent;
+  while (current) {
+    if (
+      ts.isSourceFile(current) ||
+      ts.isBlock(current) ||
+      ts.isModuleBlock(current) ||
+      ts.isCaseBlock(current)
+    ) {
+      return current;
+    }
+    current = current.parent;
+  }
+  return declaration.getSourceFile();
+}
+
+function appendMockAccessProperty(
+  path: MockAccessPath | undefined,
+  property: string,
+): MockAccessPath | undefined {
+  return path ? { root: path.root, properties: [...path.properties, property] } : undefined;
+}
+
+function addMockBinding(
+  identifier: ts.Identifier,
+  scope: ts.Node,
+  bindings: Map<string, MockBinding[]>,
+  initializer?: ts.Expression,
+  sourcePath?: MockAccessPath,
 ) {
-  if (name === path.root && path.properties.length === 0) {
-    return;
-  }
-  if (!aliases.has(name)) {
-    aliases.set(name, path);
-    return;
-  }
-  const existing = aliases.get(name);
-  if (existing && mockAccessPathKey(existing) === mockAccessPathKey(path)) {
-    return;
-  }
-  // The same identifier text can be bound in multiple lexical scopes. Treat
-  // conflicting aliases as ambiguous rather than letting one reset hide a
-  // different mock with the same local name.
-  aliases.set(name, null);
+  const existing = bindings.get(identifier.text) ?? [];
+  existing.push({ identifier, initializer, scope, sourcePath });
+  bindings.set(identifier.text, existing);
 }
 
-function addBindingAccessAliases(
+function addShadowBindings(
   name: ts.BindingName,
-  sourcePath: MockAccessPath,
-  aliases: Map<string, MockAccessAlias>,
+  scope: ts.Node,
+  bindings: Map<string, MockBinding[]>,
 ) {
   if (ts.isIdentifier(name)) {
-    setMockAccessAlias(aliases, name.text, sourcePath);
+    addMockBinding(name, scope, bindings);
+    return;
+  }
+  for (const element of name.elements) {
+    if (!ts.isOmittedExpression(element)) {
+      addShadowBindings(element.name, scope, bindings);
+    }
+  }
+}
+
+function addMockBindings(
+  name: ts.BindingName,
+  declaration: ts.VariableDeclaration,
+  sourcePath: MockAccessPath | undefined,
+  bindings: Map<string, MockBinding[]>,
+) {
+  if (ts.isIdentifier(name)) {
+    addMockBinding(
+      name,
+      findMockBindingScope(declaration),
+      bindings,
+      declaration.name === name ? declaration.initializer : undefined,
+      sourcePath,
+    );
     return;
   }
 
@@ -475,10 +574,11 @@ function addBindingAccessAliases(
           ? element.name.text
           : undefined;
       if (property !== undefined) {
-        addBindingAccessAliases(
+        addMockBindings(
           element.name,
-          { root: sourcePath.root, properties: [...sourcePath.properties, property] },
-          aliases,
+          declaration,
+          appendMockAccessProperty(sourcePath, property),
+          bindings,
         );
       }
     }
@@ -487,39 +587,94 @@ function addBindingAccessAliases(
 
   for (const [index, element] of name.elements.entries()) {
     if (!ts.isOmittedExpression(element) && !element.dotDotDotToken) {
-      addBindingAccessAliases(
+      addMockBindings(
         element.name,
-        { root: sourcePath.root, properties: [...sourcePath.properties, String(index)] },
-        aliases,
+        declaration,
+        appendMockAccessProperty(sourcePath, String(index)),
+        bindings,
       );
     }
   }
 }
 
-function findMockAccessAliases(
+function findMockBindings(
   sourceFile: ts.SourceFile,
   vitestNamespaces: ReadonlySet<string>,
-): ReadonlyMap<string, MockAccessAlias> {
-  const aliases = new Map<string, MockAccessAlias>();
+): MockBindingIndex {
+  const bindings = new Map<string, MockBinding[]>();
+
+  function addImportShadows(node: ts.ImportDeclaration) {
+    const clause = node.importClause;
+    if (!clause) {
+      return;
+    }
+    if (clause.name) {
+      addMockBinding(clause.name, sourceFile, bindings);
+    }
+    const namedBindings = clause.namedBindings;
+    if (namedBindings && ts.isNamespaceImport(namedBindings)) {
+      addMockBinding(namedBindings.name, sourceFile, bindings);
+    } else if (namedBindings) {
+      for (const element of namedBindings.elements) {
+        addMockBinding(element.name, sourceFile, bindings);
+      }
+    }
+  }
 
   function visit(node: ts.Node) {
-    if (ts.isVariableDeclaration(node) && node.initializer) {
-      const sourcePath = getMockAccessPath(node.initializer, vitestNamespaces);
-      if (sourcePath) {
-        addBindingAccessAliases(node.name, sourcePath, aliases);
-      }
+    if (ts.isVariableDeclaration(node)) {
+      const sourcePath = node.initializer
+        ? getMockAccessPath(node.initializer, vitestNamespaces)
+        : undefined;
+      addMockBindings(node.name, node, sourcePath, bindings);
+    } else if (ts.isParameter(node)) {
+      addShadowBindings(node.name, node.parent, bindings);
+    } else if (ts.isFunctionDeclaration(node) && node.name) {
+      addMockBinding(node.name, findBlockBindingScope(node), bindings);
+    } else if (ts.isFunctionExpression(node) && node.name) {
+      addMockBinding(node.name, node, bindings);
+    } else if (ts.isClassDeclaration(node) && node.name) {
+      addMockBinding(node.name, findBlockBindingScope(node), bindings);
+    } else if (ts.isClassExpression(node) && node.name) {
+      addMockBinding(node.name, node, bindings);
+    } else if (ts.isImportDeclaration(node)) {
+      addImportShadows(node);
+    } else if (ts.isImportEqualsDeclaration(node)) {
+      addMockBinding(node.name, sourceFile, bindings);
     }
     ts.forEachChild(node, visit);
   }
 
   visit(sourceFile);
-  return aliases;
+  return bindings;
+}
+
+function findVisibleMockBinding(
+  identifier: ts.Identifier,
+  bindings: MockBindingIndex,
+): MockBinding | undefined {
+  const candidates = bindings.get(identifier.text) ?? [];
+  const exactBinding = candidates.find((binding) => binding.identifier === identifier);
+  if (exactBinding) {
+    return exactBinding;
+  }
+
+  const visibleBindings = candidates
+    .filter((binding) => isDescendantOf(identifier, binding.scope))
+    .sort((left, right) => left.scope.end - left.scope.pos - (right.scope.end - right.scope.pos));
+  if (visibleBindings.length === 0) {
+    return undefined;
+  }
+  const narrowestScope = visibleBindings[0].scope;
+  return visibleBindings.filter((binding) => binding.scope === narrowestScope).length === 1
+    ? visibleBindings[0]
+    : undefined;
 }
 
 function findHoistedResetCoverage(
   sourceFile: ts.SourceFile,
   vitestNamespaces: ReadonlySet<string>,
-  aliases: ReadonlyMap<string, MockAccessAlias>,
+  bindings: MockBindingIndex,
 ): { hasGlobalReset: boolean; resetPaths: ReadonlySet<string> } {
   let hasGlobalReset = false;
   const resetPaths = new Set<string>();
@@ -533,7 +688,7 @@ function findHoistedResetCoverage(
       node.expression.name.text === 'mockReset'
     ) {
       const path = getMockAccessPath(node.expression.expression, vitestNamespaces);
-      const resolvedPath = path ? resolveMockAccessPath(path, aliases) : undefined;
+      const resolvedPath = path ? resolveMockAccessPath(path, bindings) : undefined;
       if (resolvedPath) {
         resetPaths.add(mockAccessPathKey(resolvedPath));
       }
@@ -579,33 +734,62 @@ function collectFactoryReturnExpressions(factory: InvokableFunction): ts.Express
   return expressions;
 }
 
-function findIdentifierExposurePaths(
+type SetterExposureContext = {
+  bindings: MockBindingIndex;
+  functionBindings: Map<ts.Node, ReadonlyMap<string, LexicalBinding>>;
+  activeBindings: ReadonlySet<number>;
+  activeFunctions: ReadonlySet<number>;
+};
+
+function findSetterExposurePaths(
   expression: ts.Expression,
-  identifier: string,
+  setter: ts.CallExpression,
+  context: SetterExposureContext,
   prefix: readonly string[] = [],
 ): string[][] {
   const current = unwrapExpression(expression);
-  if (ts.isIdentifier(current)) {
-    return current.text === identifier ? [[...prefix]] : [];
+  if (current === setter) {
+    return [[...prefix]];
   }
+
+  if (ts.isIdentifier(current)) {
+    const binding = findVisibleMockBinding(current, context.bindings);
+    if (!binding?.initializer || context.activeBindings.has(binding.identifier.pos)) {
+      return [];
+    }
+    return findSetterExposurePaths(
+      binding.initializer,
+      setter,
+      {
+        ...context,
+        activeBindings: new Set([...context.activeBindings, binding.identifier.pos]),
+      },
+      prefix,
+    );
+  }
+
   if (ts.isConditionalExpression(current)) {
     return [
-      ...findIdentifierExposurePaths(current.whenTrue, identifier, prefix),
-      ...findIdentifierExposurePaths(current.whenFalse, identifier, prefix),
+      ...findSetterExposurePaths(current.whenTrue, setter, context, prefix),
+      ...findSetterExposurePaths(current.whenFalse, setter, context, prefix),
     ];
   }
+
   if (ts.isObjectLiteralExpression(current)) {
     const paths: string[][] = [];
     for (const property of current.properties) {
       if (ts.isShorthandPropertyAssignment(property)) {
-        if (property.name.text === identifier) {
-          paths.push([...prefix, property.name.text]);
-        }
+        paths.push(
+          ...findSetterExposurePaths(property.name, setter, context, [
+            ...prefix,
+            property.name.text,
+          ]),
+        );
       } else if (ts.isPropertyAssignment(property)) {
         const propertyName = getPropertyNameText(property.name);
         if (propertyName !== undefined) {
           paths.push(
-            ...findIdentifierExposurePaths(property.initializer, identifier, [
+            ...findSetterExposurePaths(property.initializer, setter, context, [
               ...prefix,
               propertyName,
             ]),
@@ -615,69 +799,69 @@ function findIdentifierExposurePaths(
     }
     return paths;
   }
+
   if (ts.isArrayLiteralExpression(current)) {
     return current.elements.flatMap((element, index) =>
-      ts.isOmittedExpression(element) || ts.isSpreadElement(element)
+      ts.isOmittedExpression(element)
         ? []
-        : findIdentifierExposurePaths(element, identifier, [...prefix, String(index)]),
+        : ts.isSpreadElement(element)
+          ? []
+          : findSetterExposurePaths(element, setter, context, [...prefix, String(index)]),
     );
   }
+
+  if (ts.isCallExpression(current)) {
+    if (
+      ts.isPropertyAccessExpression(current.expression) &&
+      current.expression.name.text.startsWith('mock')
+    ) {
+      const receiverPaths = findSetterExposurePaths(
+        current.expression.expression,
+        setter,
+        context,
+        prefix,
+      );
+      if (receiverPaths.length > 0) {
+        return receiverPaths;
+      }
+    }
+
+    const invoked = resolveInvokedFunction(current.expression, context.functionBindings);
+    if (!invoked?.body || context.activeFunctions.has(invoked.pos)) {
+      return [];
+    }
+    const nextContext = {
+      ...context,
+      activeFunctions: new Set([...context.activeFunctions, invoked.pos]),
+    };
+    return collectFactoryReturnExpressions(invoked).flatMap((returned) =>
+      findSetterExposurePaths(returned, setter, nextContext, prefix),
+    );
+  }
+
   return [];
 }
 
 function findPersistentMockFactoryPaths(
   factoryNode: ts.Node,
   setter: ts.CallExpression,
+  bindings: MockBindingIndex,
 ): string[][] {
-  const factory = resolveInvokedFunction(
-    factoryNode,
-    new Map<ts.Node, ReadonlyMap<string, LexicalBinding>>(),
-  );
-  if (!factory?.body || !isDescendantOf(setter, factory)) {
+  const functionBindings = new Map<ts.Node, ReadonlyMap<string, LexicalBinding>>();
+  const factory = resolveInvokedFunction(factoryNode, functionBindings);
+  if (!factory?.body) {
     return [];
   }
 
-  const properties: string[] = [];
-  let localRoot: string | undefined;
-  let returnedDirectly = ts.isArrowFunction(factory) && !ts.isBlock(factory.body);
-  let current: ts.Node = setter;
-
-  while (current !== factory && current.parent) {
-    const parent = current.parent;
-    if (ts.isPropertyAssignment(parent) && parent.initializer === current) {
-      const property = getPropertyNameText(parent.name);
-      if (property === undefined) {
-        return [];
-      }
-      properties.unshift(property);
-    } else if (ts.isArrayLiteralExpression(parent)) {
-      const index = parent.elements.findIndex((element) => element === current);
-      if (index >= 0) {
-        properties.unshift(String(index));
-      }
-    } else if (
-      ts.isVariableDeclaration(parent) &&
-      parent.initializer === current &&
-      ts.isIdentifier(parent.name) &&
-      !isFunctionLikeNode(current)
-    ) {
-      localRoot = parent.name.text;
-      break;
-    } else if (ts.isReturnStatement(parent) && parent.expression === current) {
-      returnedDirectly = true;
-    }
-    current = parent;
-  }
-
-  if (localRoot) {
-    return collectFactoryReturnExpressions(factory).flatMap((expression) =>
-      findIdentifierExposurePaths(expression, localRoot).map((exposurePath) => [
-        ...exposurePath,
-        ...properties,
-      ]),
-    );
-  }
-  return returnedDirectly ? [properties] : [];
+  const context: SetterExposureContext = {
+    bindings,
+    functionBindings,
+    activeBindings: new Set<number>(),
+    activeFunctions: new Set([factory.pos]),
+  };
+  return collectFactoryReturnExpressions(factory).flatMap((expression) =>
+    findSetterExposurePaths(expression, setter, context),
+  );
 }
 
 function bindFactoryPath(
@@ -685,7 +869,7 @@ function bindFactoryPath(
   properties: readonly string[],
 ): MockAccessPath | undefined {
   if (ts.isIdentifier(name)) {
-    return { root: name.text, properties };
+    return { root: name, properties };
   }
   if (properties.length === 0) {
     return undefined;
@@ -719,7 +903,7 @@ function hasMatchingHoistedReset(
   hoistedCall: ts.CallExpression,
   factoryNode: ts.Node,
   setter: ts.CallExpression,
-  aliases: ReadonlyMap<string, MockAccessAlias>,
+  bindings: MockBindingIndex,
   resetPaths: ReadonlySet<string>,
 ): boolean {
   const declaration = findHoistedVariableDeclaration(hoistedCall);
@@ -727,9 +911,9 @@ function hasMatchingHoistedReset(
     return false;
   }
 
-  return findPersistentMockFactoryPaths(factoryNode, setter).some((factoryPath) => {
+  return findPersistentMockFactoryPaths(factoryNode, setter, bindings).some((factoryPath) => {
     const boundPath = bindFactoryPath(declaration.name, factoryPath);
-    const resolvedPath = boundPath ? resolveMockAccessPath(boundPath, aliases) : undefined;
+    const resolvedPath = boundPath ? resolveMockAccessPath(boundPath, bindings) : undefined;
     return resolvedPath ? resetPaths.has(mockAccessPathKey(resolvedPath)) : false;
   });
 }
@@ -744,11 +928,11 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
 
   let finding: ts.CallExpression | undefined;
   const vitestNamespaces = findVitestNamespaceImports(file.sourceFile);
-  const aliases = findMockAccessAliases(file.sourceFile, vitestNamespaces);
+  const bindings = findMockBindings(file.sourceFile, vitestNamespaces);
   const { hasGlobalReset, resetPaths } = findHoistedResetCoverage(
     file.sourceFile,
     vitestNamespaces,
-    aliases,
+    bindings,
   );
   if (hasGlobalReset) {
     return undefined;
@@ -764,7 +948,7 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
         enterRootFunction: true,
         followSynchronousCalls: true,
         ignorePersistentMockSetter: (setter) =>
-          hasMatchingHoistedReset(node, node.arguments[0], setter, aliases, resetPaths),
+          hasMatchingHoistedReset(node, node.arguments[0], setter, bindings, resetPaths),
       });
       if (finding) {
         return;
@@ -1518,11 +1702,11 @@ function findClassStaticBlockPersistentMock(stmt: ts.Statement): ts.Node | undef
 }
 
 function findModuleScopePersistentMockWithoutReset(file: HygieneFile): ts.Node | undefined {
-  if (globalMockResetPattern.test(file.source)) {
+  const vitestNamespaces = findVitestNamespaceImports(file.sourceFile);
+  if (hasViMethodCall(file.sourceFile, 'resetAllMocks', vitestNamespaces)) {
     return undefined;
   }
   const moduleFactoryByName = findModuleFactories(file.sourceFile);
-  const vitestNamespaces = findVitestNamespaceImports(file.sourceFile);
 
   for (const stmt of file.sourceFile.statements) {
     const finding =
@@ -2236,8 +2420,71 @@ describe('root test hygiene', () => {
         '});',
       ].join('\n'),
     ],
+    [
+      [
+        "function build() { return vi.fn().mockReturnValue('default'); }",
+        'const mock = vi.hoisted(() => build());',
+        'beforeEach(() => {',
+        "  mock.mockReset().mockReturnValue('default');",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        'const mocks = vi.hoisted(() => {',
+        "  const request = vi.fn().mockReturnValue('default');",
+        '  const client = { request };',
+        '  return { client };',
+        '});',
+        'const client = mocks.client;',
+        'beforeEach(() => {',
+        "  client.request.mockReset().mockReturnValue('default');",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        'const mocks = vi.hoisted(() => ({',
+        "  request: vi.fn().mockReturnValue('default'),",
+        '}));',
+        'const { request } = mocks;',
+        'beforeEach(() => {',
+        "  request.mockReset().mockReturnValue('default');",
+        '});',
+        "it('uses another request', () => {",
+        '  const request = otherClient.request;',
+        '  expect(request).toBeDefined();',
+        '});',
+      ].join('\n'),
+    ],
   ])('allows hoisted persistent mock implementations with reset', (source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('does not let a reset on a scoped shadow cover a hoisted mock', () => {
+    const source = [
+      'const mocks = vi.hoisted(() => ({',
+      "  request: vi.fn().mockReturnValue('default'),",
+      '}));',
+      'const { request } = mocks;',
+      'beforeEach(() => {',
+      '  const request = otherClient.request;',
+      '  request.mockReset();',
+      '});',
+    ].join('\n');
+
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('does not let a reset on a parameter shadow cover a hoisted mock', () => {
+    const source = [
+      "const request = vi.hoisted(() => vi.fn().mockReturnValue('default'));",
+      'function resetRequest(request: ReturnType<typeof vi.fn>) {',
+      '  request.mockReset();',
+      '}',
+    ].join('\n');
+
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
 
   it('does not let one per-mock reset hide another hoisted violation', () => {
@@ -2769,6 +3016,18 @@ describe('root test hygiene', () => {
         '',
         'beforeEach(() => {',
         '  vi.resetAllMocks();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        "import * as vitest from 'vitest';",
+        "vitest.vi.mock('proxy-agent', () => ({",
+        "  ProxyAgent: vitest.vi.fn().mockReturnValue('default'),",
+        '}));',
+        '',
+        'beforeEach(() => {',
+        '  vitest.vi.resetAllMocks();',
         '});',
       ].join('\n'),
     ],
