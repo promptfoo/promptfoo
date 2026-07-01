@@ -216,6 +216,128 @@ describe('OpenAI billing helpers', () => {
     ).toBeUndefined();
   });
 
+  it('uses explicit costs for unknown OpenAI-compatible models', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+      ),
+    ).toBeCloseTo(0.000028, 10);
+  });
+
+  it('supports explicit input/output token aliases and nested usage', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { cost: 0.000001 },
+        { usage: { input_tokens: 100, output_tokens: 50 } },
+      ),
+    ).toBeCloseTo(0.00015, 10);
+  });
+
+  it('prices input-only usage only when the caller opts into an outputless API', () => {
+    const usage = { prompt_tokens: 100, total_tokens: 100 };
+    const config = { inputCost: 0.000001 };
+
+    expect(calculateOpenAIUsageCost('third-party/embedding', config, usage)).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('third-party/embedding', config, usage, {
+        allowMissingOutputTokens: true,
+      }),
+    ).toBeCloseTo(0.0001, 10);
+  });
+
+  it('prices zero-token sides without requiring an explicit cost', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 0,
+        },
+      ),
+    ).toBeCloseTo(0.000014, 10);
+  });
+
+  it('leaves unknown models unpriced when a used token side has no cost', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['empty usage', {}],
+    ['input-only usage', { prompt_tokens: 100 }],
+    ['output-only usage', { completion_tokens: 50 }],
+    ['total-only usage', { total_tokens: 150 }],
+    ['non-finite usage', { prompt_tokens: Number.NaN, completion_tokens: 50 }],
+    [
+      'audio usage',
+      {
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        prompt_tokens_details: { audio_tokens: 10 },
+      },
+    ],
+    [
+      'image usage',
+      {
+        input_tokens: 100,
+        output_tokens: 50,
+        input_tokens_details: { image_tokens: 10 },
+      },
+    ],
+  ])('leaves unknown models unpriced for %s', (_label, usage) => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        usage,
+      ),
+    ).toBeUndefined();
+  });
+
+  it('accepts explicit zero non-text usage for unknown models', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          prompt_tokens_details: { audio_tokens: 0, image_tokens: 0 },
+          completion_tokens_details: { audio_tokens: 0, image_tokens: 0 },
+        },
+      ),
+    ).toBeCloseTo(0.000028, 10);
+  });
+
+  it('does not charge for cached unknown-model responses with explicit costs', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+        { cachedResponse: true },
+      ),
+    ).toBe(0);
+  });
+
   it('prices audio text and audio tokens separately', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-4o-mini-audio-preview',

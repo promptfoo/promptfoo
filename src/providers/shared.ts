@@ -60,27 +60,39 @@ export function calculateCost(
   models: ProviderModel[],
 ): number | undefined {
   if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
     !Number.isFinite(promptTokens) ||
     !Number.isFinite(completionTokens) ||
-    typeof promptTokens === 'undefined' ||
-    typeof completionTokens === 'undefined'
+    promptTokens < 0 ||
+    completionTokens < 0
   ) {
     return undefined;
   }
 
-  const model = models.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
+  const modelCost = models.find((m) => m.id === modelName)?.cost;
+
+  const longContextCost =
+    modelCost?.longContext && promptTokens > modelCost.longContext.threshold
+      ? modelCost.longContext
+      : undefined;
+  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? modelCost?.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? modelCost?.output;
+
+  if (
+    (inputCost !== undefined && (!Number.isFinite(inputCost) || inputCost < 0)) ||
+    (outputCost !== undefined && (!Number.isFinite(outputCost) || outputCost < 0)) ||
+    (promptTokens !== 0 && inputCost === undefined) ||
+    (completionTokens !== 0 && outputCost === undefined)
+  ) {
     return undefined;
   }
 
-  const longContextCost =
-    model.cost.longContext && promptTokens > model.cost.longContext.threshold
-      ? model.cost.longContext
-      : undefined;
-  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? model.cost.input;
-  const outputCost =
-    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens;
+  const inputTotal = promptTokens === 0 ? 0 : inputCost! * promptTokens;
+  const outputTotal = completionTokens === 0 ? 0 : outputCost! * completionTokens;
+  const total = inputTotal + outputTotal;
+  return Number.isFinite(total) ? total : undefined;
 }
 
 /**
