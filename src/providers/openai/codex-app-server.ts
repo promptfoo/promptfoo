@@ -25,7 +25,6 @@ import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
-import { warnIfPreviewReasoningEffort } from './codexReasoning';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -1105,8 +1104,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.apiKey = this.getApiKey();
     this.providerId = options.id ?? this.providerId;
     providerRegistry.register(this);
-
-    warnIfPreviewReasoningEffort(this.config.model_reasoning_effort, '[CodexAppServer]');
   }
 
   id(): string {

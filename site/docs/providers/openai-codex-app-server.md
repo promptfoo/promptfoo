@@ -178,8 +178,8 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
-:::warning `max`/`ultra` depend on the Codex runtime catalog
-`max` and `ultra` only take effect when the installed Codex runtime recognizes the selected GPT-5.6 model for your account. If the bundled Codex model catalog does not include GPT-5.6, the app-server **silently falls back to its default reasoning** — the value is ignored and **no error is raised**. Promptfoo logs a warning when you use `max`/`ultra`; confirm the effective reasoning with `deep_tracing`. For `max`, the [Responses API](/docs/providers/openai#gpt-56-limited-preview) path (`openai:responses:gpt-5.6-sol`) applies it directly.
+:::note `max`/`ultra` depend on the Codex runtime catalog
+`max` and `ultra` only take effect when the installed Codex runtime recognizes the selected GPT-5.6 model for your account. If the bundled Codex model catalog does not include GPT-5.6, the app-server **silently falls back to its default reasoning** — the value is ignored and **no error is raised**. Confirm the effective reasoning with `deep_tracing`. For `max`, the [Responses API](/docs/providers/openai#gpt-56-limited-preview) path (`openai:responses:gpt-5.6-sol`) applies it directly.
 :::
 
 ### Granular Approval Policy

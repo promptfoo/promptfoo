@@ -30,7 +30,6 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
-import { warnIfPreviewReasoningEffort } from './codexReasoning';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -703,8 +702,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
-
-    warnIfPreviewReasoningEffort(this.config.model_reasoning_effort, '[CodexSDK]');
   }
 
   id(): string {
