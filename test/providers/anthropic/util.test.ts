@@ -8,6 +8,7 @@ import {
   isClaudeFableOrMythos5Model,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
+  isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
@@ -1950,6 +1951,36 @@ describe('Anthropic utilities', () => {
       }
       // Sonnet 4.5/4.6 keep sampling-param support.
       expect(isSamplingParamsDeprecatedClaudeModel('claude-sonnet-4-6')).toBe(false);
+    });
+
+    it('flags Claude 4.5+ models for the regional endpoint premium but not earlier releases', () => {
+      // Sonnet 4.5, Haiku 4.5, Opus 4.5, and every later model (4.6/4.7/4.8 + Claude 5).
+      for (const id of [
+        'claude-sonnet-5',
+        'us.anthropic.claude-sonnet-5',
+        'claude-fable-5',
+        'claude-mythos-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-opus-4-5-20251101',
+        'claude-sonnet-4-6',
+        'claude-sonnet-4-5-20250929',
+        'claude-haiku-4-5-20251001',
+      ]) {
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+      }
+      // Opus 4.1 and earlier + pre-4.5 Sonnet/Haiku retain base pricing on all endpoints.
+      for (const id of [
+        'claude-opus-4-1-20250805',
+        'claude-opus-4-20250514',
+        'claude-sonnet-4-20250514',
+        'claude-sonnet-4-0',
+        'claude-3-7-sonnet-20250219',
+        'claude-3-5-haiku-20241022',
+      ]) {
+        expect(isClaudeRegionalPremiumModel(id)).toBe(false);
+      }
     });
   });
 });

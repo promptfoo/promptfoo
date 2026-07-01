@@ -85,35 +85,57 @@ describe('calculateBedrockCost', () => {
   });
 
   it('uses Claude Sonnet long-context rates above 200k effective input tokens', () => {
-    expect(calculateBedrockCost('anthropic.claude-sonnet-4-6', 200_001, 1_000)).toBeCloseTo(
+    // Global endpoint isolates the long-context tier from the regional premium.
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-4-6', 200_001, 1_000)).toBeCloseTo(
       (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
       6,
     );
   });
 
-  it('prices Claude Sonnet 5 at standard base rates at or below 200k tokens', () => {
-    // $3/MTok input, $15/MTok output — matches Sonnet 4.6 base pricing.
-    expect(calculateBedrockCost('anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+  it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
+    // The global endpoint bills at the base rate; regional profiles add a premium (below).
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
       (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
       6,
     );
   });
 
   it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-    // Unlike Sonnet 4.5/4.6, Sonnet 5 bills its full 1M context at the standard rate,
-    // so a >200K request must NOT switch to the $6/$22.5 tier.
-    expect(calculateBedrockCost('anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
+    // Unlike Sonnet 4.5/4.6, Sonnet 5 bills its full 1M context at the standard rate, so a
+    // >200K request must NOT switch to the $6/$22.5 tier. Use the global endpoint to isolate
+    // this from the regional premium.
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
       (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
       6,
     );
   });
 
-  it('applies the regional (non-global) premium to Claude Sonnet 5 base rates', () => {
-    // Sonnet 5 is not a Fable/Mythos model, so the 10% Claude 5 regional premium
-    // does not apply — a `us.` profile bills at the same base rate as the bare ID.
+  it('applies the 10% regional premium to non-global Claude 4.5+ profiles (Sonnet 5, Opus 4.8, Sonnet 4.6)', () => {
+    // Per Anthropic pricing, Claude 4.5+ models carry a 10% premium on regional/geo endpoints;
+    // only the `global.` endpoint bills at the base rate.
+    const sonnet5Base = (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15;
     expect(calculateBedrockCost('us.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
-      (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+      sonnet5Base * 1.1,
       6,
+    );
+    expect(calculateBedrockCost('eu.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base * 1.1,
+      6,
+    );
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base,
+      6,
+    );
+    // The premium also applies to the other Claude 4.5+ models (previously Fable/Mythos only).
+    const opus48Base = (100 / 1e6) * 5 + (50 / 1e6) * 25;
+    expect(calculateBedrockCost('us.anthropic.claude-opus-4-8', 100, 50)).toBeCloseTo(
+      opus48Base * 1.1,
+      8,
+    );
+    const sonnet46Base = (100 / 1e6) * 3 + (50 / 1e6) * 15;
+    expect(calculateBedrockCost('eu.anthropic.claude-sonnet-4-6', 100, 50)).toBeCloseTo(
+      sonnet46Base * 1.1,
+      8,
     );
   });
 
@@ -135,15 +157,22 @@ describe('calculateBedrockCost', () => {
   it('reports InvokeModel cost for Claude Sonnet 5 (a Claude 5 model) but not legacy Sonnet 4.x', () => {
     // Live QA found the default `bedrock:` (InvokeModel) path reported `cost: 0` for Sonnet 5
     // because the allowlist only covered Fable/Mythos. Sonnet 5 is a Claude 5 model with a
-    // verified rate, so it must report cost on the base ID and regional profiles; Sonnet 4.6
-    // (legacy Claude 4.x) stays fail-closed.
-    const expected = (100 / 1e6) * 3 + (200 / 1e6) * 15;
+    // verified rate, so it reports cost — the global endpoint at base and regional/geo profiles
+    // with the 10% premium. Sonnet 4.6 (legacy Claude 4.x) stays fail-closed.
+    const base = (100 / 1e6) * 3 + (200 / 1e6) * 15;
     expect(
-      calculateBedrockInvokeModelCost('anthropic.claude-sonnet-5', 100, 200, 0, 0, 'us-east-2'),
-    ).toBeCloseTo(expected, 10);
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        200,
+        0,
+        0,
+        'us-east-2',
+      ),
+    ).toBeCloseTo(base, 10);
     expect(
       calculateBedrockInvokeModelCost('us.anthropic.claude-sonnet-5', 100, 200, 0, 0, 'us-east-2'),
-    ).toBeCloseTo(expected, 10);
+    ).toBeCloseTo(base * 1.1, 10);
     expect(
       calculateBedrockInvokeModelCost('anthropic.claude-sonnet-4-6', 100, 200, 0, 0, 'us-east-2'),
     ).toBeUndefined();

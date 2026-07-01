@@ -216,6 +216,26 @@ export function isClaudeSonnet5Model(modelId: string): boolean {
   return /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i.test(modelId);
 }
 
+/**
+ * Matches the Claude models that carry a 10% premium on Bedrock regional and Vertex
+ * regional/multi-region endpoints (vs the global endpoint). Per Anthropic's pricing docs
+ * ("Regional and multi-region endpoint pricing for Claude 4.5 models and beyond"), this
+ * applies to Claude Sonnet 4.5, Haiku 4.5, Opus 4.5, and every later model — i.e. the
+ * 4.5/4.6/4.7/4.8 tiers plus the Claude 5 models (Fable 5, Mythos 5, Sonnet 5). Opus 4.1
+ * and earlier releases retain base pricing on all endpoints, so they are excluded (as are
+ * the pre-4.5 `claude-sonnet-4`/`claude-3-*` IDs).
+ */
+export function isClaudeRegionalPremiumModel(modelId: string): boolean {
+  return (
+    isClaudeFableOrMythos5Model(modelId) ||
+    isClaudeSonnet5Model(modelId) ||
+    isClaudeOpus47Model(modelId) ||
+    isClaudeOpus48Model(modelId) ||
+    // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 (dated snapshots and `-latest` included).
+    /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i.test(modelId)
+  );
+}
+
 export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean {
   return isClaudeFableOrMythos5Model(modelId);
 }
@@ -269,21 +289,21 @@ export function normalizeClaudeThinkingConfig<
   return thinking;
 }
 
-// Bedrock and Vertex bill Claude 5 regional/geo endpoints at this premium over
-// the global endpoint.
+// Bedrock and Vertex bill Claude 4.5+ regional/geo endpoints at this premium over
+// the global endpoint (see isClaudeRegionalPremiumModel).
 export const CLAUDE_5_REGIONAL_PREMIUM = 1.1;
 
 /**
- * Fill premium-multiplied Claude 5 list rates into a cost config, unless the
- * user supplied a `cost` override. Callers decide whether the request is
- * regional; this helper owns the rates so they stay derived from
- * ANTHROPIC_MODELS.
+ * Fill premium-multiplied list rates into a cost config for the Claude models that carry
+ * the regional endpoint premium (see isClaudeRegionalPremiumModel), unless the user
+ * supplied a `cost` override. Callers decide whether the request is regional; this helper
+ * owns the rates so they stay derived from ANTHROPIC_MODELS.
  */
 export function applyClaude5RegionalPremium(modelName: string, config: any): any {
   const modelInfo = ANTHROPIC_MODELS.find(
     (model) => model.id === normalizeAnthropicModelName(modelName),
   );
-  if (!isClaudeFableOrMythos5Model(modelName) || !modelInfo || config.cost != null) {
+  if (!isClaudeRegionalPremiumModel(modelName) || !modelInfo || config.cost != null) {
     return config;
   }
   return {

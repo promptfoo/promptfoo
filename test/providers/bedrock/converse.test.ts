@@ -1196,7 +1196,8 @@ describe('AwsBedrockConverseProvider', () => {
       // The 'anthropic.claude-opus-4-8' price entry is matched via substring and
       // must win over the broader 'anthropic.claude-opus-4' ($15/$75) entry —
       // this asserts both the $5/$25 price and the newest-first lookup ordering.
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+      // Use the global endpoint to isolate the price lookup from the regional premium.
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-4-8', {
         config: { region: 'us-east-1' },
       });
 
@@ -1205,7 +1206,7 @@ describe('AwsBedrockConverseProvider', () => {
 
       const result = await provider.callApi('Test');
 
-      // Claude Opus 4.8: $5/MTok input, $25/MTok output
+      // Claude Opus 4.8: $5/MTok input, $25/MTok output (global endpoint, no premium)
       // Default usage: (100/1M * 5) + (50/1M * 25) = 0.0005 + 0.00125 = 0.00175
       expect(result.cost).toBeCloseTo(0.00175, 6);
     });
@@ -1285,8 +1286,10 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.cost).toBeCloseTo(0.00385, 6);
     });
 
-    it('should apply cache pricing at base rate with no premium for Claude Opus 4.8', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+    it('should apply cache pricing at base rate on the global endpoint for Claude Opus 4.8', async () => {
+      // The global endpoint bills at base rate (no regional premium); regional/geo profiles
+      // for Claude 4.5+ models add the 10% premium (covered elsewhere).
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-4-8', {
         config: { region: 'us-east-1' },
       });
       mockSend.mockResolvedValueOnce(

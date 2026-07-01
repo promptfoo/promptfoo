@@ -47,8 +47,9 @@ Anthropic's Claude models are available with the following versions:
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
-over the global endpoint for Claude 5 models; promptfoo includes that premium in
-cost calculations unless `config.region` is `global`.
+over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,
+Opus 4.5+, and the Claude 5 models including Sonnet 5); promptfoo includes that
+premium in cost calculations unless `config.region` is `global`.
 
 Claude 5 models also require provider data sharing on Vertex — without it requests
 fail with a 403 asking you to set `PublisherModelConfig.data_sharing_enabled_provider`.

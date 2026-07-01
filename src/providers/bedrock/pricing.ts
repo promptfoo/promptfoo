@@ -2,6 +2,7 @@ import {
   CLAUDE_5_REGIONAL_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
 } from '../anthropic/util';
 
@@ -390,12 +391,12 @@ export function calculateBedrockCost(
     return undefined;
   }
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
-  // premium. The model ID may be a bare `global.` profile or an
-  // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
+  // premium for Claude 4.5+ models. The model ID may be a bare `global.` profile
+  // or an inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
-    isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
+    isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
       ? CLAUDE_5_REGIONAL_PREMIUM
       : 1;
   const serviceTierMultiplier =
