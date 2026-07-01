@@ -22,7 +22,7 @@ import {
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
+import { isValidJson, safeJsonStringify } from '../util/json';
 import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
 import {
@@ -958,16 +958,73 @@ export const HttpProviderConfigSchema = z.object({
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
-function contentTypeIsJson(headers: Record<string, string> | undefined) {
-  if (!headers) {
-    return false;
+const JSON_MEDIA_TYPE_PATTERN = /^application\/(?:json|[a-z0-9][a-z0-9!#$&+.^_-]{0,121}\+json)$/i;
+const MEDIA_TYPE_PREFIX_PATTERN =
+  /^[\t ]*([!#$%&'*+.^_`|~0-9a-z-]+)\/([!#$%&'*+.^_`|~0-9a-z-]+)[\t ]*/i;
+const MEDIA_TYPE_PARAMETER_PATTERN =
+  /;[\t ]*([!#$%&'*+.^_`|~0-9a-z-]+)[\t ]*=[\t ]*(?:"(?:[\t \x21\x23-\x5b\x5d-\x7e\x80-\xff]|\\[\t \x21-\x7e\x80-\xff])*"|[!#$%&'*+.^_`|~0-9a-z-]+)[\t ]*/iy;
+
+function parseMediaType(value: string): string | undefined {
+  const mediaType = MEDIA_TYPE_PREFIX_PATTERN.exec(value);
+  if (!mediaType) {
+    return undefined;
   }
-  return Object.keys(headers).some((key) => {
-    if (key.toLowerCase().startsWith('content-type')) {
-      return headers?.[key].includes('application/json');
+
+  let index = mediaType[0].length;
+  const parameterNames = new Set<string>();
+  while (index < value.length) {
+    MEDIA_TYPE_PARAMETER_PATTERN.lastIndex = index;
+    const parameter = MEDIA_TYPE_PARAMETER_PATTERN.exec(value);
+    const parameterName = parameter?.[1].toLowerCase();
+    if (!parameterName || parameterNames.has(parameterName)) {
+      return undefined;
     }
-    return false;
-  });
+    parameterNames.add(parameterName);
+    index = MEDIA_TYPE_PARAMETER_PATTERN.lastIndex;
+  }
+
+  return `${mediaType[1]}/${mediaType[2]}`;
+}
+
+function contentTypeIsJson(headers: Record<string, string> | undefined) {
+  const contentType = getHeaderValue(headers, 'content-type');
+  return contentType != null && JSON_MEDIA_TYPE_PATTERN.test(parseMediaType(contentType) ?? '');
+}
+
+function jsonValueContainsTemplate(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return /\{[{%#]/.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(jsonValueContainsTemplate);
+  }
+  return value != null && typeof value === 'object'
+    ? Object.values(value).some(jsonValueContainsTemplate)
+    : false;
+}
+
+function isTypedJsonTemplate(value: string): boolean {
+  const expression = value.match(/^\s*\{\{\s*([\s\S]*?)\s*\}\}\s*$/)?.[1];
+  const usesDump = /\|\s*dump(?:\s*\([^)]*\))?(?:\s*\||\s*$)/.test(expression ?? '');
+  return expression != null && (usesDump || !/\bprompt\b/.test(expression));
+}
+
+function renderPreSerializedJsonBody(value: string, vars: Record<string, any>): string | undefined {
+  try {
+    const parsed = JSON.parse(value);
+    if (!jsonValueContainsTemplate(parsed)) {
+      return value;
+    }
+    if (typeof parsed !== 'string') {
+      return undefined;
+    }
+    const rendered = renderVarsInObject(parsed, vars);
+    return isTypedJsonTemplate(parsed) && isValidJson(rendered)
+      ? rendered
+      : JSON.stringify(rendered);
+  } catch {
+    return undefined;
+  }
 }
 
 function removeMultipartContentType(headers: Record<string, string>): void {
@@ -1451,6 +1508,17 @@ function sanitizeRequestBodyForMetadata(body: unknown, headers?: Record<string, 
   }
 
   const contentType = getHeaderValue(headers, 'content-type');
+  try {
+    const parsedBody = JSON.parse(sanitizedBody);
+    if (typeof parsedBody === 'string') {
+      const sanitizedScalar = sanitizeObject(parsedBody, { context: 'request body' });
+      if (sanitizedScalar !== parsedBody) {
+        return JSON.stringify(sanitizedScalar);
+      }
+    }
+  } catch {
+    // Invalid JSON is handled by the format-specific fallbacks below.
+  }
   const normalizedContentType = contentType?.toLowerCase();
   if (contentType && normalizedContentType?.includes('multipart/form-data')) {
     return sanitizeMultipartBody(sanitizedBody, contentType);
@@ -2518,8 +2586,9 @@ export class HttpProvider implements ApiProvider {
           JSON.parse(body);
         }
       } catch {
+        const sanitizedHeaders = sanitizeObject(headers, { context: 'request headers' });
         logger.warn(
-          `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
+          `[HTTP Provider] Content-Type is application/json, but body is an invalid JSON string. It should be a valid JSON value. Headers: ${safeJsonStringify(sanitizedHeaders)}`,
         );
       }
     }
@@ -2737,6 +2806,22 @@ export class HttpProvider implements ApiProvider {
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
     logTransformedPrompt(transformedPrompt, prompt, headers);
 
+    const jsonContentType = contentTypeIsJson(headers);
+    const preSerializedJsonBody =
+      typeof this.config.body === 'string' &&
+      jsonContentType &&
+      (typeof transformedPrompt !== 'object' || transformedPrompt === null)
+        ? renderPreSerializedJsonBody(this.config.body, {
+            ...vars,
+            prompt: transformedPrompt,
+          })
+        : undefined;
+    const renderedBody = this.config.multipart
+      ? undefined
+      : preSerializedJsonBody === undefined
+        ? determineRequestBody(jsonContentType, transformedPrompt, this.config.body, vars)
+        : preSerializedJsonBody;
+
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
       method: getNunjucksEngine().renderString(
@@ -2744,14 +2829,7 @@ export class HttpProvider implements ApiProvider {
         vars,
       ),
       headers,
-      body: this.config.multipart
-        ? undefined
-        : determineRequestBody(
-            contentTypeIsJson(headers),
-            transformedPrompt,
-            this.config.body,
-            vars,
-          ),
+      body: renderedBody,
       queryParams: (() => {
         const baseQueryParams = this.config.queryParams
           ? Object.fromEntries(
@@ -2834,7 +2912,7 @@ export class HttpProvider implements ApiProvider {
       ...(method !== 'GET' &&
         !multipartBody &&
         renderedConfig.body != null && {
-          body: contentTypeIsJson(headers)
+          body: jsonContentType
             ? typeof renderedConfig.body === 'string'
               ? renderedConfig.body // Already a JSON string, use as-is
               : JSON.stringify(renderedConfig.body) // Object, needs stringifying
