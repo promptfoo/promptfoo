@@ -46,7 +46,7 @@ redteam:
     - mitre:atlas
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or target specific tactics:
@@ -180,7 +180,7 @@ redteam:
     - base64
     - jailbreak
     - leetspeak
-    - prompt-injection
+    - jailbreak-templates
     - rot13
 ```
 
@@ -339,7 +339,7 @@ redteam:
     - mitre:atlas
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - base64
     - rot13
 ```
@@ -381,7 +381,7 @@ redteam:
     - nist:ai:measure
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## Best Practices for ATLAS-Based Red Teaming

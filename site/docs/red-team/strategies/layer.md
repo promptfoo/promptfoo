@@ -288,8 +288,8 @@ redteam:
     - id: layer
       config:
         steps:
-          - prompt-injection # Add injection payloads
-          - rot13 # Obfuscate the injection
+          - jailbreak-templates # Apply static jailbreak templates
+          - rot13 # Obfuscate the payload
 ```
 
 ### Custom Strategy Pipeline
