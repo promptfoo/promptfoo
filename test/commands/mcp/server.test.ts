@@ -160,7 +160,13 @@ describe('MCP Server', () => {
     mcpServerMocks.MockMcpServer.mockReset().mockImplementation(
       mcpServerMocks.mockMcpServerImplementation,
     );
-    streamableHttpMocks.constructor.mockClear();
+    streamableHttpMocks.constructor
+      .mockReset()
+      .mockImplementation(function MockStreamableHTTPServerTransport() {
+        return {
+          handleRequest: vi.fn(),
+        };
+      });
     mockRandomUUID.mockClear();
     mcpServerCalls.length = 0;
   });

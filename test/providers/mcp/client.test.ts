@@ -85,7 +85,7 @@ const mcpMocks = vi.hoisted(() => {
   };
 });
 
-const { mockClient, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
+const { mockClient, mockSSETransport, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
 
 // Mock the modules before importing them
 vi.mock('@modelcontextprotocol/sdk/client/index.js', async (importOriginal) => {
@@ -146,6 +146,21 @@ describe('MCPClient', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClient.registerCapabilities.mockReset();
+    mockClient.assertCapability.mockReset();
+    mockClient.connect.mockReset();
+    mockClient.ping.mockReset().mockResolvedValue({});
+    mockClient.listTools.mockReset().mockResolvedValue({
+      tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+    });
+    mockClient.callTool.mockReset();
+    mockClient.close.mockReset().mockResolvedValue(undefined);
+    for (const transport of [mockStdioTransport, mockStreamableHTTPTransport, mockSSETransport]) {
+      transport.close.mockReset().mockResolvedValue(undefined);
+      transport.connect.mockReset();
+      transport.start.mockReset();
+      transport.send.mockReset();
+    }
     mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
     // Reset the OAuth token mock to return a valid token by default

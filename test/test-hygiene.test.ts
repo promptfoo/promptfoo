@@ -268,7 +268,6 @@ const persistentMockMethodNames = new Set<string>(persistentMockMethods);
 const persistentMockImplementationPattern = new RegExp(
   `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
 );
-const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
 // Only `vi.resetAllMocks()` is trusted as a file-level signal that every
 // `vi.fn()`-style mock has its persistent implementation reset between tests.
 // Per-mock helpers (.mockReset()/.mockRestore()) only reset the specific mock
@@ -298,39 +297,162 @@ function findVitestNamespaceImports(sourceFile: ts.SourceFile): ReadonlySet<stri
   return namespaces;
 }
 
+function isVitestViExpression(node: ts.Node, vitestNamespaces: ReadonlySet<string>): boolean {
+  return (
+    (ts.isIdentifier(node) && node.text === 'vi') ||
+    (ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'vi' &&
+      ts.isIdentifier(node.expression) &&
+      vitestNamespaces.has(node.expression.text))
+  );
+}
+
+function isViMethodCall(
+  node: ts.Node,
+  method: string,
+  vitestNamespaces: ReadonlySet<string>,
+): node is ts.CallExpression {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === method &&
+    isVitestViExpression(node.expression.expression, vitestNamespaces)
+  );
+}
+
 function isViHoistedCall(
   node: ts.Node,
   vitestNamespaces: ReadonlySet<string>,
 ): node is ts.CallExpression {
-  if (
-    !ts.isCallExpression(node) ||
-    !ts.isPropertyAccessExpression(node.expression) ||
-    node.expression.name.text !== 'hoisted'
+  return isViMethodCall(node, 'hoisted', vitestNamespaces);
+}
+
+function collectBindingIdentifiers(name: ts.BindingName, identifiers: Set<string>) {
+  if (ts.isIdentifier(name)) {
+    identifiers.add(name.text);
+    return;
+  }
+  for (const element of name.elements) {
+    if (!ts.isOmittedExpression(element)) {
+      collectBindingIdentifiers(element.name, identifiers);
+    }
+  }
+}
+
+function findHoistedBindingIdentifiers(call: ts.CallExpression): ReadonlySet<string> {
+  let current: ts.Node = call;
+  while (
+    current.parent &&
+    (ts.isParenthesizedExpression(current.parent) ||
+      ts.isAsExpression(current.parent) ||
+      ts.isTypeAssertionExpression(current.parent) ||
+      ts.isNonNullExpression(current.parent) ||
+      ts.isSatisfiesExpression(current.parent)) &&
+    current.parent.expression === current
   ) {
-    return false;
+    current = current.parent;
   }
 
-  const receiver = node.expression.expression;
-  return (
-    (ts.isIdentifier(receiver) && receiver.text === 'vi') ||
-    (ts.isPropertyAccessExpression(receiver) &&
-      receiver.name.text === 'vi' &&
-      ts.isIdentifier(receiver.expression) &&
-      vitestNamespaces.has(receiver.expression.text))
-  );
+  const identifiers = new Set<string>();
+  if (current.parent && ts.isVariableDeclaration(current.parent)) {
+    collectBindingIdentifiers(current.parent.name, identifiers);
+  }
+  return identifiers;
+}
+
+function findResetTargetIdentifier(
+  node: ts.Expression,
+  vitestNamespaces: ReadonlySet<string>,
+): ts.Identifier | undefined {
+  let current = unwrapExpression(node);
+  while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+    current = unwrapExpression(current.expression);
+  }
+  if (ts.isIdentifier(current)) {
+    return current;
+  }
+  if (isViMethodCall(current, 'mocked', vitestNamespaces) && current.arguments[0]) {
+    return findResetTargetIdentifier(current.arguments[0], vitestNamespaces);
+  }
+  return undefined;
+}
+
+function findDerivedBindingIdentifiers(
+  sourceFile: ts.SourceFile,
+  rootIdentifiers: ReadonlySet<string>,
+  vitestNamespaces: ReadonlySet<string>,
+): ReadonlySet<string> {
+  // Hoisted factories often return an object whose mocks are then destructured
+  // or assigned to local aliases. Follow those aliases so resets stay tied to
+  // the vi.hoisted() call that created the mock.
+  const identifiers = new Set(rootIdentifiers);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    function visit(node: ts.Node) {
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        const sourceIdentifier = findResetTargetIdentifier(node.initializer, vitestNamespaces);
+        if (sourceIdentifier && identifiers.has(sourceIdentifier.text)) {
+          const previousSize = identifiers.size;
+          collectBindingIdentifiers(node.name, identifiers);
+          changed ||= identifiers.size > previousSize;
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  }
+
+  return identifiers;
+}
+
+function findHoistedResetCoverage(
+  sourceFile: ts.SourceFile,
+  vitestNamespaces: ReadonlySet<string>,
+): { hasGlobalReset: boolean; resetBindings: ReadonlySet<string> } {
+  let hasGlobalReset = false;
+  const resetBindings = new Set<string>();
+
+  function visit(node: ts.Node) {
+    if (isViMethodCall(node, 'resetAllMocks', vitestNamespaces)) {
+      hasGlobalReset = true;
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'mockReset'
+    ) {
+      const identifier = findResetTargetIdentifier(node.expression.expression, vitestNamespaces);
+      if (identifier) {
+        resetBindings.add(identifier.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return { hasGlobalReset, resetBindings };
 }
 
 function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpression | undefined {
   if (
     !hoistedMockPattern.test(file.source) ||
-    !persistentMockImplementationPattern.test(file.source) ||
-    mockImplementationResetPattern.test(file.source)
+    !persistentMockImplementationPattern.test(file.source)
   ) {
     return undefined;
   }
 
   let finding: ts.CallExpression | undefined;
   const vitestNamespaces = findVitestNamespaceImports(file.sourceFile);
+  const { hasGlobalReset, resetBindings } = findHoistedResetCoverage(
+    file.sourceFile,
+    vitestNamespaces,
+  );
+  if (hasGlobalReset) {
+    return undefined;
+  }
 
   function visit(node: ts.Node) {
     if (finding) {
@@ -338,11 +460,20 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
     }
 
     if (isViHoistedCall(node, vitestNamespaces) && node.arguments.length > 0) {
-      finding = findEvaluatedPersistentMockSetter(node.arguments[0], {
+      const candidate = findEvaluatedPersistentMockSetter(node.arguments[0], {
         enterRootFunction: true,
         followSynchronousCalls: true,
       });
-      if (finding) {
+      const bindingIdentifiers = findDerivedBindingIdentifiers(
+        file.sourceFile,
+        findHoistedBindingIdentifiers(node),
+        vitestNamespaces,
+      );
+      const hasMatchingReset = Array.from(bindingIdentifiers).some((identifier) =>
+        resetBindings.has(identifier),
+      );
+      if (candidate && !hasMatchingReset) {
+        finding = candidate;
         return;
       }
     }
@@ -1732,8 +1863,77 @@ describe('root test hygiene', () => {
         '});',
       ].join('\n'),
     ],
+    [
+      [
+        'const mocks = vi.hoisted(() => ({',
+        '  request: vi.fn().mockResolvedValue({ ok: true }),',
+        '}));',
+        'beforeEach(() => {',
+        '  mocks.request.mockReset().mockResolvedValue({ ok: true });',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        'const mocks = vi.hoisted(() => ({',
+        '  request: vi.fn().mockResolvedValue({ ok: true }),',
+        '}));',
+        'const { request } = mocks;',
+        'beforeEach(() => {',
+        '  request.mockReset().mockResolvedValue({ ok: true });',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        'const mocks = vi.hoisted(() => ({',
+        '  request: vi.fn().mockResolvedValue({ ok: true }),',
+        '}));',
+        'const request = mocks.request;',
+        'beforeEach(() => {',
+        '  request.mockReset().mockResolvedValue({ ok: true });',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        'const mockRequest = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));',
+        'beforeEach(() => {',
+        '  vi.mocked(mockRequest).mockReset().mockResolvedValue({ ok: true });',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        "import * as vitest from 'vitest';",
+        'const mockRequest = vitest.vi.hoisted(() =>',
+        '  vitest.vi.fn().mockResolvedValue({ ok: true }),',
+        ');',
+        'beforeEach(() => {',
+        '  vitest.vi.resetAllMocks();',
+        '});',
+      ].join('\n'),
+    ],
   ])('allows hoisted persistent mock implementations with reset', (source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('does not let one per-mock reset hide another hoisted violation', () => {
+    const source = [
+      "const safe = vi.hoisted(() => vi.fn().mockReturnValue('safe'));",
+      "const unsafe = vi.hoisted(() => vi.fn().mockReturnValue('unsafe'));",
+      'beforeEach(() => {',
+      "  safe.mockReset().mockReturnValue('safe');",
+      '});',
+    ].join('\n');
+
+    expect(scanFixturePolicies(source, 'nested/fixture.test.ts').hoistedPersistentMock).toEqual([
+      expect.objectContaining({
+        file: 'nested/fixture.test.ts',
+        line: 2,
+        snippet: "vi.fn().mockReturnValue('unsafe')",
+      }),
+    ]);
   });
 
   it.each([
