@@ -415,6 +415,7 @@ const sidebars = {
                 'guides/prevent-llm-hallucinations',
                 'guides/evaluate-json',
                 'guides/evaluate-coding-agents',
+                'guides/evaluate-agent-tool-routing',
                 'guides/evaluate-osworld-with-inspect',
                 'guides/test-agent-skills',
                 'guides/factuality-eval',
