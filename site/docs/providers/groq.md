@@ -93,24 +93,30 @@ Groq updates its lineup frequently. The [Groq Models page](https://console.groq.
 
 :::
 
-### Current models
+### Models available through the `groq:` provider
 
-| Model ID                              | Type                                         | Tier       |
-| ------------------------------------- | -------------------------------------------- | ---------- |
-| `openai/gpt-oss-120b`                 | Reasoning / general-purpose, tool use        | Production |
-| `openai/gpt-oss-20b`                  | Reasoning / general-purpose, tool use        | Production |
-| `groq/compound`                       | Agentic system (web search + code execution) | Production |
-| `groq/compound-mini`                  | Agentic system (lower latency)               | Production |
-| `whisper-large-v3`                    | Speech-to-text                               | Production |
-| `whisper-large-v3-turbo`              | Speech-to-text (faster)                      | Production |
-| `qwen/qwen3.6-27b`                    | Multimodal (reasoning + vision)              | Preview    |
-| `openai/gpt-oss-safeguard-20b`        | Safety / content moderation                  | Preview    |
-| `meta-llama/llama-prompt-guard-2-86m` | Safety / prompt-injection guard              | Preview    |
-| `meta-llama/llama-prompt-guard-2-22m` | Safety / prompt-injection guard              | Preview    |
-| `canopylabs/orpheus-v1-english`       | Text-to-speech (English)                     | Preview    |
-| `canopylabs/orpheus-arabic-saudi`     | Text-to-speech (Arabic)                      | Preview    |
+The `groq:` and `groq:responses:` prefixes route to Groq's Chat Completions and Responses APIs, so they cover Groq's text, reasoning, vision, and compound models:
+
+| Model ID                       | Type                                         | Tier       |
+| ------------------------------ | -------------------------------------------- | ---------- |
+| `openai/gpt-oss-120b`          | Reasoning / general-purpose, tool use        | Production |
+| `openai/gpt-oss-20b`           | Reasoning / general-purpose, tool use        | Production |
+| `groq/compound`                | Agentic system (web search + code execution) | Production |
+| `groq/compound-mini`           | Agentic system (lower latency)               | Production |
+| `qwen/qwen3.6-27b`             | Multimodal (reasoning + vision)              | Preview    |
+| `openai/gpt-oss-safeguard-20b` | Safety / content moderation (chat-based)     | Preview    |
 
 Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on.
+
+### Other Groq models
+
+Groq hosts additional models that use audio or classification endpoints, so they aren't reachable through the `groq:` chat provider:
+
+- **Speech-to-text:** `whisper-large-v3`, `whisper-large-v3-turbo`. Use promptfoo's [OpenAI](/docs/providers/openai/) `transcription` provider pointed at Groq — e.g. `openai:transcription:whisper-large-v3` with `apiBaseUrl: https://api.groq.com/openai/v1` and `apiKeyEnvar: GROQ_API_KEY`.
+- **Text-to-speech:** `canopylabs/orpheus-v1-english`, `canopylabs/orpheus-arabic-saudi`.
+- **Prompt-safety classifiers:** `meta-llama/llama-prompt-guard-2-86m`, `meta-llama/llama-prompt-guard-2-22m`.
+
+See the [Groq Models page](https://console.groq.com/docs/models) for these models' specifications.
 
 **Being retired:** Groq has deprecated its Llama chat models (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) along with `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct`. See the [deprecations page](https://console.groq.com/docs/deprecations) for shutdown dates, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
 
