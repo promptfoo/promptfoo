@@ -24,11 +24,18 @@ export function warnIfPreviewReasoningEffort(effort: string | undefined, compone
     return;
   }
 
+  // `ultra` is Codex-only (no Responses API equivalent), so only point users to the
+  // Responses path for `max`, which the Responses API applies directly.
+  const responsesHint =
+    effort === 'max'
+      ? ` For 'max', the Responses API (openai:responses:gpt-5.6-sol) applies it directly.`
+      : '';
+
   logger.warn(
     `${component} Reasoning effort '${effort}' is a GPT-5.6 preview level. It only takes effect ` +
       `when the installed Codex runtime recognizes the selected model for your account; if the ` +
       `runtime model catalog lacks GPT-5.6, Codex silently falls back to its default reasoning and ` +
-      `this value is ignored (no error is raised). Confirm the effective reasoning via request ` +
-      `tracing, or use the Responses API (openai:responses:gpt-5.6-sol) for 'max'.`,
+      `this value is ignored (no error is raised). Confirm the effective reasoning via request tracing.` +
+      responsesHint,
   );
 }

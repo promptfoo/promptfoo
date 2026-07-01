@@ -267,6 +267,13 @@ describe('OpenAICodexSDKProvider', () => {
         expect.stringContaining(`Reasoning effort '${effort}' is a GPT-5.6 preview level`),
       );
 
+      // The Responses API hint applies only to `max`; `ultra` is Codex-only.
+      if (effort === 'max') {
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Responses API'));
+      } else {
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Responses API'));
+      }
+
       warnSpy.mockRestore();
     });
 
