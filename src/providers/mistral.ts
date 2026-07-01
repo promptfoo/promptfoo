@@ -77,17 +77,22 @@ const MISTRAL_CHAT_MODELS = [
       output: 2 / 1000000,
     },
   })),
-  // Mistral Medium 3.5 — `mistral-medium-latest` and bare `mistral-medium` now resolve
-  // to `mistral-medium-2604`
-  ...['mistral-medium-2604', 'mistral-medium-3.5', 'mistral-medium-latest', 'mistral-medium'].map(
-    (id) => ({
-      id,
-      cost: {
-        input: 1.5 / 1000000,
-        output: 7.5 / 1000000,
-      },
-    }),
-  ),
+  // Mistral Medium 3.5 — `mistral-medium-latest`, bare `mistral-medium`, and the
+  // `mistral-medium-3` / `mistral-medium-3-5` aliases all resolve to `mistral-medium-2604`
+  ...[
+    'mistral-medium-2604',
+    'mistral-medium-3.5',
+    'mistral-medium-3-5',
+    'mistral-medium-3',
+    'mistral-medium-latest',
+    'mistral-medium',
+  ].map((id) => ({
+    id,
+    cost: {
+      input: 1.5 / 1000000,
+      output: 7.5 / 1000000,
+    },
+  })),
   {
     id: 'mistral-large-2402',
     cost: {
@@ -116,13 +121,16 @@ const MISTRAL_CHAT_MODELS = [
       output: 3 / 1000000,
     },
   },
-  ...['codestral-2508', 'codestral-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 0.3 / 1000000,
-      output: 0.9 / 1000000,
-    },
-  })),
+  // Codestral — also aliased by the Mistral Code product ids
+  ...['codestral-2508', 'codestral-latest', 'mistral-code-latest', 'mistral-code-fim-latest'].map(
+    (id) => ({
+      id,
+      cost: {
+        input: 0.3 / 1000000,
+        output: 0.9 / 1000000,
+      },
+    }),
+  ),
   ...['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'].map((id) => ({
     id,
     cost: {
@@ -186,7 +194,13 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.2 / 1000000,
     },
   })),
-  ...['devstral-2512', 'devstral-latest', 'devstral-medium-latest'].map((id) => ({
+  // Devstral 2 — `mistral-code-agent-latest` is the Mistral Code agent alias
+  ...[
+    'devstral-2512',
+    'devstral-latest',
+    'devstral-medium-latest',
+    'mistral-code-agent-latest',
+  ].map((id) => ({
     id,
     cost: {
       input: 0.4 / 1000000,

@@ -366,6 +366,12 @@ describe('Mistral', () => {
       ['mistral-medium', 0.0051],
       // mistral-medium-2604 is the canonical dated ID for Mistral Medium 3.5
       ['mistral-medium-2604', 0.0051],
+      // version aliases that also resolve to Mistral Medium 3.5
+      ['mistral-medium-3-5', 0.0051],
+      // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
+      ['mistral-code-latest', 0.00066],
+      // Devstral 2 agent alias: $0.40/$2.00
+      ['mistral-code-agent-latest', 0.00136],
     ])('tracks current pricing for %s', async (model, expectedCost) => {
       const provider = new MistralChatCompletionProvider(model);
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
