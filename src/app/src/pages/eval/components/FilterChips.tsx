@@ -86,7 +86,7 @@ export function FilterChips() {
 
   const getChipStyles = (isActive: boolean): string => {
     if (isActive) {
-      return 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/40 dark:border-blue-700 dark:text-blue-300';
+      return 'bg-red-50 border-red-300 text-red-700 dark:bg-red-950/40 dark:border-red-700 dark:text-red-300';
     }
     return 'bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground';
   };
