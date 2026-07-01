@@ -174,70 +174,116 @@ export const ANTHROPIC_MODELS = [
   })),
 ];
 
+// Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
+// `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure deployment
+// names. The leading `(^|[^a-z0-9])` boundary and trailing `(?![0-9])` guard keep a family
+// from matching a longer neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and
+// `claude-sonnet-4-5` is not Sonnet 5) while still matching dated snapshots like
+// `claude-opus-4-8-20260528`.
+const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
+const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
+const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
+const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
+// Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
+const CLAUDE_4_5_AND_4_6_TIER_PATTERN =
+  /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
+
+interface ClaudeModelFamily {
+  /** Recognizes this family's IDs across every provider naming scheme. */
+  match: RegExp;
+  /** Model name used in the one-time deprecation warnings surfaced to users. */
+  warningName?: string;
+  /** Rejects `temperature`/`top_p`/`top_k` at the model level (the API returns 400). */
+  samplingParamsDeprecated?: boolean;
+  /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
+  alwaysOnAdaptiveThinking?: boolean;
+  /** 10% premium on Bedrock regional / Vertex regional+multi-region endpoints vs global. */
+  regionalPremium?: boolean;
+}
+
 /**
- * Matches Claude Opus 4.7 model IDs across Anthropic, Bedrock (including the
- * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
- * deployment names. Returns `false` for hypothetical suffix variants like
- * `claude-opus-4-70` or `claude-opus-4-7N` so detection stays forward-compatible.
+ * Single source of truth for Claude model capabilities. Adding a model is a new row here
+ * (plus, if a provider branches on it by name, a thin `isClaude<Model>Model` accessor)
+ * instead of editing several parallel OR-chains. Regional-premium coverage follows
+ * Anthropic's "Claude 4.5 models and beyond" pricing (Sonnet 4.5, Haiku 4.5, Opus 4.5, and
+ * every later model); Opus 4.1 and earlier retain base pricing on all endpoints.
  */
+const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
+  {
+    match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
+    warningName: 'Claude Fable 5 and Claude Mythos 5',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    regionalPremium: true,
+  },
+  {
+    match: CLAUDE_SONNET_5_PATTERN,
+    warningName: 'Claude Sonnet 5',
+    samplingParamsDeprecated: true,
+    regionalPremium: true,
+  },
+  // Opus 4.7 and 4.8 share behavior and warning wording.
+  {
+    match: CLAUDE_OPUS_48_PATTERN,
+    warningName: 'Claude Opus 4.7 and 4.8',
+    samplingParamsDeprecated: true,
+    regionalPremium: true,
+  },
+  {
+    match: CLAUDE_OPUS_47_PATTERN,
+    warningName: 'Claude Opus 4.7 and 4.8',
+    samplingParamsDeprecated: true,
+    regionalPremium: true,
+  },
+  { match: CLAUDE_4_5_AND_4_6_TIER_PATTERN, regionalPremium: true },
+];
+
+function hasClaudeCapability(
+  modelId: string,
+  capability: 'samplingParamsDeprecated' | 'alwaysOnAdaptiveThinking' | 'regionalPremium',
+): boolean {
+  return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
+}
+
+/** Matches Claude Opus 4.7 model IDs (see the pattern constants above for boundary rules). */
 export function isClaudeOpus47Model(modelId: string): boolean {
-  return /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i.test(modelId);
+  return CLAUDE_OPUS_47_PATTERN.test(modelId);
 }
 
-/**
- * Matches Claude Opus 4.8 model IDs across Anthropic, Bedrock (including the
- * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
- * deployment names. The trailing `(?![0-9])` guard keeps a hypothetical
- * higher-numbered `claude-opus-4-80` from matching "4.8" while still matching
- * dated snapshots like `claude-opus-4-8-20260528`.
- */
+/** Matches Claude Opus 4.8 model IDs. */
 export function isClaudeOpus48Model(modelId: string): boolean {
-  return /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i.test(modelId);
+  return CLAUDE_OPUS_48_PATTERN.test(modelId);
 }
 
-/**
- * Matches the Claude 5 Fable and Mythos model IDs across Anthropic and partner
- * provider naming schemes while excluding hypothetical numeric suffixes.
- */
+/** Matches the Claude 5 Fable and Mythos model IDs. */
 export function isClaudeFableOrMythos5Model(modelId: string): boolean {
-  return /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i.test(modelId);
+  return CLAUDE_FABLE_MYTHOS_5_PATTERN.test(modelId);
 }
 
-/**
- * Matches Claude Sonnet 5 model IDs across Anthropic, Bedrock (including the
- * `us.`/`eu.`/`global.` inference-profile prefixes), Vertex, and Azure
- * deployment names. The trailing `(?![0-9])` guard keeps a hypothetical
- * higher-numbered `claude-sonnet-50` from matching "sonnet 5" while still
- * matching dated snapshots like `claude-sonnet-5-20260630`. Note this does NOT
- * match `claude-sonnet-4-5` (that literal substring is `sonnet-4-5`, not
- * `sonnet-5`), so the 4.5 line keeps its own behavior.
- */
+/** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, not `claude-sonnet-50`). */
 export function isClaudeSonnet5Model(modelId: string): boolean {
-  return /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i.test(modelId);
+  return CLAUDE_SONNET_5_PATTERN.test(modelId);
 }
 
 /**
- * Matches the Claude models that carry a 10% premium on Bedrock regional and Vertex
- * regional/multi-region endpoints (vs the global endpoint). Per Anthropic's pricing docs
- * ("Regional and multi-region endpoint pricing for Claude 4.5 models and beyond"), this
- * applies to Claude Sonnet 4.5, Haiku 4.5, Opus 4.5, and every later model — i.e. the
- * 4.5/4.6/4.7/4.8 tiers plus the Claude 5 models (Fable 5, Mythos 5, Sonnet 5). Opus 4.1
- * and earlier releases retain base pricing on all endpoints, so they are excluded (as are
- * the pre-4.5 `claude-sonnet-4`/`claude-3-*` IDs).
+ * Name for a model in user-facing deprecation warnings, or `undefined` when it is not a
+ * recognized family (callers fall back to a generic phrase).
+ */
+export function getClaudeModelWarningName(modelId: string): string | undefined {
+  return CLAUDE_MODEL_FAMILIES.find((family) => family.warningName && family.match.test(modelId))
+    ?.warningName;
+}
+
+/**
+ * Claude models that carry a 10% premium on Bedrock regional and Vertex regional/multi-region
+ * endpoints (vs the global endpoint), per Anthropic's "Claude 4.5 models and beyond" pricing.
  */
 export function isClaudeRegionalPremiumModel(modelId: string): boolean {
-  return (
-    isClaudeFableOrMythos5Model(modelId) ||
-    isClaudeSonnet5Model(modelId) ||
-    isClaudeOpus47Model(modelId) ||
-    isClaudeOpus48Model(modelId) ||
-    // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 (dated snapshots and `-latest` included).
-    /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i.test(modelId)
-  );
+  return hasClaudeCapability(modelId, 'regionalPremium');
 }
 
 export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean {
-  return isClaudeFableOrMythos5Model(modelId);
+  return hasClaudeCapability(modelId, 'alwaysOnAdaptiveThinking');
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
@@ -245,25 +291,14 @@ export function normalizeAnthropicModelName(modelName: string): string {
 }
 
 /**
- * Claude Opus 4.7+, Claude 5 Fable/Mythos, and Claude Sonnet 5 deprecate manual
- * sampling controls at the model level
- * — `temperature`, `top_p`, and `top_k` are adaptive, and a request that pins
- * any of them returns 400 `invalid_request_error` (including promptfoo's
- * built-in `temperature` default of 0). Centralizes the "omit sampling params"
- * decision shared by the Anthropic, Bedrock, Vertex, and Azure providers so
- * support for future models lands in one place.
- *
- * NOTE: Sonnet 5 is included here (verified against the live Anthropic API,
- * which rejects `temperature` for it) even though older Sonnet-tier models
- * (4.5/4.6) still accept sampling params.
+ * Claude Opus 4.7+, Claude Sonnet 5, and Claude 5 Fable/Mythos deprecate manual sampling
+ * controls at the model level — `temperature`, `top_p`, and `top_k` return 400
+ * `invalid_request_error` (including promptfoo's built-in `temperature` default of 0). Shared
+ * by the Anthropic, Bedrock, Vertex, and Azure providers; support for a new model lands as a
+ * row in CLAUDE_MODEL_FAMILIES above.
  */
 export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
-  return (
-    isClaudeOpus47Model(modelId) ||
-    isClaudeOpus48Model(modelId) ||
-    isClaudeFableOrMythos5Model(modelId) ||
-    isClaudeSonnet5Model(modelId)
-  );
+  return hasClaudeCapability(modelId, 'samplingParamsDeprecated');
 }
 
 /**

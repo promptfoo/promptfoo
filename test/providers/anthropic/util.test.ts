@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -1981,6 +1982,19 @@ describe('Anthropic utilities', () => {
       ]) {
         expect(isClaudeRegionalPremiumModel(id)).toBe(false);
       }
+    });
+
+    it('resolves the user-facing warning name for recognized Claude families', () => {
+      expect(getClaudeModelWarningName('claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('us.anthropic.claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('claude-opus-4-8')).toBe('Claude Opus 4.7 and 4.8');
+      expect(getClaudeModelWarningName('claude-opus-4-7')).toBe('Claude Opus 4.7 and 4.8');
+      expect(getClaudeModelWarningName('claude-fable-5')).toBe(
+        'Claude Fable 5 and Claude Mythos 5',
+      );
+      // Regional-premium-only tiers and unrecognized models have no warning name.
+      expect(getClaudeModelWarningName('claude-sonnet-4-6')).toBeUndefined();
+      expect(getClaudeModelWarningName('claude-3-7-sonnet-20250219')).toBeUndefined();
     });
   });
 });
