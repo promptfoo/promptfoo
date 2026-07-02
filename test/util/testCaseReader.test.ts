@@ -233,6 +233,18 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it.each([
+    ['a parent directory contains #', 'test.csv', 'fixtures#1'],
+    ['the filename contains #', 'test#1.csv', ''],
+  ])('should read CSV when %s', async (_scenario, filePath, basePath) => {
+    vi.mocked(fs.readFileSync).mockReturnValue('var1,__expected\nvalue1,expected1');
+
+    const result = await readStandaloneTestsFile(filePath, basePath);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ var1: 'value1' });
+  });
+
   it('should read CSV file with BOM (Byte Order Mark) and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       '\uFEFFvar1,var2,__expected\nvalue1,value2,expected1\nvalue3,value4,expected2',
@@ -308,6 +320,21 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should preserve existing description from JSONL rows', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"description":"Custom Desc","vars":{"x":"y"}}
+{"vars":{"a":"b"}}
+{"description":"","vars":{"c":"d"}}`,
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result[0].description).toBe('Custom Desc');
+    // Missing and empty-string descriptions both fall back to the row label,
+    // matching the JSON/YAML/CSV parsers' `||` behavior.
+    expect(result[1].description).toBe('Row #2');
+    expect(result[2].description).toBe('Row #3');
   });
 
   it('should read YAML file and return test cases', async () => {
@@ -1578,6 +1605,18 @@ describe('readTests', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
+  });
+
+  it('should handle xlsx sheet names containing dots in array format', async () => {
+    const mockData = [{ name: 'decimal-sheet', value: 'result' }];
+    const parseXlsxFileMock = vi.fn().mockResolvedValue(mockData);
+    mockParseXlsxFileState.implementation = parseXlsxFileMock;
+
+    const result = await readTests(['file://test.xlsx#2.9']);
+
+    expect(parseXlsxFileMock).toHaveBeenCalledWith(expect.stringContaining('test.xlsx#2.9'));
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ name: 'decimal-sheet', value: 'result' });
   });
 
   it('should handle xls files in array format', async () => {

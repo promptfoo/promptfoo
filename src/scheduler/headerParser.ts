@@ -101,7 +101,9 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
         result.resetAt = Date.now() + ms;
       }
     }
-  } else if (h['retry-after'] !== undefined) {
+  }
+
+  if (result.retryAfterMs === undefined && h['retry-after'] !== undefined) {
     const parsed = parseRetryAfter(h['retry-after']);
     if (parsed !== null) {
       result.retryAfterMs = parsed;

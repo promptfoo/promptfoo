@@ -32,6 +32,86 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:openai.gpt-5.5');
   });
 
+  it('routes xai.grok ids to the Responses provider on the us-west-2 mantle endpoint', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:xai.grok-4.3',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+    expect(provider.id()).toBe('bedrock:xai.grok-4.3');
+  });
+
+  it.each([
+    'bedrock:converse:xai.grok-4.3',
+    'bedrock:completion:xai.grok-4.3',
+  ])('routes the explicit %s form to the Grok mantle Responses provider', async (id) => {
+    const provider = await bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx);
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+  });
+
+  it('rejects prefixed Grok ids before native Converse routing', async () => {
+    await expect(
+      bedrockFactory.create(
+        'bedrock:converse:us.xai.grok-4.3',
+        { config: { apiKey: 'bedrock-key' } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id instead/);
+  });
+
+  it('rejects prefixed Grok ids before mantle chat routing', async () => {
+    await expect(
+      bedrockFactory.create(
+        'bedrock:mantle:us.xai.grok-4.3',
+        { config: { apiKey: 'bedrock-key' } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id instead/);
+  });
+
+  it('routes bedrock:mantle:<id> to the Chat Completions provider on the mantle /v1 endpoint', async () => {
+    // Mantle-only chat models (zai.glm-4.6, deepseek.v3.1, gemma-4, qwen *-instruct ids) are not
+    // served by InvokeModel/Converse; bedrock:mantle:<id> reaches them via Chat Completions.
+    const { BedrockMantleChatProvider } = await import('../../../src/providers/bedrock/mantleChat');
+    const provider = await bedrockFactory.create(
+      'bedrock:mantle:zai.glm-4.6',
+      { config: { region: 'us-west-2', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockMantleChatProvider);
+    expect((provider as any).config.apiBaseUrl).toBe('https://bedrock-mantle.us-west-2.api.aws/v1');
+    expect(provider.id()).toBe('bedrock:mantle:zai.glm-4.6');
+  });
+
+  it('routes bedrock:mantle:xai.grok-4.3 to the Chat Completions provider', async () => {
+    const { BedrockMantleChatProvider } = await import('../../../src/providers/bedrock/mantleChat');
+    const provider = await bedrockFactory.create(
+      'bedrock:mantle:xai.grok-4.3',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockMantleChatProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+  });
+
+  it('preserves a colon-containing model id after the mantle: subtype', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:mantle:openai.gpt-oss-20b-1:0',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect((provider as any).modelName).toBe('openai.gpt-oss-20b-1:0');
+  });
+
   it('routes gpt-oss ids to the InvokeModel completion provider', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:openai.gpt-oss-120b-1:0',
