@@ -82,6 +82,19 @@ dependency-light state implementation for embedded evaluators and focused tests.
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
 
+Assertion dispatch follows the same composition pattern. `src/assertions/registry.ts`
+defines a dependency-free generic registry, while `src/assertions/pure.ts`
+provides a host-free runner and registry for deterministic assertions without
+loading providers, redteam, tracing, scripts, Node adapters, Node builtins, or
+external packages. The pure runner accepts already-rendered values; templating,
+transforms, and host context remain responsibilities of the compatibility
+runner. The dependency-oriented capability packs under
+`src/assertions/packs/` own model-graded, script, trace, optional-format,
+provider-runtime, webhook, and redteam handlers.
+`src/assertions/defaultRegistry.ts` composes every pack for the existing
+`runAssertion()` and `runAssertions()` compatibility APIs, which also accept an
+injected registry for focused tests and custom host compositions.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a

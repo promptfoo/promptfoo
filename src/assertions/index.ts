@@ -5,7 +5,6 @@ import async from 'async';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import { matchesClassification } from '../matchers/classification';
@@ -32,6 +31,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  isGradingResult,
   type TraceData,
   type VarValue,
 } from '../types/index';
@@ -40,76 +40,18 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
-import { handleAgentRubric } from './agentRubric';
-import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
-import { handleBleuScore } from './bleu';
-import { handleClassifier } from './classifier';
-import {
-  handleContains,
-  handleContainsAll,
-  handleContainsAny,
-  handleIContains,
-  handleIContainsAll,
-  handleIContainsAny,
-} from './contains';
-import { handleContextFaithfulness } from './contextFaithfulness';
-import { handleContextRecall } from './contextRecall';
-import { handleContextRelevance } from './contextRelevance';
-import { handleCost } from './cost';
-import { handleEquals } from './equals';
-import { handleFactuality } from './factuality';
-import { handleFinishReason } from './finishReason';
-import { handleIsValidFunctionCall } from './functionToolCall';
-import { handleGEval } from './geval';
-import { handleGleuScore } from './gleu';
-import { handleGuardrails } from './guardrails';
-import { handleContainsHtml, handleIsHtml } from './html';
-import { handleJavascript } from './javascript';
-import { handleContainsJson, handleIsJson } from './json';
-import { handleLatency } from './latency';
-import { handleLevenshtein } from './levenshtein';
-import { handleLlmRubric } from './llmRubric';
-import { handleModelGradedClosedQa } from './modelGradedClosedQa';
-import { handleModeration } from './moderation';
-import { handleIsValidOpenAiToolsCall } from './openai';
-import { handlePerplexity, handlePerplexityScore } from './perplexity';
-import { handlePiScorer } from './pi';
-import { handlePython } from './python';
-import { handleRedteam } from './redteam';
-import { handleIsRefusal } from './refusal';
-import { handleRegex } from './regex';
-import { handleRougeScore } from './rouge';
-import { handleRuby } from './ruby';
-import { handleSearchRubric } from './searchRubric';
-import { handleSimilar } from './similar';
-import { handleSkillUsed } from './skill';
-import { handleContainsSql, handleIsSql } from './sql';
-import { handleStartsWith } from './startsWith';
-import { handleToolCallF1 } from './toolCallF1';
-import { handleTraceErrorSpans } from './traceErrorSpans';
-import { handleTraceSpanCount } from './traceSpanCount';
-import { handleTraceSpanDuration } from './traceSpanDuration';
-import {
-  handleTrajectoryGoalSuccess,
-  handleTrajectoryStepCount,
-  handleTrajectoryToolArgsMatch,
-  handleTrajectoryToolSequence,
-  handleTrajectoryToolUsed,
-} from './trajectory';
+import { defaultAssertionRegistry } from './defaultRegistry';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
-import { handleWebhook } from './webhook';
-import { handleWordCount } from './wordCount';
-import { handleIsXml } from './xml';
 
 import type {
   AssertionOrSet,
   AssertionParams,
   AssertionValueFunctionContext,
-  BaseAssertionTypes,
   ProviderResponse,
   ScoringFunction,
 } from '../types/index';
+import type { AssertionRegistry } from './registry';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
@@ -223,98 +165,6 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   return latestTrace;
 }
 
-const ASSERTION_HANDLERS: Record<
-  BaseAssertionTypes,
-  (params: AssertionParams) => GradingResult | Promise<GradingResult>
-> = {
-  'agent-rubric': handleAgentRubric,
-  'answer-relevance': handleAnswerRelevance,
-  bleu: handleBleuScore,
-  classifier: handleClassifier,
-  contains: handleContains,
-  'contains-all': handleContainsAll,
-  'contains-any': handleContainsAny,
-  'contains-html': handleContainsHtml,
-  'contains-json': handleContainsJson,
-  'contains-sql': handleContainsSql,
-  'contains-xml': handleIsXml,
-  'context-faithfulness': handleContextFaithfulness,
-  'context-recall': handleContextRecall,
-  'context-relevance': handleContextRelevance,
-  'conversation-relevance': handleConversationRelevance,
-  cost: handleCost,
-  equals: handleEquals,
-  factuality: handleFactuality,
-  'finish-reason': handleFinishReason,
-  'g-eval': handleGEval,
-  gleu: handleGleuScore,
-  guardrails: handleGuardrails,
-  icontains: handleIContains,
-  'icontains-all': handleIContainsAll,
-  'icontains-any': handleIContainsAny,
-  'is-html': handleIsHtml,
-  'is-json': handleIsJson,
-  'is-refusal': handleIsRefusal,
-  'is-sql': handleIsSql,
-  'is-valid-function-call': handleIsValidFunctionCall,
-  'is-valid-openai-function-call': handleIsValidFunctionCall,
-  'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
-  'is-xml': handleIsXml,
-  javascript: handleJavascript,
-  latency: handleLatency,
-  levenshtein: handleLevenshtein,
-  'llm-rubric': handleLlmRubric,
-  meteor: async (params: AssertionParams) => {
-    try {
-      const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message.includes('Cannot find module') ||
-          error.message.includes('natural" package is required'))
-      ) {
-        return {
-          pass: false,
-          score: 0,
-          reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
-          assertion: params.assertion,
-        };
-      }
-      throw error;
-    }
-  },
-  'model-graded-closedqa': handleModelGradedClosedQa,
-  'model-graded-factuality': handleFactuality,
-  moderation: handleModeration,
-  perplexity: handlePerplexity,
-  'perplexity-score': handlePerplexityScore,
-  pi: handlePiScorer,
-  python: handlePython,
-  regex: handleRegex,
-  ruby: handleRuby,
-  'rouge-n': handleRougeScore,
-  'search-rubric': handleSearchRubric,
-  'skill-used': handleSkillUsed,
-  similar: handleSimilar,
-  'similar:cosine': handleSimilar,
-  'similar:dot': handleSimilar,
-  'similar:euclidean': handleSimilar,
-  'starts-with': handleStartsWith,
-  'tool-call-f1': handleToolCallF1,
-  'trajectory:goal-success': handleTrajectoryGoalSuccess,
-  'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
-  'trajectory:step-count': handleTrajectoryStepCount,
-  'trajectory:tool-sequence': handleTrajectoryToolSequence,
-  'trajectory:tool-used': handleTrajectoryToolUsed,
-  'trace-error-spans': handleTraceErrorSpans,
-  'trace-span-count': handleTraceSpanCount,
-  'trace-span-duration': handleTraceSpanDuration,
-  webhook: handleWebhook,
-  'word-count': handleWordCount,
-};
-
 const nunjucks = getNunjucksEngine();
 
 /**
@@ -384,6 +234,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @param params.latencyMs Provider response latency in milliseconds (optional)
  * @param params.traceId Distributed trace ID for debugging (optional)
  * @param params.traceData Trace spans with timing information (optional)
+ * @param params.registry Assertion handler registry (defaults to every built-in capability pack)
  *
  * @returns GradingResult with pass/fail status, score, and reason
  *
@@ -413,6 +264,7 @@ export async function runAssertion({
   providerResponse,
   traceId,
   traceData,
+  registry = defaultAssertionRegistry,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -424,6 +276,7 @@ export async function runAssertion({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  registry?: AssertionRegistry<AssertionParams, GradingResult>;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -638,38 +491,53 @@ export async function runAssertion({
     valueFromScript,
   };
 
-  // Check for redteam assertions first
-  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+  const handler = registry.resolve(assertionParams.baseType);
+  if (!handler) {
+    throw new Error(`Unknown assertion type: ${assertion.type}`);
+  }
+  const result = await handler(assertionParams);
+  if (!isGradingResult(result)) {
+    throw new Error(`Assertion handler for "${assertion.type}" returned an invalid grading result`);
+  }
+  if (
+    result.metadata !== undefined &&
+    (result.metadata === null ||
+      typeof result.metadata !== 'object' ||
+      Array.isArray(result.metadata))
+  ) {
+    throw new Error(`Assertion handler for "${assertion.type}" returned invalid metadata`);
   }
 
-  const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (handler) {
-    const result = await handler(assertionParams);
-
-    // Store rendered assertion value in metadata if it differs from the original template
-    // This allows the UI to display substituted variable values instead of raw templates
-    if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
-    ) {
-      result.metadata = result.metadata || {};
-      result.metadata.renderedAssertionValue = renderedValue;
-    }
-
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
+  // Preserve redteam's special aggregation behavior. Redteam assertions
+  // historically bypass rendered-value metadata and metric-only weighting.
+  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return result;
   }
 
-  throw new Error(`Unknown assertion type: ${assertion.type}`);
+  // Store rendered assertion value in metadata if it differs from the original template
+  // This allows the UI to display substituted variable values instead of raw templates
+  const enrichedResult =
+    renderedValue !== undefined &&
+    renderedValue !== assertion.value &&
+    typeof renderedValue === 'string'
+      ? {
+          ...result,
+          metadata: {
+            ...result.metadata,
+            renderedAssertionValue: renderedValue,
+          },
+        }
+      : result;
+
+  // If weight is 0, treat this as a metric-only assertion that can't fail
+  if (assertion.weight === 0) {
+    return {
+      ...enrichedResult,
+      pass: true, // Force pass for weight=0 assertions
+    };
+  }
+
+  return enrichedResult;
 }
 
 /**
@@ -691,6 +559,7 @@ export async function runAssertion({
  * @param params.test The test case with assertions to run
  * @param params.vars Template variables (overrides test.vars if provided)
  * @param params.traceId Distributed trace ID (optional)
+ * @param params.registry Assertion handler registry (defaults to every built-in capability pack)
  *
  * @returns GradingResult aggregating all assertion results. The returned result
  *          includes `componentResults` and `namedScores` rather than a nested
@@ -728,6 +597,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  registry = defaultAssertionRegistry,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -737,6 +607,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  registry?: AssertionRegistry<AssertionParams, GradingResult>;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -811,6 +682,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      registry,
     });
 
     assertResult.addResult({
