@@ -217,7 +217,7 @@ See also: [Standalone GitHub Action example](https://github.com/promptfoo/prompt
 See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 
 ```yaml title=".gitlab-ci.yml"
-image: node:20
+image: node:24
 
 evaluate:
   script:
@@ -300,7 +300,7 @@ pipeline {
 Create a custom Docker image with promptfoo pre-installed:
 
 ```dockerfile title="Dockerfile"
-FROM node:20-slim
+FROM node:24-slim
 WORKDIR /app
 COPY . .
 CMD ["npx", "promptfoo@latest", "eval"]
