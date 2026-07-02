@@ -566,7 +566,11 @@ export abstract class RedteamGraderBase {
         : await matchesLlmRubric(finalRubric, llmOutput, grading)
     ) as GradingResult;
 
-    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
+    logger.debug('[Redteam] Grading completed', {
+      pass: grade.pass,
+      score: grade.score,
+      hasReason: Boolean(grade.reason),
+    });
 
     let suggestions: ResultSuggestion[] | undefined;
     if (!grade.pass) {

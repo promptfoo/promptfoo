@@ -38,6 +38,7 @@ const mockDoRemoteGrading = vi.hoisted(() =>
   }),
 );
 const mockDetermineEffectiveSessionSource = vi.hoisted(() => vi.fn().mockReturnValue('client'));
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
 vi.mock('dedent', () => ({
   default: (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -62,7 +63,7 @@ vi.mock('../../src/globalConfig/cloud', () => ({
 
 vi.mock('../../src/logger', () => ({
   default: {
-    debug: vi.fn(),
+    debug: mockLoggerDebug,
     warn: vi.fn(),
     error: vi.fn(),
   },
@@ -106,6 +107,7 @@ beforeEach(() => {
   mockEvaluate.mockReset();
   mockNeverGenerateRemote.mockReset().mockReturnValue(false);
   mockDetermineEffectiveSessionSource.mockReset().mockReturnValue('client');
+  mockLoggerDebug.mockReset();
   mockDoRemoteGrading.mockReset().mockResolvedValue({
     pass: true,
     reason: 'Session is working correctly',
@@ -469,14 +471,18 @@ describe('testProviderSession', () => {
   it('should include reason from grading judge', async () => {
     mockDoRemoteGrading.mockResolvedValueOnce({
       pass: true,
-      reason: 'The model remembered the first question',
+      reason: 'SECRET_REMOTE_SESSION_REASON',
     });
     const provider = createMockProvider();
 
     const result = await testProviderSession({ provider });
 
     expect(result.success).toBe(true);
-    expect(result.reason).toBe('The model remembered the first question');
+    expect(result.reason).toBe('SECRET_REMOTE_SESSION_REASON');
+    const logs = JSON.stringify(mockLoggerDebug.mock.calls);
+    expect(logs).toContain('[testProviderSession] Judge result');
+    expect(logs).toContain('"hasReason":true');
+    expect(logs).not.toContain('SECRET_REMOTE_SESSION_REASON');
   });
 
   it('should generate dummy values for non-main input variables', async () => {

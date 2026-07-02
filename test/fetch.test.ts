@@ -1340,6 +1340,34 @@ describe('fetchWithRetries', () => {
     expect(debugLogs).not.toContain('webhook-secret');
   });
 
+  it('uses bounded retry diagnostics for silent requests', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => key === 'PROMPTFOO_RETRY_5XX');
+    const transportError = new Error('Bearer SECRET_RETRY_ERROR', {
+      cause: new Error('Basic SECRET_RETRY_CAUSE'),
+    });
+    vi.mocked(global.fetch).mockRejectedValue(transportError);
+    const url =
+      'https://basic-user:basic-password@example.com/task?Api_Key=URL_ENCODED%2DSECRET&authz=Bearer%20QUERY_SECRET';
+
+    await expect(
+      fetchWithRetries(url, { headers: { 'X-Promptfoo-Silent': 'TRUE' } }, 1000, 0),
+    ).rejects.toThrow('Request failed after 0 retries');
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('[fetch] Request failed, retrying');
+    expect(debugLogs).toContain('"attempt":1');
+    for (const secret of [
+      'basic-user',
+      'basic-password',
+      'URL_ENCODED%2DSECRET',
+      'QUERY_SECRET',
+      'SECRET_RETRY_ERROR',
+      'SECRET_RETRY_CAUSE',
+    ]) {
+      expect(debugLogs).not.toContain(secret);
+    }
+  });
+
   it('should not sleep after the final attempt', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -1415,6 +1443,37 @@ describe('fetchWithRetries', () => {
     const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
     expect(debugLogs).toContain('n8n.example.com');
     expect(debugLogs).not.toContain('webhook-secret');
+  });
+
+  it('does not log silent rate-limit URL, status text, or body content', async () => {
+    const response = createMockResponse({
+      status: 429,
+      statusText: 'SECRET_RATE_STATUS',
+      headers: new Headers(),
+      text: () =>
+        Promise.resolve('{"error":{"code":"rate_limit_exceeded","message":"SECRET_RATE_BODY"}}'),
+    });
+    vi.mocked(global.fetch).mockResolvedValue(response);
+
+    await fetchWithRetries(
+      'https://basic-user:basic-password@example.com/task?token=SECRET_RATE_QUERY',
+      { headers: { 'x-promptfoo-silent': 'true' } },
+      1000,
+      0,
+    ).catch(() => undefined);
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('[fetch] Request rate limited; no retries remain');
+    expect(debugLogs).toContain('"status":429');
+    for (const secret of [
+      'basic-user',
+      'basic-password',
+      'SECRET_RATE_QUERY',
+      'SECRET_RATE_STATUS',
+      'SECRET_RATE_BODY',
+    ]) {
+      expect(debugLogs).not.toContain(secret);
+    }
   });
 
   it('should respect maximum retry count', async () => {

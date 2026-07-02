@@ -714,8 +714,7 @@ export async function testProviderSession({
 
     logger.debug('[testProviderSession] Judge result', {
       pass: sessionWorking,
-      reason: judgeReason,
-      providerId: provider.id,
+      hasReason: Boolean(judgeReason),
     });
 
     const troubleshootingAdvice = buildTroubleshootingAdvice({

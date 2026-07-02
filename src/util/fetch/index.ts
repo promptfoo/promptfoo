@@ -19,7 +19,7 @@ import {
   isHardQuotaCode,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { isFetchLoggingSuppressed, monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
@@ -175,6 +175,27 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+function logRequestDetail(suppressLogging: boolean, log: () => void): void {
+  if (!suppressLogging) {
+    log();
+  }
+}
+
+function logRequestDiagnostic(
+  suppressLogging: boolean,
+  safeMessage: string,
+  safeContext: Record<string, unknown> | undefined,
+  verboseMessage: () => string,
+): void {
+  if (!suppressLogging) {
+    logger.debug(verboseMessage());
+  } else if (safeContext) {
+    logger.debug(safeMessage, safeContext);
+  } else {
+    logger.debug(safeMessage);
+  }
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -182,6 +203,7 @@ export async function fetchWithProxy(
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
+  const suppressLogging = isFetchLoggingSuppressed(url, options.headers);
 
   if (!finalUrlString) {
     throw new Error('Invalid URL');
@@ -228,7 +250,9 @@ export async function fetchWithProxy(
         finalUrlString = finalUrl.toString();
       }
     } catch (e) {
-      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      logRequestDetail(suppressLogging, () =>
+        logger.debug(`URL parsing failed in fetchWithProxy: ${e}`),
+      );
     }
   }
 
@@ -243,9 +267,13 @@ export async function fetchWithProxy(
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
       const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      logRequestDetail(suppressLogging, () =>
+        logger.debug(`Using custom CA certificate from ${resolvedPath}`),
+      );
     } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+      logRequestDetail(suppressLogging, () =>
+        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`),
+      );
     }
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
@@ -254,7 +282,9 @@ export async function fetchWithProxy(
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
-      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      logRequestDetail(suppressLogging, () =>
+        logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`),
+      );
       finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
       finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
@@ -272,8 +302,17 @@ export async function fetchWithProxy(
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-      logger.debug(
-        `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+      logRequestDiagnostic(
+        suppressLogging,
+        '[fetch] Transient request failure, retrying',
+        {
+          status: response.status,
+          attempt: attempt + 1,
+          maxAttempts: maxTransientRetries + 1,
+          backoffMs,
+        },
+        () =>
+          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
       await sleep(backoffMs);
       continue;
@@ -412,12 +451,18 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  */
 async function peekRateLimitBody(
   response: Response,
+  suppressLogging: boolean,
 ): Promise<{ body: unknown; code: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
+    logRequestDiagnostic(
+      suppressLogging,
+      '[fetch] Rate-limit response clone failed; skipping body classification',
+      undefined,
+      () => `[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`,
+    );
     return { body: undefined, code: undefined };
   }
 
@@ -425,7 +470,12 @@ async function peekRateLimitBody(
   try {
     text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
+    logRequestDiagnostic(
+      suppressLogging,
+      '[fetch] Rate-limit response read failed; skipping body classification',
+      undefined,
+      () => `[fetch] peekRateLimitBody: body read failed: ${err}`,
+    );
     return { body: undefined, code: undefined };
   }
 
@@ -565,6 +615,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  suppressLogging: boolean,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -573,7 +624,7 @@ async function handleRateLimitedResponse(
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
   const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
+    ? await peekRateLimitBody(response, suppressLogging)
     : { body: undefined, code: undefined };
   const safeUrl = urlForLog(url);
 
@@ -581,8 +632,14 @@ async function handleRateLimitedResponse(
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
   if (isHardRateLimit && isHardQuotaCode(code)) {
-    logger.debug(
-      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
+    logRequestDiagnostic(
+      suppressLogging,
+      '[fetch] Request quota exhausted; failing without retry',
+      {
+        status: response.status,
+      },
+      () =>
+        `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
     throw buildHttpRateLimitError(response, body, code);
   }
@@ -591,8 +648,16 @@ async function handleRateLimitedResponse(
     if (isHardRateLimit) {
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
-      logger.debug(
-        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+      logRequestDiagnostic(
+        suppressLogging,
+        '[fetch] Request rate limited; no retries remain',
+        {
+          status: response.status,
+          attempt: attempt + 1,
+          maxAttempts: maxRetries + 1,
+        },
+        () =>
+          `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
       throw buildHttpRateLimitError(response, body, code);
     }
@@ -601,8 +666,16 @@ async function handleRateLimitedResponse(
     );
   }
 
-  logger.debug(
-    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+  logRequestDiagnostic(
+    suppressLogging,
+    '[fetch] Request rate limited; waiting before retry',
+    {
+      status: response.status,
+      attempt: attempt + 1,
+      maxAttempts: maxRetries + 1,
+    },
+    () =>
+      `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
   await handleRateLimit(response);
 }
@@ -633,6 +706,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const suppressLogging = isFetchLoggingSuppressed(url, options.headers);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -649,7 +723,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(response, url, i, maxRetries, suppressLogging);
         continue;
       }
 
@@ -669,8 +743,14 @@ export async function fetchWithRetries(
 
       const errorMessage = formatFetchErrorMessage(error);
 
-      logger.debug(
-        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+      logRequestDiagnostic(
+        suppressLogging,
+        '[fetch] Request failed, retrying',
+        {
+          attempt: i + 1,
+          maxAttempts: maxRetries + 1,
+        },
+        () => `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
       );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
