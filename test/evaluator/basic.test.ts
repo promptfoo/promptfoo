@@ -34,7 +34,7 @@ describeEvaluator('evaluator basic flows', () => {
         test: testSuite.tests![0],
         prompt: expect.any(Object),
       }),
-      undefined,
+      { abortSignal: expect.any(AbortSignal) },
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -211,7 +211,7 @@ describeEvaluator('evaluator basic flows', () => {
       expect(mockApiProvider.callApi).toHaveBeenCalledWith(
         'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
         expect.anything(),
-        undefined,
+        { abortSignal: expect.any(AbortSignal) },
       );
 
       expect(summary.stats.successes).toBe(1);

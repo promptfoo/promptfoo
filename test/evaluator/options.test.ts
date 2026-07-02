@@ -98,7 +98,9 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -153,7 +155,9 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+      }),
     );
   });
 
