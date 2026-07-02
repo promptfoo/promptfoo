@@ -812,6 +812,100 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
+    it('renders long markdown image variables with lightbox support', async () => {
+      const user = userEvent.setup();
+      const dataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+      }));
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {},
+              vars: [
+                `![Preview image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
+              ],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['imageVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const image = screen.getByRole('img', { name: 'Preview image' });
+      expect(image).toHaveAttribute('src', dataUri);
+      expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Open image preview: Preview image' }));
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', dataUri);
+      expect(screen.getByRole('button', { name: 'Close image preview' })).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('button', { name: 'Close image preview' })).not.toBeInTheDocument();
+    });
+
+    it('renders primitive variables and leaves missing variables blank', () => {
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+      }));
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {},
+              vars: [3, true],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['count', 'enabled', 'missing'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('true')).toBeInTheDocument();
+      expect(screen.queryByText('undefined')).not.toBeInTheDocument();
+    });
+
     it('renders variable video from file metadata', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
