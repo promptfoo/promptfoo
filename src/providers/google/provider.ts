@@ -17,8 +17,7 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
+import { maybeLoadResponseSchemaFromExternalFileWithVars } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -381,8 +380,9 @@ export class GoogleProvider extends GoogleGenericProvider {
         );
       }
 
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      let schema = maybeLoadResponseSchemaFromExternalFileWithVars(
+        config.responseSchema,
+        context?.vars,
       );
 
       // Parse JSON string if it's a string
@@ -393,9 +393,6 @@ export class GoogleProvider extends GoogleGenericProvider {
           throw new Error(`Invalid JSON in responseSchema: ${error}`);
         }
       }
-
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
 
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';

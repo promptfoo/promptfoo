@@ -14,8 +14,8 @@ import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetc
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import {
-  maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
+  maybeLoadStructuredConfigFromExternalFileWithVars,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
@@ -260,7 +260,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
+            functions: maybeLoadStructuredConfigFromExternalFileWithVars(
+              config.functions,
+              context?.vars,
+            ),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),

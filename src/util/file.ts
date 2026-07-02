@@ -14,12 +14,30 @@ import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
-import { renderVarsInObject } from './render';
+import { type RenderVarsInObjectOptions, renderVarsInObject } from './render';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
+};
+
+const SCHEMA_TEMPLATE_KEYS = new Set([
+  'input_schema',
+  'inputSchema',
+  'parameters',
+  'responseSchema',
+  'schema',
+]);
+
+const STRUCTURED_SCHEMA_RENDER_OPTIONS: RenderVarsInObjectOptions = {
+  allowDumpSafeObjectReferences: (path) => {
+    if (path.length === 0) {
+      return true;
+    }
+    const key = path[path.length - 1];
+    return typeof key === 'string' && SCHEMA_TEMPLATE_KEYS.has(key);
+  },
 };
 
 /**
@@ -420,6 +438,31 @@ export function maybeLoadFromExternalFileWithVars(
   return maybeLoadFromExternalFile(rendered);
 }
 
+export function maybeLoadStructuredConfigFromExternalFileWithVars(
+  config: any,
+  vars?: Record<string, VarValue>,
+): any {
+  const rendered = renderVarsInObject(config, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  return maybeLoadFromExternalFile(rendered);
+}
+
+export function maybeLoadResponseSchemaFromExternalFileWithVars(
+  responseSchema: any,
+  vars?: Record<string, VarValue>,
+): any {
+  const rendered = renderVarsInObject(responseSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  const loaded = maybeLoadFromExternalFile(rendered);
+
+  // File-loaded schemas may still intentionally contain runtime vars, but an
+  // object injected directly from vars is already user data and must not be
+  // walked again, otherwise literal "{{...}}" schema text gets rewritten.
+  if (typeof rendered === 'string' && typeof loaded !== 'string') {
+    return renderVarsInObject(loaded, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  }
+
+  return loaded;
+}
+
 /**
  * Loads response_format configuration from an external file with variable rendering.
  *
@@ -442,7 +485,7 @@ export function maybeLoadResponseFormatFromExternalFile(
   }
 
   // First, render variables and load the outer response_format
-  const rendered = renderVarsInObject(responseFormat, vars);
+  const rendered = renderVarsInObject(responseFormat, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
   const loaded = maybeLoadFromExternalFile(rendered);
 
   if (!loaded || typeof loaded !== 'object') {
@@ -454,8 +497,14 @@ export function maybeLoadResponseFormatFromExternalFile(
     const nestedSchema = loaded.schema || loaded.json_schema?.schema;
 
     if (nestedSchema) {
-      // Render and load the nested schema
-      const loadedSchema = maybeLoadFromExternalFile(renderVarsInObject(nestedSchema, vars));
+      // The outer render may have already injected an object-valued schema.
+      // Only strings can still contain template/file references; object schemas
+      // should be preserved as data so literal "{{...}}" examples survive.
+      const schemaForLoading =
+        typeof nestedSchema === 'string'
+          ? renderVarsInObject(nestedSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS)
+          : nestedSchema;
+      const loadedSchema = maybeLoadFromExternalFile(schemaForLoading);
 
       // Return with the loaded schema in place
       if (loaded.schema !== undefined) {
@@ -488,7 +537,7 @@ export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
 ): Promise<any> {
-  const rendered = renderVarsInObject(tools, vars);
+  const rendered = renderVarsInObject(tools, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
 
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result
@@ -580,7 +629,9 @@ export async function maybeLoadToolsFromExternalFile(
   // Handle arrays by recursively processing each item
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
+      rendered.map((item) =>
+        maybeLoadToolsFromExternalFile(item, typeof item === 'string' ? vars : undefined),
+      ),
     );
     // Flatten if all items are arrays (common case: multiple file:// references)
     if (results.every((r) => Array.isArray(r))) {

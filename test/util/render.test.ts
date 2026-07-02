@@ -179,6 +179,158 @@ describe('renderVarsInObject', () => {
       },
     });
   });
+
+  describe('object variable substitution', () => {
+    it('should directly substitute object variables with simple {{ varname }} syntax', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'The city and state' },
+        },
+        required: ['location'],
+      };
+      const rendered = renderVarsInObject('{{ schema }}', { schema });
+      expect(rendered).toEqual(schema);
+    });
+
+    it('should preserve dump-safe serialization by default', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      };
+      const rendered = renderVarsInObject('{{ schema | dump | safe }}', { schema });
+      expect(rendered).toBe(JSON.stringify(schema));
+    });
+
+    it('should allow dump-safe object substitution when explicitly enabled', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      };
+      const rendered = renderVarsInObject(
+        '{{ schema | dump | safe }}',
+        { schema },
+        {
+          allowDumpSafeObjectReferences: true,
+        },
+      );
+      expect(rendered).toEqual(schema);
+    });
+
+    it('should scope dump-safe object substitution to allowed object paths', async () => {
+      const schema = { type: 'object', properties: { name: { type: 'string' } } };
+      const rendered = renderVarsInObject(
+        {
+          content: '{{ schema | dump | safe }}',
+          parameters: '{{ schema | dump | safe }}',
+        },
+        { schema },
+        { allowDumpSafeObjectReferences: (path) => path.at(-1) === 'parameters' },
+      );
+      expect(rendered).toEqual({
+        content: JSON.stringify(schema),
+        parameters: schema,
+      });
+    });
+
+    it('should still serialize object variables with dump unless safe marks schema injection', async () => {
+      const schema = { type: 'object', properties: { name: { type: 'string' } } };
+      const rendered = renderVarsInObject('{{ schema | dump }}', { schema });
+      expect(rendered).toBe(JSON.stringify(schema));
+    });
+
+    it('should directly substitute array variables', async () => {
+      const tools = [
+        { type: 'function', function: { name: 'get_weather' } },
+        { type: 'function', function: { name: 'get_time' } },
+      ];
+      const rendered = renderVarsInObject('{{ tools }}', { tools });
+      expect(rendered).toEqual(tools);
+    });
+
+    it('should still render string variables normally', async () => {
+      const rendered = renderVarsInObject('{{ name }}', { name: 'John' });
+      expect(rendered).toBe('John');
+    });
+
+    it('should not automatically parse JSON strings', async () => {
+      const obj = '{"key": "value", "number": 42}';
+      const rendered = renderVarsInObject(obj, {});
+      expect(rendered).toBe('{"key": "value", "number": 42}');
+    });
+
+    it('should handle object substitution in nested structures', async () => {
+      const schema = { type: 'object', properties: {} };
+      const obj = {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'test',
+                parameters: '{{ schema }}',
+              },
+            },
+          ],
+        },
+      };
+
+      const rendered = renderVarsInObject(obj, { schema });
+
+      expect(rendered).toEqual({
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'test',
+                parameters: schema,
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it('should not substitute object when template is part of larger string', async () => {
+      const schema = { type: 'object' };
+      const rendered = renderVarsInObject('prefix {{ schema }} suffix', { schema });
+      expect(rendered).toBe('prefix [object Object] suffix');
+    });
+
+    it('should still apply non-pass-through filters via Nunjucks', async () => {
+      const rendered = renderVarsInObject('{{ tools | length }}', { tools: [1, 2, 3, 4, 5] });
+      expect(rendered).toBe('5');
+    });
+
+    it('should still apply first filter via Nunjucks', async () => {
+      const rendered = renderVarsInObject('{{ items | first }}', {
+        items: ['apple', 'banana', 'cherry'],
+      });
+      expect(rendered).toBe('apple');
+    });
+
+    it('should still apply join filter via Nunjucks', async () => {
+      const rendered = renderVarsInObject('{{ items | join(", ") }}', { items: ['a', 'b', 'c'] });
+      expect(rendered).toBe('a, b, c');
+    });
+
+    it('should still render non-plain object variables via Nunjucks', async () => {
+      const date = new Date('2026-04-21T00:00:00.000Z');
+      const rendered = renderVarsInObject('{{ date }}', { date });
+      expect(rendered).toBe(date.toString());
+    });
+
+    it('should not directly return inherited prototype object properties', async () => {
+      const rendered = renderVarsInObject('{{ __proto__ }}', {});
+      expect(rendered).not.toBe(Object.prototype);
+      expect(typeof rendered).toBe('string');
+    });
+  });
 });
 
 describe('renderEnvOnlyInObject', () => {

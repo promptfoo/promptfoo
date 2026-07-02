@@ -11,6 +11,7 @@ import {
   maybeLoadFromExternalFile,
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
+  maybeLoadResponseSchemaFromExternalFileWithVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   pathExists,
@@ -1101,6 +1102,67 @@ describe('file utilities', () => {
       expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
     });
 
+    it('should scope dump-safe object templates to schema-like tool fields', async () => {
+      const schema = { type: 'object', properties: { query: { type: 'string' } } };
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: '{{ schema | dump | safe }}',
+            parameters: '{{ schema | dump | safe }}',
+          },
+        },
+      ];
+
+      expect(await maybeLoadToolsFromExternalFile(tools, { schema })).toEqual([
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: JSON.stringify(schema),
+            parameters: schema,
+          },
+        },
+      ]);
+    });
+
+    it('should preserve literal template text inside injected tool schemas', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Must include {{literal}} braces',
+            enum: ['{{literal}}'],
+          },
+        },
+      };
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: '{{ schema | dump | safe }}',
+            parameters: '{{ schema }}',
+          },
+        },
+      ];
+
+      expect(await maybeLoadToolsFromExternalFile(tools, { schema, literal: 'rewritten' })).toEqual(
+        [
+          {
+            type: 'function',
+            function: {
+              name: 'search',
+              description: JSON.stringify(schema),
+              parameters: schema,
+            },
+          },
+        ],
+      );
+    });
+
     it('should render variables and load from external file', async () => {
       const tools = 'file://{{ file_path }}.json';
       const vars = { file_path: 'tools' };
@@ -1375,6 +1437,60 @@ describe('file utilities', () => {
         type: 'json_schema',
         name: 'my_custom_schema',
         schema: { type: 'object' },
+      });
+    });
+
+    it('should preserve literal template text inside injected top-level schemas', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+          },
+        },
+      };
+      const format = {
+        type: 'json_schema',
+        name: 'literal_schema',
+        schema: '{{ schema }}',
+      };
+
+      expect(
+        maybeLoadResponseFormatFromExternalFile(format, { schema, literal: 'rewritten' }),
+      ).toEqual({
+        type: 'json_schema',
+        name: 'literal_schema',
+        schema,
+      });
+    });
+
+    it('should preserve literal template text inside injected json_schema schemas', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+          },
+        },
+      };
+      const format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'literal_schema',
+          schema: '{{ schema }}',
+        },
+      };
+
+      expect(
+        maybeLoadResponseFormatFromExternalFile(format, { schema, literal: 'rewritten' }),
+      ).toEqual({
+        type: 'json_schema',
+        json_schema: {
+          name: 'literal_schema',
+          schema,
+        },
       });
     });
 
@@ -1887,6 +2003,60 @@ describe('file utilities', () => {
       vi.mocked(fsp.access).mockRejectedValueOnce(accessError);
 
       await expect(pathExists(path.join(tmpRoot, 'locked.txt'))).rejects.toBe(accessError);
+    });
+  });
+
+  describe('maybeLoadResponseSchemaFromExternalFileWithVars', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+    });
+
+    it('should preserve literal template text inside injected response schemas', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+          },
+        },
+      };
+
+      expect(
+        maybeLoadResponseSchemaFromExternalFileWithVars('{{ schema }}', {
+          schema,
+          literal: 'rewritten',
+        }),
+      ).toEqual(schema);
+    });
+
+    it('should render variables in schemas loaded from files', () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          type: 'object',
+          properties: {
+            answer: {
+              type: 'string',
+              description: '{{ description }}',
+            },
+          },
+        }),
+      );
+
+      expect(
+        maybeLoadResponseSchemaFromExternalFileWithVars('file://schema.json', {
+          description: 'A concise answer',
+        }),
+      ).toEqual({
+        type: 'object',
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'A concise answer',
+          },
+        },
+      });
     });
   });
 });

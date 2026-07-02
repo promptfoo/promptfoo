@@ -313,6 +313,45 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it('should preserve literal template text inside injected response schemas', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+            enum: ['{{literal}}'],
+          },
+        },
+        required: ['answer'],
+      };
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          responseSchema: '{{ schema }}',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '{"answer":"{{literal}}"}' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', {
+        vars: { schema, literal: 'rewritten' },
+      } as any);
+
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.generationConfig.response_schema).toEqual(schema);
+      expect(body.generationConfig.response_mime_type).toBe('application/json');
+    });
+
     it('should handle safety blocked response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
