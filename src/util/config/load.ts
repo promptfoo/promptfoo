@@ -455,13 +455,7 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   }
 }
 
-async function readPromptReferenceSources(
-  configPaths?: string[],
-): Promise<PromptReferenceSource[]> {
-  if (!configPaths) {
-    return [];
-  }
-
+async function readPromptReferenceSources(configPaths: string[]): Promise<PromptReferenceSource[]> {
   const sources: PromptReferenceSource[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
