@@ -55,7 +55,7 @@ tests:
           - criteria
 ```
 
-Set `graderVars: []` to pass no test variables. Built-in inputs such as the model output and rubric are still included.
+Set `graderVars: []` to pass no test variables. Built-in inputs such as the model output and rubric are still included. Names reserved for an assertion's built-in grader inputs are ignored if they appear in `graderVars`.
 
 `graderVars` does not remove values already inserted into an assertion's `value`. For example, a rubric containing `{{foo}}` still includes the value of `foo` after variable substitution. To keep a variable out of the grader request, omit it from both `graderVars` and `value`.
 
