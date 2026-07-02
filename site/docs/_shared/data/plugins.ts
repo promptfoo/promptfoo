@@ -605,6 +605,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests whether attacker-controlled values in structured data propagate into tool calls, schemas, or workflow steps',
+    label: 'technical',
+    link: '/docs/red-team/plugins/data-structure-injection/',
+    name: 'Data-Structure Injection',
+    pluginId: 'data-structure-injection',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
     link: '/docs/red-team/plugins/debug-access/',
