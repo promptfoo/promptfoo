@@ -2,7 +2,7 @@
   "app -> contracts": 7,
   "app -> legacy-contracts": 99,
   "app -> legacy-runtime": 7,
-  "app -> node": 18,
+  "app -> node": 23,
   "app -> providers": 6,
   "app -> redteam": 115,
   "cli -> core": 5,
