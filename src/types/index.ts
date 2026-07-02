@@ -28,6 +28,7 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
+import type { EvalConfigDetailField, EvalTableCellDetailField } from './evalDetailFields';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -413,8 +414,15 @@ export interface EvaluateResult {
   traceId?: string;
 }
 
+export type { EvalConfigDetailField, EvalTableCellDetailField } from './evalDetailFields';
+
 export interface EvaluateTableOutput {
   cost: number;
+  detail?: {
+    available: boolean;
+    omittedFields: EvalTableCellDetailField[];
+  };
+  evalId?: string;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
   id: string;
@@ -506,6 +514,10 @@ export type EvalTableDTO = {
   filteredCount: number;
   filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
+  configDetail?: {
+    available: boolean;
+    omittedFields: EvalConfigDetailField[];
+  };
   author: string | null;
   version: number;
   id: string;

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, useStore } from './evalConfig';
+import {
+  DEFAULT_CONFIG,
+  getPersistableEvalConfig,
+  MAX_PERSISTED_EVAL_CONFIG_BYTES,
+  useStore,
+} from './evalConfig';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
@@ -1847,6 +1853,67 @@ describe('evalConfig store', () => {
         config: { split: 'validation' },
       });
       expect(JSON.stringify(persisted)).not.toContain('standalone-generator-secret');
+    });
+    it('keeps oversized edit configs in memory while compacting persisted state', () => {
+      const largeConfig = {
+        description: 'Large config',
+        prompts: ['Prompt'],
+        providers: ['echo'],
+        defaultTest: { vars: { large: 'x'.repeat(1_000_000) } },
+        scenarios: [{ config: { large: 'x'.repeat(1_000_000) }, tests: [] }],
+        tests: [{ vars: { large: 'x'.repeat(1_000_000) } }],
+      } as unknown as Partial<UnifiedConfig>;
+
+      useStore.getState().setConfig(largeConfig);
+
+      expect(useStore.getState().config.tests).toHaveLength(1);
+      const persistableConfig = getPersistableEvalConfig(useStore.getState().config);
+      expect(persistableConfig.description).toBe('Large config');
+      expect(persistableConfig.tests).toEqual([]);
+      expect(persistableConfig.defaultTest).toEqual({});
+      expect(persistableConfig.scenarios).toEqual([]);
+    });
+
+    it('redacts small configs before persistence', () => {
+      const config = {
+        description: 'Small config',
+        env: { OPENAI_API_KEY: 'secret', REGION: 'us-east-1' },
+        providers: ['echo'],
+        prompts: ['hello'],
+      } as Partial<UnifiedConfig>;
+
+      expect(getPersistableEvalConfig(config)).toEqual({
+        ...config,
+        env: { REGION: 'us-east-1' },
+      });
+    });
+
+    it('falls back to lightweight fields when compacted configs are still too large', () => {
+      const config = {
+        description: 'Huge config',
+        providers: ['echo'],
+        prompts: ['x'.repeat(MAX_PERSISTED_EVAL_CONFIG_BYTES + 1)],
+        tests: [{ vars: { topic: 'details' } }],
+        defaultTest: { vars: { topic: 'default' } },
+        scenarios: [{ config: { topic: 'scenario' }, tests: [] }],
+      } as unknown as Partial<UnifiedConfig>;
+
+      expect(getPersistableEvalConfig(config)).toEqual({
+        ...DEFAULT_CONFIG,
+        description: 'Huge config',
+        providers: ['echo'],
+        prompts: [],
+      });
+    });
+
+    it('fails closed when config serialization fails', () => {
+      const config = {
+        description: 'Circular config',
+        providers: ['echo'],
+      } as Record<string, unknown>;
+      config.extra = config;
+
+      expect(getPersistableEvalConfig(config as Partial<UnifiedConfig>)).toEqual(DEFAULT_CONFIG);
     });
   });
 

@@ -11,6 +11,14 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
+const { fetchEvalConfigMock } = vi.hoisted(() => ({
+  fetchEvalConfigMock: vi.fn(),
+}));
+
+vi.mock('@app/utils/api', () => ({
+  fetchEvalConfig: fetchEvalConfigMock,
+}));
+
 describe('ConfigModal', () => {
   const mockOnClose = vi.fn();
   const sampleConfig = {
@@ -21,6 +29,7 @@ describe('ConfigModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchEvalConfigMock.mockReset();
 
     // Mock useTableStore to return sample config
     vi.mocked(useTableStore).mockReturnValue({
@@ -71,6 +80,55 @@ describe('ConfigModal', () => {
 
     expect(getCopyButton()).toBeInTheDocument();
     expect(getDownloadButton()).toBeInTheDocument();
+  });
+
+  it('disables copy and download until fetched full config is ready', async () => {
+    const fullConfig = {
+      prompts: ['full prompt'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { input: 'full test' } }],
+    };
+    let resolveConfig!: (value: { config: typeof fullConfig }) => void;
+    fetchEvalConfigMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { description: 'lean config' },
+      evalId: 'eval-123',
+    } as ReturnType<typeof useTableStore>);
+
+    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
+
+    expect(screen.getByText('Loading config...')).toBeInTheDocument();
+    expect(getCopyButton()).toBeDisabled();
+    expect(getDownloadButton()).toBeDisabled();
+
+    resolveConfig({ config: fullConfig });
+
+    await waitFor(() => {
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textarea.value).toContain('full prompt');
+    });
+    expect(getCopyButton()).not.toBeDisabled();
+    expect(getDownloadButton()).not.toBeDisabled();
+  });
+
+  it('keeps copy and download disabled when full config loading fails', async () => {
+    fetchEvalConfigMock.mockRejectedValueOnce(new Error('Eval config is too large to serialize'));
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { description: 'lean config' },
+      evalId: 'eval-123',
+    } as ReturnType<typeof useTableStore>);
+
+    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Eval config is too large to serialize')).toBeInTheDocument();
+    });
+    expect(getCopyButton()).toBeDisabled();
+    expect(getDownloadButton()).toBeDisabled();
   });
 
   it('copies config to clipboard when copy button is clicked', async () => {

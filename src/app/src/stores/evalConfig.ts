@@ -1257,6 +1257,41 @@ const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<U
   }
 };
 
+export const MAX_PERSISTED_EVAL_CONFIG_BYTES = 2_000_000;
+
+function getJsonSize(value: unknown): number {
+  try {
+    return new Blob([JSON.stringify(value)]).size;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function getPersistableEvalConfig(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+  const sanitizedConfig = omitPersistedSensitiveValues(config);
+  if (getJsonSize(sanitizedConfig) <= MAX_PERSISTED_EVAL_CONFIG_BYTES) {
+    return sanitizedConfig;
+  }
+
+  const compactConfig: Partial<UnifiedConfig> = {
+    ...sanitizedConfig,
+    tests: [],
+    defaultTest: {},
+    scenarios: [],
+  };
+
+  if (getJsonSize(compactConfig) <= MAX_PERSISTED_EVAL_CONFIG_BYTES) {
+    return compactConfig;
+  }
+
+  return {
+    ...DEFAULT_CONFIG,
+    description: sanitizedConfig.description ?? '',
+    providers: sanitizedConfig.providers ?? [],
+    prompts: [],
+  };
+}
+
 export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
@@ -1294,7 +1329,7 @@ export const useStore = create<EvalConfigState>()(
       name: 'promptfoo',
       skipHydration: true,
       partialize: (state) => ({
-        config: omitPersistedSensitiveValues(state.config),
+        config: getPersistableEvalConfig(state.config),
       }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;

@@ -711,6 +711,30 @@ describe('resolveImageSource security', () => {
     expect(resolveImageSource('storageRef:images/test.png')).toBe('/api/media/images/test.png');
   });
 
+  it('should resolve structured storage references in image data', () => {
+    expect(
+      resolveImageSource({
+        data: 'storageRef:images/test.png',
+        format: 'png',
+      }),
+    ).toBe('/api/media/images/test.png');
+  });
+
+  it('should NOT return external URLs from structured image data', () => {
+    expect(
+      resolveImageSource({
+        data: 'https://attacker.example/leak.png',
+        format: 'png',
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveImageSource({
+        data: 'http://attacker.example/leak.png',
+        format: 'png',
+      }),
+    ).toBeUndefined();
+  });
+
   it('should convert long base64 strings to data URIs', () => {
     const base64 = 'A'.repeat(100); // Long enough to be treated as base64
     expect(resolveImageSource(base64)).toBe(`data:image/png;base64,${base64}`);
@@ -756,6 +780,15 @@ describe('resolveImageSource security', () => {
       format: 'png',
     });
     expect(result).toBeUndefined();
+  });
+
+  it('should ignore unsupported structured image placeholders', () => {
+    expect(
+      resolveImageSource({
+        data: 'blobref:qa-small-1',
+        format: 'png',
+      }),
+    ).toBeUndefined();
   });
 });
 
@@ -808,6 +841,18 @@ describe('resolveAudioSource', () => {
     expect(result).toEqual({
       src: '/api/media/audio/test.mp3',
       type: 'audio/mpeg',
+    });
+  });
+
+  it('should resolve structured storage references in audio data', () => {
+    expect(
+      resolveAudioSource({
+        data: 'storageRef:audio/test.wav',
+        format: 'wav',
+      }),
+    ).toEqual({
+      src: '/api/media/audio/test.wav',
+      type: 'audio/wav',
     });
   });
 
@@ -890,6 +935,19 @@ describe('resolveAudioSource', () => {
     });
 
     expect(result?.type).toBe('audio/mp3');
+  });
+
+  it('should ignore unsupported structured audio placeholders', () => {
+    expect(
+      resolveAudioSource({
+        data: 'blobref:qa-small-1',
+        format: 'wav',
+      }),
+    ).toBeNull();
+  });
+
+  it('should not treat plain text fallback content as base64 audio', () => {
+    expect(resolveAudioSource(undefined, 'not actually audio data')).toBeNull();
   });
 });
 

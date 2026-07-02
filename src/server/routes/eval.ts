@@ -12,8 +12,6 @@ import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
-  getEvalTableOutputPromptLocationsBySize,
-  getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
@@ -26,6 +24,8 @@ import { shouldShareResults } from '../../util/sharing';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
+import { trimEvalConfigForTableApi, trimEvalTableForApi } from '../utils/evalTablePayload';
+import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
 import type {
@@ -41,92 +41,19 @@ import type {
 
 export const evalRouter = Router();
 
-function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
-  let parsedPayload: EvalTableDTO;
-  try {
-    parsedPayload = EvalSchemas.Table.Response.parse(responsePayload) as unknown as EvalTableDTO;
-  } catch (error) {
-    sendError(res, 500, 'Failed to render eval table', error);
-    return;
+function getResultDetailText(result: EvalResult): string {
+  const rawOutput = result.response?.output;
+  const outputText =
+    rawOutput !== null && typeof rawOutput === 'object'
+      ? JSON.stringify(rawOutput)
+      : rawOutput == null || rawOutput === ''
+        ? result.error || ''
+        : String(rawOutput);
+
+  if (result.testCase.assert) {
+    return result.success ? outputText || result.error || '' : outputText;
   }
-
-  try {
-    res.json(parsedPayload);
-  } catch (error) {
-    if (!(error instanceof RangeError)) {
-      throw error;
-    }
-
-    logger.warn('[GET /:id/table] Response too large, stripping per-cell prompts by size', {
-      evalId,
-    });
-
-    const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
-    if (promptLocations.length === 0) {
-      logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
-        evalId,
-      });
-      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
-      return;
-    }
-
-    const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
-      const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
-        parsedPayload,
-        promptLocations,
-        promptCountToStrip,
-      );
-      try {
-        const responseBody = JSON.stringify(responseWithoutPrompts);
-        invariant(typeof responseBody === 'string', 'Eval table response must serialize to JSON');
-        return responseBody;
-      } catch (retryError) {
-        if (!(retryError instanceof RangeError)) {
-          throw retryError;
-        }
-        return null;
-      }
-    };
-
-    let lowerBound = 0;
-    let upperBound = 1;
-    let responseBody: string | null = null;
-
-    while (upperBound < promptLocations.length) {
-      responseBody = tryStringifyWithStrippedPrompts(upperBound);
-      if (responseBody) {
-        break;
-      }
-      lowerBound = upperBound;
-      upperBound *= 2;
-    }
-
-    if (!responseBody) {
-      upperBound = promptLocations.length;
-      responseBody = tryStringifyWithStrippedPrompts(upperBound);
-    }
-
-    if (responseBody) {
-      while (upperBound - lowerBound > 1) {
-        const midPoint = lowerBound + Math.floor((upperBound - lowerBound) / 2);
-        const midpointResponseBody = tryStringifyWithStrippedPrompts(midPoint);
-        if (midpointResponseBody) {
-          upperBound = midPoint;
-          responseBody = midpointResponseBody;
-        } else {
-          lowerBound = midPoint;
-        }
-      }
-
-      res.type('json').send(responseBody);
-      return;
-    }
-
-    logger.error('[GET /:id/table] Response still too large after stripping prompts', {
-      evalId,
-    });
-    res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
-  }
+  return result.error || outputText;
 }
 
 evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
@@ -255,11 +182,15 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { id } = paramsResult.data;
-  const { table, config } = bodyResult.data;
+  const { table, config, configPatch } = bodyResult.data;
 
   try {
-    // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
-    await updateResult(id, config, table as unknown as EvaluateTable | undefined);
+    await updateResult(id, {
+      config,
+      configPatch,
+      // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
+      table: table as unknown as EvaluateTable | undefined,
+    });
     res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
   } catch (error) {
     logger.error('[PATCH /api/eval/:id] Failed to update eval', { id, error });
@@ -305,6 +236,36 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   } catch (error) {
     logger.error(`Failed to update eval author: ${error}`);
     res.status(500).json({ error: 'Failed to update eval author' });
+  }
+});
+
+evalRouter.get('/:id/config', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.Config.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
+  const { id } = paramsResult.data;
+
+  try {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const responsePayload = EvalSchemas.Config.Response.parse({
+      config: redactAzureBlobSasTokens(eval_.config),
+    });
+    sendJsonResponse(res, responsePayload, {
+      evalId: id,
+      logger,
+      tooLargeMessage: 'Eval config is too large to serialize',
+    });
+  } catch (error) {
+    logger.error('[GET /:id/config] Failed to fetch eval config', { error, evalId: id });
+    sendError(res, 500, 'Failed to fetch eval config');
   }
 });
 
@@ -378,7 +339,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   const indices = table.body.map((row) => row.testIdx);
 
-  let returnTable = { head: table.head, body: table.body };
+  let returnTable: EvaluateTable = { head: table.head as EvaluateTable['head'], body: table.body };
 
   if (comparisonEvalIds.length > 0) {
     // Fetch comparison evals and their tables, keeping track of eval IDs
@@ -413,15 +374,19 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       comparisonData.filter(
         (data): data is { evalId: string; table: typeof table } => data !== null,
       ),
-    );
+    ) as unknown as EvaluateTable;
   }
 
   // Handle JSON export format (CSV is handled above via unified generateEvalCsv)
   if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
-    setDownloadHeaders(res, `${id}.json`, 'application/json');
-    res.json(jsonData);
+    sendJsonResponse(res, jsonData, {
+      beforeSend: () => setDownloadHeaders(res, `${id}.json`, 'application/json'),
+      evalId: id,
+      logger,
+      tooLargeMessage: 'Eval JSON export is too large to serialize',
+    });
     return;
   }
 
@@ -465,20 +430,84 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  const responsePayload = {
-    table: returnTable,
+  // Version 3 evals persist the client table for legacy manual-rating updates.
+  // Keep those tables full so a rating PATCH does not write trimmed detail back to storage.
+  const isLegacyTable = eval_.version() < 4;
+  const tableForResponse = isLegacyTable ? returnTable : trimEvalTableForApi(returnTable);
+  const leanConfig = trimEvalConfigForTableApi(redactAzureBlobSasTokens(eval_.config));
+  const responsePayload = EvalSchemas.Table.Response.parse({
+    table: tableForResponse,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: redactAzureBlobSasTokens(eval_.config),
+    config: leanConfig.config,
+    configDetail: leanConfig.detail,
     author: eval_.author || null,
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  } as EvalTableDTO;
+  });
 
-  sendEvalTableResponse(res, id, responsePayload);
+  sendJsonResponse(res, responsePayload as unknown as EvalTableDTO, {
+    evalId: id,
+    logger,
+    // Legacy v3 clients PATCH the whole table back via saveManualRating; returning
+    // placeholder strings on overflow would silently overwrite stored content, so
+    // we return 413 instead and let the client surface the error.
+    stripOversizedStringsOnRangeError: !isLegacyTable,
+    tooLargeMessage: 'Eval table response is too large to serialize',
+  });
 });
+
+evalRouter.get(
+  '/:evalId/results/:resultId/detail',
+  async (req: Request, res: Response): Promise<void> => {
+    const paramsResult = EvalSchemas.ResultDetail.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      return;
+    }
+
+    const { evalId, resultId } = paramsResult.data;
+
+    try {
+      const result = await EvalResult.findById(resultId);
+      if (!result || result.evalId !== evalId) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+
+      const responsePayload = EvalSchemas.ResultDetail.Response.parse({
+        evalId,
+        resultId: result.id || `${result.testIdx}-${result.promptIdx}`,
+        prompt: result.prompt.raw,
+        providerPrompt: result.response?.prompt,
+        response: result.response,
+        testCase: result.testCase,
+        metadata: result.metadata,
+        gradingResult: result.gradingResult,
+        text: getResultDetailText(result),
+        output: result.response?.output,
+        audio: result.response?.audio,
+        video: result.response?.video,
+        images: result.response?.images,
+      });
+
+      sendJsonResponse(res, responsePayload, {
+        evalId,
+        logger,
+        tooLargeMessage: 'Eval result detail is too large to serialize',
+      });
+    } catch (error) {
+      logger.error('[GET /:evalId/results/:resultId/detail] Failed to fetch result detail', {
+        error,
+        evalId,
+        resultId,
+      });
+      sendError(res, 500, 'Failed to fetch result detail');
+    }
+  },
+);
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.MetadataKeys.Params.safeParse(req.params);

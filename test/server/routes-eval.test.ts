@@ -16,7 +16,7 @@ const patchHandler = (req: Request, res: Response): void => {
   }
 
   try {
-    updateResult(id, config, table);
+    updateResult(id, { config, table });
     res.json({ message: 'Eval updated successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
@@ -68,7 +68,7 @@ describe('evalRouter - PATCH /:id', () => {
     patchHandler(mockReq as Request, mockRes as Response);
 
     expect(jsonMock).toHaveBeenCalledWith({ message: 'Eval updated successfully' });
-    expect(updateResult).toHaveBeenCalledWith(evalId, newConfig, undefined);
+    expect(updateResult).toHaveBeenCalledWith(evalId, { config: newConfig, table: undefined });
   });
 
   it('should return 400 if id is missing', async () => {

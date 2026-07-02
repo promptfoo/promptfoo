@@ -10,9 +10,21 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
-  mockShowToast: vi.fn(),
+const {
+  mockClearEvalApiResponseCache,
+  mockFetchEvalConfig,
+  mockNavigate,
+  mockPrefetchEvalConfig,
+  mockSetSearchParams,
+  mockShowToast,
+  mockUpdateConfig,
+} = vi.hoisted(() => ({
+  mockClearEvalApiResponseCache: vi.fn(),
+  mockFetchEvalConfig: vi.fn(),
   mockNavigate: vi.fn(),
+  mockPrefetchEvalConfig: vi.fn(),
+  mockShowToast: vi.fn(),
+  mockSetSearchParams: vi.fn(),
   mockUpdateConfig: vi.fn(),
 }));
 
@@ -30,7 +42,10 @@ vi.mock('@app/stores/evalConfig', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  clearEvalApiResponseCache: mockClearEvalApiResponseCache,
+  fetchEvalConfig: mockFetchEvalConfig,
   fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
+  prefetchEvalConfig: mockPrefetchEvalConfig,
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
 }));
 
@@ -247,6 +262,16 @@ beforeEach(() => {
   });
   vi.mocked(callApi).mockReset();
   vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+  mockFetchEvalConfig.mockReset();
+  mockFetchEvalConfig.mockResolvedValue({
+    config: {
+      description: 'Full Test Evaluation',
+      tests: [{ vars: { input: 'full test' } }],
+    },
+  });
+  mockPrefetchEvalConfig.mockReset();
+  mockPrefetchEvalConfig.mockResolvedValue(null);
+  mockClearEvalApiResponseCache.mockReset();
   mockWindowOpen();
 });
 
@@ -259,7 +284,9 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => mockNavigate,
-    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
+    useSearchParams: vi
+      .fn()
+      .mockReturnValue([new URLSearchParams('filterMode=failures'), mockSetSearchParams]),
   };
 });
 
@@ -390,6 +417,34 @@ describe('ResultsView Share Button', () => {
     });
   });
 
+  it('loads the full config before edit and re-run', async () => {
+    const fullConfig = {
+      description: 'Full Test Evaluation',
+      tests: [{ vars: { input: 'full test' } }],
+      defaultTest: { assert: [{ type: 'contains', value: 'ok' }] },
+    };
+    mockFetchEvalConfig.mockResolvedValueOnce({ config: fullConfig });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+
+    await waitFor(() => {
+      expect(mockFetchEvalConfig).toHaveBeenCalledWith('test-eval-id');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(fullConfig);
+      expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+        state: { sourceEvalId: 'test-eval-id' },
+      });
+    });
+  });
+
   it('passes the current dataset to the comparison eval selector', () => {
     renderWithRouter(
       <ResultsView
@@ -426,11 +481,14 @@ describe('ResultsView Share Button', () => {
     await userEvent.click(screen.getByText('Eval actions'));
     await userEvent.click(screen.getByText('Edit and re-run'));
 
-    expect(mockUpdateConfig).toHaveBeenCalledWith(
-      expect.objectContaining({ description: 'Test Evaluation' }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith('/setup', {
-      state: { sourceEvalId: 'test-eval-id' },
+    await waitFor(() => {
+      expect(mockFetchEvalConfig).toHaveBeenCalledWith('test-eval-id');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Full Test Evaluation' }),
+      );
+      expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+        state: { sourceEvalId: 'test-eval-id' },
+      });
     });
   });
 

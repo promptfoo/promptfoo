@@ -7,11 +7,77 @@ import { DropdownMenuItem, DropdownMenuItemIcon } from '@app/components/ui/dropd
 import invariant from '@promptfoo/util/invariant';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import yaml from 'js-yaml';
-import { CheckCircle, Copy, Download } from 'lucide-react';
+import { CheckCircle, Copy, Download, Loader2 } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
+import {
+  type EvalResultDetailResponse,
+  fetchEvalConfig,
+  fetchEvalResultDetail,
+  prefetchEvalConfig,
+} from '../../../utils/api';
 import { useTableStore as useResultsViewStore } from './store';
-import type { UnifiedConfig } from '@promptfoo/types';
+
+type ResultsViewState = ReturnType<typeof useResultsViewStore.getState>;
+type ResultsTable = NonNullable<ResultsViewState['table']>;
+type EvaluateTableRow = ResultsTable['body'][number];
+type EvaluateTableOutput = NonNullable<EvaluateTableRow['outputs'][number]>;
+type UnifiedConfig = NonNullable<ResultsViewState['config']>;
+
+const DETAIL_EXPORT_CONCURRENCY = 8;
+
+// Server placeholder emitted by stripOversizedStrings when a string exceeds the
+// oversized-string limit. Used to detect cells that need full detail hydration
+// instead of falling back to the lean table value.
+const OVERSIZED_PLACEHOLDER_RE = /^\[content omitted: \d+ characters\]$/;
+
+function hasPlaceholder(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return OVERSIZED_PLACEHOLDER_RE.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasPlaceholder);
+  }
+  return false;
+}
+
+function getConfigPromptDisplayValue(prompt: unknown): string | undefined {
+  if (typeof prompt === 'string') {
+    return prompt;
+  }
+  if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
+    return undefined;
+  }
+
+  const value = prompt as Record<string, unknown>;
+  for (const field of ['label', 'display', 'raw']) {
+    if (typeof value[field] === 'string') {
+      return value[field];
+    }
+  }
+  return undefined;
+}
+
+type AdvancedExportName = 'failed-tests' | 'dpo' | 'human-eval' | 'burp';
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
 
 interface DownloadMenuItemProps {
   onClick: () => void;
@@ -81,6 +147,14 @@ interface DownloadDialogProps {
 export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const { table, config, evalId } = useResultsViewStore();
   const [downloadedFiles, setDownloadedFiles] = React.useState<Set<string>>(new Set());
+  const [isDownloadingConfig, setIsDownloadingConfig] = React.useState(false);
+  const [advancedExportInProgress, setAdvancedExportInProgress] =
+    React.useState<AdvancedExportName | null>(null);
+  const [advancedExportProgress, setAdvancedExportProgress] = React.useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const detailHydrationFailuresRef = React.useRef(0);
   const { showToast } = useToast();
 
   // Use the new hooks for CSV and JSON downloads
@@ -156,16 +230,161 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     return `${evalId}-${suffix}`;
   };
 
-  const downloadConfig = () => {
+  const prefetchFullConfig = React.useCallback(() => {
+    if (evalId) {
+      void prefetchEvalConfig(evalId);
+    }
+  }, [evalId]);
+
+  const setExportProgressTotal = (total: number) => {
+    setAdvancedExportProgress(total > 0 ? { current: 0, total } : null);
+  };
+
+  const incrementExportProgress = () => {
+    setAdvancedExportProgress((progress) =>
+      progress
+        ? {
+            current: Math.min(progress.current + 1, progress.total),
+            total: progress.total,
+          }
+        : progress,
+    );
+  };
+
+  const getAdvancedExportLabel = (
+    exportName: AdvancedExportName,
+    idleLabel: string,
+    activeLabel: string,
+  ) => {
+    if (advancedExportInProgress !== exportName) {
+      return idleLabel;
+    }
+
+    if (advancedExportProgress && advancedExportProgress.total > 0) {
+      return `${activeLabel} ${advancedExportProgress.current}/${advancedExportProgress.total}...`;
+    }
+
+    return `${activeLabel}...`;
+  };
+
+  const getDownloadIcon = (active: boolean) =>
+    active ? (
+      <Loader2 className="size-4 mr-2 animate-spin" />
+    ) : (
+      <Download className="size-4 mr-2" />
+    );
+
+  const getOutputDetail = async (
+    output?: EvaluateTableOutput | null,
+  ): Promise<EvalResultDetailResponse | null> => {
+    if (!evalId || !output?.id || output.detail?.available === false) {
+      return null;
+    }
+
+    try {
+      return await fetchEvalResultDetail(output.evalId || evalId, output.id);
+    } catch {
+      detailHydrationFailuresRef.current += 1;
+      return null;
+    }
+  };
+
+  const getFirstOutput = (row: EvaluateTableRow): EvaluateTableOutput | null =>
+    row.outputs.find((output): output is EvaluateTableOutput => Boolean(output)) ?? null;
+
+  const getFullConfigTest = (
+    fullConfig: Partial<UnifiedConfig>,
+    row: EvaluateTableRow,
+  ): EvaluateTableRow['test'] | undefined => {
+    if (!Array.isArray(fullConfig.tests) || !Number.isInteger(row.testIdx)) {
+      return undefined;
+    }
+
+    const test = fullConfig.tests[row.testIdx];
+    if (test && typeof test === 'object' && !Array.isArray(test)) {
+      return test as EvaluateTableRow['test'];
+    }
+
+    return undefined;
+  };
+
+  const getRowVars = (
+    row: EvaluateTableRow,
+    detail?: EvalResultDetailResponse | null,
+    fullConfig?: Partial<UnifiedConfig>,
+  ): Record<string, unknown> => {
+    const detailVars = detail?.testCase?.vars;
+    if (detailVars && typeof detailVars === 'object' && !Array.isArray(detailVars)) {
+      return detailVars as Record<string, unknown>;
+    }
+
+    const fullConfigVars = fullConfig ? getFullConfigTest(fullConfig, row)?.vars : undefined;
+    if (fullConfigVars && typeof fullConfigVars === 'object' && !Array.isArray(fullConfigVars)) {
+      return fullConfigVars as Record<string, unknown>;
+    }
+
+    if (row.test?.vars) {
+      return row.test.vars as Record<string, unknown>;
+    }
+
+    return Object.fromEntries(
+      (table?.head.vars ?? []).map((varName, idx) => [varName, row.vars[idx]]),
+    );
+  };
+
+  const runAdvancedExport = async (exportName: AdvancedExportName, action: () => Promise<void>) => {
+    if (advancedExportInProgress) {
+      return;
+    }
+
+    setAdvancedExportInProgress(exportName);
+    setAdvancedExportProgress(null);
+    detailHydrationFailuresRef.current = 0;
+    try {
+      await action();
+      const detailHydrationFailures = detailHydrationFailuresRef.current;
+      if (detailHydrationFailures > 0) {
+        showToast(
+          `Export used table data for ${detailHydrationFailures} result${
+            detailHydrationFailures === 1 ? '' : 's'
+          } because full result details could not be loaded.`,
+          'warning',
+        );
+      }
+    } catch (error) {
+      showToast(
+        `Failed to export ${exportName.replace('-', ' ')}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        'error',
+      );
+    } finally {
+      setAdvancedExportInProgress(null);
+      setAdvancedExportProgress(null);
+    }
+  };
+
+  const downloadConfig = async () => {
     if (!evalId || !config) {
       showToast('No evaluation ID or configuration available', 'error');
       return;
     }
-    const fileName = getFilename('config.yaml');
-    downloadYamlConfig(config, fileName, 'Configuration downloaded successfully');
+    setIsDownloadingConfig(true);
+    try {
+      const { config: fullConfig } = await fetchEvalConfig(evalId);
+      const fileName = getFilename('config.yaml');
+      downloadYamlConfig(fullConfig, fileName, 'Configuration downloaded successfully');
+    } catch (error) {
+      showToast(
+        `Failed to download configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsDownloadingConfig(false);
+    }
   };
 
-  const downloadFailedTestsConfig = () => {
+  const downloadFailedTestsConfig = async () => {
     if (!config || !table) {
       showToast('No configuration or results available', 'error');
       return;
@@ -176,31 +395,47 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return;
     }
 
-    // Find the failed tests
-    const failedTests = table.body
-      .filter((row) => row.outputs.some((output) => !output?.pass))
-      .map((row) => row.test);
+    await runAdvancedExport('failed-tests', async () => {
+      const failedRows = table.body.filter((row) => row.outputs.some((output) => !output?.pass));
 
-    if (failedTests.length === 0) {
-      showToast('No failed tests found', 'info');
-      return;
-    }
+      if (failedRows.length === 0) {
+        showToast('No failed tests found', 'info');
+        return;
+      }
 
-    // Create a modified copy of the config with only failed tests
-    const configCopy = { ...config, tests: failedTests };
+      setExportProgressTotal(failedRows.length);
 
-    // Create the file name
-    const fileName = getFilename('failed-tests.yaml');
+      const { config: fullConfig } = await fetchEvalConfig(evalId);
+      const failedTests = await mapWithConcurrency(
+        failedRows,
+        DETAIL_EXPORT_CONCURRENCY,
+        async (row) => {
+          try {
+            const failedOutput =
+              row.outputs.find((output): output is EvaluateTableOutput =>
+                Boolean(output && !output.pass),
+              ) ?? getFirstOutput(row);
+            const detail = await getOutputDetail(failedOutput);
+            return detail?.testCase ?? getFullConfigTest(fullConfig, row) ?? row.test;
+          } finally {
+            incrementExportProgress();
+          }
+        },
+      );
 
-    downloadYamlConfig(
-      configCopy,
-      fileName,
-      `Downloaded config with ${failedTests.length} failed tests`,
-      { skipInvalid: true },
-    );
+      const configCopy = { ...fullConfig, tests: failedTests };
+      const fileName = getFilename('failed-tests.yaml');
+
+      downloadYamlConfig(
+        configCopy,
+        fileName,
+        `Downloaded config with ${failedTests.length} failed tests`,
+        { skipInvalid: true },
+      );
+    });
   };
 
-  const downloadDpoJson = () => {
+  const downloadDpoJson = async () => {
     if (!table) {
       showToast('No table data', 'error');
       return;
@@ -209,16 +444,65 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       showToast('No evaluation ID', 'error');
       return;
     }
-    const formattedData = table.body.map((row) => ({
-      chosen: row.outputs.filter((output) => output?.pass).map((output) => output!.text),
-      rejected: row.outputs.filter((output) => output && !output.pass).map((output) => output.text),
-      vars: row.test.vars,
-      providers: table.head.prompts.map((prompt) => prompt.provider),
-      prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
-    }));
-    const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, getFilename('dpo.json'));
-    handleClose();
+
+    await runAdvancedExport('dpo', async () => {
+      setExportProgressTotal(table.body.reduce((total, row) => total + row.outputs.length, 0));
+      const { config: fullConfig } = await fetchEvalConfig(evalId);
+      const fullConfigPrompts = Array.isArray(fullConfig.prompts)
+        ? fullConfig.prompts
+        : typeof fullConfig.prompts === 'string'
+          ? [fullConfig.prompts]
+          : fullConfig.prompts
+            ? Object.values(fullConfig.prompts)
+            : [];
+      const prompts = table.head.prompts.map((prompt, idx) => {
+        const leanValue = prompt.label || prompt.display || prompt.raw;
+        return hasPlaceholder(leanValue)
+          ? (getConfigPromptDisplayValue(fullConfigPrompts[idx]) ?? leanValue)
+          : leanValue;
+      });
+
+      const formattedData = await mapWithConcurrency(
+        table.body,
+        DETAIL_EXPORT_CONCURRENCY,
+        async (row) => {
+          // Row vars in the table are display strings. Hydrate one result per
+          // row to preserve typed values, then hydrate additional cells only
+          // where their exported output text was trimmed.
+          const rowDetailIndex = row.outputs.findIndex(Boolean);
+          const details = await Promise.all(
+            row.outputs.map(async (output, idx) => {
+              try {
+                if (idx !== rowDetailIndex && !hasPlaceholder(output?.text)) {
+                  return null;
+                }
+                return await getOutputDetail(output);
+              } finally {
+                incrementExportProgress();
+              }
+            }),
+          );
+          const getOutputText = (output: EvaluateTableOutput, idx: number) =>
+            hasPlaceholder(output.text) ? (details[idx]?.text ?? output.text ?? '') : output.text;
+          const rowDetail = rowDetailIndex >= 0 ? details[rowDetailIndex] : null;
+
+          return {
+            chosen: row.outputs
+              .map((output, idx) => (output?.pass ? getOutputText(output, idx) : null))
+              .filter((text): text is string => text != null),
+            rejected: row.outputs
+              .map((output, idx) => (output && !output.pass ? getOutputText(output, idx) : null))
+              .filter((text): text is string => text != null),
+            vars: getRowVars(row, rowDetail, fullConfig),
+            providers: table.head.prompts.map((prompt) => prompt.provider),
+            prompts,
+          };
+        },
+      );
+      const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
+      openDownloadDialog(blob, getFilename('dpo.json'));
+      handleClose();
+    });
   };
 
   const downloadTable = async () => {
@@ -245,7 +529,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     }
   };
 
-  const downloadHumanEvalTestCases = () => {
+  const downloadHumanEvalTestCases = async () => {
     if (!table) {
       showToast('No table data', 'error');
       return;
@@ -255,35 +539,52 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return;
     }
 
-    const humanEvalCases = table.body
-      .filter((row) => row.outputs.some((output) => output != null))
-      .map((row) => ({
-        vars: {
-          ...row.test.vars,
-          output: row.outputs[0]?.text.includes('---')
-            ? row.outputs[0]!.text.split('---\n')[1]
-            : (row.outputs[0]?.text ?? ''),
-          redteamFinalPrompt: row.outputs[0]?.metadata?.redteamFinalPrompt,
-          ...(row.outputs[0]?.gradingResult?.comment
-            ? { comment: row.outputs[0]!.gradingResult!.comment }
-            : {}),
-        },
-        assert: [
-          {
-            type: 'javascript',
-            value: `${row.outputs[0]?.pass ? '' : '!'}JSON.parse(output).pass`,
-          },
-        ],
-        metadata: row.test.metadata,
-      }));
+    await runAdvancedExport('human-eval', async () => {
+      const rowsWithOutputs = table.body.filter((row) =>
+        row.outputs.some((output) => output != null),
+      );
+      setExportProgressTotal(rowsWithOutputs.length);
+      const humanEvalCases = await mapWithConcurrency(
+        rowsWithOutputs,
+        DETAIL_EXPORT_CONCURRENCY,
+        async (row) => {
+          const output = getFirstOutput(row);
+          try {
+            const detail = await getOutputDetail(output);
+            const outputText = detail?.text ?? output?.text ?? '';
+            const metadata = detail?.metadata ?? output?.metadata;
 
-    const yamlContent = yaml.dump(humanEvalCases);
-    const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
-    openDownloadDialog(blob, getFilename('human-eval-cases.yaml'));
-    handleClose();
+            return {
+              vars: {
+                ...getRowVars(row, detail),
+                output: outputText.includes('---') ? outputText.split('---\n')[1] : outputText,
+                redteamFinalPrompt: metadata?.redteamFinalPrompt,
+                ...(output?.gradingResult?.comment
+                  ? { comment: output.gradingResult.comment }
+                  : {}),
+              },
+              assert: [
+                {
+                  type: 'javascript',
+                  value: `${output?.pass ? '' : '!'}JSON.parse(output).pass`,
+                },
+              ],
+              metadata: detail?.testCase?.metadata ?? row.test.metadata,
+            };
+          } finally {
+            incrementExportProgress();
+          }
+        },
+      );
+
+      const yamlContent = yaml.dump(humanEvalCases);
+      const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
+      openDownloadDialog(blob, getFilename('human-eval-cases.yaml'));
+      handleClose();
+    });
   };
 
-  const downloadBurpPayloads = () => {
+  const downloadBurpPayloads = async () => {
     if (!table) {
       showToast('No table data', 'error');
       return;
@@ -300,23 +601,37 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     }
 
     const varName = config.redteam.injectVar || 'prompt';
-    const payloads = table.body
-      .map((row) => {
-        const vars = row.test.vars as Record<string, unknown>;
-        return String(vars?.[varName] || '');
-      })
-      .filter(Boolean)
-      .map((input) => {
+    await runAdvancedExport('burp', async () => {
+      setExportProgressTotal(table.body.length);
+      const payloads = await mapWithConcurrency(
+        table.body,
+        DETAIL_EXPORT_CONCURRENCY,
+        async (row) => {
+          try {
+            // Burp only needs the injectVar value; fetch detail only when the
+            // lean row value is a placeholder (trimmed by the server).
+            const detail = hasPlaceholder(row.vars)
+              ? await getOutputDetail(getFirstOutput(row))
+              : null;
+            const vars = getRowVars(row, detail);
+            return String(vars?.[varName] || '');
+          } finally {
+            incrementExportProgress();
+          }
+        },
+      );
+      const encodedPayloads = payloads.filter(Boolean).map((input) => {
         const jsonEscaped = JSON.stringify(input).slice(1, -1); // Remove surrounding quotes
         return encodeURIComponent(jsonEscaped);
       });
 
-    const uniquePayloads = [...new Set(payloads)];
+      const uniquePayloads = [...new Set(encodedPayloads)];
 
-    const content = uniquePayloads.join('\n');
-    const blob = new Blob([content], { type: 'text/plain' });
-    openDownloadDialog(blob, getFilename('burp-payloads.burp'));
-    handleClose();
+      const content = uniquePayloads.join('\n');
+      const blob = new Blob([content], { type: 'text/plain' });
+      openDownloadDialog(blob, getFilename('burp-payloads.burp'));
+      handleClose();
+    });
   };
 
   return (
@@ -336,9 +651,15 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                   <p className="text-sm text-muted-foreground mb-4">
                     Complete configuration file for this evaluation
                   </p>
-                  <Button onClick={downloadConfig} className="w-full mb-2">
-                    <Download className="size-4 mr-2" />
-                    Download YAML Config
+                  <Button
+                    onClick={downloadConfig}
+                    className="w-full mb-2"
+                    onFocus={prefetchFullConfig}
+                    onMouseEnter={prefetchFullConfig}
+                    disabled={isDownloadingConfig}
+                  >
+                    {getDownloadIcon(isDownloadingConfig)}
+                    {isDownloadingConfig ? 'Downloading...' : 'Download YAML Config'}
                   </Button>
                   {evalId && (
                     <CommandBlock
@@ -358,14 +679,17 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     onClick={downloadFailedTestsConfig}
                     variant="outline"
                     className="w-full mb-2"
+                    onFocus={prefetchFullConfig}
+                    onMouseEnter={prefetchFullConfig}
                     disabled={
                       !table ||
                       !table.body ||
-                      table.body.every((row) => row.outputs.every((output) => output?.pass))
+                      table.body.every((row) => row.outputs.every((output) => output?.pass)) ||
+                      advancedExportInProgress !== null
                     }
                   >
-                    <Download className="size-4 mr-2" />
-                    Download Failed Tests
+                    {getDownloadIcon(advancedExportInProgress === 'failed-tests')}
+                    {getAdvancedExportLabel('failed-tests', 'Download Failed Tests', 'Downloading')}
                   </Button>
                   {evalId && (
                     <CommandBlock
@@ -395,7 +719,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                   className="h-12"
                   disabled={isLoadingCsv}
                 >
-                  <Download className="size-4 mr-2" />
+                  {getDownloadIcon(isLoadingCsv)}
                   {isLoadingCsv ? 'Downloading...' : 'Download Results CSV'}
                 </Button>
 
@@ -405,7 +729,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                   className="h-12"
                   disabled={isLoadingJson}
                 >
-                  <Download className="size-4 mr-2" />
+                  {getDownloadIcon(isLoadingJson)}
                   {isLoadingJson ? 'Downloading...' : 'Download Results JSON'}
                 </Button>
               </div>
@@ -422,19 +746,34 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Button onClick={downloadBurpPayloads} variant="outline" className="h-12">
-                  <Download className="size-4 mr-2" />
-                  Burp Payloads
+                <Button
+                  onClick={downloadBurpPayloads}
+                  variant="outline"
+                  className="h-12"
+                  disabled={advancedExportInProgress !== null}
+                >
+                  {getDownloadIcon(advancedExportInProgress === 'burp')}
+                  {getAdvancedExportLabel('burp', 'Burp Payloads', 'Exporting')}
                 </Button>
 
-                <Button onClick={downloadDpoJson} variant="outline" className="h-12">
-                  <Download className="size-4 mr-2" />
-                  DPO JSON
+                <Button
+                  onClick={downloadDpoJson}
+                  variant="outline"
+                  className="h-12"
+                  disabled={advancedExportInProgress !== null}
+                >
+                  {getDownloadIcon(advancedExportInProgress === 'dpo')}
+                  {getAdvancedExportLabel('dpo', 'DPO JSON', 'Exporting')}
                 </Button>
 
-                <Button onClick={downloadHumanEvalTestCases} variant="outline" className="h-12">
-                  <Download className="size-4 mr-2" />
-                  Human Eval YAML
+                <Button
+                  onClick={downloadHumanEvalTestCases}
+                  variant="outline"
+                  className="h-12"
+                  disabled={advancedExportInProgress !== null}
+                >
+                  {getDownloadIcon(advancedExportInProgress === 'human-eval')}
+                  {getAdvancedExportLabel('human-eval', 'Human Eval YAML', 'Exporting')}
                 </Button>
               </div>
             </CardContent>

@@ -182,13 +182,42 @@ export async function readResult(
   }
 }
 
+export type UpdateResultOptions = {
+  /** Replace the stored config entirely. */
+  config?: Partial<UnifiedConfig>;
+  /** Shallow-merge over the current config. Applied after `config`. */
+  configPatch?: Partial<UnifiedConfig>;
+  /** Replace the stored table. */
+  table?: EvaluateTable;
+};
+
+function isUpdateResultOptions(
+  value: UpdateResultOptions | Partial<UnifiedConfig>,
+): value is UpdateResultOptions {
+  return 'config' in value || 'configPatch' in value || 'table' in value;
+}
+
+export function updateResult(id: string, options?: UpdateResultOptions): Promise<void>;
+export function updateResult(
+  id: string,
+  config?: Partial<UnifiedConfig>,
+  table?: EvaluateTable,
+): Promise<void>;
 export async function updateResult(
   id: string,
-  newConfig?: Partial<UnifiedConfig>,
-  newTable?: EvaluateTable,
+  optionsOrConfig?: UpdateResultOptions | Partial<UnifiedConfig>,
+  legacyTable?: EvaluateTable,
 ): Promise<void> {
+  const options: UpdateResultOptions =
+    legacyTable === undefined
+      ? optionsOrConfig === undefined
+        ? {}
+        : isUpdateResultOptions(optionsOrConfig)
+          ? optionsOrConfig
+          : { config: optionsOrConfig }
+      : { config: optionsOrConfig as Partial<UnifiedConfig> | undefined, table: legacyTable };
+  const { config, configPatch, table } = options;
   try {
-    // Fetch the existing eval data from the database
     const existingEval = await Eval.findById(id);
 
     if (!existingEval) {
@@ -196,11 +225,17 @@ export async function updateResult(
       return;
     }
 
-    if (newConfig) {
-      existingEval.config = restoreAzureBlobSasTokens(newConfig, existingEval.config);
+    if (config) {
+      existingEval.config = restoreAzureBlobSasTokens(config, existingEval.config);
     }
-    if (newTable) {
-      existingEval.setTable(newTable);
+    if (configPatch) {
+      existingEval.config = {
+        ...existingEval.config,
+        ...configPatch,
+      };
+    }
+    if (table) {
+      existingEval.setTable(table);
     }
 
     await existingEval.save();
