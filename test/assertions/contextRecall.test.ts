@@ -16,7 +16,7 @@ describe('handleContextRecall', () => {
     vi.clearAllMocks();
   });
 
-  it('should pass when context recall is above threshold', async () => {
+  it('should project grader vars without dropping the resolved context', async () => {
     const mockResult = {
       pass: true,
       score: 0.9,
@@ -37,15 +37,33 @@ describe('handleContextRecall', () => {
     const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
-      assertion: { type: 'context-recall', threshold: 0.8 },
+      assertion: { type: 'context-recall', threshold: 0.8, graderVars: ['audience'] },
       renderedValue: 'Expected fact',
       prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
+      test: {
+        vars: {
+          context: 'test context',
+          audience: 'enterprise',
+          expected_fix_patch: '<large patch>',
+        },
+        options: {},
+      },
       baseType: 'context-recall',
       assertionValueContext: {
         prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
+        vars: {
+          context: 'test context',
+          audience: 'enterprise',
+          expected_fix_patch: '<large patch>',
+        },
+        test: {
+          vars: {
+            context: 'test context',
+            audience: 'enterprise',
+            expected_fix_patch: '<large patch>',
+          },
+          options: {},
+        },
         logProbs: undefined,
         provider: mockProvider,
         providerResponse: undefined,
@@ -77,7 +95,7 @@ describe('handleContextRecall', () => {
       'Expected fact',
       0.8,
       {},
-      { context: 'test context' },
+      { audience: 'enterprise' },
       undefined,
     );
   });

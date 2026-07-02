@@ -1,6 +1,7 @@
 import { matchesContextFaithfulness } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -49,7 +50,7 @@ export async function handleContextFaithfulness({
       context,
       assertion.threshold ?? 0,
       test.options,
-      test.vars,
+      getGraderVars(assertion, test.vars),
       providerCallContext,
     )),
     metadata: {

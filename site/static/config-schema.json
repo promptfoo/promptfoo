@@ -1061,6 +1061,12 @@
         },
         "provider": {},
         "rubricPrompt": {},
+        "graderVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "metric": {
           "type": "string"
         },

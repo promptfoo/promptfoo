@@ -74,6 +74,73 @@ describe('handleLlmRubric', () => {
     );
   });
 
+  it('should preserve all test vars when graderVars is omitted', async () => {
+    const vars = {
+      question: 'How should this bug be fixed?',
+      expected_fix_patch: 'large patch contents',
+    };
+    const params: AssertionParams = {
+      ...defaultParams,
+      renderedValue: 'Grade the proposed fix',
+      test: { vars },
+    };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+
+    await handleLlmRubric(params);
+
+    expect(mockMatchesLlmRubric.mock.calls[0]?.[3]).toEqual(vars);
+  });
+
+  it('should pass no test vars when graderVars is empty', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'llm-rubric',
+        value: 'Grade the proposed fix',
+        graderVars: [],
+      },
+      renderedValue: 'Grade the proposed fix',
+      test: {
+        vars: {
+          question: 'How should this bug be fixed?',
+          expected_fix_patch: 'large patch contents',
+        },
+      },
+    };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+
+    await handleLlmRubric(params);
+
+    expect(mockMatchesLlmRubric.mock.calls[0]?.[3]).toEqual({});
+  });
+
+  it('should pass only allowlisted test vars to the grader', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'llm-rubric',
+        value: 'Grade the proposed fix',
+        graderVars: ['question', 'referenceAnswer', 'missingVar'],
+      },
+      renderedValue: 'Grade the proposed fix',
+      test: {
+        vars: {
+          question: 'How should this bug be fixed?',
+          referenceAnswer: 'Reject unsafe paths',
+          expected_fix_patch: 'large patch contents',
+        },
+      },
+    };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+
+    await handleLlmRubric(params);
+
+    expect(mockMatchesLlmRubric.mock.calls[0]?.[3]).toEqual({
+      question: 'How should this bug be fixed?',
+      referenceAnswer: 'Reject unsafe paths',
+    });
+  });
+
   it('should handle object rendered value', async () => {
     const params = {
       ...defaultParams,
