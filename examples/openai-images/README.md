@@ -126,7 +126,18 @@ Promptfoo's `openai:image` provider currently supports text-to-image generation.
 
 **Note:** Prices shown are 1024x1024 output image estimates and do not include input text tokens. For GPT Image 2 `auto` quality or custom sizes, promptfoo preserves OpenAI usage metadata and leaves `cost` unset instead of guessing.
 
+## LLM-as-a-Judge Evaluation
+
+Use `promptfooconfig.judge.yaml` to grade generated images with a vision-capable model:
+
+```bash
+PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml
+```
+
+This config uses `llm-rubric` with GPT-5.4 mini as a grader to evaluate whether generated images match the prompt. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
+
 ## Documentation
 
+- [Image Evaluation Guide](https://promptfoo.dev/docs/guides/image-evaluation)
 - [OpenAI Image Generation API Documentation](https://developers.openai.com/api/docs/guides/image-generation)
 - [promptfoo OpenAI Provider Documentation](https://promptfoo.dev/docs/providers/openai)

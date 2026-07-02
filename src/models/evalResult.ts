@@ -701,6 +701,8 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
+      // This bulk writer is used by imports. Preserve archival inline response payloads
+      // rather than normalizing their provider JSON during ingestion.
       const processedResponse = isBlobStorageEnabled()
         ? await extractAndStoreBinaryData(result.response, {
             evalId,

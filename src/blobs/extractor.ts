@@ -382,6 +382,169 @@ async function externalizeMetadataAudio(
 }
 
 /**
+ * Detect image MIME type from the first bytes of base64-encoded data.
+ * Falls back to image/png if unrecognized.
+ * @internal Exported for testing
+ */
+export function detectImageMimeType(b64: string): string {
+  // The longest signature below needs 12 decoded bytes.
+  const buffer = Buffer.from(b64.trim().slice(0, 16), 'base64');
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (
+    buffer.length >= 6 &&
+    ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))
+  ) {
+    return 'image/gif';
+  }
+  return 'image/png';
+}
+
+type ImageOutputItem = { type: 'b64'; value: string } | { type: 'url'; value: string };
+
+function extractImageOutputItems(data: Array<Record<string, unknown>>): ImageOutputItem[] | null {
+  const items: ImageOutputItem[] = [];
+
+  for (const item of data) {
+    if (typeof item?.b64_json === 'string') {
+      items.push({ type: 'b64', value: item.b64_json });
+      continue;
+    }
+    if (typeof item?.url === 'string') {
+      items.push({ type: 'url', value: item.url });
+      continue;
+    }
+    return null;
+  }
+
+  return items.some((item) => item.type === 'b64') ? items : null;
+}
+
+function setOutputFromUris(next: ProviderResponse, uris: string[]): void {
+  next.output = uris.length === 1 ? uris[0] : JSON.stringify(uris);
+}
+
+async function handleB64JsonOutput(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  storeOnce: StoreOnce,
+  context: BlobContext | undefined,
+): Promise<boolean> {
+  try {
+    const parsed = JSON.parse(response.output as string) as {
+      data?: Array<Record<string, unknown>>;
+    };
+    if (!Array.isArray(parsed.data)) {
+      return false;
+    }
+
+    const imageItems = extractImageOutputItems(parsed.data);
+    if (!imageItems) {
+      return false;
+    }
+
+    if (!isBlobStorageEnabled()) {
+      const inlineUris = imageItems.map((item) =>
+        item.type === 'b64'
+          ? `data:${detectImageMimeType(item.value)};base64,${item.value}`
+          : item.value,
+      );
+      setOutputFromUris(next, inlineUris);
+      logger.debug('[BlobExtractor] Converted b64_json to inline data URI', {
+        ...context,
+        count: inlineUris.length,
+      });
+      return true;
+    }
+
+    const base64Items = imageItems.filter(
+      (item): item is Extract<ImageOutputItem, { type: 'b64' }> => item.type === 'b64',
+    );
+    if (
+      base64Items.some((item) => {
+        const parsedImage = parseBinary(item.value, detectImageMimeType(item.value));
+        return !parsedImage || !shouldExternalize(parsedImage.buffer);
+      })
+    ) {
+      logger.debug(
+        '[BlobExtractor] Preserving b64_json output because not all images are storable',
+        {
+          ...context,
+          totalCount: imageItems.length,
+        },
+      );
+      return false;
+    }
+
+    const outputUris: string[] = [];
+    for (const item of imageItems) {
+      if (item.type === 'url') {
+        outputUris.push(item.value);
+        continue;
+      }
+      const stored = await storeOnce(
+        item.value,
+        detectImageMimeType(item.value),
+        'response.output.data[].b64_json',
+        'image',
+      );
+      if (!stored) {
+        logger.debug('[BlobExtractor] Preserving b64_json output after blob storage failure', {
+          ...context,
+          totalCount: imageItems.length,
+        });
+        return false;
+      }
+      outputUris.push(stored.uri);
+      logger.debug('[BlobExtractor] Stored image blob from b64_json', {
+        ...context,
+        hash: stored.hash,
+      });
+    }
+    setOutputFromUris(next, outputUris);
+    next.metadata = {
+      ...(response.metadata || {}),
+      blobUris: outputUris.filter((uri) => uri.startsWith(BLOB_SCHEME)),
+      originalFormat: response.format,
+    };
+    return true;
+  } catch (err) {
+    logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
+      error: err instanceof Error ? err.message : String(err),
+      location: 'response.output',
+    });
+  }
+  return false;
+}
+
+function hasB64JsonOutput(
+  response: ProviderResponse,
+): response is ProviderResponse & { output: string } {
+  return (
+    typeof response.output === 'string' &&
+    response.output.trim().startsWith('{') &&
+    ((response.isBase64 && response.format === 'json') ||
+      response.output.includes('"b64_json"') ||
+      response.output.includes('b64_json'))
+  );
+}
+
+/**
  * Best-effort extraction of binary data from provider responses.
  * Currently focuses on audio.data fields and data URL outputs.
  */
@@ -509,59 +672,10 @@ export async function extractAndStoreBinaryData(
 
   // OpenAI (and similar) image responses often arrive as JSON strings with b64_json fields.
   // Try to parse and externalize b64_json when it looks like an image payload.
-  if (
-    typeof response.output === 'string' &&
-    response.output.trim().startsWith('{') &&
-    ((response.isBase64 && response.format === 'json') ||
-      response.output.includes('"b64_json"') ||
-      response.output.includes('b64_json'))
-  ) {
-    try {
-      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
-      if (Array.isArray(parsed.data)) {
-        let jsonMutated = false;
-        const storedUris: string[] = [];
-        for (const item of parsed.data) {
-          if (item?.b64_json && typeof item.b64_json === 'string') {
-            const stored = await storeOnce(
-              item.b64_json,
-              'image/png',
-              'response.output.data[].b64_json',
-              'image',
-            );
-            if (stored) {
-              item.b64_json = stored.uri;
-              storedUris.push(stored.uri);
-              jsonMutated = true;
-              mutated = true;
-              logger.debug('[BlobExtractor] Stored image blob from b64_json', {
-                ...context,
-                hash: stored.hash,
-              });
-            }
-          }
-        }
-        if (jsonMutated) {
-          // Prefer a simple blob ref output so graders/UI don't have to parse JSON
-          if (storedUris.length === 1) {
-            next.output = storedUris[0];
-          } else if (storedUris.length > 1) {
-            next.output = JSON.stringify(storedUris);
-          } else {
-            next.output = JSON.stringify(parsed);
-          }
-          next.metadata = {
-            ...(response.metadata || {}),
-            blobUris: storedUris,
-            originalFormat: response.format,
-          };
-        }
-      }
-    } catch (err) {
-      logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
-        error: err instanceof Error ? err.message : String(err),
-        location: 'response.output',
-      });
+  if (hasB64JsonOutput(response)) {
+    const b64Result = await handleB64JsonOutput(response, next, storeOnce, context);
+    if (b64Result) {
+      mutated = true;
     }
   }
 
