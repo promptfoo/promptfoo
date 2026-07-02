@@ -163,8 +163,8 @@ export function isCodexSandboxError(error: unknown): boolean {
     getErrorKind(nestedError ?? errorRecord, errorInfo) ?? getErrorKind(errorRecord, errorInfo);
   const rawCode = errorRecord.code ?? nestedError?.code;
   const code = typeof rawCode === 'string' ? rawCode : undefined;
-  const normalizedKind = kind?.replaceAll('_', '').replaceAll('-', '').toLowerCase();
-  const normalizedCode = code?.replaceAll('_', '').replaceAll('-', '').toLowerCase();
+  const normalizedKind = kind?.replace(/[_-]/g, '').toLowerCase();
+  const normalizedCode = code?.replace(/[_-]/g, '').toLowerCase();
   return normalizedKind === 'sandboxerror' || normalizedCode === 'sandboxerror';
 }
 
