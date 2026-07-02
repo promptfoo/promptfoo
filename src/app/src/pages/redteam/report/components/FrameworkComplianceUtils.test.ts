@@ -62,6 +62,31 @@ describe('expandPluginCollections', () => {
     expect(result).toEqual(new Set(['harmful']));
   });
 
+  it('should keep one key per logical harmful plugin when short and prefixed aliases coexist', () => {
+    const categoryStats: CategoryStats = {
+      'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+      'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
+      'promptfoo:redteam:harmful:self-harm': { pass: 3, total: 5, failCount: 2 },
+    };
+
+    const result = expandPluginCollections(['harmful'], categoryStats);
+
+    // Exact short key wins over its prefixed alias; plugins present only in
+    // prefixed form keep that form.
+    expect(result).toEqual(new Set(['harmful:hate', 'promptfoo:redteam:harmful:self-harm']));
+  });
+
+  it('should prefer the short harmful key regardless of categoryStats iteration order', () => {
+    const categoryStats: CategoryStats = {
+      'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
+      'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+    };
+
+    const result = expandPluginCollections(['harmful'], categoryStats);
+
+    expect(result).toEqual(new Set(['harmful:hate']));
+  });
+
   it('should match a mapped short plugin ID to its fully qualified categoryStats key', () => {
     const categoryStats: CategoryStats = {
       'promptfoo:redteam:intent': { pass: 1, total: 1, failCount: 0 },

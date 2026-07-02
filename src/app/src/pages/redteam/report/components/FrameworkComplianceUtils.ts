@@ -42,13 +42,22 @@ export const expandPluginCollections = (
   const expandedPlugins = new Set<string>();
   plugins.forEach((plugin) => {
     if (plugin === 'harmful') {
-      // Add all harmful:* plugins that have stats
-      Object.keys(categoryStats)
-        .filter((key) => {
-          const frameworkPluginId = getFrameworkPluginId(key);
-          return frameworkPluginId === 'harmful' || frameworkPluginId.startsWith('harmful:');
-        })
-        .forEach((key) => expandedPlugins.add(key));
+      // Add all harmful:* plugins that have stats, keeping one stat key per logical
+      // plugin: prefer the exact short key over its prefixed alias, mirroring the
+      // ordinary-plugin branch below. Without this, a report containing both
+      // 'harmful:hate' and 'promptfoo:redteam:harmful:hate' would render, count, and
+      // export the same plugin twice.
+      const keyByFrameworkPluginId = new Map<string, string>();
+      Object.keys(categoryStats).forEach((key) => {
+        const frameworkPluginId = getFrameworkPluginId(key);
+        if (frameworkPluginId !== 'harmful' && !frameworkPluginId.startsWith('harmful:')) {
+          return;
+        }
+        if (!keyByFrameworkPluginId.has(frameworkPluginId) || key === frameworkPluginId) {
+          keyByFrameworkPluginId.set(frameworkPluginId, key);
+        }
+      });
+      keyByFrameworkPluginId.forEach((key) => expandedPlugins.add(key));
     } else {
       const categoryStatsKey = categoryStats[plugin]
         ? plugin

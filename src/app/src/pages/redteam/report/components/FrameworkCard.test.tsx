@@ -140,6 +140,26 @@ describe('FrameworkCard', () => {
     expect(screen.queryByText('coding-agent:network-egress-bypass')).not.toBeInTheDocument();
   });
 
+  it('should render a harmful plugin once per category when short and prefixed aliases coexist in categoryStats', () => {
+    renderFrameworkCard({
+      framework: 'owasp:llm',
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      categoryStats: {
+        'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+        'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
+      },
+      pluginCategories: categories(['harmful:hate']),
+    });
+
+    // Both alias forms describe the same logical plugin, so each category listing it
+    // must render one row, not one per alias: owasp:llm:01 via the 'harmful'
+    // collection and owasp:llm:04 via an explicit 'harmful:hate' entry. The exact
+    // short key wins; the prefixed alias must not appear as a separate row.
+    expect(screen.getAllByText('harmful:hate')).toHaveLength(2);
+    expect(screen.queryByText('promptfoo:redteam:harmful:hate')).not.toBeInTheDocument();
+  });
+
   it('should render categorized plugin lists with correct category names, chips, and plugin status for an OWASP framework with plugins in multiple categories', () => {
     // Using real OWASP API framework with plugins that are actually in it
     // owasp:api:01 has: ['bola', 'rbac']
