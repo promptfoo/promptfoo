@@ -57,11 +57,14 @@ describe('CloudConfig', () => {
       expect(cloudConfigInstance.getApiKey()).toBe('test-key');
     });
 
-    it('should ignore the legacy API_HOST environment variable and warn once', () => {
+    it('should ignore the legacy API_HOST environment variable and warn once when cloud is enabled', () => {
       // Env files routinely define API_HOST for the app under test; the cloud
       // origin decides where monkeyPatchFetch sends the saved bearer token, so
       // a generic variable must never redirect it.
-      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'saved-key' },
+      });
       const restoreEnv = mockProcessEnv({
         API_HOST: 'https://env-file.example.com',
         PROMPTFOO_CLOUD_API_URL: undefined,
@@ -76,6 +79,27 @@ describe('CloudConfig', () => {
         expect(logger.warn).toHaveBeenCalledWith(
           expect.stringContaining('Ignoring the API_HOST environment variable'),
         );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should not warn about API_HOST when no cloud credential is configured', () => {
+      // monkeyPatchFetch resolves the host on every request; evals that never
+      // touch Cloud must not see a Cloud warning just because their env file
+      // configures API_HOST for the app under test.
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      const restoreEnv = mockProcessEnv({
+        API_HOST: 'https://env-file.example.com',
+        PROMPTFOO_CLOUD_API_URL: undefined,
+        PROMPTFOO_API_KEY: undefined,
+      });
+
+      try {
+        const config = new CloudConfig(false);
+
+        expect(config.getApiHost()).toBe(CLOUD_API_HOST);
+        expect(logger.warn).not.toHaveBeenCalled();
       } finally {
         restoreEnv();
       }
