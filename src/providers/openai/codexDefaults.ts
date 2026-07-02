@@ -44,6 +44,8 @@ type CodexDefaultProviders = Pick<
   | 'gradingJsonProvider'
   | 'gradingProvider'
   | 'llmRubricProvider'
+  | 'redteamProvider'
+  | 'redteamJsonProvider'
   | 'suggestionsProvider'
   | 'synthesizeProvider'
   | 'webSearchProvider'
@@ -53,6 +55,8 @@ type CodexDefaultProviderBundle = {
   gradingJsonProvider: OpenAICodexSDKProvider;
   gradingProvider: OpenAICodexSDKProvider;
   llmRubricProvider: OpenAICodexSDKProvider;
+  redteamProvider: OpenAICodexSDKProvider;
+  redteamJsonProvider: OpenAICodexSDKProvider;
   suggestionsProvider: OpenAICodexSDKProvider;
   synthesizeProvider: OpenAICodexSDKProvider;
   webSearchProvider: OpenAICodexSDKProvider;
@@ -210,6 +214,8 @@ function getUniqueCodexDefaultProviders(
       providers.gradingJsonProvider,
       providers.gradingProvider,
       providers.llmRubricProvider,
+      providers.redteamProvider,
+      providers.redteamJsonProvider,
       providers.suggestionsProvider,
       providers.synthesizeProvider,
       providers.webSearchProvider,
@@ -397,6 +403,9 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
     gradingJsonProvider,
     gradingProvider,
     llmRubricProvider: gradingJsonProvider,
+    redteamProvider: gradingProvider,
+    // Strategy JSON shapes differ from the fixed grading output schema.
+    redteamJsonProvider: gradingProvider,
     shutdownRequested: false,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,

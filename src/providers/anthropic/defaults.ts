@@ -1,3 +1,4 @@
+import { getDefaultRedteamTemperature } from '../redteamDefaults';
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
@@ -125,6 +126,14 @@ const webSearchProviderFactory = createLazyProvider(
     }),
 );
 
+const redteamProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) =>
+    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+      env,
+      config: { temperature: getDefaultRedteamTemperature(env) },
+    }),
+);
+
 /**
  * Gets all default Anthropic providers with the given environment overrides
  * @param env - Optional environment overrides
@@ -140,11 +149,14 @@ export function getAnthropicProviders(
   | 'suggestionsProvider'
   | 'synthesizeProvider'
   | 'webSearchProvider'
+  | 'redteamProvider'
+  | 'redteamJsonProvider'
 > {
   // Get providers with the provided environment variables
   const gradingProvider = gradingProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
   const webSearchProvider = webSearchProviderFactory.getInstance(env);
+  const redteamProvider = redteamProviderFactory.getInstance(env);
 
   return {
     gradingJsonProvider: gradingProvider,
@@ -153,5 +165,9 @@ export function getAnthropicProviders(
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
     webSearchProvider,
+    redteamProvider,
+    // Anthropic JSON generation is prompted rather than schema-constrained here;
+    // strategy output shapes differ and no common schema applies.
+    redteamJsonProvider: redteamProvider,
   };
 }

@@ -1,7 +1,8 @@
 ---
+title: Red Team Getting Started
 sidebar_position: 2
 sidebar_label: Getting started
-description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
+description: 'Start red teaming LLMs in minutes with Promptfoo: scan 50+ vulnerability types including jailbreaks, prompt injection, data exfiltration, and compliance risks'
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -29,7 +30,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 ## Prerequisites
 
 - Install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`
-- Optional: Set your `OPENAI_API_KEY` environment variable
+- Optional but recommended: Configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Local attack generation will select a strong model from that provider automatically.
 
 ## Initialize the project
 
@@ -86,7 +87,7 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 Next, configure Promptfoo to communicate with your target application or model.
 
 :::note
-The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
+The target defines the model being tested. Attack generation uses a separate provider; if `redteam.provider` is not set, local generation selects from supported credentials. See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
 :::
 
 Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
@@ -249,7 +250,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
-- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
+- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [Ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
 ## Continuous improvement
 
