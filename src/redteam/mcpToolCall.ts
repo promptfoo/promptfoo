@@ -1,7 +1,10 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 
-import type { MCPTool } from '../providers/mcp/types';
+export type McpToolDefinition = {
+  name: string;
+  inputSchema?: Record<string, unknown>;
+};
 
 export type McpToolCall = {
   tool: string;
@@ -56,7 +59,7 @@ export function parseMcpToolCall(
 
 export function validateMcpToolCall(
   toolCall: McpToolCall | undefined,
-  toolByName: Map<string, MCPTool>,
+  toolByName: Map<string, McpToolDefinition>,
 ): boolean {
   if (!toolCall) {
     return false;
@@ -74,7 +77,10 @@ export function validateMcpToolCall(
   }
 }
 
-export function normalizeMcpToolCall(value: unknown, tools: MCPTool[]): McpToolCall | undefined {
+export function normalizeMcpToolCall(
+  value: unknown,
+  tools: McpToolDefinition[],
+): McpToolCall | undefined {
   const allowedToolNames = new Set(tools.map((tool) => tool.name));
   const toolByName = new Map(tools.map((tool) => [tool.name, tool]));
   const toolCall = parseMcpToolCall(value, allowedToolNames);

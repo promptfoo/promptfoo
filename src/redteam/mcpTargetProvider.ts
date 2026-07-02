@@ -1,8 +1,9 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
-import { materializeMcpToolCallRemote } from '../providers/promptfoo';
+import { materializeMcpToolCallRemote } from './extraction/util';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
+import { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
 
 import type { MCPTool } from '../providers/mcp/types';
 import type {
@@ -37,6 +38,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
   inputs?: ApiProvider['inputs'];
 
   private toolsPromise?: Promise<MCPTool[]>;
+  private readonly cloudTargetId?: string;
 
   constructor(private readonly target: McpProviderWithTools) {
     this.label = target.label;
@@ -44,6 +46,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
     this.delay = target.delay;
     this.transform = target.transform;
     this.inputs = target.inputs;
+    this.cloudTargetId = getCloudTargetIdFromProviders({
+      id: target.id(),
+      config: target.config,
+    });
   }
 
   id(): string {
@@ -89,6 +95,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           {
             intentValue,
             purpose,
+            ...(this.cloudTargetId ? { targetId: this.cloudTargetId } : {}),
             tools,
             value: prompt,
           },

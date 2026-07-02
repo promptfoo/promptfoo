@@ -17,7 +17,7 @@ vi.mock('../../src/redteam/providers/shared', () => ({
     getProvider: providerManagerMocks.getProvider,
   },
 }));
-vi.mock('../../src/providers/promptfoo', () => ({
+vi.mock('../../src/redteam/extraction/util', () => ({
   materializeMcpToolCallRemote: promptfooProviderMocks.materializeMcpToolCallRemote,
 }));
 
@@ -25,8 +25,11 @@ class FakeMcpProvider extends MCPProvider {
   calls: { context?: CallApiContextParams; options?: CallApiOptionsParams; prompt: string }[] = [];
   cleanupCalls = 0;
 
-  constructor(private readonly tools: MCPTool[]) {
-    super({ config: { enabled: false }, id: 'mcp' });
+  constructor(
+    private readonly tools: MCPTool[],
+    id = 'mcp',
+  ) {
+    super({ config: { enabled: false }, id });
   }
 
   async getAvailableTools(): Promise<MCPTool[]> {
@@ -120,6 +123,27 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.calls).toHaveLength(1);
     expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
     expect(parseToolCall(target.calls[0].context?.vars.prompt)).toEqual(searchCompaniesCall);
+  });
+
+  it('passes linked cloud target context to remote materialization', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
+      JSON.stringify(searchCompaniesCall),
+    );
+
+    const target = new FakeMcpProvider(
+      [searchCompaniesTool],
+      'promptfoo://provider/cloud-target-123',
+    );
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(promptfooProviderMocks.materializeMcpToolCallRemote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetId: 'cloud-target-123',
+      }),
+      undefined,
+    );
   });
 
   it('does not request inference when the prompt is already valid MCP JSON', async () => {

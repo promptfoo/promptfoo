@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
-import { normalizeMcpToolCall, stringifyMcpToolCall } from '../redteam/mcpToolCall';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -26,7 +25,6 @@ import type {
   RemoteGenerationContext,
   TokenUsage,
 } from '../types/index';
-import type { MCPTool } from './mcp/types';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -35,15 +33,6 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
   targetId?: string;
   redteamGenerationContext?: RemoteGenerationContext;
-}
-
-interface PromptfooMcpMaterializationOptions {
-  intentValue?: unknown;
-  purpose?: string;
-  targetId?: string;
-  redteamGenerationContext?: RemoteGenerationContext;
-  tools: MCPTool[];
-  value: unknown;
 }
 
 /**
@@ -273,61 +262,6 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-  }
-}
-
-export async function materializeMcpToolCallRemote(
-  options: PromptfooMcpMaterializationOptions,
-  callApiOptions?: CallApiOptionsParams,
-): Promise<string | undefined> {
-  if (neverGenerateRemote()) {
-    return undefined;
-  }
-
-  const body = {
-    email: getUserEmail(),
-    jsonOnly: true,
-    mcpMaterializationContext: {
-      intentValue: options.intentValue,
-      purpose: options.purpose,
-      tools: options.tools,
-    },
-    preferSmallModel: false,
-    prompt: typeof options.value === 'string' ? options.value : JSON.stringify(options.value),
-    task: 'mcp-materialization',
-    version: VERSION,
-    ...providerRemoteGenerationContextPayload(options.redteamGenerationContext ?? options.targetId),
-  };
-
-  try {
-    const response = await fetchWithRetries(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(body),
-        ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
-      },
-      getRequestTimeoutMs(),
-    );
-
-    if (!response.ok) {
-      throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
-    }
-
-    const data = (await response.json()) as { result?: unknown };
-    const toolCall = normalizeMcpToolCall(data.result, options.tools);
-
-    if (!toolCall) {
-      throw new Error('Remote MCP materialization did not return a valid tool call');
-    }
-
-    return stringifyMcpToolCall(toolCall);
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw err;
-    }
-    throw new Error(`Remote MCP materialization failed: ${String(err)}`);
   }
 }
 

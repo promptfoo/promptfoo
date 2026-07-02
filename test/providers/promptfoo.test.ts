@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
-  materializeMcpToolCallRemote,
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
   PromptfooSimulatedUserProvider,
@@ -27,106 +26,6 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
       }
     },
   };
-});
-
-describe('materializeMcpToolCallRemote', () => {
-  const searchCompaniesTool = {
-    name: 'search_companies',
-    description: 'Search sample company records.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string' },
-      },
-      required: ['query'],
-    },
-  };
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function () {
-      return 'test@example.com';
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-  });
-
-  it('returns normalized MCP JSON from the remote task server', async () => {
-    vi.mocked(fetchWithRetries).mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          result: {
-            tool: 'search_companies',
-            args: { query: 'clean energy' },
-          },
-        }),
-        { status: 200 },
-      ),
-    );
-
-    const result = await materializeMcpToolCallRemote({
-      intentValue: 'Find clean energy companies.',
-      purpose: 'Search companies',
-      tools: [searchCompaniesTool],
-      value: 'Find clean energy companies.',
-    });
-
-    expect(JSON.parse(result ?? '')).toEqual({
-      tool: 'search_companies',
-      args: { query: 'clean energy' },
-    });
-    expect(JSON.parse((vi.mocked(fetchWithRetries).mock.calls[0][1] as any).body)).toMatchObject({
-      email: 'test@example.com',
-      jsonOnly: true,
-      mcpMaterializationContext: {
-        intentValue: 'Find clean energy companies.',
-        purpose: 'Search companies',
-        tools: [searchCompaniesTool],
-      },
-      preferSmallModel: false,
-      prompt: 'Find clean energy companies.',
-      task: 'mcp-materialization',
-    });
-  });
-
-  it('returns undefined when remote generation is disabled', async () => {
-    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
-      return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
-    });
-
-    await expect(
-      materializeMcpToolCallRemote({
-        tools: [searchCompaniesTool],
-        value: 'Find clean energy companies.',
-      }),
-    ).resolves.toBeUndefined();
-    expect(fetchWithRetries).not.toHaveBeenCalled();
-  });
-
-  it('rejects invalid remote materialization output', async () => {
-    vi.mocked(fetchWithRetries).mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          result: {
-            tool: 'unknown_tool',
-            args: {},
-          },
-        }),
-        { status: 200 },
-      ),
-    );
-
-    await expect(
-      materializeMcpToolCallRemote({
-        tools: [searchCompaniesTool],
-        value: 'Find clean energy companies.',
-      }),
-    ).rejects.toThrow('Remote MCP materialization failed');
-  });
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
