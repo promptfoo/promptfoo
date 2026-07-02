@@ -104,7 +104,7 @@ prompts:
 
 The provider returns Codex's final assistant text as `output`. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
 
-For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
+For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata. If streamed command output diverges from the completed SDK aggregate, the streamed transcript remains in `aggregated_output` and the SDK observation is preserved separately as `sdk_aggregated_output`.
 
 ## Safety Defaults
 
@@ -369,6 +369,8 @@ model-generation boundaries, so these markers cannot distinguish batched from
 sequential tool calls inside a turn.
 
 Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
+
+Command spans expose streamed output as `codex.output`. When the SDK-completed command output diverges from that stream, its sanitized observation is also exposed as `codex.sdk_output` so downstream graders can inspect both evidence sources.
 
 ## Local Verification
 
