@@ -49,6 +49,31 @@ describe('isProviderResponseRateLimited', () => {
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
+
+    it('should not reinterpret prose when structured execution health is present', () => {
+      const result: ProviderResponse = {
+        error: 'Fixture mentions HTTP 429, rate limit, and too many requests',
+        metadata: {
+          executionHealth: {
+            schemaVersion: 1,
+            eventCoverage: 'stream',
+            toolExitCodes: [],
+            providerErrors: [
+              {
+                source: 'provider',
+                message: 'Fixture mentions HTTP 429, rate limit, and too many requests',
+                fatal: true,
+              },
+            ],
+            droppedEvents: [],
+            sandboxFailures: [],
+            successfulSkillCalls: [],
+          },
+        },
+      };
+
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
   });
 
   describe('Thrown error detection', () => {

@@ -41,7 +41,15 @@ export function isProviderResponseRateLimited(
   if (result?.metadata?.rateLimitKind === 'rate_limit') {
     return true;
   }
-  if (isHttpRateLimitError(error) && error.kind === 'quota') {
+  if (isHttpRateLimitError(error)) {
+    return error.kind === 'rate_limit';
+  }
+  if (result?.metadata?.http?.status === 429) {
+    return true;
+  }
+  // Providers with execution health have already classified their failures
+  // from structured protocol data. Do not reinterpret their diagnostic prose.
+  if (result?.metadata?.executionHealth) {
     return false;
   }
   // String fallback for providers that fold the structured error into
@@ -59,10 +67,8 @@ export function isProviderResponseRateLimited(
   }
 
   return Boolean(
-    // Check HTTP status code (most reliable)
-    result?.metadata?.http?.status === 429 ||
-      // Check error field in response
-      result?.error?.includes?.('429') ||
+    // Check error field in response
+    result?.error?.includes?.('429') ||
       result?.error?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
       error?.message?.includes('429') ||

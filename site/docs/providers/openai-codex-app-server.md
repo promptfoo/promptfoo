@@ -346,6 +346,10 @@ providerResponse.metadata.codexAppServer.items;
 providerResponse.metadata.codexAppServer.serverRequests;
 ```
 
+`providerResponse.metadata.executionHealth` provides the same versioned execution summary as the Codex SDK provider. It includes command exit codes, recovered and terminal provider errors, observed dropped events, structured sandbox failures, and confirmed successful skill calls. App-server errors normalize the type and HTTP status from `codexErrorInfo`, along with retryability and fatality, when the protocol supplies them. Promptfoo also counts malformed or oversized JSON-RPC messages on a connection exclusively owned by one call and started items that never receive a completion event. It never attaches connection-level parse failures from a reusable multiplexed connection to an individual row.
+
+Promptfoo does not classify command output or error message text. A command whose output contains text such as `429`, `Could not resolve host`, or `ECONNREFUSED` is not a provider, network, or sandbox failure unless Codex supplies a corresponding structured field.
+
 Command output, tool arguments, and approval metadata are sanitized before they are placed in metadata or tracing attributes.
 
 ## Tracing
