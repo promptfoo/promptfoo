@@ -1,4 +1,5 @@
 import { matchesSearchRubric } from '../matchers/search';
+import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -20,7 +21,7 @@ export async function handleSearchRubric({
     String(renderedValue),
     providerResponse.output,
     test.options,
-    test.vars,
+    getGraderVars(assertion, test.vars),
     assertion,
     provider,
     providerCallContext,

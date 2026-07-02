@@ -73,9 +73,9 @@ describe('handleModelGradedClosedQa', () => {
     );
   });
 
-  it('should call matchesClosedQa with correct parameters', async () => {
+  it('should project grader vars while preserving closed-QA inputs', async () => {
     const params: AssertionParams = {
-      assertion: { type: 'model-graded-closedqa' },
+      assertion: { type: 'model-graded-closedqa', graderVars: ['var'] },
       baseType: 'model-graded-closedqa',
       assertionValueContext: {
         prompt: 'test prompt',
@@ -97,6 +97,7 @@ describe('handleModelGradedClosedQa', () => {
         },
         vars: {
           var: 'value',
+          expected_fix_patch: '<large patch>',
         },
       },
     };
@@ -117,7 +118,7 @@ describe('handleModelGradedClosedQa', () => {
     );
 
     expect(result).toEqual({
-      assertion: { type: 'model-graded-closedqa' },
+      assertion: params.assertion,
       pass: true,
       score: 1,
       reason: 'test reason',

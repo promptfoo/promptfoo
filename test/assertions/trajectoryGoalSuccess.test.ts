@@ -160,7 +160,7 @@ describe('handleTrajectoryGoalSuccess', () => {
     );
   });
 
-  it('passes resolved assertion vars instead of the raw test vars', async () => {
+  it('projects resolved grader vars while preserving trajectory inputs', async () => {
     vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
       pass: true,
       score: 1,
@@ -169,12 +169,22 @@ describe('handleTrajectoryGoalSuccess', () => {
 
     const params: AssertionParams = {
       ...defaultParams,
+      assertion: {
+        ...defaultParams.assertion,
+        graderVars: ['orderId'],
+      },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        vars: { orderId: 'resolved-123' },
+        vars: {
+          orderId: 'resolved-123',
+          expected_fix_patch: '<large patch>',
+        },
       },
       test: {
-        vars: { orderId: '{{ order_id }}' },
+        vars: {
+          orderId: '{{ order_id }}',
+          expected_fix_patch: '<large patch>',
+        },
       },
     };
 

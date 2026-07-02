@@ -355,15 +355,22 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   });
 
   describe('runCompareAssertion (select-best)', () => {
-    it('should pass callApiContext to matchesSelectBest', async () => {
+    it('should project grader vars while preserving comparison inputs and context', async () => {
       const mockResult = [
         { pass: true, score: 1, reason: 'best' },
         { pass: false, score: 0, reason: 'not best' },
       ];
       vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
 
-      const test = { vars: { testVar: 'value' }, options: { provider: 'test-provider' } };
-      const assertion = { type: 'select-best' as const, value: 'test criteria' };
+      const test = {
+        vars: { testVar: 'value', expected_fix_patch: '<large patch>' },
+        options: { provider: 'test-provider' },
+      };
+      const assertion = {
+        type: 'select-best' as const,
+        value: 'test criteria',
+        graderVars: ['testVar'],
+      };
       const outputs = ['output1', 'output2'];
 
       await runCompareAssertion(test, assertion, outputs, mockCallApiContext);

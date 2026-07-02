@@ -5,9 +5,22 @@ import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types/index';
+import { type Assertion, type TestCase, type VarValue } from '../types/index';
 
 const clone = Clone();
+
+const GRADER_BUILTIN_VARS: Readonly<Record<string, ReadonlySet<string>>> = {
+  'agent-rubric': new Set(['output', 'rubric']),
+  'context-faithfulness': new Set(['question', 'answer', 'context', 'statements']),
+  'context-recall': new Set(['context', 'groundTruth']),
+  factuality: new Set(['input', 'ideal', 'completion']),
+  'llm-rubric': new Set(['output', 'rubric']),
+  'model-graded-closedqa': new Set(['input', 'criteria', 'completion']),
+  'model-graded-factuality': new Set(['input', 'ideal', 'completion']),
+  'search-rubric': new Set(['output', 'rubric']),
+  'select-best': new Set(['criteria', 'outputs']),
+  'trajectory:goal-success': new Set(['goal', 'output', 'trajectory']),
+};
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
   // Deep copy
@@ -34,6 +47,32 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
   return Object.freeze(ret);
+}
+
+/**
+ * Projects test variables before they are passed to a model grader.
+ *
+ * Assertion values are rendered before this projection is applied, so a value
+ * that explicitly references a test variable still includes it in the rubric.
+ */
+export function getGraderVars(
+  assertion: Assertion,
+  vars: Record<string, VarValue> | undefined,
+): Record<string, VarValue> | undefined {
+  if (assertion.graderVars === undefined) {
+    return vars;
+  }
+
+  if (!vars) {
+    return {};
+  }
+
+  const builtins = GRADER_BUILTIN_VARS[assertion.type];
+  return Object.fromEntries(
+    assertion.graderVars
+      .filter((name) => !builtins?.has(name) && Object.prototype.hasOwnProperty.call(vars, name))
+      .map((name) => [name, vars[name]]),
+  );
 }
 
 export async function loadFromJavaScriptFile(

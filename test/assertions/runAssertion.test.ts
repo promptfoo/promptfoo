@@ -4001,5 +4001,81 @@ describe('runAssertion', () => {
         'Does the output correctly reference the input: {{myVar}}?',
       );
     });
+
+    it('renders explicit assertion references before projecting grader vars', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const capturingGrader = createMockProvider({
+        id: 'capturing-grader',
+        callApi: capturedPrompt,
+      });
+      const patchSentinel = 'EXPECTED_FIX_PATCH_SENTINEL';
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'Check this explicitly referenced patch: {{expected_fix_patch}}',
+        graderVars: [],
+        provider: capturingGrader,
+      };
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test: {
+          vars: {
+            expected_fix_patch: patchSentinel,
+            unrelated: 'ambient value',
+          },
+        },
+        providerResponse: { output: 'static model output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      const graderContext = capturedPrompt.mock.calls[0]?.[1];
+      expect(gradingPrompt).toContain(patchSentinel);
+      expect(gradingPrompt).not.toContain('{{expected_fix_patch}}');
+      expect(graderContext?.vars).toEqual({
+        output: 'static model output',
+        rubric: `Check this explicitly referenced patch: ${patchSentinel}`,
+      });
+    });
+
+    it('does not send excluded ambient vars to the grading prompt or provider context', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const patchSentinel = 'EXCLUDED_EXPECTED_FIX_PATCH_SENTINEL';
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'llm-rubric',
+          value: 'Check whether the output fixes {{issue}}',
+          graderVars: ['issue'],
+          provider: createMockProvider({
+            id: 'capturing-grader',
+            callApi: capturedPrompt,
+          }),
+        },
+        test: {
+          vars: {
+            issue: 'path traversal',
+            expected_fix_patch: patchSentinel,
+          },
+        },
+        providerResponse: { output: 'static model output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      const graderContext = capturedPrompt.mock.calls[0]?.[1];
+      expect(gradingPrompt).not.toContain(patchSentinel);
+      expect(graderContext?.vars).toEqual({
+        output: 'static model output',
+        rubric: 'Check whether the output fixes path traversal',
+        issue: 'path traversal',
+      });
+    });
   });
 });

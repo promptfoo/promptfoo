@@ -39,6 +39,28 @@ Trajectory-based:
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
+## Limiting variables sent to graders
+
+By default, model-graded assertions that accept test variables pass all of them to the grader. Use `graderVars` to allowlist only the variables the grader needs. This prevents large, unused variables from making grader requests too large:
+
+```yaml
+tests:
+  - vars:
+      criteria: Summarize accurately
+      foo: file://fixtures/large-input.txt
+    assert:
+      - type: llm-rubric
+        value: The output satisfies {{criteria}}
+        graderVars:
+          - criteria
+```
+
+Set `graderVars: []` to pass no test variables. Built-in inputs such as the model output and rubric are still included. Names reserved for an assertion's built-in grader inputs are ignored if they appear in `graderVars`.
+
+`graderVars` does not remove values already inserted into an assertion's `value`. For example, a rubric containing `{{foo}}` still includes the value of `foo` after variable substitution. To keep a variable out of the grader request, omit it from both `graderVars` and `value`.
+
+This option is supported by `llm-rubric`, `agent-rubric`, `search-rubric`, `model-graded-closedqa`, `factuality`, `context-recall`, `context-faithfulness`, `trajectory:goal-success`, and `select-best`.
+
 ## Examples (output-based)
 
 Example of `llm-rubric` and/or `model-graded-closedqa`:

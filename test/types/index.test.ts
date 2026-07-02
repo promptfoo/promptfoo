@@ -45,12 +45,44 @@ describe('AssertionSchema', () => {
       weight: 2,
       provider: 'openai:gpt-4o-mini',
       rubricPrompt: 'Custom rubric prompt',
+      graderVars: ['question', 'referenceAnswer'],
       metric: 'similarity_score',
       transform: 'toLowerCase()',
     };
 
     const result = AssertionSchema.safeParse(fullAssertion);
     expect(result.success).toBe(true);
+  });
+
+  it('should validate and preserve graderVars allowlists', () => {
+    const graderVarsCases = [[], ['question', 'referenceAnswer']];
+
+    for (const graderVars of graderVarsCases) {
+      const result = AssertionSchema.safeParse({
+        type: 'llm-rubric',
+        value: 'Grade the answer',
+        graderVars,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.graderVars).toEqual(graderVars);
+      }
+    }
+  });
+
+  it('should reject invalid graderVars values', () => {
+    const invalidGraderVars = ['question', ['question', 42], { question: true }];
+
+    for (const graderVars of invalidGraderVars) {
+      expect(
+        AssertionSchema.safeParse({
+          type: 'llm-rubric',
+          value: 'Grade the answer',
+          graderVars,
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it('should validate all base assertion types', () => {
