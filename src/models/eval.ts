@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -423,6 +423,25 @@ export default class Eval {
     return evalInstance;
   }
 
+  static async updateAuthor(
+    id: string,
+    author: string | null,
+    options: { onlyIfUnassigned?: boolean } = {},
+  ): Promise<boolean> {
+    const db = await getDb();
+    const condition = options.onlyIfUnassigned
+      ? and(eq(evalsTable.id, id), or(isNull(evalsTable.author), eq(evalsTable.author, '')))
+      : eq(evalsTable.id, id);
+    const result = await db.update(evalsTable).set({ author }).where(condition).run();
+
+    if (result.rowsAffected > 0) {
+      notifyEvaluationChanged(id);
+      return true;
+    }
+
+    return false;
+  }
+
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = await getDb();
     const evals = await db
@@ -666,7 +685,8 @@ export default class Eval {
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
-      author: this.author,
+      // Use null explicitly to ensure Drizzle updates the column (undefined may be skipped)
+      author: this.author || null,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),

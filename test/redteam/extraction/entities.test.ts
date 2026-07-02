@@ -42,6 +42,15 @@ vi.mock('../../../src/redteam/remoteGeneration', async () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
+// Mock getUserEmail to return null for consistent test behavior
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/globalConfig/accounts')>();
+  return {
+    ...original,
+    getUserEmail: vi.fn().mockReturnValue(null),
+  };
+});
+
 describe('Entities Extractor', () => {
   let provider: MockApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
