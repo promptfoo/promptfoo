@@ -99,6 +99,7 @@ const mocks = vi.hoisted(() => {
   };
 
   const fs = {
+    readFileSync: vi.fn(),
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
@@ -134,6 +135,7 @@ vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
+    readFileSync: mocks.fs.readFileSync,
     unlinkSync: mocks.fs.unlinkSync,
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
@@ -190,6 +192,9 @@ function setupMocks() {
   };
 
   mocks.core.getInput.mockImplementation((name: string) => {
+    if (name === 'api-host') {
+      return 'https://api.promptfoo.app';
+    }
     if (name === 'github-token') {
       return 'fake-token';
     }
@@ -376,6 +381,25 @@ function setPullRequestRepos(headRepoFullName: string, baseRepoFullName = 'test-
   mocks.github.context.payload.pull_request.base.repo.full_name = baseRepoFullName;
 }
 
+function mockActionInputs(
+  values: Record<string, string> = {},
+  booleanValues: Record<string, boolean> = {},
+): void {
+  mocks.core.getInput.mockImplementation((name: string) => {
+    if (Object.hasOwn(values, name)) {
+      return values[name];
+    }
+    if (name === 'api-host') {
+      return 'https://api.promptfoo.app';
+    }
+    if (name === 'github-token') {
+      return 'fake-token';
+    }
+    return '';
+  });
+  mocks.core.getBooleanInput.mockImplementation((name: string) => booleanValues[name] ?? false);
+}
+
 describe('code-scan-action main', () => {
   let restoreEnv: () => void;
 
@@ -420,6 +444,22 @@ describe('code-scan-action main', () => {
       const { args } = await importActionAndGetPromptfooCall();
 
       expectCliArg(args, '--base', 'feat/openai-sora-video-provider');
+    });
+
+    it('passes untrusted-looking refs and paths as single argv values', async () => {
+      const base = 'main; echo injected';
+      const configPath = './policy $(touch pwned).yaml';
+      const apiHost = 'https://api.promptfoo.app/$(echo injected)';
+      mockProcessEnv({ GITHUB_BASE_REF: base });
+      mockActionInputs({ 'api-host': apiHost, 'config-path': configPath });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--base', base);
+      expectCliArg(args, '--config', configPath);
+      expectCliArg(args, '--api-host', apiHost);
+      expect(args).not.toContain('echo');
+      expect(args).not.toContain('touch');
     });
 
     it('should not pass NPM_CONFIG_BEFORE to the promptfoo scan command', async () => {
@@ -476,6 +516,9 @@ describe('code-scan-action main', () => {
     it('should skip fork pull_request scans by default before fetching files or starting auth', async () => {
       setPullRequestRepos('external-contributor/test-repo');
       mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'api-host') {
+          return 'https://api.promptfoo.app';
+        }
         if (name === 'github-token') {
           return 'fake-token';
         }
@@ -521,9 +564,26 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
 
+    it('fails closed when the PR source repository is missing from the event payload', async () => {
+      if (!('pull_request' in mocks.github.context.payload)) {
+        throw new Error('Expected a pull_request payload');
+      }
+      mocks.github.context.payload.pull_request.head.repo = null as never;
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.warning).toHaveBeenCalledWith(
+          'Unable to determine PR source repository from GitHub event payload; treating it as a fork PR',
+        );
+      });
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
     it('should scan fork pull_request events when enable-fork-prs is true', async () => {
       setPullRequestRepos('external-contributor/test-repo');
-      mocks.core.getBooleanInput.mockReturnValue(true);
+      mocks.core.getBooleanInput.mockImplementation((name: string) => name === 'enable-fork-prs');
 
       const { args } = await importActionAndGetPromptfooCall();
 
@@ -685,6 +745,18 @@ describe('code-scan-action main', () => {
         version: '2.1.0',
       });
       expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
+      expect(mocks.core.warning).not.toHaveBeenCalled();
+    });
+
+    it('accepts an absolute SARIF path inside GITHUB_WORKSPACE', async () => {
+      const absolutePath = path.resolve('/test/workspace/reports/absolute.sarif');
+
+      await triggerSarifAction(absolutePath);
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(absolutePath, expect.any(String));
+      });
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', absolutePath);
       expect(mocks.core.warning).not.toHaveBeenCalled();
     });
 
@@ -1059,6 +1131,235 @@ describe('code-scan-action main', () => {
     });
   });
 
+  describe('config-path precedence', () => {
+    it('uses only trusted workflow inputs outside the selected config policy', async () => {
+      const configPath = './trusted/policy.yaml';
+      mockActionInputs({
+        'config-path': configPath,
+        'min-severity': 'not-a-severity',
+        'diffs-only': 'not-a-boolean',
+        guidance: 'ignored guidance',
+        'guidance-file': '/tmp/missing-guidance.md',
+      });
+      mocks.core.getBooleanInput.mockImplementation((name: string) => {
+        if (name === 'diffs-only') {
+          throw new Error('diffs-only must not be parsed with config-path');
+        }
+        return false;
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', configPath);
+      expectCliArg(args, '--api-host', 'https://api.promptfoo.app');
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+      expect(mocks.fs.readFileSync).not.toHaveBeenCalled();
+      expect(mocks.fs.unlinkSync).not.toHaveBeenCalled();
+      expect(mocks.core.getBooleanInput).not.toHaveBeenCalledWith('diffs-only');
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        'config-path supplies scan policy; ignoring Action inputs: min-severity, diffs-only, guidance, guidance-file',
+      );
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('uses the trusted default host when api-host is explicitly empty', async () => {
+      mockActionInputs({ 'api-host': '', 'config-path': './trusted/policy.yaml' });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--api-host', 'https://api.promptfoo.app');
+    });
+
+    it.each([
+      'relative/policy.yaml',
+      path.resolve('/test/workspace/policy.yaml'),
+    ])('passes the selected config path to the CLI without rewriting it: %s', async (configPath) => {
+      mockActionInputs({ 'config-path': configPath });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', configPath);
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+    });
+
+    it('keeps fallback operational links while omitting an unknown config severity', async () => {
+      const createReview = vi.fn().mockResolvedValue({});
+      mocks.github.getOctokit.mockReturnValue({
+        rest: {
+          pulls: {
+            createReview,
+            get: vi.fn().mockResolvedValue({ data: { base: { ref: 'main' } } }),
+          },
+          issues: { createComment: vi.fn().mockResolvedValue({}) },
+        },
+      });
+      mockActionInputs({ 'config-path': './trusted/policy.yaml' });
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [],
+                  commentsPosted: false,
+                  review: 'Fallback review from scan server',
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => expect(createReview).toHaveBeenCalled());
+      const body = createReview.mock.calls[0][0].body as string;
+      expect(body).toContain('Fallback review from scan server');
+      expect(body).toContain('@promptfoo-scanner');
+      expect(body).toContain('[Learn more]');
+      expect(body).not.toContain('Minimum severity threshold');
+    });
+  });
+
+  describe('diffs-only input resolution', () => {
+    it.each([
+      ['omitted', '', false],
+      ['explicit false', 'false', false],
+      ['explicit true', 'true', true],
+    ])('generates config for %s', async (_label, rawValue, parsedValue) => {
+      mockActionInputs({ 'diffs-only': rawValue }, { 'diffs-only': parsedValue });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith(
+        'medium',
+        undefined,
+        parsedValue,
+      );
+      if (rawValue) {
+        expect(mocks.core.getBooleanInput).toHaveBeenCalledWith('diffs-only');
+      } else {
+        expect(mocks.core.getBooleanInput).not.toHaveBeenCalledWith('diffs-only');
+      }
+    });
+
+    it('propagates malformed active boolean inputs as Action failures', async () => {
+      mockActionInputs({ 'diffs-only': 'yes' });
+      mocks.core.getBooleanInput.mockImplementation((name: string) => {
+        if (name === 'diffs-only') {
+          throw new Error('Invalid boolean input: yes');
+        }
+        return false;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('Invalid boolean input: yes');
+      });
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('input and subprocess failure propagation', () => {
+    it('fails when both active guidance inputs are supplied', async () => {
+      mockActionInputs({ guidance: 'inline', 'guidance-file': '/tmp/guidance.md' });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          'Cannot specify both guidance and guidance-file inputs',
+        );
+      });
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+    });
+
+    it('fails when an active guidance file cannot be read', async () => {
+      mockActionInputs({ 'guidance-file': '/tmp/missing-guidance.md' });
+      mocks.fs.readFileSync.mockImplementation(() => {
+        throw new Error('ENOENT');
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('Failed to read guidance file: ENOENT');
+      });
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+    });
+
+    it('cleans up generated config when npm installation fails', async () => {
+      mocks.exec.exec.mockImplementation(async (command: string) => {
+        if (command === 'npm') {
+          throw new Error('npm install failed');
+        }
+        return 0;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('npm install failed');
+      });
+      expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+    });
+
+    it('propagates scanner exit failures and cleans up generated config', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stderr?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo') {
+            options?.listeners?.stderr?.(Buffer.from('scanner failed'));
+            return 17;
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('Code scan failed with exit code 17');
+      });
+      expect(mocks.core.error).toHaveBeenCalledWith('CLI exited with code 17');
+      expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+    });
+
+    it('propagates invalid scanner JSON and cleans up generated config', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo') {
+            options?.listeners?.stdout?.(Buffer.from('{invalid'));
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to parse CLI output as JSON'),
+        );
+      });
+      expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+    });
+  });
+
   describe('minimum severity input resolution', () => {
     function mockSeverityInputs(values: {
       'min-severity'?: string;
@@ -1083,7 +1384,7 @@ describe('code-scan-action main', () => {
 
       await importActionAndGetPromptfooCall();
 
-      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined, false);
       expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
     });
 
@@ -1092,7 +1393,7 @@ describe('code-scan-action main', () => {
 
       await importActionAndGetPromptfooCall();
 
-      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined, false);
       expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
     });
 
@@ -1101,7 +1402,7 @@ describe('code-scan-action main', () => {
 
       await importActionAndGetPromptfooCall();
 
-      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined);
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined, false);
       expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
     });
 
@@ -1110,7 +1411,7 @@ describe('code-scan-action main', () => {
 
       await importActionAndGetPromptfooCall();
 
-      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined);
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
       expect(mocks.core.warning).toHaveBeenCalledWith(
         expect.stringContaining('Both min-severity (high) and minimum-severity (critical) are set'),
       );
@@ -1121,16 +1422,43 @@ describe('code-scan-action main', () => {
 
       await importActionAndGetPromptfooCall();
 
-      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined);
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
       expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
     });
 
-    it('trims whitespace from severity inputs', async () => {
-      mockSeverityInputs({ 'minimum-severity': '  critical  ' });
+    it('normalizes case before comparing severity aliases', async () => {
+      mockSeverityInputs({ 'min-severity': ' High ', 'minimum-severity': 'high' });
 
       await importActionAndGetPromptfooCall();
 
-      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('normalizes whitespace and case in severity inputs', async () => {
+      mockSeverityInputs({ 'minimum-severity': '  CRITICAL  ' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined, false);
+    });
+
+    it('propagates invalid active severity inputs as Action failures', async () => {
+      mockSeverityInputs({ 'min-severity': 'high!' });
+      mocks.config.generateConfigFile.mockImplementation(() => {
+        throw new Error('Invalid severity: high!');
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('Invalid severity: high!');
+      });
+      expect(mocks.exec.exec).not.toHaveBeenCalledWith(
+        'promptfoo',
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 });

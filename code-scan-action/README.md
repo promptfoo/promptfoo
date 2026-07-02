@@ -12,6 +12,8 @@ After scanning, the action posts findings with severity levels and suggested fix
 
 To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
 
+Without `config-path`, the action generates scan policy from `min-severity`, `diffs-only`, and guidance inputs. With `config-path`, that explicit file supplies scan policy and those individual inputs are ignored with a warning. Keep the selected file workflow-controlled (for example, use a detached worktree at the pull request's base SHA so relative files remain available). The workflow-controlled `api-host` input remains pinned to `https://api.promptfoo.app` unless explicitly overridden.
+
 ## Quick Start
 
 **Recommended:** Install the [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner) for the easiest setup:
@@ -32,20 +34,20 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     enable-fork-prs: true
 ```
 
 ## SARIF Output
 
-Grant `security-events: write` in the workflow job permissions, then upload the generated file.
+Grant `contents: read` and `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
 The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional:
 
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     sarif-output-path: promptfoo-code-scan.sarif
 
@@ -59,7 +61,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ## Contributing
 
-Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/promptfoo/code-scan-action) in the main promptfoo repository.
+Please note that this is a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/code-scan-action) in the main promptfoo repository.
 
 ## License
 

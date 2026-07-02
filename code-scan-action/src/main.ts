@@ -29,6 +29,7 @@ interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
   configPath: string;
+  diffsOnly: boolean;
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
@@ -57,6 +58,7 @@ function formatError(error: unknown): string {
 }
 
 const DEFAULT_MINIMUM_SEVERITY = 'medium';
+const DEFAULT_API_HOST = 'https://api.promptfoo.app';
 
 /**
  * Resolve the effective minimum severity from the two supported inputs.
@@ -74,8 +76,8 @@ const DEFAULT_MINIMUM_SEVERITY = 'medium';
  * emitted so the workflow author can collapse the inputs.
  */
 function resolveMinimumSeverityInput(): string {
-  const primary = core.getInput('min-severity').trim();
-  const alias = core.getInput('minimum-severity').trim();
+  const primary = core.getInput('min-severity').trim().toLowerCase();
+  const alias = core.getInput('minimum-severity').trim().toLowerCase();
 
   if (primary && alias && primary !== alias) {
     core.warning(
@@ -86,11 +88,39 @@ function resolveMinimumSeverityInput(): string {
   return primary || alias || DEFAULT_MINIMUM_SEVERITY;
 }
 
+function resolveDiffsOnlyInput(): boolean {
+  return core.getInput('diffs-only').trim() ? core.getBooleanInput('diffs-only') : false;
+}
+
+function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
+  if (!configPath) {
+    return;
+  }
+
+  const ignoredInputs = [
+    'min-severity',
+    'minimum-severity',
+    'diffs-only',
+    'guidance',
+    'guidance-file',
+  ].filter((name) => core.getInput(name).trim());
+
+  if (ignoredInputs.length > 0) {
+    core.warning(
+      `config-path supplies scan policy; ignoring Action input${ignoredInputs.length === 1 ? '' : 's'}: ${ignoredInputs.join(', ')}`,
+    );
+  }
+}
+
 function getActionInputs(): ActionInputs {
+  const configPath = core.getInput('config-path');
+  warnIgnoredInputsWhenConfigPathSet(configPath);
+
   return {
-    apiHost: core.getInput('api-host'),
-    minimumSeverity: resolveMinimumSeverityInput(),
-    configPath: core.getInput('config-path'),
+    apiHost: core.getInput('api-host').trim() || DEFAULT_API_HOST,
+    minimumSeverity: configPath ? DEFAULT_MINIMUM_SEVERITY : resolveMinimumSeverityInput(),
+    configPath,
+    diffsOnly: configPath ? false : resolveDiffsOnlyInput(),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
@@ -137,6 +167,10 @@ function createScanEnv(oidcToken: string | undefined): Record<string, string> {
 }
 
 function loadGuidance(inputs: ActionInputs): string | undefined {
+  if (inputs.configPath) {
+    return undefined;
+  }
+
   if (inputs.guidanceText && inputs.guidanceFile) {
     throw new Error('Cannot specify both guidance and guidance-file inputs');
   }
@@ -209,12 +243,17 @@ async function authenticateWithOidc(): Promise<string | undefined> {
   }
 }
 
-function resolveConfigPath(configPath: string, minimumSeverity: string, guidance?: string): string {
+function resolveConfigPath(
+  configPath: string,
+  minimumSeverity: string,
+  guidance: string | undefined,
+  diffsOnly: boolean,
+): string {
   if (configPath) {
     return configPath;
   }
 
-  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance);
+  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance, diffsOnly);
   core.info(`📝 Generated temporary config at ${generatedConfigPath}`);
   return generatedConfigPath;
 }
@@ -469,7 +508,7 @@ async function postFallbackComments(
   context: PullRequestContext,
   comments: Comment[],
   review: string | undefined,
-  minimumSeverity: string,
+  minimumSeverity: string | undefined,
 ): Promise<void> {
   core.info('📝 Server could not post comments - posting as fallback...');
 
@@ -671,7 +710,7 @@ async function handleScanResponse(
       context,
       comments,
       review,
-      inputs.minimumSeverity,
+      inputs.configPath ? undefined : inputs.minimumSeverity,
     );
     return;
   }
@@ -741,7 +780,12 @@ async function runCodeScan(): Promise<void> {
 
   const oidcToken = await authenticateWithOidc();
 
-  const finalConfigPath = resolveConfigPath(inputs.configPath, inputs.minimumSeverity, guidance);
+  const finalConfigPath = resolveConfigPath(
+    inputs.configPath,
+    inputs.minimumSeverity,
+    guidance,
+    inputs.diffsOnly,
+  );
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
