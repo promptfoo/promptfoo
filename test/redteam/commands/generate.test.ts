@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 
 import { Command } from 'commander';
@@ -5,7 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
+import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../../src/constants';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -442,7 +443,13 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
     generatedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
     const firstHash = generatedOutput.metadata?.configHash;
-    expect(firstHash).toEqual(expect.any(String));
+    expect(firstHash).toBe(
+      createHash('sha256')
+        .update(
+          JSON.stringify({ version: VERSION, content: configContent, filters: initialFilters }),
+        )
+        .digest('hex'),
+    );
 
     vi.clearAllMocks();
     await doGenerateRedteam(options);
