@@ -31,7 +31,7 @@ providers:
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(accumulator, data, context?)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
 - `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 300000 (5 minutes).
-- `protocols` (optional): A WebSocket subprotocol string or list of strings to request during the connection handshake. If `headers` includes `Sec-WebSocket-Protocol`, Promptfoo treats that value as `protocols` for backwards compatibility.
+- `protocols` (optional): A WebSocket subprotocol string or list of strings to request during the connection handshake. Use this instead of setting `Sec-WebSocket-Protocol` in `headers` when the server negotiates a selected subprotocol.
 - `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
 ## Using Variables

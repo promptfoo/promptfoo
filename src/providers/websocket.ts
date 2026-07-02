@@ -23,8 +23,6 @@ const nunjucks = getNunjucksEngine();
 
 export const processResult = normalizeResponseTransformResult;
 
-const WEBSOCKET_PROTOCOL_HEADER = 'sec-websocket-protocol';
-
 function normalizeWebSocketProtocols(protocols: string | string[] | undefined): string[] {
   if (!protocols) {
     return [];
@@ -35,10 +33,6 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean);
-}
-
-function getWebSocketProtocolHeaderKey(headers: Record<string, string>): string | undefined {
-  return Object.keys(headers).find((key) => key.toLowerCase() === WEBSOCKET_PROTOCOL_HEADER);
 }
 
 function getWebSocketErrorMessage(err: WebSocket.ErrorEvent | Error | unknown): string {
@@ -249,22 +243,9 @@ export class WebSocketProvider implements ApiProvider {
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
-      let protocols = normalizeWebSocketProtocols(this.config.protocols);
+      const protocols = normalizeWebSocketProtocols(this.config.protocols);
       if (this.config.headers) {
-        const headers = { ...this.config.headers };
-        const protocolHeaderKey = getWebSocketProtocolHeaderKey(headers);
-
-        if (protocols.length === 0 && protocolHeaderKey) {
-          protocols = normalizeWebSocketProtocols(headers[protocolHeaderKey]);
-        }
-
-        if (protocolHeaderKey) {
-          delete headers[protocolHeaderKey];
-        }
-
-        if (Object.keys(headers).length > 0) {
-          wsOptions.headers = headers;
-        }
+        wsOptions.headers = this.config.headers;
       }
       const ws =
         protocols.length > 0
