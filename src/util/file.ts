@@ -11,7 +11,7 @@ import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './fileExtensions';
+import { isJavascriptFile, isPythonFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
@@ -96,11 +96,12 @@ export function maybeLoadFromExternalFile(
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
+  const isExecutableFile = isPythonFile(cleanPath) || isJavascriptFile(cleanPath);
 
   // In assertion contexts, always preserve Python/JS file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (context === 'assertion' && isExecutableFile) {
     logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
@@ -117,13 +118,13 @@ export function maybeLoadFromExternalFile(
   // For Python/JS files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (functionName && isExecutableFile) {
     return renderedFilePath;
   }
 
   // For non-Python/JS files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+    functionName && !isExecutableFile
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 

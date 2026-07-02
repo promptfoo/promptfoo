@@ -221,6 +221,34 @@ describe('loadFunction', () => {
       expect(runPython).toHaveBeenCalledWith(TEST_PY_PATH, 'custom_function', ['test input']);
     });
 
+    it('should load a mixed-case Python file extension', async () => {
+      const mixedCasePath = '/test/resolved/function.PY';
+      mockResolve.mockReturnValueOnce(mixedCasePath);
+
+      const result = await loadFunction({
+        filePath: 'function.PY',
+        functionName: 'custom_function',
+      });
+
+      await result('test input');
+      expect(runPython).toHaveBeenCalledWith(mixedCasePath, 'custom_function', ['test input']);
+    });
+
+    it.each([
+      '/test/resolved/file?handler=score.PY',
+      '/test/resolved/file#score.PY',
+    ])('should reject a query-like mixed-case Python path: %s', async (queryLikePath) => {
+      mockResolve.mockReturnValueOnce(queryLikePath);
+
+      await expect(
+        loadFunction({
+          filePath: queryLikePath,
+          functionName: 'score',
+        }),
+      ).rejects.toThrow('File must be a JavaScript');
+      expect(runPython).not.toHaveBeenCalled();
+    });
+
     it('should use default function name for Python when none specified', async () => {
       const mockPythonResult = vi.fn();
       vi.mocked(runPython).mockImplementation((...args) => mockPythonResult(...args));
@@ -357,6 +385,58 @@ describe('parseFileUrl', () => {
     expect(result).toEqual({
       filePath: './path/to/file.py',
       functionName: 'function_name',
+    });
+  });
+
+  it.each([
+    'file://./path/to/file.PY:function_name',
+    'file://C:/path/to/file.Py:function_name',
+  ])('should parse mixed-case Python file URLs with function names: %s', (fileUrl) => {
+    expect(parseFileUrl(fileUrl)).toEqual({
+      filePath: fileUrl.slice('file://'.length, -':function_name'.length),
+      functionName: 'function_name',
+    });
+  });
+
+  it.each([
+    ['file://./path/to/file.PY:评分', '评分'],
+    ['file://./path/to/file.PY:检查.评分', '检查.评分'],
+    ['file://./path/to/file.PY:Class.py', 'Class.py'],
+  ])('should preserve compatible Python selectors: %s', (fileUrl, functionName) => {
+    expect(parseFileUrl(fileUrl)).toEqual({
+      filePath: './path/to/file.PY',
+      functionName,
+    });
+  });
+
+  it('should preserve a Python path with a colon after a .py directory component', () => {
+    expect(parseFileUrl('file://dir.py:segment/script.PY')).toEqual({
+      filePath: 'dir.py:segment/script.PY',
+    });
+  });
+
+  it.each([
+    'file://note.txt?handler=script.PY:fn',
+    'file://note.txt?handler=script.PY',
+    'file://note.txt#handler.PY',
+    'file://dir.PY:segment/readme.txt',
+    'file://script.PY:fn:extra',
+  ])('should not parse invalid Python function references: %s', (fileUrl) => {
+    expect(parseFileUrl(fileUrl)).toEqual({
+      filePath: fileUrl.slice('file://'.length),
+    });
+  });
+
+  it('should preserve non-executable Ruby-looking paths', () => {
+    expect(parseFileUrl('file://fixtures.rb:old/readme.txt')).toEqual({
+      filePath: 'fixtures.rb:old/readme.txt',
+    });
+  });
+
+  it('should preserve a JavaScript selector whose export ends in .py', () => {
+    expect(parseFileUrl('file://script.js:Class.py')).toEqual({
+      filePath: 'script.js',
+      functionName: 'Class.py',
     });
   });
 
