@@ -1098,6 +1098,38 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.finishReason).toBe('content_filter');
     });
 
+    it('does not crash when the API returns an empty choices array', async () => {
+      // An empty `choices` array (e.g. when every candidate is filtered) makes
+      // `choices[0]` undefined. The rest of the parser optional-chains `choice`,
+      // but the logProbs read dereferenced `data.choices[0]` directly and threw a
+      // TypeError, which surfaced as an opaque "API response error" instead of a
+      // normal empty result.
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 0,
+          total_tokens: 10,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.logProbs).toBeUndefined();
+    });
+
     it('should detect input content filtering', async () => {
       const mockResponse = {
         error: {

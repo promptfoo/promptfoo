@@ -493,7 +493,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         }
 
-        logProbs = data.choices[0].logprobs?.content?.map(
+        logProbs = choice?.logprobs?.content?.map(
           (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
         );
       }
