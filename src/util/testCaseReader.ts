@@ -148,7 +148,7 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
     telemetry.record('feature_used', {
       feature: 'jsonl tests file - azure blob',
     });
-    return parseJsonlTestCases(fileContent);
+    return parseJsonlTestCases(fileContent, varsPath);
   }
 
   telemetry.record('feature_used', {
@@ -351,20 +351,43 @@ function parseJsonTestCases(fileContent: string): TestCase[] {
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonlTestCases(fileContent);
+  return parseJsonlTestCases(fileContent, resolvedVarsPath);
 }
 
-function parseJsonlTestCases(fileContent: string): TestCase[] {
-  return fileContent
-    .split('\n')
-    .filter((line) => line.trim())
-    .map((line, idx) => {
-      const row = JSON.parse(line);
-      return {
-        ...row,
-        description: row.description || `Row #${idx + 1}`,
-      };
-    });
+/**
+ * Parse JSON, throwing a user-friendly error prefixed with `context` so the
+ * raw `JSON.parse` SyntaxError is attributed to its source file.
+ */
+function parseJsonOrThrow(text: string, context: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${context}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Parse the non-empty lines of a JSONL file into raw test cases. */
+function parseJsonlLines(fileContent: string, filePath: string): TestCase[] {
+  const rows: TestCase[] = [];
+  for (const [lineIndex, line] of fileContent.split('\n').entries()) {
+    if (!line.trim()) {
+      continue;
+    }
+    rows.push(
+      parseJsonOrThrow(
+        line,
+        `Failed to parse JSONL test file ${filePath} on line ${lineIndex + 1}`,
+      ) as TestCase,
+    );
+  }
+  return rows;
+}
+
+function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] {
+  return parseJsonlLines(fileContent, filePath).map((testCase, idx) => ({
+    ...testCase,
+    description: testCase.description || `Row #${idx + 1}`,
+  }));
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
@@ -521,14 +544,15 @@ export async function loadTestsFromGlob(
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
-      const rawCases = fileContent
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => JSON.parse(line));
+      const rawCases = parseJsonlLines(fileContent, testFile);
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
+      const fileContent = await fsPromises.readFile(testFile, 'utf8');
+      const rawContent = parseJsonOrThrow(
+        fileContent,
+        `Failed to parse JSON test file ${testFile}`,
+      );
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
