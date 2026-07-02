@@ -28,7 +28,7 @@ describe('checkCodexCliCompatibility', () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     fs.rmSync(sdkRoot, { recursive: true, force: true });
   });
 
