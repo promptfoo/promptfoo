@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getGlobalDispatcher } from 'undici';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
-import logger, { closeLogger, setLogLevel } from './logger';
+import logger, { closeLogger, setCustomLogFile, setLogLevel } from './logger';
 import telemetry from './telemetry';
 import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
@@ -178,6 +178,11 @@ export function addCommonOptionsRecursively(command: Command) {
     );
   }
 
+  const hasLogFileOption = command.options.some((option) => option.long === '--log-file');
+  if (!hasLogFileOption) {
+    command.option('--log-file <path>', 'Write logs to specified file in addition to default logs');
+  }
+
   command.hook('preAction', (thisCommand, actionCommand) => {
     const keepStructuredCodeScanOutputMuted = requestsStructuredCodeScanOutput(
       process.argv.slice(2),
@@ -192,6 +197,11 @@ export function addCommonOptionsRecursively(command: Command) {
     const envPath = normalizeEnvPaths(rawEnvPath);
     if (envPath) {
       loadEnvPathOnce(envPath, true);
+    }
+
+    const logFile = thisCommand.opts().logFile;
+    if (logFile) {
+      setCustomLogFile(logFile);
     }
 
     if (thisCommand === actionCommand) {

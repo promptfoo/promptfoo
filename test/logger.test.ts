@@ -567,6 +567,58 @@ describe('logger', () => {
     });
   });
 
+  describe('setCustomLogFile', () => {
+    it('should add a debug file transport for the custom log file', async () => {
+      const winston = await import('winston');
+      (fsMock.existsSync as Mock).mockReturnValue(false);
+
+      logger.setCustomLogFile('/custom/logs/promptfoo.log');
+
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith('/custom/logs', { recursive: true });
+      expect(winston.default.transports.File).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filename: '/custom/logs/promptfoo.log',
+          level: 'debug',
+        }),
+      );
+      expect(mockLogger.add).toHaveBeenCalledTimes(1);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Logging to custom file: /custom/logs/promptfoo.log',
+        }),
+      );
+    });
+
+    it('should replace an existing custom log transport', async () => {
+      const winston = await import('winston');
+
+      logger.setCustomLogFile('/tmp/first.log');
+      const firstTransport = vi.mocked(winston.default.transports.File).mock.instances[0];
+
+      logger.setCustomLogFile('/tmp/second.log');
+
+      expect(mockLogger.remove).toHaveBeenCalledWith(firstTransport);
+      expect(mockLogger.add).toHaveBeenCalledTimes(2);
+      expect(winston.default.transports.File).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filename: '/tmp/second.log',
+          level: 'debug',
+        }),
+      );
+    });
+
+    it('should not add a duplicate transport for the same custom log file', async () => {
+      const winston = await import('winston');
+
+      logger.setCustomLogFile('/tmp/same.log');
+      logger.setCustomLogFile('/tmp/same.log');
+
+      expect(winston.default.transports.File).toHaveBeenCalledTimes(1);
+      expect(mockLogger.add).toHaveBeenCalledTimes(1);
+      expect(mockLogger.remove).not.toHaveBeenCalled();
+    });
+  });
+
   describe('initializeSourceMapSupport', () => {
     it('should only call install once across concurrent and repeated invocations', async () => {
       // Save and clear LOG_LEVEL to prevent auto-initialization during import
