@@ -49,7 +49,11 @@
         "docs/**/*.{md,mdx}"
       ],
       "project": ["**/*.{js,ts,tsx}"],
-      "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
+      "ignoreFiles": [
+        "docs/_shared/**/*.{js,ts,tsx}",
+        "static/js/scripts-analytics.js",
+        "static/js/scripts-marketing.js"
+      ],
       "ignoreDependencies": [
         "@docusaurus/types",
         "@docusaurus/theme-common",
