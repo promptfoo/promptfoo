@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -45,6 +46,16 @@ export default function Prompts({
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  const openPromptDetails = useCallback(
+    (prompt: ServerPromptWithMetadata) => {
+      const index = data.findIndex((entry) => entry.id === prompt.id);
+      if (index !== -1) {
+        setDialogState({ open: true, selectedIndex: index });
+      }
+    },
+    [data],
+  );
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
@@ -70,8 +81,19 @@ export default function Prompts({
         accessorKey: 'label',
         header: 'Label',
         accessorFn: (row) => row.prompt.label || row.prompt.display || row.prompt.raw,
-        cell: ({ getValue }) => (
-          <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+        cell: ({ getValue, row }) => (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto max-w-full justify-start whitespace-normal px-0 text-left"
+            onClick={(event) => {
+              event.stopPropagation();
+              openPromptDetails(row.original);
+            }}
+          >
+            <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+          </Button>
         ),
         size: 200,
       },
@@ -113,15 +135,8 @@ export default function Prompts({
         meta: { align: 'right' },
       },
     ],
-    [],
+    [openPromptDetails],
   );
-
-  const handleRowClick = (prompt: ServerPromptWithMetadata) => {
-    const index = data.findIndex((p) => p.id === prompt.id);
-    if (index !== -1) {
-      handleClickOpen(index);
-    }
-  };
 
   return (
     <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
@@ -141,7 +156,7 @@ export default function Prompts({
               data={data}
               isLoading={isLoading}
               error={error}
-              onRowClick={handleRowClick}
+              onRowClick={openPromptDetails}
               emptyMessage="Create a prompt to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
               globalFilterLabel="Search prompts"

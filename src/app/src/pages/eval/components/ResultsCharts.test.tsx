@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
@@ -99,8 +100,68 @@ describe('ResultsCharts', () => {
     });
 
     const { container } = render(<ResultsCharts scores={scores} />);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
     expect(container.querySelectorAll('canvas').length).toBeGreaterThan(0);
+  });
+
+  it('exposes chart regions, text summaries, and a keyboard-reachable scatter comparison control', async () => {
+    const user = userEvent.setup();
+    const mockTable = {
+      head: {
+        prompts: [
+          { provider: 'test-provider-1', metrics: { namedScores: {} } },
+          { provider: 'test-provider-2', metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: [
+        {
+          outputs: [
+            { score: 0.8, pass: true, text: 'valid output' },
+            { score: 0.9, pass: true, text: 'valid output' },
+          ],
+          vars: [],
+        },
+        {
+          outputs: [
+            { score: 0.6, pass: true, text: 'another valid' },
+            { score: 0.7, pass: true, text: 'another valid' },
+          ],
+          vars: [],
+        },
+      ],
+    };
+
+    const scores = calculateScores(mockTable);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    render(<ResultsCharts scores={scores} />);
+
+    expect(
+      screen.getByRole('region', { name: 'Evaluation result visualizations' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Pass rate chart' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Score distribution chart' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Prompt score comparison chart' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Pass rates by provider\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Comparing test-provider-1 with test-provider-2 across 2 paired scores\./),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Compare prompt outputs' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('X-axis prompt')).toBeInTheDocument();
+    expect(screen.getByLabelText('Y-axis prompt')).toBeInTheDocument();
   });
 
   it('should render without errors with a large number of providers', () => {
@@ -632,6 +693,11 @@ describe('ResultsCharts', () => {
       // Should render charts (the specific chart type logic is tested indirectly)
       const canvasElements = container.querySelectorAll('canvas');
       expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+      expect(
+        screen.getByRole('img', { name: 'Named score metric chart' }),
+      ).toHaveAccessibleDescription(
+        'Normalized named scores by provider. test-provider-1: accuracy 100.00%, precision 100.00%, recall 100.00%; test-provider-2: accuracy 88.89%, precision 87.50%, recall 85.71%.',
+      );
     });
 
     it('should render finite metric chart values if named scores are all zero', () => {

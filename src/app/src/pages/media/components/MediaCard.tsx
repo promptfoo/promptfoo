@@ -80,6 +80,8 @@ export function MediaCard({
   const KindIcon = getKindIcon(item.kind);
   const isPlayable = item.kind === 'video' || item.kind === 'audio';
   const isDownloadOnly = item.kind === 'other';
+  const itemLabel =
+    item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`;
 
   const handlePrimaryAction = () => {
     if (isSelectionMode && onToggleSelection) {
@@ -129,7 +131,7 @@ export function MediaCard({
         onClick={handlePrimaryAction}
         onFocus={onFocus}
         tabIndex={tabIndex}
-        aria-label={`${getKindLabel(item.kind)}: ${item.context.evalDescription || 'Media item'}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
+        aria-label={`${getKindLabel(item.kind)}: ${itemLabel}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
       />
 
       {/* Media Preview Area */}
@@ -176,7 +178,7 @@ export function MediaCard({
                   'opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
                   'hover:bg-black/80',
                 )}
-                aria-label="Download"
+                aria-label={`Download ${itemLabel}`}
               >
                 <Download className="h-3.5 w-3.5 text-white" />
               </button>
@@ -196,7 +198,7 @@ export function MediaCard({
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-muted-foreground/50 bg-white/90 dark:bg-zinc-800/90 hover:border-primary',
             )}
-            aria-label={isSelected ? 'Deselect' : 'Select'}
+            aria-label={isSelected ? `Deselect ${itemLabel}` : `Select ${itemLabel}`}
           >
             {isSelected && <Check className="h-4 w-4" />}
           </button>
@@ -263,9 +265,7 @@ export function MediaCard({
         </div>
 
         {/* Eval description */}
-        <p className="text-sm font-medium truncate">
-          {item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
-        </p>
+        <p className="text-sm font-medium truncate">{itemLabel}</p>
 
         {/* Test/Prompt indices - only render if we have data */}
         {(item.context.testIdx !== undefined || item.context.promptIdx !== undefined) && (

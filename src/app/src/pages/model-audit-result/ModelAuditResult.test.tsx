@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditResult from './ModelAuditResult';
 
@@ -60,6 +60,8 @@ describe('ModelAuditResult', () => {
   const mockFetchScanById = vi.fn();
   const mockDeleteHistoricalScan = vi.fn();
   const mockStartNewScan = vi.fn();
+  const originalTitle = document.title;
+  let descriptionMetaTag: HTMLMetaElement;
 
   const getDefaultHistoryState = () => ({
     historicalScans: [],
@@ -82,10 +84,20 @@ describe('ModelAuditResult', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    descriptionMetaTag = document.createElement('meta');
+    descriptionMetaTag.name = 'description';
+    descriptionMetaTag.content = 'Initial description';
+    document.head.appendChild(descriptionMetaTag);
+    document.title = 'Initial Title';
     mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
     mockUseConfigStore.mockImplementation((selector: any) =>
       selector({ startNewScan: mockStartNewScan }),
     );
+  });
+
+  afterEach(() => {
+    descriptionMetaTag.remove();
+    document.title = originalTitle;
   });
 
   const renderComponent = (scanId: string = 'test-scan-id') => {
@@ -133,6 +145,19 @@ describe('ModelAuditResult', () => {
     // Now check for the scan name (use heading role since it's an h4)
     expect(screen.getByRole('heading', { name: 'My Test Scan' })).toBeInTheDocument();
     expect(screen.getByTestId('results-tab')).toBeInTheDocument();
+  });
+
+  it('should expose scan-specific document metadata after the result loads', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Metadata Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
+    await waitFor(() => {
+      expect(document.title).toBe('Metadata Scan | promptfoo');
+    });
+
+    expect(descriptionMetaTag).toHaveAttribute('content', 'View model audit scan results');
   });
 
   it('should display error when scan not found', async () => {
