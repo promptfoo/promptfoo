@@ -123,6 +123,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-5.6-sol: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-5.6-terra / gpt-5.6-luna: runtime-dependent preview levels
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
@@ -140,8 +142,10 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'max': Deepest single-agent reasoning for GPT-5.6 Sol
+ * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol
  */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Web search modes controlling how the agent accesses the web.
@@ -436,7 +440,9 @@ const OpenAICodexSDKConfigShape = {
   model: z.string().min(1).optional(),
   model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+  model_reasoning_effort: z
+    .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    .optional(),
   network_access_enabled: z.boolean().optional(),
   web_search_enabled: z.boolean().optional(),
   web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
@@ -652,6 +658,10 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.6 limited-preview models
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-pro',

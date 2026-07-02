@@ -114,6 +114,7 @@
         "src/migrate.ts",
         "src/models",
         "src/node",
+        "src/runtimeCompatibilityNotice.ts",
         "src/share.ts",
         "src/storage",
         "src/util"
@@ -176,6 +177,7 @@
         "src/python",
         "src/remoteGrading.ts",
         "src/remoteScoring.ts",
+        "src/runtimeCompatibility.ts",
         "src/ruby",
         "src/suggestions.ts",
         "src/table.ts",

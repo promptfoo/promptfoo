@@ -101,7 +101,7 @@ redteam:
     # Standard strategies that work well with Gemini models
     - jailbreak
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
     - crescendo # Gradual escalation attacks (conversational)
     - goat # Another conversational attack
 ```
