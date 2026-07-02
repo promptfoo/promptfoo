@@ -26,15 +26,6 @@ import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
-  buildCodexExecutionHealth,
-  buildCodexProviderError,
-  buildCodexSandboxFailure,
-  type CodexDroppedEvent,
-  type CodexExecutionHealth,
-  type CodexProviderError,
-  type CodexSandboxFailure,
-} from './codexExecutionHealth';
-import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
   getCodexSkillRootPrefixes,
@@ -278,7 +269,6 @@ interface AppServerConnectionOptions {
   requestTimeoutMs: number;
   startupTimeoutMs: number;
   onNotification: (message: JsonRpcMessage) => void;
-  onDroppedEvent: (event: CodexDroppedEvent) => void;
   onServerRequest: (message: JsonRpcMessage) => Promise<unknown>;
   onClose: (error: Error) => void;
 }
@@ -317,9 +307,6 @@ interface CodexAppServerTurnState {
   rawTokenUsage?: unknown;
   turn?: any;
   error?: string;
-  providerErrors: CodexProviderError[];
-  droppedEvents: CodexDroppedEvent[];
-  sandboxFailures: CodexSandboxFailure[];
   completed: Deferred<void>;
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
@@ -707,13 +694,11 @@ function getJsonRpcErrorMessage(message: JsonRpcMessage): string {
 
 class JsonRpcError extends Error {
   readonly code?: number;
-  readonly data?: unknown;
 
-  constructor(message: string, code?: number, data?: unknown) {
+  constructor(message: string, code?: number) {
     super(message);
     this.name = 'JsonRpcError';
     this.code = code;
-    this.data = data;
   }
 }
 
@@ -926,22 +911,12 @@ class CodexAppServerConnection {
             error,
             bufferedChars: candidate.length,
           });
-          this.options.onDroppedEvent({
-            source: 'json-rpc',
-            reason: 'oversized',
-            count: 1,
-          });
           this.bufferedJsonRpcLines = [];
         }
         return;
       }
 
       logger.warn('[CodexAppServer] Failed to parse JSON-RPC line', { error, line: candidate });
-      this.options.onDroppedEvent({
-        source: 'json-rpc',
-        reason: 'malformed',
-        count: 1,
-      });
       this.bufferedJsonRpcLines = [];
       return;
     }
@@ -979,11 +954,6 @@ class CodexAppServerConnection {
     }
 
     logger.debug('[CodexAppServer] Ignoring unknown JSON-RPC message shape', { message });
-    this.options.onDroppedEvent({
-      source: 'json-rpc',
-      reason: 'malformed',
-      count: 1,
-    });
   }
 
   private handleResponse(message: JsonRpcMessage): void {
@@ -1002,9 +972,7 @@ class CodexAppServerConnection {
     }
 
     if (message.error) {
-      pendingRequest.reject(
-        new JsonRpcError(getJsonRpcErrorMessage(message), message.error.code, message.error.data),
-      );
+      pendingRequest.reject(new JsonRpcError(getJsonRpcErrorMessage(message), message.error.code));
       return;
     }
     try {
@@ -1280,28 +1248,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex app-server', { error: errorMessage });
-      return {
-        error: `Error calling OpenAI Codex app-server: ${errorMessage}`,
-        metadata: {
-          executionHealth: this.sanitizeCodexExecutionHealth(
-            buildCodexExecutionHealth({
-              eventCoverage: 'stream',
-              providerErrors: [buildCodexProviderError(error, { source: 'provider', fatal: true })],
-            }),
-          ),
-        },
-      };
+      return { error: `Error calling OpenAI Codex app-server: ${errorMessage}` };
     }
 
     if (callOptions?.abortSignal?.aborted) {
-      return {
-        error: 'OpenAI Codex app-server call aborted before it started',
-        metadata: {
-          executionHealth: this.sanitizeCodexExecutionHealth(
-            buildCodexExecutionHealth({ eventCoverage: 'stream' }),
-          ),
-        },
-      };
+      return { error: 'OpenAI Codex app-server call aborted before it started' };
     }
 
     const workingDirectory = this.resolveWorkingDirectory(config);
@@ -1387,31 +1338,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
             await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
             return this.buildProviderResponse(state, threadHandle, resolvedConfig);
-          } catch (error) {
-            if (error instanceof Error && error.name === 'AbortError') {
-              state.error = 'OpenAI Codex app-server call aborted';
-              return {
-                ...this.buildProviderResponse(state, threadHandle, resolvedConfig),
-                error: state.error,
-              };
-            }
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            state.error = errorMessage;
-            if (
-              !state.providerErrors.some(
-                (providerError) =>
-                  providerError.fatal === true && providerError.message === errorMessage,
-              )
-            ) {
-              state.providerErrors.push(
-                buildCodexProviderError(error, { source: 'json-rpc', fatal: true }),
-              );
-            }
-            const sandboxFailure = buildCodexSandboxFailure(error, { source: 'json-rpc' });
-            if (sandboxFailure) {
-              state.sandboxFailures.push(sandboxFailure);
-            }
-            return this.buildProviderResponse(state, threadHandle, resolvedConfig);
           } finally {
             this.unregisterTurnState(state);
             await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
@@ -1433,31 +1359,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
       if (isAbort) {
         logger.warn('OpenAI Codex app-server call aborted');
-        return {
-          error: 'OpenAI Codex app-server call aborted',
-          metadata: {
-            executionHealth: this.sanitizeCodexExecutionHealth(
-              buildCodexExecutionHealth({ eventCoverage: 'stream' }),
-            ),
-          },
-        };
+        return { error: 'OpenAI Codex app-server call aborted' };
       }
 
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex app-server', { error: errorMessage });
-      const sandboxFailure = buildCodexSandboxFailure(error, { source: 'provider' });
-      return {
-        error: `Error calling OpenAI Codex app-server: ${errorMessage}`,
-        metadata: {
-          executionHealth: this.sanitizeCodexExecutionHealth(
-            buildCodexExecutionHealth({
-              eventCoverage: 'stream',
-              providerErrors: [buildCodexProviderError(error, { source: 'provider', fatal: true })],
-              sandboxFailures: sandboxFailure ? [sandboxFailure] : [],
-            }),
-          ),
-        },
-      };
+      return { error: `Error calling OpenAI Codex app-server: ${errorMessage}` };
     } finally {
       if (localConnection) {
         await localConnection.close().catch((error) => {
@@ -1642,12 +1549,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
       onNotification: (message) => this.handleNotification(message),
-      onDroppedEvent: (event) =>
-        this.handleProtocolDroppedEvent(
-          connectionInstanceId,
-          config.reuse_server === false || config.deep_tracing === true,
-          event,
-        ),
       onServerRequest: (message) => this.handleServerRequest(message, config),
       onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
@@ -1716,34 +1617,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.resolveActiveTurns(error, (state) => state.connectionInstanceId === connectionInstanceId);
   }
 
-  private handleProtocolDroppedEvent(
-    connectionInstanceId: string,
-    connectionIsExclusive: boolean,
-    event: CodexDroppedEvent,
-  ): void {
-    if (!connectionIsExclusive) {
-      logger.debug(
-        '[CodexAppServer] Protocol drop on reusable connection is not attributed to a turn',
-        { connectionInstanceId, event },
-      );
-      return;
-    }
-
-    const activeStates = Array.from(this.activeTurnsByThread.values()).filter(
-      (state) => state.connectionInstanceId === connectionInstanceId,
-    );
-    if (activeStates.length === 1) {
-      activeStates[0].droppedEvents.push(event);
-      return;
-    }
-
-    logger.debug('[CodexAppServer] Protocol drop could not be attributed on exclusive connection', {
-      activeTurnCount: activeStates.length,
-      connectionInstanceId,
-      event,
-    });
-  }
-
   private resolveActiveTurns(
     error: Error,
     predicate: (state: CodexAppServerTurnState) => boolean = () => true,
@@ -1753,13 +1626,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         continue;
       }
       state.error = error.message;
-      state.providerErrors.push(
-        buildCodexProviderError(error, { source: 'provider', fatal: true }),
-      );
-      const sandboxFailure = buildCodexSandboxFailure(error, { source: 'provider' });
-      if (sandboxFailure) {
-        state.sandboxFailures.push(sandboxFailure);
-      }
       state.completed.resolve();
     }
   }
@@ -2300,9 +2166,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       agentMessageDeltas: [],
       agentMessageDeltasByItemId: new Map(),
       commandExecutionOutputDeltasByItemId: new Map(),
-      providerErrors: [],
-      droppedEvents: [],
-      sandboxFailures: [],
       completed: createDeferred<void>(),
       activeSpans: new Map(),
       itemStartTimes: new Map(),
@@ -2380,17 +2243,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (state.config.include_raw_events) {
       state.notifications.push(message);
     }
-    const reportedDroppedEventCount =
-      typeof params.droppedEventCount === 'number'
-        ? params.droppedEventCount
-        : params.dropped_event_count;
-    if (typeof reportedDroppedEventCount === 'number' && reportedDroppedEventCount > 0) {
-      state.droppedEvents.push({
-        source: 'event-stream',
-        reason: 'reported',
-        count: reportedDroppedEventCount,
-      });
-    }
     const eventTime = Date.now();
 
     switch (message.method) {
@@ -2428,17 +2280,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       case 'turn/completed':
         state.turn = params.turn;
         if (params.turn?.status === 'failed') {
-          const turnError = params.turn?.error ?? {
-            message: 'Codex app-server turn failed',
-          };
-          state.error = turnError.message ?? 'Codex app-server turn failed';
-          state.providerErrors.push(
-            buildCodexProviderError(turnError, { source: 'turn', fatal: true }),
-          );
-          const sandboxFailure = buildCodexSandboxFailure(turnError, { source: 'turn' });
-          if (sandboxFailure) {
-            state.sandboxFailures.push(sandboxFailure);
-          }
+          state.error = params.turn?.error?.message ?? 'Codex app-server turn failed';
         }
         if (!state.activeTurnSpan) {
           // Stream lacked any `turn/started`/`item.*` events with a usable
@@ -2449,21 +2291,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         state.completed.resolve();
         break;
       case 'error':
-        {
-          const providerError = params.error ?? { message: 'Codex app-server error' };
-          const retryable = params.willRetry === true;
-          state.providerErrors.push(
-            buildCodexProviderError(providerError, {
-              source: 'stream',
-              fatal: !retryable,
-              retryable,
-            }),
-          );
-          const sandboxFailure = buildCodexSandboxFailure(providerError, { source: 'stream' });
-          if (sandboxFailure) {
-            state.sandboxFailures.push(sandboxFailure);
-          }
-        }
         if (params.willRetry === true) {
           logger.debug('[CodexAppServer] Retryable error received', {
             error: params.error?.message,
@@ -2488,11 +2315,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private handleItemStarted(state: CodexAppServerTurnState, item: any, eventTime: number): void {
     if (!item) {
-      state.droppedEvents.push({
-        source: 'event-stream',
-        reason: 'malformed',
-        count: 1,
-      });
       return;
     }
     state.itemStarts.push(item);
@@ -2513,11 +2335,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private handleItemCompleted(state: CodexAppServerTurnState, item: any, eventTime: number): void {
     if (!item) {
-      state.droppedEvents.push({
-        source: 'event-stream',
-        reason: 'malformed',
-        count: 1,
-      });
       return;
     }
 
@@ -2826,6 +2643,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
       }
     }
+
+    if (state.error) {
+      throw new Error(state.error);
+    }
   }
 
   private async cleanupThreadAfterTurn(
@@ -2970,13 +2791,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     };
     const metadata = this.buildResponseMetadata(state, threadHandle, config, normalizedItems);
 
-    if (state.error) {
-      return {
-        error: `Error calling OpenAI Codex app-server: ${state.error}`,
-        metadata,
-      };
-    }
-
     return {
       output,
       tokenUsage: state.tokenUsage,
@@ -3014,14 +2828,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state.items,
       this.getSkillRootPrefixes(config, state.appServerEnv),
     );
-    const executionHealth = buildCodexExecutionHealth({
-      eventCoverage: 'stream',
-      items: state.items,
-      providerErrors: state.providerErrors,
-      droppedEvents: [...state.droppedEvents, ...this.getMissingItemCompletionEvents(state)],
-      sandboxFailures: state.sandboxFailures,
-      successfulSkillCalls: skillMetadata?.skillCalls,
-    });
     return {
       codexAppServer: {
         threadId: threadHandle.threadId,
@@ -3037,42 +2843,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         notificationCount: state.notificationCount,
       },
       ...getCodexSkillMetadataFields(skillMetadata),
-      executionHealth: this.sanitizeCodexExecutionHealth(executionHealth),
     };
-  }
-
-  private getMissingItemCompletionEvents(state: CodexAppServerTurnState): CodexDroppedEvent[] {
-    const completedItemIds = new Set(
-      state.items
-        .map((item) => item?.id)
-        .filter(
-          (itemId): itemId is string | number =>
-            typeof itemId === 'string' || typeof itemId === 'number',
-        )
-        .map(String),
-    );
-    const seenStartedItemIds = new Set<string>();
-    const droppedEvents: CodexDroppedEvent[] = [];
-
-    for (const item of state.itemStarts) {
-      if (typeof item?.id !== 'string' && typeof item?.id !== 'number') {
-        continue;
-      }
-      const itemId = String(item.id);
-      if (completedItemIds.has(itemId) || seenStartedItemIds.has(itemId)) {
-        continue;
-      }
-      seenStartedItemIds.add(itemId);
-      droppedEvents.push({
-        source: 'item-lifecycle',
-        reason: 'missing-completion',
-        count: 1,
-        itemId,
-        ...(typeof item.type === 'string' ? { itemType: item.type } : {}),
-      });
-    }
-
-    return droppedEvents;
   }
 
   private normalizeItemForMetadata(item: any): Record<string, unknown> {
@@ -3622,10 +3393,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private sanitizeForMetadata(value: unknown): unknown {
     return this.redactTracePii(sanitizeObject(value, { context: 'Codex app-server metadata' }));
-  }
-
-  private sanitizeCodexExecutionHealth(health: CodexExecutionHealth): CodexExecutionHealth {
-    return this.sanitizeForMetadata(health) as CodexExecutionHealth;
   }
 
   private redactTracePii(value: unknown): unknown {

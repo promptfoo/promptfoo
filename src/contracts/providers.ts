@@ -35,50 +35,24 @@ export interface ImageOutput {
   mimeType?: string;
 }
 
-export interface SkillCallEntry {
-  name: string;
-  input?: unknown;
-  path?: string;
-  source?: 'heuristic' | 'tool';
-  is_error?: boolean;
-}
-
-export type CodexExecutionEventCoverage = 'stream' | 'final-items';
-
 export interface CodexToolExitCode {
   itemId?: string;
-  status?: string;
   exitCode: number;
 }
 
 export interface CodexProviderError {
-  source: 'provider' | 'stream' | 'turn' | 'item' | 'json-rpc';
-  message?: string;
   code?: string | number;
   kind?: string;
   httpStatusCode?: number;
-  retryable?: boolean;
-  fatal: boolean;
 }
 
 export interface CodexDroppedEvent {
-  source: 'event-stream' | 'item-lifecycle' | 'json-rpc';
-  reason: 'reported' | 'missing-completion' | 'malformed' | 'oversized';
-  count: number;
-  itemId?: string;
+  itemId: string;
   itemType?: string;
 }
 
-export interface CodexSandboxFailure {
-  source: CodexProviderError['source'];
-  message?: string;
-  code?: string | number;
-  itemId?: string;
-  exitCode?: number;
-}
-
 /**
- * Versioned execution diagnostics returned by the Codex providers.
+ * Versioned execution diagnostics returned by the Codex SDK provider.
  *
  * Classifications in this envelope come only from structured provider data or
  * protocol lifecycle observations. Command output and error prose are not
@@ -86,12 +60,10 @@ export interface CodexSandboxFailure {
  */
 export interface CodexExecutionHealth {
   schemaVersion: 1;
-  eventCoverage: CodexExecutionEventCoverage;
   toolExitCodes: CodexToolExitCode[];
-  providerErrors: CodexProviderError[];
+  providerError?: CodexProviderError;
   droppedEvents: CodexDroppedEvent[];
-  sandboxFailures: CodexSandboxFailure[];
-  successfulSkillCalls: SkillCallEntry[];
+  sandboxFailure: boolean;
 }
 
 export interface ProviderResponse {

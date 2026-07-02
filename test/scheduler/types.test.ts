@@ -9,10 +9,18 @@ import type { ProviderResponse } from '../../src/types/providers';
 
 describe('isProviderResponseRateLimited', () => {
   describe('HTTP status detection', () => {
-    it('should detect 429 status in metadata.http.status', () => {
+    it('should prefer a structured 429 over execution health', () => {
       const result: ProviderResponse = {
         output: 'error',
-        metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+        metadata: {
+          http: { status: 429, statusText: 'Too Many Requests', headers: {} },
+          executionHealth: {
+            schemaVersion: 1,
+            toolExitCodes: [],
+            droppedEvents: [],
+            sandboxFailure: false,
+          },
+        },
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
@@ -56,18 +64,9 @@ describe('isProviderResponseRateLimited', () => {
         metadata: {
           executionHealth: {
             schemaVersion: 1,
-            eventCoverage: 'stream',
             toolExitCodes: [],
-            providerErrors: [
-              {
-                source: 'provider',
-                message: 'Fixture mentions HTTP 429, rate limit, and too many requests',
-                fatal: true,
-              },
-            ],
             droppedEvents: [],
-            sandboxFailures: [],
-            successfulSkillCalls: [],
+            sandboxFailure: false,
           },
         },
       };

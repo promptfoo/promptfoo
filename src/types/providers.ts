@@ -16,10 +16,8 @@ import type { TransformFunction } from './transform';
 export type {
   ChatMessage,
   CodexDroppedEvent,
-  CodexExecutionEventCoverage,
   CodexExecutionHealth,
   CodexProviderError,
-  CodexSandboxFailure,
   CodexToolExitCode,
   GuardrailResponse,
   ImageOutput,
@@ -29,7 +27,6 @@ export type {
   ProviderModerationResponse,
   ProviderResponse,
   ProviderSimilarityResponse,
-  SkillCallEntry,
 } from '../contracts/providers';
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
@@ -52,6 +49,14 @@ export interface RemoteGenerationContext {
 }
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+
+export interface SkillCallEntry {
+  name: string;
+  input?: unknown;
+  path?: string;
+  source?: 'heuristic' | 'tool';
+  is_error?: boolean;
+}
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 

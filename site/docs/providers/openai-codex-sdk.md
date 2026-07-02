@@ -696,19 +696,17 @@ providers:
 
 ## Execution health
 
-Every completed Codex response includes `response.metadata.executionHealth` with a versioned, machine-readable summary:
+Codex responses include `response.metadata.executionHealth` with a small, versioned summary:
 
-| Field                  | Description                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------- |
-| `schemaVersion`        | Contract version. Currently `1`.                                                                |
-| `eventCoverage`        | `stream`; execution health consumes the SDK event stream in both tracing modes.                 |
-| `toolExitCodes`        | Command item ids, statuses, and numeric exit codes. A nonzero exit is not a provider failure.   |
-| `providerErrors`       | Provider, stream, turn, item, or JSON-RPC errors with structured code/status fields when known. |
-| `droppedEvents`        | Structured drop reports and item lifecycle gaps observed by promptfoo.                          |
-| `sandboxFailures`      | Failures carrying an explicit Codex sandbox discriminator.                                      |
-| `successfulSkillCalls` | The same confirmed skill calls exposed by `metadata.skillCalls`.                                |
+| Field            | Description                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| `schemaVersion`  | Contract version. Currently `1`.                                                                  |
+| `toolExitCodes`  | Numeric exit codes for completed command items. A nonzero exit is not a provider failure.         |
+| `providerError`  | The terminal provider error's structured code, kind, and HTTP status, when the SDK supplies them. |
+| `droppedEvents`  | Items that started but did not receive a completion event.                                        |
+| `sandboxFailure` | Whether the terminal error carries an explicit Codex sandbox discriminator.                       |
 
-`providerErrors[].fatal` distinguishes terminal failures from errors that Codex recovered from. Promptfoo does not infer rate limits, DNS failures, connection failures, sandbox failures, or dropped-event counts from command output or error prose.
+Promptfoo does not infer these fields from command output or error prose. Confirmed skill usage remains available separately in `response.metadata.skillCalls`.
 
 The `CodexExecutionHealth` type is exported from `promptfoo/contracts`.
 
