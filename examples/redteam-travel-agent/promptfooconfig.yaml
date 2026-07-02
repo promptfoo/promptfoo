@@ -26,7 +26,7 @@ redteam:
     - jailbreak
     - jailbreak:composite
     - jailbreak:tree
-    - prompt-injection
+    - jailbreak-templates
     - goat
     - crescendo
     - mischievous-user

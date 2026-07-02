@@ -43,7 +43,7 @@ redteam:
     - owasp:api
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or target specific API risks:
@@ -433,7 +433,7 @@ redteam:
     - owasp:api
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 This configuration tests your LLM application against all OWASP API Security Top 10 risks.
@@ -458,7 +458,7 @@ redteam:
     - owasp:llm
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## LLM-Specific API Security Challenges
