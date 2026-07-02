@@ -906,6 +906,7 @@ class RedteamIterativeProvider implements ApiProvider {
       redteamProvider: await redteamProviderManager.getProvider({
         provider: this.redteamProvider,
         jsonOnly: true,
+        purpose: 'attack',
       }),
       gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,

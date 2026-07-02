@@ -107,6 +107,7 @@ export async function encodeMathPrompt(text: string, concept: string): Promise<s
   const redteamProvider = await redteamProviderManager.getProvider({
     jsonOnly: true,
     preferSmallModel: true,
+    purpose: 'attack',
   });
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
