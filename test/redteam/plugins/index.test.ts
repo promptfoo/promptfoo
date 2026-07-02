@@ -170,6 +170,15 @@ describe('Plugins', () => {
         'config.intendedResults',
       );
     });
+
+    it('should validate path-traversal-output plugin config through the registry', async () => {
+      const pathTraversalPlugin = Plugins.find((p) => p.key === 'path-traversal-output');
+      expect(() =>
+        pathTraversalPlugin?.validate?.({
+          pathTraversalOutputPatterns: [{ id: 'custom', pattern: 'CUSTOM_SECRET_TOKEN' }],
+        }),
+      ).toThrow(/requires config\.examples/);
+    });
   });
 
   describe('max chars retries', () => {
