@@ -1,4 +1,5 @@
 ---
+title: HTTP/HTTPS API
 sidebar_label: HTTP API
 description: Configure HTTP/HTTPS endpoints for custom LLM integrations with dynamic request transforms, variable substitution, and multi-provider API compatibility
 ---
@@ -1705,13 +1706,52 @@ Streaming responses typically use one of these formats:
 - **Chunked JSON**: Multiple JSON objects sent sequentially, often separated by newlines or delimiters.
 - **HTTP chunked transfer encoding**: Standard HTTP mechanism for streaming arbitrary data.
 
-Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md). However, synchronous REST/HTTP requests are often preferable for the following reasons:
+Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md).
 
-- Streaming formats vary widely and often require custom parsing logic in `transformResponse`.
-- Evals wait for the full response before scoring, so progressive tokens may not be surfaced.
-- Overall test duration is typically similar to non-streaming requests, so streaming does not provide a performance benefit.
+### Time to First Token (TTFT) Measurement
 
-If you need to evaluate a streaming endpoint, you will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+When `stream: true` is set in the request body, Promptfoo records timing metrics on every streamed response. TTFT here measures streamed text output; it does not measure time to the first audio packet or audio frame. See [the TTFT assertion docs](/docs/configuration/expected-outputs/deterministic#ttft) for precise definitions of each measured field.
+
+Two measurement modes are supported:
+
+**Canonical TTFT (recommended)** — pin TTFT to the first model-emitted text content token using `streamFormat`:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      body:
+        stream: true
+      streamFormat: openai-chat # or: openai-responses, anthropic-messages
+```
+
+**Wire-level proxy (default)** — TTFT fires on the first non-whitespace body byte. This is format-agnostic and works on any SSE/chunked endpoint without configuration, but may report earlier than canonical TTFT when framing metadata arrives before the first content token.
+
+Add TTFT assertions to your tests:
+
+```yaml
+defaultTest:
+  assert:
+    - type: ttft
+      threshold: 2000 # Fail if TTFT > 2 seconds
+    - type: latency
+      threshold: 10000 # Fail if total response > 10 seconds
+```
+
+**Config options**
+
+| Option                    | Type                                                          | Default | Purpose                                                                                                            |
+| ------------------------- | ------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `streamFormat`            | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol                                                        |
+| `streamFirstTokenPattern` | regex source string                                           | unset   | Custom detector matched against the most recent 64 KiB of stream text. Overrides `streamFormat` when both are set. |
+
+When `stream: true` is set, response caching is automatically disabled so every TTFT measurement reflects a live call.
+
+### Parsing Streaming Responses
+
+You will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+
+Content-derived streaming metrics (`completionChars` and `tokensPerSecond`) are populated only when `transformResponse` (or the deprecated `responseParser`) explicitly returns the reconstructed completion. Without a transform, Promptfoo cannot distinguish plain-text completion bytes from SSE or NDJSON framing, so it leaves those fields unset rather than reporting misleading throughput.
 
 **Example streaming response format:**
 
@@ -1767,23 +1807,25 @@ This parser would extract `"The quick brown fox"` from the example response abov
 
 Supported config options:
 
-| Option            | Type                    | Description                                                                                                                                                                         |
-| ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
-| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
-| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
-| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
-| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
-| multipart         | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
-| queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
-| transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
-| transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
-| tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
-| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
-| auth              | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
-| signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
-| tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
+| Option                  | Type                    | Description                                                                                                                                                                         |
+| ----------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url                     | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
+| request                 | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
+| method                  | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
+| headers                 | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
+| body                    | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| multipart               | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
+| queryParams             | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
+| transformRequest        | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
+| transformResponse       | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| streamFormat            | string                  | Built-in TTFT detector for `openai-chat`, `openai-responses`, or `anthropic-messages` streaming responses.                                                                          |
+| streamFirstTokenPattern | string                  | Custom regex source matched against the recent stream text to identify the first content token. Overrides `streamFormat`.                                                           |
+| tokenEstimation         | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
+| maxRetries              | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| validateStatus          | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
+| auth                    | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
+| signatureAuth           | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
+| tls                     | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 

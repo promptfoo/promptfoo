@@ -75,6 +75,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [ttft](#ttft)                                                   | Time to first token is below threshold (milliseconds)              |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
@@ -929,6 +930,75 @@ assert:
 ```
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+
+### TTFT
+
+The `ttft` assertion measures **Time to First Token** (TTFT) for streaming text HTTP responses and fails if the measured value exceeds the specified threshold. Duration is in milliseconds. It does not measure time to the first audio packet or audio frame.
+
+#### Precise definition
+
+Two measurement modes are supported. Choose one via the provider's `streamFormat` or `streamFirstTokenPattern` config.
+
+| Mode                                                                        | Start event                                      | End event                                            |
+| --------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted text content token in the stream |
+| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body       |
+
+The wire-level proxy is format-agnostic and may report earlier because it fires on SSE framing frames (for example, `{"delta":{"role":"assistant"}}` or `{"type":"response.created"}`) rather than the first content delta.
+
+#### Canonical TTFT (recommended)
+
+Set `streamFormat` on the provider to enable content-token detection for the three common SSE protocols:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      body:
+        model: gpt-5.4-mini
+        reasoning_effort: none
+        stream: true
+        messages: [{ role: user, content: '{{prompt}}' }]
+      streamFormat: openai-chat # or: openai-responses, anthropic-messages
+
+assert:
+  - type: ttft
+    threshold: 2000
+```
+
+For endpoints that don't match a built-in preset, provide a regex:
+
+```yaml
+streamFirstTokenPattern: '"delta"\s*:\s*\{[\s\S]*?"content"\s*:\s*"(?!")'
+```
+
+The regex is matched against the most recent 64 KiB of raw stream text so detector work remains bounded; design it to match a local event or short event sequence. `streamFirstTokenPattern` takes precedence over `streamFormat` when both are set.
+
+#### What the underlying streaming metrics measure
+
+When `stream: true` is set on the provider, the HTTP provider populates `providerResponse.streamingMetrics`:
+
+| Field                | Definition                                                                         | Notes                                                                                                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeToFirstToken`   | ms from request dispatch to the first event that matches the configured detector   | Canonical when a preset/pattern is set; wire-level otherwise                                                                                                                      |
+| `totalStreamTime`    | ms from first response-body chunk arrival to last chunk arrival                    | Excludes request processing before body bytes arrive and any idle tail before close; may include framing bytes before the detected content token                                  |
+| `completionChars`    | UTF-16 code units in the parsed completion (after an explicit `transformResponse`) | Exact, no heuristic. Unset without a response transform because raw streaming bytes may contain protocol framing. Use for custom throughput calculations with your own tokenizer. |
+| `tokensPerSecond`    | `Math.ceil(completionChars / 4) / totalStreamTime × 1000`                          | Approximate. Populated only when `completionChars` exists, `multiChunkDelivery === true`, and `totalStreamTime ≥ 50ms`. Inaccurate for CJK / code / base64.                       |
+| `multiChunkDelivery` | `true` iff the stream delivered more than one network read's worth of bytes        | Does not mean the model emitted multiple tokens — only that the transport flushed incrementally.                                                                                  |
+
+#### Caching
+
+Streaming responses are never cached so TTFT always reflects a live network call.
+
+#### Use Cases
+
+- Measuring user-perceived responsiveness in chat applications
+- Comparing streaming performance across different models
+- Setting performance SLAs for production deployments
+
+#### See Also
+
+- [HTTP Provider Streaming Documentation](/docs/providers/http#streaming-responses)
 
 ### Levenshtein distance
 

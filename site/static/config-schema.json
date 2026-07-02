@@ -963,6 +963,7 @@
                 "trace-span-count",
                 "trace-span-duration",
                 "search-rubric",
+                "ttft",
                 "webhook",
                 "word-count"
               ]
@@ -1034,6 +1035,7 @@
                 "trace-span-count",
                 "trace-span-duration",
                 "search-rubric",
+                "ttft",
                 "webhook",
                 "word-count"
               ]

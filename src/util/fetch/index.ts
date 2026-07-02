@@ -537,6 +537,7 @@ export function isTransientError(response: Response): boolean {
 
 /**
  * Fetch with automatic retries and rate limit handling
+ * Returns raw Response object for unified processing
  */
 export type { FetchOptions } from './types';
 
@@ -680,4 +681,383 @@ export async function fetchWithRetries(
     }
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
+}
+
+/**
+ * Timing metrics captured while consuming a streaming HTTP response.
+ *
+ * Applies to text modalities only. Timing values are milliseconds.
+ *
+ * ## Precise field definitions
+ *
+ * `timeToFirstToken` is the wall time from request dispatch (when the
+ * HTTP request is sent) to a detection event on the response body. The
+ * default detection event is "first non-whitespace byte of the response
+ * body" — a format-agnostic proxy for TTFT. For SSE streams this fires
+ * on the first `data: ...` frame, which often carries framing metadata
+ * (e.g. OpenAI's `{"delta":{"role":"assistant"}}`) rather than the first
+ * model-generated content token.
+ *
+ * For canonical TTFT as defined in ML benchmarking literature (vLLM,
+ * MLPerf, OpenAI performance docs) — "time from request dispatch to the
+ * first model-generated output token" — pass a `firstTokenDetector` that
+ * inspects the accumulated stream text and returns true when the first
+ * content token has arrived. For OpenAI Chat Completions SSE:
+ *
+ *   firstTokenDetector: (buf) => /"delta":\s*\{[^}]*"content":"[^"]/.test(buf)
+ *
+ * `totalStreamTime` is from the arrival of the first response-body chunk to
+ * the arrival of the last response-body chunk. It excludes connection/server
+ * time before the first body bytes and excludes any idle tail while an
+ * already-delivered stream remains open.
+ *
+ * `multiChunkDelivery` is true when the transport delivered more than
+ * one network chunk (`ReadableStream.getReader().read()` call). It does
+ * NOT mean the upstream model emitted multiple tokens. A server that
+ * flushes every SSE event in one TCP write reports `false`. A server
+ * that buffers and flushes in bursts reports `true`. Use this to detect
+ * whether the stream actually progressed incrementally versus arrived
+ * in a single burst (in which case `tokensPerSecond` is omitted).
+ *
+ * `tokensPerSecond` is populated by the caller (the HTTP provider) after
+ * `transformResponse` produces the final content string. It uses a
+ * `chars / 4` heuristic that is a standard English-prose proxy but
+ * underestimates token counts for CJK text, code, and base64. It is
+ * intentionally NOT computed from the raw stream buffer here because SSE
+ * frame wrappers inflate character counts by 20x-60x.
+ */
+export interface StreamingMetrics {
+  /**
+   * Milliseconds from request dispatch to the first detected "token event".
+   * See interface JSDoc for the precise definition and detector semantics.
+   */
+  timeToFirstToken?: number;
+  /**
+   * Milliseconds from first response-body chunk arrival to last chunk arrival.
+   * Excludes request processing before body bytes arrive and any idle tail before close.
+   * May include protocol framing that arrives before the detected content token.
+   * Populated by `processStreamingResponse`.
+   */
+  totalStreamTime?: number;
+  /**
+   * Number of UTF-16 code units in the final completion text (i.e. after
+   * `transformResponse` has parsed the stream). This is the exact raw
+   * measurement — no heuristic. Divide by `totalStreamTime` and multiply by
+   * 1000 to get chars/second, or pass through your own tokenizer for an
+   * exact tokens-per-second figure that does not depend on the chars/4
+   * approximation used by `tokensPerSecond`.
+   */
+  completionChars?: number;
+  /**
+   * Approximate throughput in "tokens" per second where a "token" is
+   * defined as 4 UTF-16 code units (the OpenAI-documented English-prose
+   * heuristic). Computed as `Math.ceil(completionChars / 4) / totalStreamTime * 1000`.
+   * Only populated when the response delivered multiple network chunks
+   * and the stream window is at least `MIN_MEANINGFUL_STREAM_WINDOW_MS`.
+   *
+   * NOT accurate for CJK text, code, or base64 — prefer `completionChars`
+   * with your own tokenizer when precision matters.
+   */
+  tokensPerSecond?: number;
+  /** True when the transport delivered more than one network chunk. */
+  multiChunkDelivery?: boolean;
+}
+
+/**
+ * Predicate called after each chunk is appended. When it returns true,
+ * `timeToFirstToken` is stamped. Receives the accumulated raw response
+ * text (across all chunks so far) so patterns can safely span chunk
+ * boundaries.
+ */
+export type FirstTokenDetector = (accumulatedText: string) => boolean;
+
+/**
+ * Default detector: fires on the first non-whitespace byte in the new chunk.
+ * Exported for callers that want to explicitly opt into the format-agnostic
+ * wire-level proxy rather than a format-specific content detector.
+ */
+export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedText) => {
+  for (let i = 0; i < accumulatedText.length; i++) {
+    if (accumulatedText.charCodeAt(i) > 32) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Supported text streaming response formats. Selects a built-in content-token
+ * detector so callers do not have to reverse-engineer the SSE shape. These
+ * detectors do not measure audio stream latency.
+ *
+ * - `openai-chat`: OpenAI Chat Completions (`/v1/chat/completions`). Fires on
+ *   the first delta with a non-empty `content` string. Skips the leading
+ *   `{"delta":{"role":"assistant"}}` framing frame.
+ * - `openai-responses`: OpenAI Responses API (`/v1/responses`). Fires on the
+ *   first `response.output_text.delta` event with a non-empty `delta`.
+ * - `anthropic-messages`: Anthropic Messages API (`/v1/messages`). Fires on
+ *   the first `content_block_delta` event with a non-empty `text_delta`.
+ *
+ * If your endpoint is not one of these, use `streamFirstTokenPattern` with a
+ * custom regex or omit it entirely to get the default wire-level proxy.
+ */
+export type StreamFormat = 'openai-chat' | 'openai-responses' | 'anthropic-messages';
+const BUILT_IN_STREAM_FORMAT = Symbol('builtInStreamFormat');
+type BuiltInStreamFormatDetector = FirstTokenDetector & {
+  [BUILT_IN_STREAM_FORMAT]: StreamFormat;
+};
+
+function parseSseDataEvents(accumulatedText: string): unknown[] {
+  return accumulatedText.split(/\r?\n/).flatMap((line) => {
+    const event = parseSseDataLine(line);
+    return event === undefined ? [] : [event];
+  });
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseSseDataLine(line: string): unknown | undefined {
+  if (!line.startsWith('data:')) {
+    return undefined;
+  }
+
+  const data = line.slice('data:'.length).trim();
+  if (!data || data === '[DONE]') {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(data) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+const STREAM_FORMAT_EVENT_DETECTORS: Record<StreamFormat, (event: unknown) => boolean> = {
+  'openai-chat': (event) => {
+    if (!isRecord(event) || !Array.isArray(event.choices)) {
+      return false;
+    }
+    return event.choices.some(
+      (choice) =>
+        isRecord(choice) && isRecord(choice.delta) && isNonEmptyString(choice.delta.content),
+    );
+  },
+  'openai-responses': (event) =>
+    isRecord(event) && event.type === 'response.output_text.delta' && isNonEmptyString(event.delta),
+  'anthropic-messages': (event) =>
+    isRecord(event) &&
+    isRecord(event.delta) &&
+    event.delta.type === 'text_delta' &&
+    isNonEmptyString(event.delta.text),
+};
+
+/**
+ * Build a first-token detector for a known streaming format.
+ * When passed to `processStreamingResponse`, its format marker enables
+ * incremental SSE processing instead of repeatedly parsing accumulated text.
+ */
+export function detectorForStreamFormat(format: StreamFormat): FirstTokenDetector {
+  const detector = ((accumulatedText) =>
+    parseSseDataEvents(accumulatedText).some(
+      STREAM_FORMAT_EVENT_DETECTORS[format],
+    )) as BuiltInStreamFormatDetector;
+  detector[BUILT_IN_STREAM_FORMAT] = format;
+  return detector;
+}
+
+function createIncrementalStreamFormatDetector(
+  format: StreamFormat,
+): (chunk: string, final: boolean) => boolean {
+  let pendingLine = '';
+  return (chunk, final) => {
+    const lines = `${pendingLine}${chunk}`.split(/\r?\n/);
+    pendingLine = final ? '' : (lines.pop() ?? '');
+    return lines.some((line) => {
+      const event = parseSseDataLine(line);
+      return event !== undefined && STREAM_FORMAT_EVENT_DETECTORS[format](event);
+    });
+  };
+}
+
+function getBuiltInStreamFormat(
+  detector: FirstTokenDetector | undefined,
+): StreamFormat | undefined {
+  return (detector as BuiltInStreamFormatDetector | undefined)?.[BUILT_IN_STREAM_FORMAT];
+}
+
+interface StreamingDetectionOptions {
+  firstTokenDetector?: FirstTokenDetector;
+  firstTokenDetectorWindowChars?: number;
+  streamFormat?: StreamFormat;
+}
+
+function createStreamingTokenDetector(
+  opts?: StreamingDetectionOptions,
+): (chunk: string, final: boolean) => boolean {
+  const builtInFormat = opts?.firstTokenDetector
+    ? getBuiltInStreamFormat(opts.firstTokenDetector)
+    : opts?.streamFormat;
+  if (builtInFormat !== undefined) {
+    return createIncrementalStreamFormatDetector(builtInFormat);
+  }
+
+  if (opts?.firstTokenDetector) {
+    const detector = opts.firstTokenDetector;
+    const windowChars = opts.firstTokenDetectorWindowChars;
+    let detectorText = '';
+    return (chunk) => {
+      detectorText += chunk;
+      if (windowChars !== undefined) {
+        detectorText = detectorText.slice(-windowChars);
+      }
+      return detector(detectorText);
+    };
+  }
+
+  return (chunk) => firstNonWhitespaceByteDetector(chunk);
+}
+
+/**
+ * Consume a streaming HTTP response and collect timing metrics.
+ *
+ * `timeToFirstToken` is measured from `requestStartTime` so it captures
+ * connection setup and server processing, not just stream-read latency.
+ * Pass a `firstTokenDetector` to customize when TTFT fires (see
+ * `StreamingMetrics` JSDoc for canonical-TTFT examples).
+ *
+ * @param response - The Response object to process as a stream
+ * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
+ * @param opts.firstTokenDetector - Predicate that decides when TTFT fires. Defaults
+ *   to `firstNonWhitespaceByteDetector` (first non-whitespace body byte).
+ * @param opts.streamFormat - Built-in SSE detector, processed once per completed event.
+ *   Ignored when an unrelated custom `firstTokenDetector` is provided.
+ * @param opts.firstTokenDetectorWindowChars - Optional rolling character window retained
+ *   for a custom detector. Use this for pattern detectors over untrusted streams.
+ */
+export async function processStreamingResponse(
+  response: Response,
+  requestStartTime: number,
+  opts?: StreamingDetectionOptions,
+): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error(`Response has no readable body (status ${response.status})`);
+  }
+
+  const detectToken = createStreamingTokenDetector(opts);
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let firstTokenTime: number | undefined;
+  let firstByteTime: number | undefined;
+  let lastByteTime: number | undefined;
+  let chunkCount = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const now = Date.now();
+      // Pin totalStreamTime strictly between first and last byte so the
+      // window is "bytes arriving on the wire", not "time in this function."
+      if (firstByteTime === undefined) {
+        firstByteTime = now;
+      }
+      lastByteTime = now;
+
+      const chunk = decoder.decode(value, { stream: true });
+      chunks.push(chunk);
+      chunkCount++;
+
+      // Stamp TTFT on the first chunk whose arrival causes the detector to pass.
+      // Measure from requestStartTime so network overhead (TCP/TLS/headers) is included.
+      if (firstTokenTime === undefined && detectToken(chunk, false)) {
+        firstTokenTime = now - requestStartTime;
+      }
+    }
+
+    // Flush any buffered decoder state at EOF. This preserves the same
+    // replacement-character behavior as Response.text() for truncated UTF-8.
+    const trailingText = decoder.decode();
+    if (trailingText) {
+      chunks.push(trailingText);
+    }
+    if (
+      firstTokenTime === undefined &&
+      lastByteTime !== undefined &&
+      detectToken(trailingText, true)
+    ) {
+      firstTokenTime = lastByteTime - requestStartTime;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const totalStreamTime =
+    firstByteTime !== undefined && lastByteTime !== undefined
+      ? lastByteTime - firstByteTime
+      : undefined;
+
+  return {
+    text: chunks.join(''),
+    streamingMetrics: {
+      // Left undefined on all-whitespace streams so the ttft assertion reports "could not measure".
+      timeToFirstToken: firstTokenTime,
+      totalStreamTime,
+      multiChunkDelivery: chunkCount > 1,
+    },
+  };
+}
+
+/**
+ * Minimum streamed window below which `tokensPerSecond` is suppressed.
+ *
+ * Rationale (why 50ms specifically):
+ *
+ * 1. Cross-region HTTP round-trip times to major LLM endpoints sit in the
+ *    10-40ms range on a typical cloud or residential link, so inter-chunk
+ *    gaps shorter than ~50ms are dominated by network buffering jitter
+ *    rather than model generation cadence.
+ * 2. The rate formula is `chars/4 / streamWindowMs * 1000`. At 50ms the
+ *    denominator is large enough that a +/-5ms clock jitter moves the
+ *    reported rate by at most 10%, which matches the chars/4 heuristic's
+ *    own precision floor for English text.
+ * 3. Below ~50ms, real multi-chunk streams tend to represent a single TCP
+ *    packet arriving in two network-stack reads (kernel -> userspace
+ *    boundary). Reporting throughput for that case misrepresents the
+ *    model's token-generation speed.
+ *
+ * Callers that want the raw rate at any window can compute it from
+ * `completionChars` and `totalStreamTime` directly; this constant only
+ * governs the convenience `tokensPerSecond` field.
+ */
+export const MIN_MEANINGFUL_STREAM_WINDOW_MS = 50;
+
+/**
+ * Compute tokens-per-second using content chars (chars/4 heuristic) over the
+ * streamed window. Returns `undefined` when the window is too short or
+ * content is empty — in those cases the number would be misleading (or
+ * infinite) rather than informative.
+ */
+export function estimateStreamingTokensPerSecond(
+  completionChars: number,
+  streamWindowMs: number | undefined,
+): number | undefined {
+  if (
+    completionChars <= 0 ||
+    streamWindowMs === undefined ||
+    streamWindowMs < MIN_MEANINGFUL_STREAM_WINDOW_MS
+  ) {
+    return undefined;
+  }
+  return (Math.ceil(completionChars / 4) / streamWindowMs) * 1000;
 }
