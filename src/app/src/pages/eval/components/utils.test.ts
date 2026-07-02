@@ -218,6 +218,20 @@ describe('hasHumanRating', () => {
     expect(hasHumanRating(output)).toBe(true);
   });
 
+  it('should return true for a legacy top-level human rating', () => {
+    const output: EvaluateTableOutput = {
+      ...createBaseOutput(),
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Legacy manual rating',
+        assertion: { type: HUMAN_ASSERTION_TYPE },
+      },
+    };
+
+    expect(hasHumanRating(output)).toBe(true);
+  });
+
   it('should return false when output has no human rating in componentResults', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
@@ -359,6 +373,21 @@ describe('getHumanRating', () => {
     };
 
     expect(getHumanRating(output)).toEqual(humanResult);
+  });
+
+  it('should return a legacy top-level human rating when no component rating exists', () => {
+    const gradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Legacy manual rating',
+      assertion: { type: HUMAN_ASSERTION_TYPE },
+    };
+    const output: EvaluateTableOutput = {
+      ...createBaseOutput(),
+      gradingResult,
+    };
+
+    expect(getHumanRating(output)).toEqual(gradingResult);
   });
 
   it('should return undefined when no human rating exists', () => {

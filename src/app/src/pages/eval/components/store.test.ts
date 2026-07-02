@@ -1119,6 +1119,161 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('ignores a stale background refresh without superseding the active eval request', async () => {
+      let resolveCurrent!: (response: Response) => void;
+      const currentResponse = new Promise<Response>((resolve) => {
+        resolveCurrent = resolve;
+      });
+      vi.mocked(callApi).mockReturnValueOnce(currentResponse);
+      act(() => {
+        useTableStore.getState().setEvalId('current-eval');
+      });
+
+      let currentFetch!: Promise<EvalTableDTO | null>;
+      let staleFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        currentFetch = useTableStore
+          .getState()
+          .fetchEvalData('current-eval', { skipSettingEvalId: true });
+        staleFetch = useTableStore
+          .getState()
+          .fetchEvalData('previous-eval', { skipLoadingState: true, skipSettingEvalId: true });
+      });
+      expect(await staleFetch).toBeNull();
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveCurrent({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      } as Response);
+      await act(async () => {
+        await currentFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+      expect(useTableStore.getState().table).toEqual({ head: { prompts: [] }, body: [] });
+    });
+
+    it('keeps loading active when a stale foreground request fails before the latest request', async () => {
+      let resolveFirst!: (response: Response) => void;
+      let resolveSecond!: (response: Response) => void;
+      const firstResponse = new Promise<Response>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondResponse = new Promise<Response>((resolve) => {
+        resolveSecond = resolve;
+      });
+      vi.mocked(callApi).mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
+
+      let firstFetch!: Promise<EvalTableDTO | null>;
+      let secondFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        firstFetch = useTableStore.getState().fetchEvalData('eval-id');
+        secondFetch = useTableStore.getState().fetchEvalData('eval-id');
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveFirst({ ok: false } as Response);
+      await act(async () => {
+        await firstFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveSecond({ ok: false } as Response);
+      await act(async () => {
+        await secondFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
+    it('clears superseded foreground loading when the latest background refresh completes', async () => {
+      let resolveForeground!: (response: Response) => void;
+      let resolveBackground!: (response: Response) => void;
+      const foregroundResponse = new Promise<Response>((resolve) => {
+        resolveForeground = resolve;
+      });
+      const backgroundResponse = new Promise<Response>((resolve) => {
+        resolveBackground = resolve;
+      });
+      vi.mocked(callApi)
+        .mockReturnValueOnce(foregroundResponse)
+        .mockReturnValueOnce(backgroundResponse);
+
+      let foregroundFetch!: Promise<EvalTableDTO | null>;
+      let backgroundFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        foregroundFetch = useTableStore.getState().fetchEvalData('eval-id');
+        backgroundFetch = useTableStore
+          .getState()
+          .fetchEvalData('eval-id', { skipLoadingState: true });
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveBackground({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      } as Response);
+      await act(async () => {
+        await backgroundFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+
+      resolveForeground({ ok: false } as Response);
+      await act(async () => {
+        await foregroundFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
+    it('applies a successful foreground response when a newer background refresh fails', async () => {
+      let resolveForeground!: (response: Response) => void;
+      let resolveBackground!: (response: Response) => void;
+      const foregroundResponse = new Promise<Response>((resolve) => {
+        resolveForeground = resolve;
+      });
+      const backgroundResponse = new Promise<Response>((resolve) => {
+        resolveBackground = resolve;
+      });
+      vi.mocked(callApi)
+        .mockReturnValueOnce(foregroundResponse)
+        .mockReturnValueOnce(backgroundResponse);
+
+      let foregroundFetch!: Promise<EvalTableDTO | null>;
+      let backgroundFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        foregroundFetch = useTableStore.getState().fetchEvalData('eval-id');
+        backgroundFetch = useTableStore
+          .getState()
+          .fetchEvalData('eval-id', { skipLoadingState: true });
+      });
+
+      resolveBackground({ ok: false } as Response);
+      await act(async () => {
+        await backgroundFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      const table = { head: { prompts: [] }, body: [] };
+      resolveForeground({
+        ok: true,
+        json: async () => ({ table, totalCount: 0, filteredCount: 0 }),
+      } as Response);
+      await act(async () => {
+        await foregroundFetch;
+      });
+
+      expect(useTableStore.getState().table).toEqual(table);
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';
@@ -1542,6 +1697,57 @@ describe('useTableStore', () => {
         });
 
         expect(useTableStore.getState().shouldHighlightSearchText).toBe(false);
+      });
+
+      it('ignores an older table response that finishes after a newer query', async () => {
+        const mockEvalId = 'test-eval-id';
+        let resolveFirst!: (response: any) => void;
+        let resolveSecond!: (response: any) => void;
+        const firstResponse = new Promise<any>((resolve) => {
+          resolveFirst = resolve;
+        });
+        const secondResponse = new Promise<any>((resolve) => {
+          resolveSecond = resolve;
+        });
+        vi.mocked(callApi).mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
+
+        const firstRequest = useTableStore
+          .getState()
+          .fetchEvalData(mockEvalId, { searchText: 'old query' });
+        const secondRequest = useTableStore
+          .getState()
+          .fetchEvalData(mockEvalId, { searchText: 'new query' });
+        resolveSecond({
+          ok: true,
+          json: async () => ({
+            table: {
+              head: { prompts: [], vars: [] },
+              body: [{ outputs: [{ text: 'new result' }], test: {}, vars: [] }],
+            },
+            totalCount: 1,
+            filteredCount: 1,
+            config: {},
+            version: 4,
+          }),
+        });
+        await secondRequest;
+        resolveFirst({
+          ok: true,
+          json: async () => ({
+            table: {
+              head: { prompts: [], vars: [] },
+              body: [{ outputs: [{ text: 'old result' }], test: {}, vars: [] }],
+            },
+            totalCount: 1,
+            filteredCount: 1,
+            config: {},
+            version: 4,
+          }),
+        });
+        await firstRequest;
+
+        expect(useTableStore.getState().table?.body[0].outputs[0]?.text).toBe('new result');
+        expect(useTableStore.getState().shouldHighlightSearchText).toBe(true);
       });
 
       it('should update shouldHighlightSearchText from true to false when fetchEvalData is called with non-empty search text and then with empty search text', async () => {

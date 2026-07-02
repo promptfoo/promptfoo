@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
+import { evalResultsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
@@ -11,6 +14,7 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { setNonstandardScoringBaseline } from '../../src/types/internal';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -140,6 +144,50 @@ describe('EvalResult', () => {
       // Verify it was not persisted to database
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).toBeNull();
+    });
+
+    it.each([
+      true,
+      false,
+    ])('persists a private nonstandard baseline when persist starts as %s', async (persistInitially) => {
+      const gradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'Custom aggregate failed',
+      };
+      setNonstandardScoringBaseline(gradingResult, { pass: false, score: 0.25 });
+      const result = await EvalResult.createFromEvaluateResult(
+        `test-eval-custom-baseline-${persistInitially}`,
+        {
+          ...mockEvaluateResult,
+          success: false,
+          score: 0.25,
+          failureReason: ResultFailureReason.ASSERT,
+          gradingResult,
+        },
+        { persist: persistInitially },
+      );
+      if (!persistInitially) {
+        await result.save();
+      }
+
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(stored?.manualRatingState).toMatchObject({
+        version: 1,
+        status: 'baseline',
+        original: {
+          success: false,
+          score: 0.25,
+          failureReason: ResultFailureReason.ASSERT,
+        },
+      });
+      expect(JSON.stringify(result.gradingResult)).not.toContain(
+        '__promptfooNonstandardScoringBaseline',
+      );
     });
 
     it('should preserve response headers when persist option is false', async () => {
@@ -1001,6 +1049,35 @@ describe('EvalResult', () => {
         evaluationId: 'bulk-evaluation-id',
         metadata: { source: 'import' },
       });
+    });
+
+    it('does not import private manual-rating provenance', async () => {
+      const [result] = await EvalResult.createManyFromEvaluateResult(
+        [
+          {
+            ...mockEvaluateResult,
+            manualRatingState: {
+              version: 1,
+              status: 'active',
+              original: {
+                success: false,
+                score: 0.123,
+                failureReason: ResultFailureReason.ASSERT,
+                gradingResult: null,
+              },
+            },
+          } as EvaluateResult & { manualRatingState: unknown },
+        ],
+        'test-eval-bulk-private-state',
+      );
+
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(stored?.manualRatingState).toBeNull();
+      expect(result).not.toHaveProperty('manualRatingState');
     });
   });
 

@@ -67,6 +67,7 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
+import { type InternalEvaluateOptions, setNonstandardScoringBaseline } from './types/internal';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
@@ -121,7 +122,6 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
-import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
@@ -1877,6 +1877,16 @@ function mergeComparisonTokenUsage(
   }
 }
 
+function recordNonstandardScoringBaseline(result: EvaluationStoreResult) {
+  if (!result.gradingResult) {
+    return;
+  }
+  setNonstandardScoringBaseline(result.gradingResult, {
+    pass: result.success,
+    score: result.score,
+  });
+}
+
 function mergeSelectBestGradingResult(
   result: EvaluationStoreResult,
   gradingResult: GradingResult,
@@ -1892,6 +1902,7 @@ function mergeSelectBestGradingResult(
     }
     result.gradingResult.componentResults ||= [];
     result.gradingResult.componentResults.push(gradingResult);
+    recordNonstandardScoringBaseline(result);
     return;
   }
 
@@ -1904,6 +1915,7 @@ function mergeSelectBestGradingResult(
   if (!gradingResult.pass) {
     result.score = result.gradingResult.score = gradingResult.score;
   }
+  recordNonstandardScoringBaseline(result);
 }
 
 function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult: GradingResult) {
@@ -1937,6 +1949,7 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   if (!comparisonPassed) {
     result.score = newScore;
   }
+  recordNonstandardScoringBaseline(result);
 }
 
 function ensureDefaultTestForExtensions(testSuite: TestSuite) {

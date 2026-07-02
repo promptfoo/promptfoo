@@ -306,6 +306,8 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
+  tableRequestGeneration: number;
+  tableLoadingRequestGeneration: number | null;
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -626,6 +628,8 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+    tableRequestGeneration: 0,
+    tableLoadingRequestGeneration: null,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -652,12 +656,35 @@ export const useTableStore = create<TableState>()(
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
+      if (skipSettingEvalId && currentState.evalId !== id) {
+        return null;
+      }
+      const requestGeneration = currentState.tableRequestGeneration + 1;
+      const ownsLoadingRequest = () =>
+        !skipLoadingState && get().tableLoadingRequestGeneration === requestGeneration;
+      const isCurrentRequest = () =>
+        (get().tableRequestGeneration === requestGeneration || ownsLoadingRequest()) &&
+        (!skipSettingEvalId || get().evalId === id);
+      const shouldIgnoreResponse = () => !isCurrentRequest();
+      const finishCurrentRequest = () => {
+        if (!isCurrentRequest()) {
+          return;
+        }
+        set((prevState) => {
+          const ownsLoading = prevState.tableLoadingRequestGeneration === requestGeneration;
+          return ownsLoading ? { isFetching: false, tableLoadingRequestGeneration: null } : {};
+        });
+      };
       if (currentState.currentMetadataKeysRequest) {
         currentState.currentMetadataKeysRequest.abort();
       }
 
       set({
-        isFetching: skipLoadingState ? get().isFetching : true,
+        tableRequestGeneration: requestGeneration,
+        tableLoadingRequestGeneration: skipLoadingState
+          ? currentState.tableLoadingRequestGeneration
+          : requestGeneration,
+        isFetching: skipLoadingState ? currentState.isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -710,52 +737,73 @@ export const useTableStore = create<TableState>()(
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
 
+          // A background refresh for the previously active eval must not replace a newly
+          // selected eval while its response was in flight.
+          if (shouldIgnoreResponse()) {
+            return null;
+          }
+
           // Build async options
           const [redteamOptions, policyIdToNameMap] = await Promise.all([
             buildRedteamFilterOptions(data.config, data.table),
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
-          set((prevState) => ({
-            table: data.table,
-            filteredResultsCount: data.filteredCount,
-            totalResultsCount: data.totalCount,
-            highlightedResultsCount: computeHighlightCount(data.table),
-            userRatedResultsCount: computeUserRatedCount(data.table),
-            config: data.config,
-            version: data.version,
-            author: data.author,
-            evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
-            shouldHighlightSearchText: searchText !== '',
-            // Store filtered metrics from backend (null when no filters or feature disabled)
-            filteredMetrics: data.filteredMetrics || null,
-            // Store evaluation-level stats including durationMs
-            stats: data.stats || null,
-            filters: {
-              ...prevState.filters,
-              options: {
-                metric: computeAvailableMetrics(data.table),
-                metadata: [],
-                ...redteamOptions,
+          if (shouldIgnoreResponse()) {
+            return null;
+          }
+
+          set((prevState) => {
+            const shouldClearLoading =
+              !skipLoadingState || prevState.tableLoadingRequestGeneration !== null;
+            return {
+              table: data.table,
+              filteredResultsCount: data.filteredCount,
+              totalResultsCount: data.totalCount,
+              highlightedResultsCount: computeHighlightCount(data.table),
+              userRatedResultsCount: computeUserRatedCount(data.table),
+              config: data.config,
+              version: data.version,
+              author: data.author,
+              evalId: skipSettingEvalId ? get().evalId : id,
+              isFetching: shouldClearLoading ? false : prevState.isFetching,
+              tableLoadingRequestGeneration: shouldClearLoading
+                ? null
+                : prevState.tableLoadingRequestGeneration,
+              shouldHighlightSearchText: searchText !== '',
+              // Store filtered metrics from backend (null when no filters or feature disabled)
+              filteredMetrics: data.filteredMetrics || null,
+              // Store evaluation-level stats including durationMs
+              stats: data.stats || null,
+              filters: {
+                ...prevState.filters,
+                options: {
+                  metric: computeAvailableMetrics(data.table),
+                  metadata: [],
+                  ...redteamOptions,
+                },
+                policyIdToNameMap,
               },
-              policyIdToNameMap,
-            },
-          }));
+            };
+          });
 
           // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 
           return data;
         }
 
-        if (!skipLoadingState) {
-          set({ isFetching: false });
+        if (shouldIgnoreResponse()) {
+          return null;
         }
+        finishCurrentRequest();
         return null;
       } catch (error) {
+        if (shouldIgnoreResponse()) {
+          return null;
+        }
         console.error('Error fetching eval data:', error);
+        finishCurrentRequest();
         set({
-          isFetching: skipLoadingState ? get().isFetching : false,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,
