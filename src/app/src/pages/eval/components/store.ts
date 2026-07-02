@@ -276,6 +276,8 @@ interface TableState {
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
   setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
+  /** Increments when a background fetch replaces the displayed table. */
+  tableRefreshVersion: number;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -548,6 +550,7 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tableRefreshVersion: 0,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
@@ -718,6 +721,9 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => ({
             table: data.table,
+            tableRefreshVersion: skipLoadingState
+              ? prevState.tableRefreshVersion + 1
+              : prevState.tableRefreshVersion,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
