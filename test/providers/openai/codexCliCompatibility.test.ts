@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline';
+import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,6 +26,19 @@ interface FixtureOptions {
 
 const fixtureDirectories: string[] = [];
 const realSdkEntryPoint = path.resolve('node_modules/@openai/codex-sdk/dist/index.js');
+
+async function runtimeReadlineSplitsUnicodeSeparators(): Promise<boolean> {
+  const event = `${JSON.stringify({ output: 'before\u2028between\u2029after' })}\n`;
+  const lines = readline.createInterface({
+    input: Readable.from([event]),
+    crlfDelay: Infinity,
+  });
+  let lineCount = 0;
+  for await (const _line of lines) {
+    lineCount += 1;
+  }
+  return lineCount !== 1;
+}
 
 function createSdkFixture(options: FixtureOptions = {}) {
   const sdkVersion = options.sdkVersion ?? '0.142.3';
@@ -282,7 +297,7 @@ describe('preflightCodexSdkCliCompatibility', () => {
         env: {},
       });
 
-      if (Number(process.versions.node.split('.')[0]) >= 24) {
+      if (await runtimeReadlineSplitsUnicodeSeparators()) {
         const escapedNodeVersion = process.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         await expect(preflight).rejects.toThrow(
           new RegExp(`cannot parse the supported CLI event schema on Node ${escapedNodeVersion}`),
