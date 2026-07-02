@@ -109,6 +109,8 @@ type CodexAppServerMcpElicitationPolicy =
       action: 'accept' | 'decline' | 'cancel';
       content?: unknown;
       _meta?: unknown;
+      allowed_server_names?: string[];
+      allowed_messages?: string[];
     };
 
 type JsonRpcId = string | number;
@@ -434,6 +436,8 @@ const McpElicitationPolicySchema = z.union([
       action: z.enum(['accept', 'decline', 'cancel']),
       content: z.unknown().optional(),
       _meta: z.unknown().optional(),
+      allowed_server_names: z.array(z.string().min(1)).min(1).optional(),
+      allowed_messages: z.array(z.string().min(1)).min(1).optional(),
     })
     .strict(),
 ]);
@@ -2478,7 +2482,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       case 'item/tool/requestUserInput':
         return this.buildUserInputResponse(message.params, policy.user_input ?? 'empty');
       case 'mcpServer/elicitation/request':
-        return this.buildMcpElicitationResponse(policy.mcp_elicitation);
+        return this.buildMcpElicitationResponse(message.params, policy.mcp_elicitation);
       case 'item/tool/call':
         return this.buildDynamicToolResponse(message.params, policy.dynamic_tools);
       case 'account/chatgptAuthTokens/refresh':
@@ -2509,13 +2513,26 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
   }
 
-  private buildMcpElicitationResponse(policy: CodexAppServerMcpElicitationPolicy = 'decline'): {
+  private buildMcpElicitationResponse(
+    params: { serverName?: string; message?: string } | undefined,
+    policy: CodexAppServerMcpElicitationPolicy = 'decline',
+  ): {
     action: 'accept' | 'decline' | 'cancel';
     content: unknown;
     _meta: unknown;
   } {
     if (typeof policy === 'string') {
       return { action: policy, content: null, _meta: null };
+    }
+
+    if (
+      (policy.allowed_server_names &&
+        (typeof params?.serverName !== 'string' ||
+          !policy.allowed_server_names.includes(params.serverName))) ||
+      (policy.allowed_messages &&
+        (typeof params?.message !== 'string' || !policy.allowed_messages.includes(params.message)))
+    ) {
+      return { action: 'decline', content: null, _meta: null };
     }
 
     return {
