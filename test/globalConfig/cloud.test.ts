@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { API_HOST, CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
@@ -44,7 +44,7 @@ describe('CloudConfig', () => {
       });
       const config = new CloudConfig();
       expect(config.getAppUrl()).toBe('https://www.promptfoo.app');
-      expect(config.getApiHost()).toBe(API_HOST);
+      expect(config.getApiHost()).toBe(CLOUD_API_HOST);
       expect(config.getApiKey()).toBeUndefined();
     });
 
@@ -632,13 +632,13 @@ describe('CloudConfig', () => {
       expect(config.getApiHost()).toBe('https://config-host.example.com');
     });
 
-    it('should return default API_HOST when neither config nor env var is set', () => {
+    it('should return the default cloud host when neither config nor env var is set', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined, API_HOST: undefined });
       const config = new CloudConfig();
-      expect(config.getApiHost()).toBe(API_HOST);
+      expect(config.getApiHost()).toBe(CLOUD_API_HOST);
     });
 
     it('should strip a trailing slash from a config-file host', () => {

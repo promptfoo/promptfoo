@@ -4,8 +4,6 @@ import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
-export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
-
 const CLOUD_HOSTNAMES = new Set([
   new URL(CLOUD_API_HOST).hostname,
   new URL('https://www.promptfoo.app').hostname,
@@ -128,9 +126,8 @@ export class CloudConfig {
    * entered via `promptfoo auth login --api-host https://host/` commonly include one.
    */
   private resolveApiHost(): string {
-    // API_HOST is a legacy fallback that may arrive through an early --env-file. Resolve it when
-    // the deferred singleton is first used instead of relying on the module-level compatibility
-    // export, which is captured before argv env loading.
+    // API_HOST is a legacy fallback that may arrive through --env-file. Resolve it at call time
+    // rather than at module load, which happens before argv env loading.
     const host =
       this.config.apiHost ||
       process.env.PROMPTFOO_CLOUD_API_URL ||
