@@ -1,5 +1,6 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
+import { materializeMcpToolCallRemote } from '../providers/promptfoo';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
 
@@ -84,14 +85,30 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }`,
         );
 
-        const materializerProvider = await redteamProviderManager.getProvider({ jsonOnly: true });
-        materializedPrompt = await materializeMcpValue({
-          intentValue,
-          provider: materializerProvider,
-          purpose,
-          tools,
-          value: prompt,
-        });
+        const remoteMaterializedPrompt = await materializeMcpToolCallRemote(
+          {
+            intentValue,
+            purpose,
+            tools,
+            value: prompt,
+          },
+          options,
+        );
+
+        if (remoteMaterializedPrompt) {
+          materializedPrompt = remoteMaterializedPrompt;
+        } else {
+          const materializerProvider = await redteamProviderManager.getProvider({
+            jsonOnly: true,
+          });
+          materializedPrompt = await materializeMcpValue({
+            intentValue,
+            provider: materializerProvider,
+            purpose,
+            tools,
+            value: prompt,
+          });
+        }
       }
 
       const materializedContext: CallApiContextParams | undefined = context

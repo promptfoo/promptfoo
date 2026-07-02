@@ -8,11 +8,17 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 const providerManagerMocks = vi.hoisted(() => ({
   getProvider: vi.fn(),
 }));
+const promptfooProviderMocks = vi.hoisted(() => ({
+  materializeMcpToolCallRemote: vi.fn(),
+}));
 
 vi.mock('../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
     getProvider: providerManagerMocks.getProvider,
   },
+}));
+vi.mock('../../src/providers/promptfoo', () => ({
+  materializeMcpToolCallRemote: promptfooProviderMocks.materializeMcpToolCallRemote,
 }));
 
 class FakeMcpProvider extends MCPProvider {
@@ -88,21 +94,29 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
   beforeEach(() => {
     providerManagerMocks.getProvider.mockReset();
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockReset();
   });
 
-  it('materializes redteam target calls before they reach MCP providers', async () => {
-    providerManagerMocks.getProvider.mockResolvedValueOnce({
-      id: () => 'openai:test',
-      callApi: async () => ({
-        output: JSON.stringify(searchCompaniesCall),
-      }),
-    });
+  it('uses remote materialization for invalid redteam target calls before they reach MCP providers', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
+      JSON.stringify(searchCompaniesCall),
+    );
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
     const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
     await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
+    expect(promptfooProviderMocks.materializeMcpToolCallRemote).toHaveBeenCalledWith(
+      {
+        intentValue: searchCompaniesPrompt,
+        purpose: 'Search companies',
+        tools: [searchCompaniesTool],
+        value: searchCompaniesPrompt,
+      },
+      undefined,
+    );
+    expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
     expect(target.calls).toHaveLength(1);
     expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
     expect(parseToolCall(target.calls[0].context?.vars.prompt)).toEqual(searchCompaniesCall);
@@ -119,6 +133,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     await wrapped.callApi(prompt, redteamContext(prompt));
 
     expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
+    expect(promptfooProviderMocks.materializeMcpToolCallRemote).not.toHaveBeenCalled();
     expect(target.calls).toHaveLength(1);
     expect(parseToolCall(target.calls[0].prompt)).toEqual({
       tool: 'search_companies',
@@ -140,7 +155,27 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
     expect(response).toEqual({ output: 'ok' });
     expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
+    expect(promptfooProviderMocks.materializeMcpToolCallRemote).not.toHaveBeenCalled();
     expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined, options }]);
+  });
+
+  it('uses local fallback materialization when remote generation is disabled', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(undefined);
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output: JSON.stringify(searchCompaniesCall),
+      }),
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(promptfooProviderMocks.materializeMcpToolCallRemote).toHaveBeenCalledTimes(1);
+    expect(providerManagerMocks.getProvider).toHaveBeenCalledWith({ jsonOnly: true });
+    expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
   });
 
   it('preserves provider identity helpers and cleanup behavior', async () => {
@@ -160,6 +195,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
   });
 
   it('returns a materialization error when inference provider is unavailable', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(undefined);
     providerManagerMocks.getProvider.mockRejectedValueOnce(
       new Error('No repair provider configured'),
     );
@@ -191,6 +227,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
   });
 
   it('returns a materialization error when inference provider calls fail', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(undefined);
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',
       callApi: async () => {
@@ -208,12 +245,9 @@ describe('maybeWrapMcpProviderForRedteam', () => {
   });
 
   it('returns a materialization error when the wrapped provider call fails', async () => {
-    providerManagerMocks.getProvider.mockResolvedValueOnce({
-      id: () => 'openai:test',
-      callApi: async () => ({
-        output: JSON.stringify(searchCompaniesCall),
-      }),
-    });
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
+      JSON.stringify(searchCompaniesCall),
+    );
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
     vi.spyOn(target, 'callApi').mockRejectedValueOnce(new Error('Target provider failed'));
