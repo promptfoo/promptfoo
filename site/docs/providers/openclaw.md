@@ -213,30 +213,30 @@ providers:
 
 ## Config Options
 
-| Config Property      | Environment Variable      | Description                                                                              |
-| -------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
-| gateway_url          | OPENCLAW_GATEWAY_URL      | Gateway URL (default: auto-detected)                                                     |
-| -                    | OPENCLAW_GATEWAY_PORT     | Local gateway port override used when `gateway_url` is unset                             |
-| auth_token           | OPENCLAW_GATEWAY_TOKEN    | Gateway bearer secret for token auth mode                                                |
-| auth_password        | OPENCLAW_GATEWAY_PASSWORD | Gateway bearer secret for password auth mode                                             |
-| backend_model        | -                         | Backend model override sent as `x-openclaw-model`                                        |
-| model_override       | -                         | Alias for `backend_model`                                                                |
-| message_channel      | -                         | Channel context sent as `x-openclaw-message-channel` and WS `channel`                    |
-| account_id           | -                         | Account context sent as `x-openclaw-account-id` and WS `accountId`                       |
-| scopes               | -                         | WS operator scopes and optional HTTP `x-openclaw-scopes` context                         |
-| session_key          | -                         | Session identifier; unscoped keys for explicit agents are scoped automatically           |
-| thinking_level       | -                         | WS Agent reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive` |
-| extra_system_prompt  | -                         | WS Agent-only extra system prompt injected as `extraSystemPrompt`                        |
-| device_identity_path | -                         | WS Agent device keypair path (default: promptfoo config directory)                       |
-| device_auth_path     | -                         | WS Agent issued-device-token cache path (default: promptfoo config directory)            |
-| device_token         | -                         | Explicit WS device token for paired-device auth                                          |
-| device_family        | -                         | Optional device metadata included in the signed WS device payload                        |
-| disable_device_auth  | -                         | WS Agent break-glass option to omit device identity                                      |
-| ws_headers           | -                         | Additional headers for WebSocket connects                                                |
-| headers              | -                         | Additional HTTP headers, also used by WS unless overridden by `ws_headers`               |
-| action               | -                         | Tool Invoke-only sub-action forwarded as `body.action`                                   |
-| dry_run              | -                         | Tool Invoke-only dry-run hint forwarded as `body.dryRun`                                 |
-| timeoutMs            | -                         | Client timeout in milliseconds for WS Agent waits and Tool Invoke HTTP requests          |
+| Config Property      | Environment Variable      | Description                                                                                                                                                     |
+| -------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| gateway_url          | OPENCLAW_GATEWAY_URL      | Gateway URL (default: auto-detected)                                                                                                                            |
+| -                    | OPENCLAW_GATEWAY_PORT     | Local gateway port override used when `gateway_url` is unset                                                                                                    |
+| auth_token           | OPENCLAW_GATEWAY_TOKEN    | Gateway bearer secret for token auth mode                                                                                                                       |
+| auth_password        | OPENCLAW_GATEWAY_PASSWORD | Gateway bearer secret for password auth mode                                                                                                                    |
+| backend_model        | -                         | Backend model override sent as `x-openclaw-model`                                                                                                               |
+| model_override       | -                         | Alias for `backend_model`                                                                                                                                       |
+| message_channel      | -                         | Channel context sent as `x-openclaw-message-channel` and WS `channel`                                                                                           |
+| account_id           | -                         | Account context sent as `x-openclaw-account-id` and WS `accountId`                                                                                              |
+| scopes               | -                         | WS operator scopes and optional HTTP `x-openclaw-scopes` context                                                                                                |
+| session_key          | -                         | Session identifier; unscoped keys for explicit agents are scoped automatically, except the `global` and `unknown` sentinels which always pass through unchanged |
+| thinking_level       | -                         | WS Agent reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive`                                                                        |
+| extra_system_prompt  | -                         | WS Agent-only extra system prompt injected as `extraSystemPrompt`                                                                                               |
+| device_identity_path | -                         | WS Agent device keypair path (default: promptfoo config directory)                                                                                              |
+| device_auth_path     | -                         | WS Agent issued-device-token cache path (default: promptfoo config directory)                                                                                   |
+| device_token         | -                         | Explicit WS device token for paired-device auth                                                                                                                 |
+| device_family        | -                         | Optional device metadata included in the signed WS device payload                                                                                               |
+| disable_device_auth  | -                         | WS Agent break-glass option to omit device identity                                                                                                             |
+| ws_headers           | -                         | Additional headers for WebSocket connects                                                                                                                       |
+| headers              | -                         | Additional HTTP headers, also used by WS unless overridden by `ws_headers`                                                                                      |
+| action               | -                         | Tool Invoke-only sub-action forwarded as `body.action`                                                                                                          |
+| dry_run              | -                         | Tool Invoke-only dry-run hint forwarded as `body.dryRun`                                                                                                        |
+| timeoutMs            | -                         | Client timeout in milliseconds for WS Agent waits and Tool Invoke HTTP requests                                                                                 |
 
 ## Examples
 

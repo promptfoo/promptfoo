@@ -369,6 +369,14 @@ function normalizeHeaderValue(value: string | undefined): string | undefined {
 }
 
 /**
+ * OpenClaw treats these unscoped session keys as canonical sentinels (global queue/history and
+ * unknown-session classification) and resolves them before generic agent scoping, even when an
+ * explicit agent is targeted. Prefixing them would silently turn a sentinel into an ordinary
+ * per-agent session.
+ */
+const UNSCOPED_SESSION_SENTINELS = new Set(['global', 'unknown']);
+
+/**
  * Scope an unqualified session key to an explicit agent. OpenClaw canonicalizes unscoped keys
  * under the configured default agent, so explicit agents must carry their scope in the key.
  */
@@ -399,6 +407,10 @@ export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey:
         `OpenClaw session key targets agent "${scopedAgentId || '(missing)'}" but the provider targets "${trimmedAgentId}"`,
       );
     }
+    return trimmedSessionKey;
+  }
+
+  if (UNSCOPED_SESSION_SENTINELS.has(trimmedSessionKey.toLowerCase())) {
     return trimmedSessionKey;
   }
 

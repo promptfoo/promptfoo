@@ -814,6 +814,18 @@ describe('OpenClaw Provider', () => {
       );
     });
 
+    it.each([
+      'global',
+      'GLOBAL',
+      'unknown',
+      'Unknown',
+    ])('should not agent-scope the unscoped session sentinel %s', (sessionKey) => {
+      const provider = new OpenClawChatProvider('main', {
+        config: { session_key: sessionKey },
+      });
+      expect(provider.config.headers?.['x-openclaw-session-key']).toBe(sessionKey);
+    });
+
     it('should reject session keys scoped to a different explicit agent', () => {
       expect(
         () =>
@@ -2462,6 +2474,27 @@ describe('OpenClaw Provider', () => {
 
       expect(agentReq.params.agentId).toBe('dev');
       expect(agentReq.params.sessionKey).toBe('agent:dev:my-session');
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
+    it('should forward unscoped session sentinels unchanged for explicit WS agents', async () => {
+      const provider = new OpenClawAgentProvider('dev', {
+        config: { gateway_url: 'http://test:18789', session_key: 'global' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.agentId).toBe('dev');
+      expect(agentReq.params.sessionKey).toBe('global');
 
       onMessage(
         Buffer.from(
