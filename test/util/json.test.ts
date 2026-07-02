@@ -10,6 +10,7 @@ import {
   orderKeys,
   resetAjv,
   safeJsonStringify,
+  stableJsonStringify,
   summarizeEvaluateResultForLogging,
 } from '../../src/util/json';
 import { createEvaluateResult } from '../factories/eval';
@@ -186,6 +187,129 @@ describe('json utilities', () => {
     it('preserves non-circular nested structures', () => {
       const nested = { a: { b: { c: 1 } }, d: [1, 2, { e: 3 }] };
       expect(JSON.parse(safeJsonStringify(nested) as string)).toEqual(nested);
+    });
+  });
+
+  describe('stableJsonStringify', () => {
+    it('sorts top-level keys regardless of insertion order', () => {
+      const a = { b: 2, a: 1, c: 3 };
+      const b = { a: 1, c: 3, b: 2 };
+      expect(stableJsonStringify(a)).toBe(stableJsonStringify(b));
+      expect(stableJsonStringify(a)).toBe('{"a":1,"b":2,"c":3}');
+    });
+
+    it('sorts nested object keys', () => {
+      const a = { outer: { z: 'last', a: 'first' }, list: [{ y: 2, x: 1 }] };
+      const b = { list: [{ x: 1, y: 2 }], outer: { a: 'first', z: 'last' } };
+      expect(stableJsonStringify(a)).toBe(stableJsonStringify(b));
+    });
+
+    it('does not sort arrays (order is semantically meaningful)', () => {
+      expect(stableJsonStringify([3, 1, 2])).toBe('[3,1,2]');
+      expect(stableJsonStringify([1, 2, 3])).toBe('[1,2,3]');
+      expect(stableJsonStringify([3, 1, 2])).not.toBe(stableJsonStringify([1, 2, 3]));
+    });
+
+    it('returns undefined for circular references rather than throwing', () => {
+      const circular: any = { a: 1 };
+      circular.self = circular;
+      // Second reference to the cycle parent is silently dropped.
+      expect(stableJsonStringify(circular)).toBe('{"a":1}');
+    });
+
+    it('duplicates shared non-circular references instead of treating them as cycles', () => {
+      // A repeated reference in sibling positions is NOT a cycle — it's a
+      // shared value. Both occurrences must serialize in full, otherwise
+      // `{ a: shared, b: shared }` and `{ a: shared, b: {} }` would hash
+      // to the same cache key.
+      const shared = { x: 1 };
+      const obj = { a: shared, b: shared };
+      expect(stableJsonStringify(obj)).toBe('{"a":{"x":1},"b":{"x":1}}');
+    });
+
+    it('duplicates shared references inside arrays', () => {
+      const shared = { x: 1 };
+      expect(stableJsonStringify([shared, shared])).toBe('[{"x":1},{"x":1}]');
+    });
+
+    it('produces different hashes for semantically different payloads that share a reference', () => {
+      const shared = { x: 1 };
+      const twoFields = { a: shared, b: shared };
+      const oneField = { a: shared };
+      expect(stableJsonStringify(twoFields)).not.toBe(stableJsonStringify(oneField));
+    });
+
+    it('handles primitives and null', () => {
+      expect(stableJsonStringify(42)).toBe('42');
+      expect(stableJsonStringify('hi')).toBe('"hi"');
+      expect(stableJsonStringify(null)).toBe('null');
+      expect(stableJsonStringify(true)).toBe('true');
+    });
+
+    it('omits functions and undefined like JSON.stringify', () => {
+      expect(stableJsonStringify({ a: 1, f: () => 0, u: undefined })).toBe('{"a":1}');
+    });
+
+    it('returns undefined for top-level undefined', () => {
+      expect(stableJsonStringify(undefined)).toBeUndefined();
+    });
+
+    it('respects Date.toJSON so different dates produce different cache keys', () => {
+      const earlier = new Date('2024-01-01T00:00:00Z');
+      const later = new Date('2024-06-01T00:00:00Z');
+
+      // Matches JSON.stringify's serialization (ISO string), not `{}`.
+      expect(stableJsonStringify({ at: earlier })).toBe('{"at":"2024-01-01T00:00:00.000Z"}');
+      expect(stableJsonStringify({ at: earlier })).not.toBe(stableJsonStringify({ at: later }));
+    });
+
+    it('respects arbitrary toJSON implementations and then sorts the result', () => {
+      const custom = {
+        toJSON() {
+          return { z: 2, a: 1 };
+        },
+      };
+
+      expect(stableJsonStringify(custom)).toBe('{"a":1,"z":2}');
+    });
+
+    it('handles self-returning toJSON without infinite recursion', () => {
+      // Matches JSON.stringify semantics: toJSON is called once per
+      // position, and its result is processed normally. When toJSON
+      // returns `this`, the object's non-function properties are
+      // serialized but toJSON is not re-invoked.
+      const selfReturning: any = { a: 1 };
+      selfReturning.toJSON = function () {
+        return this;
+      };
+
+      expect(() => stableJsonStringify(selfReturning)).not.toThrow();
+      expect(stableJsonStringify(selfReturning)).toBe('{"a":1}');
+    });
+
+    it('produces different cache keys for two self-returning toJSON objects with different payloads', () => {
+      const first: any = { a: 1 };
+      first.toJSON = function () {
+        return this;
+      };
+      const second: any = { a: 2 };
+      second.toJSON = function () {
+        return this;
+      };
+
+      expect(stableJsonStringify(first)).not.toBe(stableJsonStringify(second));
+    });
+
+    it('passes the current property key to toJSON (matching JSON.stringify)', () => {
+      const keyAware = {
+        toJSON(key: string) {
+          return `serialized-as:${key}`;
+        },
+      };
+      // At the top level, JSON.stringify passes an empty-string key.
+      expect(stableJsonStringify(keyAware)).toBe(JSON.stringify(keyAware));
+      // Inside a parent object, the property key is passed through.
+      expect(stableJsonStringify({ nested: keyAware })).toBe('{"nested":"serialized-as:nested"}');
     });
   });
 

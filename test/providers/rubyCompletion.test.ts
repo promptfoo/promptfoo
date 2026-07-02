@@ -6,7 +6,9 @@ import { getCache, isCacheEnabled } from '../../src/cache';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
+import { sha256 } from '../../src/util/createHash';
 import * as fileReference from '../../src/util/fileReference';
+import { stableJsonStringify } from '../../src/util/json';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -327,7 +329,14 @@ describe('RubyProvider', () => {
 
   describe('caching', () => {
     it('should use cached result when available', async () => {
-      const provider = new RubyProvider('script.rb');
+      const options = {
+        config: { basePath: '/base', temperature: 0.2 },
+      } as any;
+      const provider = new RubyProvider('script.rb', options);
+      const context = {
+        vars: { name: 'Alice' },
+        prompt: { label: 'Hello {{name}}' },
+      } as any;
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
@@ -335,17 +344,31 @@ describe('RubyProvider', () => {
       };
       vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
-      const result = await provider.callApi('test prompt');
-
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
+      const result = await provider.callApi('test prompt', context);
+      const expectedCacheKey = mockCache.get.mock.calls[0][0] as string;
+      const expectedOptions = { ...options, config: { ...options.config } };
+      const expectedArgsHash = sha256(
+        stableJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
       );
+
+      expect(expectedCacheKey).toContain('ruby:');
+      expect(expectedCacheKey).toContain(':call_api:call_api:');
+      expect(expectedCacheKey).toContain(sha256('mock file content'));
+      expect(expectedCacheKey).toContain(expectedArgsHash);
+      expect(expectedCacheKey).not.toContain('test prompt');
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
-    it('should cache result when cache is enabled', async () => {
-      const provider = new RubyProvider('script.rb');
+    it('should bypass caching when invocation inputs contain secrets', async () => {
+      const options = {
+        config: { basePath: '/base', apiKey: 'sk-test-ruby-secret' },
+      } as any;
+      const provider = new RubyProvider('script.rb', options);
+      const context = {
+        vars: { promptSecret: 'sk-test-context-secret' },
+        prompt: { label: 'sk-test-context-label-secret' },
+      } as any;
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),
@@ -354,12 +377,11 @@ describe('RubyProvider', () => {
       mockGetCache.mockResolvedValue(mockCache as never);
       mockRunRuby.mockResolvedValue({ output: 'new result' });
 
-      await provider.callApi('test prompt');
+      await provider.callApi('test prompt', context);
 
-      expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
-        '{"output":"new result"}',
-      );
+      expect(mockCache.get).not.toHaveBeenCalled();
+      expect(mockCache.set).not.toHaveBeenCalled();
+      expect(mockRunRuby).toHaveBeenCalled();
     });
 
     it('should properly transform token usage in cached results', async () => {
@@ -509,12 +531,14 @@ describe('RubyProvider', () => {
         output: 'fresh result',
         cached: false,
       });
-      expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:undefined$/,
-        ),
-        '{"output":"fresh result"}',
+      const cacheKey = mockCache.set.mock.calls[0][0] as string;
+      const expectedArgsHash = sha256(
+        stableJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
       );
+      expect(cacheKey).toMatch(/^ruby:script\.rb:call_api:call_api:[a-f0-9]{64}:/);
+      expect(cacheKey).toContain(expectedArgsHash);
+      expect(cacheKey).not.toContain('test prompt');
+      expect(mockCache.set).toHaveBeenCalledWith(cacheKey, '{"output":"fresh result"}');
     });
 
     it('should properly use different cache keys for different function names', async () => {
@@ -538,8 +562,8 @@ describe('RubyProvider', () => {
       const cacheSetCalls = mockCache.set.mock.calls;
       expect(cacheSetCalls).toHaveLength(2);
 
-      // The first call should contain 'default' in the cache key
-      expect(cacheSetCalls[0][0]).toContain(':default:');
+      // The first call should contain the resolved call_api function in the cache key
+      expect(cacheSetCalls[0][0]).toContain(':call_api:');
 
       // The second call should contain the custom function name
       expect(cacheSetCalls[1][0]).toContain(':custom_function:');
@@ -575,6 +599,51 @@ describe('RubyProvider', () => {
 
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
       expect(result).not.toHaveProperty('cached');
+    });
+
+    it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh' });
+
+      const baseContext = {
+        vars: { name: 'Alice' },
+        prompt: { raw: 'Hi Alice', label: 'Hi {{name}}' },
+        test: { vars: { name: 'Alice' }, assert: [], options: {}, metadata: {} },
+        repeatIndex: 0,
+      };
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-first-run',
+        testCaseId: 'case-first',
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+        tracestate: 'vendor=first',
+        testIdx: 0,
+        promptIdx: 0,
+      } as any);
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-second-run',
+        testCaseId: 'case-second',
+        traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+        tracestate: 'vendor=second',
+        testIdx: 0,
+        promptIdx: 0,
+      } as any);
+
+      const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
+      const secondCacheKey = mockCache.get.mock.calls[1][0] as string;
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).not.toContain('eval-first-run');
+      expect(secondCacheKey).not.toContain('eval-second-run');
     });
   });
 

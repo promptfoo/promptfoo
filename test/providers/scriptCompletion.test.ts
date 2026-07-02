@@ -2,14 +2,22 @@ import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
+import logger from '../../src/logger';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import { stableJsonStringify } from '../../src/util/json';
 import type { MockedFunction } from 'vitest';
+
+let createActualHash: typeof crypto.createHash;
+
+function realSha256(value: string) {
+  return createActualHash('sha256').update(value).digest('hex');
+}
 
 vi.mock('child_process', async (importOriginal) => {
   return {
@@ -25,6 +33,16 @@ vi.mock('../../src/cache', async () => {
     isCacheEnabled: vi.fn(),
   };
 });
+
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
   const existsSync = vi.fn();
@@ -53,6 +71,11 @@ let existsSyncMock: MockedFunction<typeof fs.existsSync>;
 let statSyncMock: MockedFunction<typeof fs.statSync>;
 let readFileSyncMock: MockedFunction<typeof fs.readFileSync>;
 let createHashMock: MockedFunction<typeof crypto.createHash>;
+
+beforeAll(async () => {
+  const actualCrypto = await vi.importActual<typeof import('crypto')>('crypto');
+  createActualHash = actualCrypto.createHash;
+});
 
 function normalizeFsPath(path: fs.PathOrFileDescriptor): string {
   if (path instanceof URL) {
@@ -267,6 +290,12 @@ describe('ScriptCompletionProvider', () => {
 
   it('should use cache when available', async () => {
     const cachedResult = { output: 'cached result' };
+    const options = { config: { basePath: '/base', temperature: 0.2 } } as any;
+    const provider = new ScriptCompletionProvider('node script.js', options);
+    const context = {
+      vars: { name: 'Alice' },
+      prompt: { label: 'Hello {{name}}' },
+    } as any;
     const mockCache = {
       get: vi.fn().mockResolvedValue(JSON.stringify(cachedResult)),
       set: vi.fn(),
@@ -279,21 +308,197 @@ describe('ScriptCompletionProvider', () => {
     statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
     readFileSyncMock.mockReturnValue('file content');
 
-    const mockHashUpdate = {
-      update: vi.fn().mockReturnThis(),
-      digest: vi.fn().mockReturnValue('mock hash'),
-    } as unknown as crypto.Hash;
     vi.mocked(crypto.createHash).mockImplementation(function () {
-      return mockHashUpdate;
+      let value = '';
+      const mockHash = {
+        update: vi.fn((input: string | Buffer) => {
+          value += Buffer.isBuffer(input) ? input.toString('utf8') : String(input);
+          return mockHash;
+        }),
+        digest: vi.fn(() => realSha256(value)),
+      } as unknown as crypto.Hash;
+      return mockHash;
     });
 
-    const result = await provider.callApi('test prompt');
+    const result = await provider.callApi('test prompt', context);
+    const fileHash = realSha256('file content');
+    const expectedCacheKey = `exec:node script.js:${fileHash}:${fileHash}:${realSha256('test prompt')}:${realSha256(
+      stableJsonStringify(options) ?? 'undefined',
+    )}:${realSha256(stableJsonStringify(context) ?? 'undefined')}`;
+
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
-    expect(mockCache.get).toHaveBeenCalledWith(
-      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
-    );
+    expect(mockCache.get).toHaveBeenCalledWith(expectedCacheKey);
+    expect(expectedCacheKey).not.toContain('test prompt');
+    expect(logger.debug).toHaveBeenCalledWith('Returning cached result for script', {
+      scriptPath: 'node script.js',
+    });
     expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('should bypass caching when invocation inputs contain secrets', async () => {
+    const options = { config: { basePath: '/base', apiKey: 'sk-test-script-secret' } } as any;
+    const provider = new ScriptCompletionProvider('node script.js', options);
+    const context = {
+      vars: { promptSecret: 'sk-test-context-secret' },
+      prompt: { label: 'sk-test-context-label-secret' },
+    } as any;
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      let value = '';
+      const mockHash = {
+        update: vi.fn((input: string | Buffer) => {
+          value += Buffer.isBuffer(input) ? input.toString('utf8') : String(input);
+          return mockHash;
+        }),
+        digest: vi.fn(() => realSha256(value)),
+      } as unknown as crypto.Hash;
+      return mockHash;
+    });
+
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      if (typeof callback === 'function') {
+        callback(null, Buffer.from('fresh result'), '');
+      }
+      return {} as any;
+    });
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.output).toBe('fresh result');
+    expect(mockCache.get).not.toHaveBeenCalled();
+    expect(mockCache.set).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      'ScriptCompletionProvider cache disabled for sensitive invocation input',
+    );
+  });
+
+  it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      let value = '';
+      const mockHash = {
+        update: vi.fn((input: string | Buffer) => {
+          value += Buffer.isBuffer(input) ? input.toString('utf8') : String(input);
+          return mockHash;
+        }),
+        digest: vi.fn(() => realSha256(value)),
+      } as unknown as crypto.Hash;
+      return mockHash;
+    });
+
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      if (typeof callback === 'function') {
+        callback(null, Buffer.from('fresh result'), '');
+      }
+      return {} as any;
+    });
+
+    const baseContext = {
+      vars: { name: 'Alice' },
+      prompt: { raw: 'Hi Alice', label: 'Hi {{name}}' },
+      test: { vars: { name: 'Alice' }, assert: [], options: {}, metadata: {} },
+      repeatIndex: 0,
+    };
+
+    await provider.callApi('test prompt', {
+      ...baseContext,
+      evaluationId: 'eval-first-run',
+      testCaseId: 'case-first',
+      traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+      tracestate: 'vendor=first',
+      testIdx: 0,
+      promptIdx: 0,
+    } as any);
+
+    await provider.callApi('test prompt', {
+      ...baseContext,
+      evaluationId: 'eval-second-run',
+      testCaseId: 'case-second',
+      traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+      tracestate: 'vendor=second',
+      testIdx: 0,
+      promptIdx: 0,
+    } as any);
+
+    const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
+    const secondCacheKey = mockCache.get.mock.calls[1][0] as string;
+
+    expect(firstCacheKey).toBe(secondCacheKey);
+    // Neither key should embed the per-run identifiers that would break
+    // cache hits across eval runs.
+    expect(firstCacheKey).not.toContain('eval-first-run');
+    expect(secondCacheKey).not.toContain('eval-second-run');
+  });
+
+  it('should separate cache keys for different context payloads', async () => {
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      let value = '';
+      const mockHash = {
+        update: vi.fn((input: string | Buffer) => {
+          value += Buffer.isBuffer(input) ? input.toString('utf8') : String(input);
+          return mockHash;
+        }),
+        digest: vi.fn(() => realSha256(value)),
+      } as unknown as crypto.Hash;
+      return mockHash;
+    });
+
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      if (typeof callback === 'function') {
+        callback(null, Buffer.from('fresh result'), '');
+      }
+      return {} as any;
+    });
+
+    await provider.callApi('test prompt', {
+      vars: { tenant: 'SECRET_TENANT' },
+      prompt: { label: 'SECRET_LABEL_A' },
+    } as any);
+    await provider.callApi('test prompt', {
+      vars: { tenant: 'SECRET_TENANT' },
+      prompt: { label: 'SECRET_LABEL_B' },
+    } as any);
+
+    const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
+    const secondCacheKey = mockCache.get.mock.calls[1][0] as string;
+
+    expect(firstCacheKey).not.toBe(secondCacheKey);
+    expect(firstCacheKey).not.toContain('SECRET_TENANT');
+    expect(secondCacheKey).not.toContain('SECRET_TENANT');
+    expect(firstCacheKey).not.toContain('SECRET_LABEL_A');
+    expect(secondCacheKey).not.toContain('SECRET_LABEL_B');
   });
 
   it('should handle script execution errors', async () => {

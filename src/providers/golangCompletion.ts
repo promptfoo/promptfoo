@@ -10,13 +10,16 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import { safeJsonStringify, stableJsonStringify } from '../util/json';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
   CallApiContextParams,
-  ProviderClassificationResponse,
-  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
@@ -42,6 +45,11 @@ export class GolangProvider implements ApiProvider {
       options?.config.basePath || '',
       runPath,
     );
+    if (functionName && functionName !== 'call_api' && functionName !== 'CallApi') {
+      throw new Error(
+        `The Golang provider only supports the CallApi function; received "${functionName}"`,
+      );
+    }
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
@@ -67,42 +75,51 @@ export class GolangProvider implements ApiProvider {
   private async executeGolangScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
-  ): Promise<any> {
+  ): Promise<ProviderResponse> {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
-    const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    const functionName = this.functionName || 'call_api';
+    const sanitizedContext = sanitizeScriptContext('GolangProvider', context);
+    const args = [prompt, this.options, sanitizedContext];
+    const jsonArgs = safeJsonStringify(args) || '[]';
+    // Build a separate arg set for cache-key hashing that excludes per-run
+    // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
+    // full `args` (with tracing metadata) are still forwarded to the Go binary.
+    // Stable (sorted) JSON ensures callers that clone/reshape options or
+    // context with a different key order still hit the same cache entry.
+    const cacheableContext = buildCacheableScriptContext(context);
+    const cacheKeyArgs = [prompt, this.options, cacheableContext];
     const cache = await getCache();
     let cachedResult;
+    const containsSensitiveInput = containsSensitiveScriptInput(cacheKeyArgs);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `golang:${this.scriptPath}:${functionName}:call_api:${fileHash}:${sha256(
+          stableJsonStringify(cacheKeyArgs) || '[]',
+        )}`
+      : undefined;
+    if (containsSensitiveInput) {
+      logger.debug('GolangProvider cache disabled for sensitive invocation input');
+    }
 
-    if (isCacheEnabled()) {
+    if (cacheEnabled && cacheKey) {
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
     if (cachedResult) {
-      logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
+      logger.debug(`Returning cached call_api result for script ${absPath}`);
       return { ...JSON.parse(cachedResult), cached: true };
     } else {
-      if (context) {
-        // Remove properties not useful in Golang and non-serializable objects
-        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-        delete context.getCache;
-        delete context.logger;
-        delete context.filters; // NunjucksFilterMap contains functions
-        delete context.originalProvider; // ApiProvider object with methods
-      }
-
-      const args =
-        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
-      logger.debug(
-        `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-      const functionName = this.functionName || apiType;
+      logger.debug('Running Golang script', {
+        scriptPath: absPath,
+        providerPath: this.scriptPath,
+        apiType: 'call_api',
+        argCount: args.length,
+        hasContext: Boolean(sanitizedContext),
+      });
 
       let tempDir: string | undefined;
       try {
@@ -146,7 +163,6 @@ export class GolangProvider implements ApiProvider {
           { cwd: scriptDir },
         );
 
-        const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
@@ -156,20 +172,23 @@ export class GolangProvider implements ApiProvider {
           jsonArgs,
         ]);
         if (stderr) {
-          logger.error(`Golang script stderr: ${stderr}`);
+          logger.error('Golang script stderr output', { stderr: String(stderr) });
         }
-        logger.debug(`Golang script stdout: ${stdout}`);
+        logger.debug('Golang script stdout output', { stdout: String(stdout) });
 
         const result = JSON.parse(stdout);
 
-        if (isCacheEnabled() && !('error' in result)) {
+        if (cacheEnabled && cacheKey && !('error' in result)) {
           await cache.set(cacheKey, JSON.stringify(result));
         }
         return result;
       } catch (error) {
-        logger.error(`Error running Golang script: ${(error as Error).message}`);
-        logger.error(`Full error object: ${JSON.stringify(error)}`);
-        throw new Error(`Error running Golang script: ${(error as Error).message}`);
+        const err = error as Error;
+        logger.error('Error running Golang script', {
+          errorMessage: err.message,
+          errorName: err.name,
+        });
+        throw new Error(`Error running Golang script: ${err.message}`);
       } finally {
         // Clean up temporary directory
         if (tempDir) {
@@ -180,14 +199,6 @@ export class GolangProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    return this.executeGolangScript(prompt, context, 'call_api');
-  }
-
-  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    return this.executeGolangScript(prompt, undefined, 'call_embedding_api');
-  }
-
-  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    return this.executeGolangScript(prompt, undefined, 'call_classification_api');
+    return this.executeGolangScript(prompt, context);
   }
 }

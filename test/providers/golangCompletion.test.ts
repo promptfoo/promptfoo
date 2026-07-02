@@ -3,6 +3,8 @@ import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
+import { sha256 } from '../../src/util/createHash';
+import { stableJsonStringify } from '../../src/util/json';
 
 // Hoisted mock functions
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -139,9 +141,11 @@ describe('GolangProvider', () => {
           extension: 'go',
         };
       }
+      const normalizedPath = runPath.replace(/^(file:\/\/|golang:)/, '');
+      const [filePath, functionName] = normalizedPath.split(':');
       return {
-        filePath: runPath.replace(/^(file:\/\/|golang:)/, '').split(':')[0],
-        functionName: runPath.includes(':') ? runPath.split(':')[1] : undefined,
+        filePath,
+        functionName,
         isPathPattern: false,
         extension: 'go',
       };
@@ -291,12 +295,21 @@ describe('GolangProvider', () => {
       expect(provider.id()).toBe('testId');
     });
 
-    it('should initialize with file:// prefix and function name', () => {
-      const provider = new GolangProvider('file://script.go:function_name', {
+    it('should initialize with file:// prefix and CallApi function name', () => {
+      const provider = new GolangProvider('file://script.go:CallApi', {
         id: 'testId',
         config: { basePath: '/base' },
       });
       expect(provider.id()).toBe('testId');
+    });
+
+    it('should reject function names that the Go wrapper cannot invoke', () => {
+      expect(
+        () =>
+          new GolangProvider('file://script.go:function_name', {
+            config: { basePath: '/base' },
+          }),
+      ).toThrow('The Golang provider only supports the CallApi function');
     });
 
     it('should handle undefined basePath and use default id', () => {
@@ -306,8 +319,8 @@ describe('GolangProvider', () => {
     });
 
     it('should use class id() method when no id is provided in options', () => {
-      const provider = new GolangProvider('script.go:custom_function');
-      expect(provider.id()).toBe('golang:script.go:custom_function');
+      const provider = new GolangProvider('script.go:CallApi');
+      expect(provider.id()).toBe('golang:script.go:CallApi');
     });
 
     it('should allow id() override and later retrieval', () => {
@@ -326,9 +339,14 @@ describe('GolangProvider', () => {
 
   describe('caching', () => {
     it('should use cached result when available', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
+      const options = {
+        config: { basePath: '/absolute/path/to', temperature: 0.2 },
+      } as any;
+      const provider = new GolangProvider('script.go', options);
+      const context = {
+        vars: { name: 'Alice' },
+        prompt: { label: 'Hello {{name}}' },
+      } as any;
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
@@ -336,12 +354,90 @@ describe('GolangProvider', () => {
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
-      const result = await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt', context);
+      const expectedCacheKey = mockCache.get.mock.calls[0][0] as string;
+      const expectedFileHash = sha256('package main\n// Mock script.go content');
+      const expectedArgsHash = sha256(
+        stableJsonStringify(['test prompt', options, context]) ?? 'undefined',
+      );
 
-      expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
+      expect(expectedCacheKey).toContain('golang:');
+      expect(expectedCacheKey).toContain(':call_api:call_api:');
+      expect(expectedCacheKey).toContain(expectedFileHash);
+      expect(expectedCacheKey).toContain(expectedArgsHash);
+      expect(expectedCacheKey).not.toContain('test prompt');
       expect(mockExecFile).not.toHaveBeenCalled();
       expect(result.cached).toBe(true);
       expect(result).toEqual({ output: 'cached result', cached: true });
+    });
+
+    it('should bypass caching when invocation inputs contain secrets', async () => {
+      const options = {
+        config: { basePath: '/absolute/path/to', apiKey: 'sk-test-golang-secret' },
+      } as any;
+      const provider = new GolangProvider('script.go', options);
+      const context = {
+        vars: { promptSecret: 'sk-test-context-secret' },
+        prompt: { label: 'sk-test-context-label-secret' },
+      } as any;
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(mockCache.get).not.toHaveBeenCalled();
+      expect(mockCache.set).not.toHaveBeenCalled();
+      expect(mockExecFile).toHaveBeenCalled();
+      expect(result).toEqual({ output: 'test output' });
+    });
+
+    it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
+      const options = { config: { basePath: '/absolute/path/to' } } as any;
+      const provider = new GolangProvider('script.go', options);
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const baseContext = {
+        vars: { name: 'Alice' },
+        prompt: { raw: 'Hi Alice', label: 'Hi {{name}}' },
+        test: { vars: { name: 'Alice' }, assert: [], options: {}, metadata: {} },
+        repeatIndex: 0,
+      };
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-first-run',
+        testCaseId: 'case-first',
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+        tracestate: 'vendor=first',
+        testIdx: 0,
+        promptIdx: 0,
+      } as any);
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-second-run',
+        testCaseId: 'case-second',
+        traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+        tracestate: 'vendor=second',
+        testIdx: 0,
+        promptIdx: 0,
+      } as any);
+
+      const firstCacheKey = mockCache.set.mock.calls[0][0] as string;
+      const secondCacheKey = mockCache.set.mock.calls[1][0] as string;
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).not.toContain('eval-first-run');
+      expect(secondCacheKey).not.toContain('eval-second-run');
     });
 
     it('should handle cache errors', async () => {
@@ -440,7 +536,6 @@ describe('GolangProvider', () => {
         expect.objectContaining({
           vars: expect.objectContaining({ circular: expect.anything() }),
         }),
-        'call_api',
       );
 
       spy.mockRestore();
@@ -516,68 +611,12 @@ describe('GolangProvider', () => {
   });
 
   describe('API methods', () => {
-    it('should call callEmbeddingApi successfully', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
-      mockExecFile.mockImplementation(((
-        file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => {
-          callback(
-            null,
-            {
-              stdout: file.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
-              stderr: '',
-            },
-            '',
-          );
-        });
-        return {} as any;
-      }) as any);
+    it('should expose only the implemented text completion method', () => {
+      const provider = new GolangProvider('script.go');
 
-      const result = await provider.callEmbeddingApi('test prompt');
-      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
-    });
-
-    it('should call callClassificationApi successfully', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
-      mockExecFile.mockImplementation(((
-        file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => {
-          callback(
-            null,
-            {
-              stdout: file.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
-              stderr: '',
-            },
-            '',
-          );
-        });
-        return {} as any;
-      }) as any);
-
-      const result = await provider.callClassificationApi('test prompt');
-      expect(result).toEqual({ classification: 'test_class' });
+      expect(provider.callApi).toBeTypeOf('function');
+      expect(provider).not.toHaveProperty('callEmbeddingApi');
+      expect(provider).not.toHaveProperty('callClassificationApi');
     });
 
     it('should handle stderr output without failing', async () => {
@@ -710,7 +749,7 @@ describe('GolangProvider', () => {
       await expect(provider.callApi('test prompt')).rejects.toThrow('Error running Golang script');
     });
 
-    it('should use custom function name when specified', async () => {
+    it('should reject a custom function name before executing a Go binary', async () => {
       const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
       mockParsePathOrGlob.mockReturnValueOnce({
         filePath: '/absolute/path/to/script.go',
@@ -719,31 +758,13 @@ describe('GolangProvider', () => {
         extension: 'go',
       });
 
-      const provider = new GolangProvider('script.go:custom_function', {
-        config: { basePath: '/absolute/path/to' },
-      });
-
-      let executedFunctionName = '';
-      mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        if (file.includes('golang_wrapper')) {
-          executedFunctionName = args[1]; // args[1] is the function name
-        }
-        setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
-
-      await provider.callApi('test prompt');
-      expect(executedFunctionName).toBe('custom_function');
+      expect(
+        () =>
+          new GolangProvider('script.go:custom_function', {
+            config: { basePath: '/absolute/path/to' },
+          }),
+      ).toThrow('The Golang provider only supports the CallApi function');
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
 
     it('should use custom go executable when specified', async () => {
@@ -807,7 +828,6 @@ describe('GolangProvider', () => {
         expect.objectContaining({
           vars: expect.objectContaining({ circular: expect.anything() }),
         }),
-        'call_api',
       );
 
       // Restore the original implementation
