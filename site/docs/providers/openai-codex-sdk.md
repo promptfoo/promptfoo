@@ -227,7 +227,7 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `approval_policy`        | string   | When to require approval (see below)                                                                 | SDK default          |
 | `cli_config`             | object   | Additional Codex CLI config overrides                                                                | None                 |
 | `skip_git_repo_check`    | boolean  | Skip Git repository validation                                                                       | false                |
-| `codex_path_override`    | string   | Custom path to codex binary                                                                          | None                 |
+| `codex_path_override`    | string   | Custom Codex binary; its version must match the SDK's bundled CLI                                    | None                 |
 | `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
 | `persist_threads`        | boolean  | Keep threads alive between calls                                                                     | false                |
 | `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
@@ -799,6 +799,19 @@ providers:
     config:
       codex_path_override: /custom/path/to/codex
 ```
+
+Before starting a turn, promptfoo verifies the selected CLI version against the SDK's exact CLI
+dependency and passes a representative JSONL event stream through the SDK parser. This preflight
+makes no API calls; incompatible CLI, SDK, event schema, or Node runtime combinations return a
+provider error before any tokens are spent.
+
+:::note
+
+The `@openai/codex-sdk` 0.142.3 through 0.142.5 JSONL parser is not compatible with Node.js 24
+when an event contains a literal Unicode line or paragraph separator. Use Node.js 22 until the SDK
+parser is updated; the preflight rejects this combination instead of risking a partial eval.
+
+:::
 
 ## Caching Behavior
 

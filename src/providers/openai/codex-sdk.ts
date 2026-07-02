@@ -30,6 +30,7 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
+import { preflightCodexSdkCliCompatibility } from './codexCliCompatibility';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -587,7 +588,7 @@ function buildCodexRateLimitResponse(
  * Helper to load the OpenAI Codex SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
-async function loadCodexSDK(): Promise<any> {
+async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -617,7 +618,10 @@ async function loadCodexSDK(): Promise<any> {
   }
 
   try {
-    return await importModule(codexPath);
+    return {
+      entryPoint: codexPath,
+      module: await importModule(codexPath),
+    };
   } catch (err) {
     logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
     if ((err as any).stack) {
@@ -674,9 +678,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   private providerId = 'openai:codex-sdk';
   private codexModule?: any;
+  private codexSdkEntryPoint?: string;
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
   private threadRunQueues: Map<string, Promise<void>> = new Map();
+  private compatibilityPreflights: Map<string, Promise<void>> = new Map();
   private deepTracingWarningShown = false; // Show warning once per instance
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
@@ -744,6 +750,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Clean up threads
     this.threads.clear();
     this.threadRunQueues.clear();
+    this.compatibilityPreflights.clear();
 
     // Clean up Codex instances to release resources (child processes, file handles)
     for (const instance of this.codexInstances.values()) {
@@ -2250,8 +2257,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     useLocalInstance: boolean;
   }> {
     if (!this.codexModule) {
-      this.codexModule = await loadCodexSDK();
+      const loadedSdk = await loadCodexSDK();
+      this.codexModule = loadedSdk.module;
+      this.codexSdkEntryPoint = loadedSdk.entryPoint;
     }
+
+    await this.ensureCodexCompatibility(env, resolvedConfig);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
@@ -2283,6 +2294,49 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       localInstance: undefined,
       useLocalInstance: false,
     };
+  }
+
+  private async ensureCodexCompatibility(
+    env: Record<string, string>,
+    resolvedConfig: OpenAICodexSDKConfig,
+  ): Promise<void> {
+    if (!this.codexSdkEntryPoint) {
+      throw new Error('Codex SDK entry point is unavailable for compatibility preflight');
+    }
+
+    const preflightEnv = { ...env };
+    delete preflightEnv.OPENAI_API_KEY;
+    delete preflightEnv.CODEX_API_KEY;
+    delete preflightEnv.TRACEPARENT;
+    for (const key of Object.keys(preflightEnv)) {
+      if (key.startsWith('OTEL_')) {
+        delete preflightEnv[key];
+      }
+    }
+
+    const preflightEnvHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(preflightEnv))
+      .digest('hex');
+    const cacheKey = [
+      this.codexSdkEntryPoint,
+      resolvedConfig.codex_path_override ?? '<bundled>',
+      preflightEnvHash,
+    ].join('\0');
+    let preflight = this.compatibilityPreflights.get(cacheKey);
+    if (!preflight) {
+      preflight = preflightCodexSdkCliCompatibility({
+        sdkEntryPoint: this.codexSdkEntryPoint,
+        sdkModule: this.codexModule,
+        codexPathOverride: resolvedConfig.codex_path_override,
+        env: preflightEnv,
+      }).then((result) => {
+        logger.debug('[CodexSDK] CLI compatibility preflight passed', { ...result });
+      });
+      this.compatibilityPreflights.set(cacheKey, preflight);
+    }
+
+    await preflight;
   }
 
   private warnOnceForDeepTracingThreadOptions(resolvedConfig: OpenAICodexSDKConfig): void {
