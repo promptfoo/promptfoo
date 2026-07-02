@@ -7,12 +7,19 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import {
+  __resetPromptConversationCacheForTests,
+  buildConversationKey,
+  evaluate,
+} from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
+  type AtomicTestCase,
+  type Prompt,
   type ProviderResponse,
   ResultFailureReason,
   type TestSuite,
@@ -234,6 +241,10 @@ describeEvaluator('evaluator execution control', () => {
     rawPrompt: string,
     testCount = 4,
     providerOverrides: Partial<ApiProvider> = {},
+    testProviderOverrides?: Partial<ApiProvider>,
+    promptConfig?: Prompt['config'],
+    testOptions?: AtomicTestCase['options'],
+    promptFunction?: Prompt['function'],
   ): Promise<ConcurrencyProbe> {
     let activeCalls = 0;
     let maxActiveCalls = 0;
@@ -276,13 +287,23 @@ describeEvaluator('evaluator execution control', () => {
       callApi,
       ...providerOverrides,
     };
+    const testProvider: ApiProvider | undefined = testProviderOverrides
+      ? { ...mockApiProvider, ...testProviderOverrides }
+      : undefined;
 
     const tests = Array.from({ length: testCount }, (_, idx) => ({
       vars: { question: `Turn ${idx + 1}` },
+      ...(testProvider
+        ? {
+            metadata: { conversationId: `conversation-${idx + 1}` },
+            options: testOptions,
+            provider: testProvider,
+          }
+        : {}),
     }));
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      prompts: [toPrompt(rawPrompt)],
+      prompts: [{ ...toPrompt(rawPrompt), config: promptConfig, function: promptFunction }],
       tests,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -343,9 +364,9 @@ describeEvaluator('evaluator execution control', () => {
     expect(evalRecord.vars).toEqual(['zebra', 'apple']);
   });
 
-  it('forces concurrency to 1 for real _conversation template references', async () => {
+  it('serializes one conversation key for real _conversation template references', async () => {
     const { maxActiveCalls } = await runConcurrencyProbe(
-      '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
+      '{{ question }} {% if _conversation and _conversation.length > 0 %}{{ _conversation[0].output }}{% endif %}',
       2,
     );
 
@@ -370,13 +391,123 @@ describeEvaluator('evaluator execution control', () => {
     expect(maxActiveCalls).toBeGreaterThan(1);
   });
 
-  it('falls back to serial execution when a prompt that mentions _conversation fails to parse', async () => {
+  it.each([
+    {
+      config: { persistSession: true },
+      id: 'browser-provider',
+      name: 'persistent browser sessions',
+    },
+    {
+      config: { maintainContext: true },
+      id: 'openai:gpt-realtime-1.5',
+      name: 'Realtime context',
+    },
+    {
+      config: { persist_threads: true },
+      id: 'openai:codex-sdk',
+      name: 'Codex threads',
+    },
+    {
+      config: { persist_sessions: true },
+      id: 'opencode:sdk',
+      name: 'OpenCode sessions',
+    },
+    {
+      config: { stateful: true },
+      id: 'openai:chatkit:workflow',
+      name: 'ChatKit state',
+    },
+    {
+      config: { sessionId: 'shared-session' },
+      id: 'bedrock-agent:agent',
+      name: 'Bedrock Agent sessions',
+    },
+    {
+      config: { session_key: 'shared-session' },
+      id: 'openclaw:agent:main',
+      name: 'OpenClaw sessions',
+    },
+    {
+      config: { continue: true },
+      id: 'anthropic:claude-agent-sdk',
+      name: 'Claude Agent continuation',
+    },
+    {
+      config: { session_id: 'existing-session' },
+      id: 'stateful-provider',
+      name: 'resumed sessions',
+    },
+  ])('forces concurrency to 1 for $name supplied through a test provider', async ({
+    config,
+    id,
+  }) => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ question }}',
+      2,
+      {},
+      { config, id: vi.fn().mockReturnValue(id) },
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('serializes conversation prompts whose function may add provider-managed state', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ _conversation }}',
+      2,
+      {},
+      { config: {}, id: vi.fn().mockReturnValue('openai:codex-sdk') },
+      undefined,
+      undefined,
+      async () => ({ prompt: 'rendered', config: { persist_threads: true } }),
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('detects provider-managed state from effective prompt config', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ question }} {{ _conversation }}',
+      2,
+      {},
+      {
+        config: { persist_threads: false },
+        id: vi.fn().mockReturnValue('openai:codex-sdk'),
+      },
+      { persist_threads: true },
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('detects provider-managed state from test options', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ question }} {{ _conversation }}',
+      2,
+      {},
+      { config: {}, id: vi.fn().mockReturnValue('openai:codex-sdk') },
+      undefined,
+      { persist_threads: true },
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('uses the active test provider when checking provider-managed state', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ question }} {{ _conversation }}',
+      2,
+      { config: { persistSession: true }, id: vi.fn().mockReturnValue('browser-provider') },
+      { config: { persistSession: false }, id: vi.fn().mockReturnValue('stateless-override') },
+    );
+
+    expect(maxActiveCalls).toBeGreaterThan(1);
+  });
+
+  it('treats invalid prompts that mention _conversation as conversation-sensitive', async () => {
     // Invalid Nunjucks ({% if %} with no condition), but the literal text
-    // contains `_conversation`. The old substring check always forced serial
-    // mode here, and the new parser-based check must preserve that safety
-    // envelope instead of silently running in parallel. The render itself
-    // will fail for an invalid template, so assert on the evaluator's
-    // concurrency-adjustment log rather than on peak in-flight calls.
+    // contains `_conversation`. The render itself will fail, so assert on the
+    // scheduler log instead of provider-call overlap.
     const infoSpy = vi.spyOn(logger, 'info');
     try {
       const mockApiProvider: ApiProvider = {
@@ -394,10 +525,776 @@ describeEvaluator('evaluator execution control', () => {
       const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
       await evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
 
-      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Setting concurrency to 1'));
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Serializing'),
+        expect.objectContaining({ serializedConversationGroupCount: 1 }),
+      );
     } finally {
       infoSpy.mockRestore();
     }
+  });
+
+  const createConversationTrackingProvider = (expectedConcurrentStarts = 1) => {
+    const activeByKey = new Map<string, number>();
+    const maxActiveByKey = new Map<string, number>();
+    const callOrderByKey = new Map<string, string[]>();
+    let activeTotal = 0;
+    let maxActiveTotal = 0;
+    let startedCount = 0;
+    let startedResolved = false;
+    let releaseCalled = false;
+    let resolveStarted: () => void = () => {};
+    let resolveRelease: () => void = () => {};
+    const startedPromise = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const releasePromise = new Promise<void>((resolve) => {
+      resolveRelease = resolve;
+    });
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (_prompt, context) => {
+        if (!context?.originalProvider || !context.prompt || !context.test) {
+          throw new Error('Missing callApi context');
+        }
+
+        const conversationKey = buildConversationKey(
+          context.originalProvider,
+          context.prompt,
+          context.test as AtomicTestCase,
+          context.repeatIndex,
+        );
+        const orderLabel = String(context.test.vars?.question ?? '');
+        const orderForKey = callOrderByKey.get(conversationKey) ?? [];
+        orderForKey.push(orderLabel);
+        callOrderByKey.set(conversationKey, orderForKey);
+
+        activeTotal += 1;
+        maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
+
+        const activeForKey = (activeByKey.get(conversationKey) ?? 0) + 1;
+        activeByKey.set(conversationKey, activeForKey);
+        maxActiveByKey.set(
+          conversationKey,
+          Math.max(maxActiveByKey.get(conversationKey) ?? 0, activeForKey),
+        );
+
+        try {
+          startedCount += 1;
+          if (!startedResolved && startedCount >= expectedConcurrentStarts) {
+            startedResolved = true;
+            resolveStarted();
+          }
+          await releasePromise;
+        } finally {
+          activeTotal -= 1;
+          activeByKey.set(conversationKey, (activeByKey.get(conversationKey) ?? 1) - 1);
+        }
+
+        return {
+          output: orderLabel,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    return {
+      getCallOrderByKey: () => callOrderByKey,
+      getMaxActiveTotal: () => maxActiveTotal,
+      maxActiveByKey,
+      provider,
+      release: () => {
+        if (!releaseCalled) {
+          releaseCalled = true;
+          resolveRelease();
+        }
+      },
+      waitForStarts: () => startedPromise,
+    };
+  };
+
+  it('builds collision-free keys for delimiter-bearing conversation IDs and repeats', () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'unused' }),
+    };
+    const prompt = { ...toPrompt('{{ _conversation }}'), id: 'prompt' };
+    const repeatLikeId = { metadata: { conversationId: 'thread:repeat:1' } };
+    const ordinaryId = { metadata: { conversationId: 'thread' } };
+
+    expect(buildConversationKey(provider, prompt, repeatLikeId, 0)).not.toBe(
+      buildConversationKey(provider, prompt, ordinaryId, 1),
+    );
+  });
+
+  it('isolates conversation history between prompts without explicit IDs', async () => {
+    const renderedPrompts: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        return {
+          output: prompt.startsWith('A') ? 'SECRET_FROM_PROMPT_A' : 'prompt-b',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt('A {% for turn in _conversation %}{{ turn.output }}{% endfor %}'),
+        toPrompt('B {% for turn in _conversation %}{{ turn.output }}{% endfor %}'),
+      ],
+      tests: [{ metadata: { conversationId: 'same' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    expect(renderedPrompts).toHaveLength(2);
+    expect(renderedPrompts[1]).not.toContain('SECRET_FROM_PROMPT_A');
+  });
+
+  it('does not drop a conversation group when its legacy key resembles an independent key', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('independent'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        { ...toPrompt('{{ _conversation }}'), id: '0' },
+        { ...toPrompt('independent prompt'), id: 'plain' },
+      ],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const completedEval = await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(await completedEval.getResults()).toHaveLength(2);
+  });
+
+  it('parallelizes across conversation keys with _conversation', async () => {
+    const {
+      getCallOrderByKey,
+      getMaxActiveTotal,
+      maxActiveByKey,
+      provider,
+      release,
+      waitForStarts,
+    } = createConversationTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{{ question }} {% if _conversation and _conversation.length > 0 %}{{ _conversation[0].output }}{% endif %}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q3' }, metadata: { conversationId: 'convo-b' } },
+        { vars: { question: 'Q4' }, metadata: { conversationId: 'convo-b' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
+
+    expect(getMaxActiveTotal()).toBe(2);
+    for (const value of maxActiveByKey.values()) {
+      expect(value).toBe(1);
+    }
+
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests as AtomicTestCase[];
+    const convoAKey = buildConversationKey(provider, prompt, tests[0]);
+    const convoBKey = buildConversationKey(provider, prompt, tests[2]);
+    const callOrderByKey = getCallOrderByKey();
+    expect(callOrderByKey.get(convoAKey)).toEqual(['Q1', 'Q2']);
+    expect(callOrderByKey.get(convoBKey)).toEqual(['Q3', 'Q4']);
+  });
+
+  it('serializes steps within the same conversation key with _conversation', async () => {
+    const {
+      getCallOrderByKey,
+      getMaxActiveTotal,
+      maxActiveByKey,
+      provider,
+      release,
+      waitForStarts,
+    } = createConversationTrackingProvider(1);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{{ question }} {% if _conversation and _conversation.length > 0 %}{{ _conversation[0].output }}{% endif %}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q3' }, metadata: { conversationId: 'convo-a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
+
+    expect(getMaxActiveTotal()).toBe(1);
+    for (const value of maxActiveByKey.values()) {
+      expect(value).toBe(1);
+    }
+
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests as AtomicTestCase[];
+    const convoKey = buildConversationKey(provider, prompt, tests[0]);
+    expect(getCallOrderByKey().get(convoKey)).toEqual(['Q1', 'Q2', 'Q3']);
+  });
+
+  it('settles active groups and skips later turns after a sibling group fails', async () => {
+    const events: string[] = [];
+    const callerAbortController = new AbortController();
+    let markB1Aborted!: () => void;
+    let markB1Started!: () => void;
+    let releaseB1!: () => void;
+    let markProgressFailure!: () => void;
+    const b1Started = new Promise<void>((resolve) => {
+      markB1Started = resolve;
+    });
+    const b1Aborted = new Promise<void>((resolve) => {
+      markB1Aborted = resolve;
+    });
+    const b1Release = new Promise<void>((resolve) => {
+      releaseB1 = resolve;
+    });
+    const progressFailure = new Promise<void>((resolve) => {
+      markProgressFailure = resolve;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (_prompt: string, context, callOptions) => {
+        const question = String(context?.test.vars?.question ?? '');
+        events.push(`start:${question}`);
+        if (question === 'A1') {
+          await b1Started;
+        } else if (question === 'B1') {
+          markB1Started();
+          const signal = callOptions?.abortSignal;
+          if (signal?.aborted) {
+            markB1Aborted();
+          } else {
+            signal?.addEventListener('abort', markB1Aborted, { once: true });
+          }
+          await b1Release;
+        }
+        events.push(`done:${question}`);
+        return {
+          output: question,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ question }} {{ _conversation }}')],
+      tests: [
+        { vars: { question: 'A1' }, metadata: { conversationId: 'a' } },
+        { vars: { question: 'A2' }, metadata: { conversationId: 'a' } },
+        { vars: { question: 'B1' }, metadata: { conversationId: 'b' } },
+        { vars: { question: 'B2' }, metadata: { conversationId: 'b' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    let settled = false;
+    const evaluationOutcome = evaluate(testSuite, evalRecord, {
+      abortSignal: callerAbortController.signal,
+      maxConcurrency: 2,
+      progressCallback: (_completed, _total, _index, evalStep) => {
+        if (evalStep.test.vars?.question === 'A1') {
+          markProgressFailure();
+          throw new Error('progress failure');
+        }
+      },
+    })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      .finally(() => {
+        settled = true;
+      });
+
+    await progressFailure;
+    await b1Aborted;
+    expect(settled).toBe(false);
+
+    callerAbortController.abort();
+    releaseB1();
+    const error = await evaluationOutcome;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('progress failure');
+    expect(events).toEqual(['start:A1', 'start:B1', 'done:A1', 'done:B1']);
+  });
+
+  it('leaves an externally aborted in-flight row pending for resume', async () => {
+    const abortController = new AbortController();
+    const abortReason = new Error('custom cancellation reason');
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn((_prompt, _context, callOptions) => {
+        return new Promise<ProviderResponse>((_resolve, reject) => {
+          const signal = callOptions?.abortSignal;
+          const rejectAbort = () => {
+            reject(signal?.reason ?? new DOMException('This operation was aborted', 'AbortError'));
+          };
+          if (signal?.aborted) {
+            rejectAbort();
+            return;
+          }
+          signal?.addEventListener('abort', rejectAbort, { once: true });
+          markStarted();
+        });
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evaluation = evaluate(testSuite, evalRecord, { abortSignal: abortController.signal });
+    await started;
+    abortController.abort(abortReason);
+    await evaluation;
+
+    expect(await evalRecord.getResults()).toHaveLength(0);
+  });
+
+  it('does not add a late timed-out response to conversation history', async () => {
+    vi.useFakeTimers();
+    let releaseFirst!: () => void;
+    let markFirstReturned!: () => void;
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const firstReturned = new Promise<void>((resolve) => {
+      markFirstReturned = resolve;
+    });
+    const renderedPrompts = new Map<string, string>();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string, context) => {
+        const question = String(context?.test.vars?.question ?? '');
+        renderedPrompts.set(question, prompt);
+        if (question === 'Q1') {
+          await firstRelease;
+          markFirstReturned();
+        } else if (question === 'Q2') {
+          releaseFirst();
+          await firstReturned;
+        }
+        return {
+          output: question,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'a' } },
+        { vars: { question: 'Q3' }, metadata: { conversationId: 'a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evaluationPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2, timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    await evaluationPromise;
+
+    expect(renderedPrompts.get('Q3')).toContain('history=Q2, current=Q3');
+    expect(renderedPrompts.get('Q3')).not.toContain('Q1');
+  });
+
+  it('does not group by conversation when PROMPTFOO_DISABLE_CONVERSATION_VAR is set', async () => {
+    const { getMaxActiveTotal, maxActiveByKey, provider, release, waitForStarts } =
+      createConversationTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{{ question }} {% if _conversation and _conversation.length > 0 %}{{ _conversation[0].output }}{% endif %}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+      ],
+    };
+
+    vi.stubEnv('PROMPTFOO_DISABLE_CONVERSATION_VAR', 'true');
+    try {
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+      try {
+        await waitForStarts();
+      } finally {
+        release();
+      }
+      await evalPromise;
+
+      const prompt = testSuite.prompts[0];
+      const tests = testSuite.tests as AtomicTestCase[];
+      const convoKey = buildConversationKey(provider, prompt, tests[0]);
+      expect(getMaxActiveTotal()).toBe(2);
+      expect(maxActiveByKey.get(convoKey)).toBe(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not group by conversation when disableConversationVar is set per test', async () => {
+    const { getMaxActiveTotal, maxActiveByKey, provider, release, waitForStarts } =
+      createConversationTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{{ question }} {% if _conversation and _conversation.length > 0 %}{{ _conversation[0].output }}{% endif %}',
+        ),
+      ],
+      tests: [
+        {
+          vars: { question: 'Q1' },
+          metadata: { conversationId: 'convo-a' },
+          options: { disableConversationVar: true },
+        },
+        {
+          vars: { question: 'Q2' },
+          metadata: { conversationId: 'convo-a' },
+          options: { disableConversationVar: true },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
+
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests as AtomicTestCase[];
+    const convoKey = buildConversationKey(provider, prompt, tests[0]);
+    expect(getMaxActiveTotal()).toBe(2);
+    expect(maxActiveByKey.get(convoKey)).toBe(2);
+  });
+
+  it('serializes conversation steps when beforeEach rewrites them to a shared key', async () => {
+    let markFirstStarted!: () => void;
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const renderedPrompts: string[] = [];
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        activeCalls += 1;
+        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+        const question = prompt.includes('current=Q1') ? 'Q1' : 'Q2';
+        if (question === 'Q1') {
+          markFirstStarted();
+          await firstRelease;
+        }
+        activeCalls -= 1;
+        return {
+          output: question,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context: any) =>
+      hookName === 'beforeEach'
+        ? {
+            test: {
+              ...context.test,
+              metadata: { ...context.test.metadata, conversationId: 'shared' },
+            },
+          }
+        : context,
+    );
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'original-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'original-b' } },
+      ],
+      extensions: ['file://hook.js:beforeEach'],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    await firstStarted;
+    await Promise.resolve();
+    await Promise.resolve();
+    const callCountBeforeRelease = vi.mocked(provider.callApi).mock.calls.length;
+    releaseFirst();
+    await evalPromise;
+
+    expect(callCountBeforeRelease).toBe(1);
+    expect(maxActiveCalls).toBe(1);
+    expect(renderedPrompts.find((prompt) => prompt.includes('current=Q2'))).toContain(
+      'history=Q1, current=Q2',
+    );
+  });
+
+  it.each([
+    false,
+    true,
+  ])('serializes a disabled turn before a later history consumer (runSerially=%s)', async (runSerially) => {
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    let markFirstStarted!: () => void;
+    let releaseFirst!: () => void;
+    const renderedPrompts: string[] = [];
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        activeCalls += 1;
+        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+
+        const question = prompt.includes('current=Q1') ? 'Q1' : 'Q2';
+        if (question === 'Q1') {
+          markFirstStarted();
+          await firstRelease;
+        }
+
+        activeCalls -= 1;
+        return {
+          output: question,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }}',
+        ),
+      ],
+      tests: [
+        {
+          vars: { question: 'Q1' },
+          metadata: { conversationId: 'convo-a' },
+          options: { disableConversationVar: true },
+        },
+        {
+          vars: { question: 'Q2' },
+          metadata: { conversationId: 'convo-a' },
+          ...(runSerially ? { options: { runSerially: true } } : {}),
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    await firstStarted;
+    await Promise.resolve();
+    await Promise.resolve();
+    const callCountBeforeRelease = vi.mocked(provider.callApi).mock.calls.length;
+    releaseFirst();
+    await evalPromise;
+
+    expect(callCountBeforeRelease).toBe(1);
+    expect(maxActiveCalls).toBe(1);
+    expect(renderedPrompts.find((prompt) => prompt.includes('current=Q2'))).toContain(
+      'history=Q1, current=Q2',
+    );
+  });
+
+  it('preserves source order when a per-test prefix introduces _conversation', async () => {
+    const callOrder: string[] = [];
+    const renderedPrompts: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string, context) => {
+        const question = String(context?.test.vars?.question ?? '');
+        callOrder.push(question);
+        renderedPrompts.push(prompt);
+        return {
+          output: question,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('current={{ question }}')],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        {
+          vars: { question: 'Q2' },
+          metadata: { conversationId: 'convo-a' },
+          options: {
+            prefix:
+              'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} ',
+            runSerially: true,
+          },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(callOrder).toEqual(['Q1', 'Q2']);
+    expect(renderedPrompts[1]).toContain('history=Q1, current=Q2');
+  });
+
+  it('preserves source order when storeOutputAs globally serializes conversation steps', async () => {
+    const renderedPrompts: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        const question = prompt.match(/current=(A1|B1|A2)/)?.[1];
+        return {
+          output: question === 'B1' ? 'stored-value' : `${question}-output`,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }} saved={{ saved | default("missing") }}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'A1' }, metadata: { conversationId: 'a' } },
+        {
+          vars: { question: 'B1' },
+          metadata: { conversationId: 'b' },
+          options: { storeOutputAs: 'saved' },
+        },
+        { vars: { question: 'A2' }, metadata: { conversationId: 'a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(renderedPrompts.map((prompt) => prompt.match(/current=(A1|B1|A2)/)?.[1])).toEqual([
+      'A1',
+      'B1',
+      'A2',
+    ]);
+    expect(renderedPrompts[2]).toContain('saved=stored-value');
+  });
+
+  it('parallelizes repeat iterations within the same conversation', async () => {
+    const {
+      getCallOrderByKey,
+      getMaxActiveTotal,
+      maxActiveByKey,
+      provider,
+      release,
+      waitForStarts,
+    } = createConversationTrackingProvider(2);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{{ question }} {% if _conversation and _conversation.length > 0 %}{{ _conversation[0].output }}{% endif %}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'convo-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2, repeat: 2 });
+    try {
+      await waitForStarts();
+    } finally {
+      release();
+    }
+    await evalPromise;
+
+    expect(getMaxActiveTotal()).toBe(2);
+    for (const value of maxActiveByKey.values()) {
+      expect(value).toBe(1);
+    }
+
+    const prompt = testSuite.prompts[0];
+    const tests = testSuite.tests as AtomicTestCase[];
+    const repeat0Key = buildConversationKey(provider, prompt, tests[0], 0);
+    const repeat1Key = buildConversationKey(provider, prompt, tests[0], 1);
+    const callOrderByKey = getCallOrderByKey();
+    expect(callOrderByKey.get(repeat0Key)).toEqual(['Q1', 'Q2']);
+    expect(callOrderByKey.get(repeat1Key)).toEqual(['Q1', 'Q2']);
   });
 
   it('propagates prior turn output into _conversation on the next serial call', async () => {

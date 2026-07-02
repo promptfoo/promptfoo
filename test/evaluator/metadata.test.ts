@@ -299,37 +299,30 @@ describeEvaluator('evaluator metadata', () => {
     // Check that the API was called with the correct prompts
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
 
-    // First conversation, first question
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('User: Question 1A'),
-      expect.anything(),
-      undefined,
+    const renderedPrompts = mockApiProvider.callApi.mock.calls.map(([prompt]) => String(prompt));
+
+    expect(renderedPrompts).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('User: Question 1A'),
+        expect.stringContaining('User: Question 2A'),
+      ]),
     );
 
-    // First conversation, second question (should include history)
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
-      expect.anything(),
-      undefined,
+    const firstConversationSecond = renderedPrompts.find((prompt) =>
+      prompt.includes('User: Question 1B'),
     );
+    expect(firstConversationSecond).toContain(
+      'User: Question 1A\nAssistant: Test output\nUser: Question 1B',
+    );
+    expect(firstConversationSecond).not.toContain('Question 2A');
 
-    // Second conversation, first question (should NOT include first conversation)
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      3,
-      expect.stringContaining('User: Question 2A'),
-      expect.anything(),
-      undefined,
+    const secondConversationSecond = renderedPrompts.find((prompt) =>
+      prompt.includes('User: Question 2B'),
     );
-
-    // Second conversation, second question (should only include second conversation history)
-    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
-      4,
-      expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
-      expect.anything(),
-      undefined,
+    expect(secondConversationSecond).toContain(
+      'User: Question 2A\nAssistant: Test output\nUser: Question 2B',
     );
+    expect(secondConversationSecond).not.toContain('Question 1A');
   });
 
   it('should include sessionId in metadata for afterEach hook', async () => {
