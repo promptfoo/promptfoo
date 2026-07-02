@@ -1,3 +1,5 @@
+import { sanitizeObject } from '../sanitizer';
+
 /**
  * Error with additional system information (e.g. Node.js system errors).
  */
@@ -316,6 +318,142 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
     message.includes('econnreset') ||
     message.includes('socket hang up')
   );
+}
+
+/**
+ * Network-level error codes meaning the connection was refused, reset, or
+ * dropped — as opposed to a clean HTTP error response. Proxies, firewalls, and
+ * WAFs (e.g. Cloudflare blocking a POST with a 403) typically surface this way:
+ * Node/undici reports `TypeError: fetch failed` or `TypeError: terminated` and
+ * tucks the real reason into `error.cause`.
+ */
+const CONNECTION_BLOCK_CODES = new Set([
+  'UND_ERR_SOCKET',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+  'EAI_AGAIN',
+]);
+
+/**
+ * Hint appended when a request fails at the connection layer, pointing at the
+ * common real-world causes instead of leaving users with a bare `terminated`.
+ *
+ * Worded cause-agnostically: `isConnectionError` matches undici's generic
+ * `fetch failed` wrapper and DNS codes (`EAI_AGAIN`), so this hint is also shown
+ * for DNS, TLS, and offline failures — not only proxy/firewall blocks. It leads
+ * with the proxy/Cloudflare case (the original report, promptfoo#9679) but names
+ * the other likely causes so the attribution is not misleading.
+ */
+export const CONNECTION_BLOCK_HINT =
+  'The connection failed before a response was received. Common causes are a network proxy, ' +
+  'firewall, or Cloudflare rule blocking the request (for example a 403 on POST), a DNS ' +
+  'resolution failure, a TLS/certificate misconfiguration, or no network connectivity. Check ' +
+  'your network, DNS, and proxy settings, or try a different network.';
+
+/**
+ * Undici's outer message for a connection-layer failure is one of a small set
+ * of fixed phrases. Matched with word boundaries so a code-like substring (e.g.
+ * the hard-quota code `access_terminated`, which embeds `terminated`) does not
+ * trip the connection-block hint. The boundaries still match the wrapped form
+ * `Request failed after N retries: TypeError: terminated (Cause: ...)` that
+ * `fetchWithRetries` produces, so the real failure path is unaffected.
+ */
+const CONNECTION_BLOCK_MESSAGE_PATTERN =
+  /\b(?:terminated|fetch failed|other side closed|socket hang up)\b/;
+
+/**
+ * Detects fetch failures that happened at the connection layer (refused, reset,
+ * or dropped) rather than as a parseable HTTP response. Inspects both the outer
+ * error and its `cause`, since undici hides the real `code`/`message` in
+ * `cause` (the outer error is just `terminated` / `fetch failed`).
+ *
+ * Related but distinct from {@link isTransientConnectionError}, which decides
+ * whether to *retry* (and inspects TLS/EPROTO codes); this one decides whether
+ * to show a user-facing network-block hint and additionally reads `error.cause`.
+ * Keep the two in sync when adding new connection-layer codes.
+ */
+export function isConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  // A rate-limit/quota response is a clean HTTP error, not a dropped
+  // connection. Guard it explicitly: a hard-quota code such as
+  // `access_terminated` would otherwise embed `terminated` in the message and
+  // attach a misleading "check your network" hint to a billing problem.
+  if (isHttpRateLimitError(error)) {
+    return false;
+  }
+  const err = error as SystemError;
+  const cause = err.cause as SystemError | undefined;
+  const codes = [err.code, cause?.code].filter((c): c is string => typeof c === 'string');
+  if (codes.some((code) => CONNECTION_BLOCK_CODES.has(code))) {
+    return true;
+  }
+  const haystack = `${err.message ?? ''} ${cause?.message ?? ''}`.toLowerCase();
+  return CONNECTION_BLOCK_MESSAGE_PATTERN.test(haystack);
+}
+
+/**
+ * Renders an error's `cause` for logging. An `Error` cause stringifies to
+ * `Name: message` (so a `SocketError` shows its class), other objects are
+ * JSON-encoded to avoid a useless `[object Object]`, and primitives stringify
+ * directly.
+ *
+ * Object causes are routed through {@link sanitizeObject} before serializing:
+ * this string is interpolated into a plain log message (e.g.
+ * `logger.warn(`...: ${describeFetchError(err)}`)`), and the logger only
+ * sanitizes its structured *context* argument, not the message text. Dumping a
+ * raw object cause could therefore leak secret-bearing fields (auth headers,
+ * api keys, cookies) into logs; `sanitizeObject` redacts those and also handles
+ * circular references, so a non-Error cause can never write a secret verbatim.
+ */
+function formatErrorCause(cause: unknown): string {
+  if (cause instanceof Error) {
+    return String(cause);
+  }
+  if (typeof cause === 'object' && cause !== null) {
+    try {
+      return JSON.stringify(sanitizeObject(cause));
+    } catch {
+      return String(cause);
+    }
+  }
+  return String(cause);
+}
+
+/**
+ * Formats a fetch/network error's name, message, and the otherwise-hidden
+ * `cause` and `code` into a single log-friendly string. Raw interpolation of an
+ * `Error` only yields `name: message`, dropping the diagnostic detail. The
+ * `code` falls back to `cause.code` because undici reports the real code (e.g.
+ * `ECONNREFUSED` on an `AggregateError`) on the cause, not the outer error.
+ */
+export function formatFetchError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const err = error as SystemError;
+  let message = `${err.name}: ${err.message}`;
+  if (err.cause !== undefined && err.cause !== null) {
+    message += ` (Cause: ${formatErrorCause(err.cause)})`;
+  }
+  const code = err.code ?? (err.cause as SystemError | undefined)?.code;
+  if (code) {
+    message += ` (Code: ${code})`;
+  }
+  return message;
+}
+
+/**
+ * Like {@link formatFetchError}, but also appends {@link CONNECTION_BLOCK_HINT}
+ * when the failure looks like a connection-layer block. Use in catch blocks
+ * around outbound requests so users get an actionable message instead of a bare
+ * `terminated`.
+ */
+export function describeFetchError(error: unknown): string {
+  const base = formatFetchError(error);
+  return isConnectionError(error) ? `${base}\n${CONNECTION_BLOCK_HINT}` : base;
 }
 
 /**

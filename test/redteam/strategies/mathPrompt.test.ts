@@ -1,6 +1,7 @@
 import { SingleBar } from 'cli-progress';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
@@ -10,6 +11,7 @@ import {
   encodeMathPrompt,
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
+import { CONNECTION_BLOCK_HINT } from '../../../src/util/fetch/errors';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 vi.mock('cli-progress');
@@ -81,6 +83,33 @@ describe('mathPrompt', () => {
 
       const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
       expect(result).toEqual([]);
+    });
+
+    it('routes connection failures through describeFetchError (surfaces cause + network hint)', async () => {
+      // Regression guard for promptfoo#9679: a dropped connection must log the
+      // hidden cause AND the actionable network-block hint, not a bare
+      // `TypeError: terminated`. Pins that this call site uses describeFetchError.
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const cause = Object.assign(new Error('other side closed'), {
+        name: 'SocketError',
+        code: 'UND_ERR_SOCKET',
+      });
+      const terminated = Object.assign(new TypeError('terminated'), { cause });
+      vi.mocked(fetchWithCache).mockRejectedValue(terminated);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
+
+      expect(result).toEqual([]);
+      const logged = errorSpy.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(logged).toContain('Cause: SocketError: other side closed');
+      expect(logged).toContain(CONNECTION_BLOCK_HINT);
     });
   });
 

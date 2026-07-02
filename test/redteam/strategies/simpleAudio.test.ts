@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
+import { CONNECTION_BLOCK_HINT } from '../../../src/util/fetch/errors';
 import { mockConsole } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
@@ -107,6 +108,25 @@ describe('audio strategy', () => {
 
       const text = 'Hello, fallback world!';
       await expect(textToAudio(text, 'en')).rejects.toThrow('Failed to generate audio');
+    });
+
+    it('logs the hidden cause and network hint via describeFetchError on a dropped connection', async () => {
+      // Regression guard for promptfoo#9679: the logged diagnostic (not the
+      // rethrown message) must surface the hidden cause AND the network-block
+      // hint. Pins that this call site uses describeFetchError.
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const cause = Object.assign(new Error('other side closed'), {
+        name: 'SocketError',
+        code: 'UND_ERR_SOCKET',
+      });
+      const terminated = Object.assign(new TypeError('terminated'), { cause });
+      mockFetchWithCache.mockRejectedValueOnce(terminated);
+
+      await expect(textToAudio('Hello', 'en')).rejects.toThrow('Failed to generate audio');
+
+      const logged = errorSpy.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(logged).toContain('Cause: SocketError: other side closed');
+      expect(logged).toContain(CONNECTION_BLOCK_HINT);
     });
 
     it('should pass language parameter to API', async () => {

@@ -8,6 +8,7 @@ import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -332,7 +333,7 @@ async function generateMultilingual(
 
     return deduplicatedResults;
   } catch (error) {
-    logger.debug(`Remote multilingual generation failed: ${error}`);
+    logger.warn(`Remote multilingual generation failed: ${describeFetchError(error)}`);
     return [];
   }
 }

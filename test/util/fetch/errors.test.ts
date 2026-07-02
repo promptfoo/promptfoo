@@ -1,16 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CONNECTION_BLOCK_HINT,
+  describeFetchError,
   extractRateLimitErrorCode,
   findTargetErrorStatus,
+  formatFetchError,
   formatRateLimitDetail,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
   isAbortError,
+  isConnectionError,
   isHardQuotaCode,
   isHttpRateLimitError,
   isNonTransientHttpStatus,
   isTransientConnectionError,
 } from '../../../src/util/fetch/errors';
+
+/**
+ * Builds an error matching the shape undici produces when a connection is cut:
+ * an outer `TypeError` whose real reason lives in a `SocketError` cause. Mirrors
+ * the values captured reproducing promptfoo#9679 (Cloudflare 403 block on POST),
+ * including the cause's `SocketError` class name so the formatted output matches
+ * what users actually see (`Cause: SocketError: other side closed`).
+ */
+function makeTerminatedError(
+  message = 'terminated',
+  causeMessage = 'other side closed',
+  causeCode = 'UND_ERR_SOCKET',
+): Error {
+  const cause = Object.assign(new Error(causeMessage), { name: 'SocketError', code: causeCode });
+  return Object.assign(new TypeError(message), { cause });
+}
 
 describe('isAbortError', () => {
   it('returns true for AbortError and AbortException', () => {
@@ -529,5 +549,175 @@ describe('formatRateLimitErrorMessage', () => {
     const out = formatRateLimitErrorMessage(err);
     expect(out.match(/Rate limit exceeded/g)?.length).toBe(1);
     expect(out.match(/HTTP 429/g)?.length).toBe(1);
+  });
+});
+
+describe('isConnectionError', () => {
+  it('detects undici `terminated` from a cut connection (cause code UND_ERR_SOCKET)', () => {
+    expect(isConnectionError(makeTerminatedError())).toBe(true);
+  });
+
+  it('detects `fetch failed` when the socket dies before any response', () => {
+    expect(isConnectionError(makeTerminatedError('fetch failed'))).toBe(true);
+  });
+
+  it('detects a forcibly reset connection via ECONNRESET on the cause', () => {
+    expect(
+      isConnectionError(makeTerminatedError('terminated', 'read ECONNRESET', 'ECONNRESET')),
+    ).toBe(true);
+  });
+
+  it('detects ECONNREFUSED on the outer error', () => {
+    const err = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    expect(isConnectionError(err)).toBe(true);
+  });
+
+  it('matches on message text even when no code is present', () => {
+    expect(isConnectionError(new Error('socket hang up'))).toBe(true);
+  });
+
+  it('detects EAI_AGAIN (DNS) and EPIPE on the cause', () => {
+    expect(
+      isConnectionError(makeTerminatedError('fetch failed', 'getaddrinfo EAI_AGAIN', 'EAI_AGAIN')),
+    ).toBe(true);
+    expect(isConnectionError(makeTerminatedError('terminated', 'write EPIPE', 'EPIPE'))).toBe(true);
+  });
+
+  it('matches the wrapped form fetchWithRetries produces', () => {
+    // fetchWithRetries re-wraps the final failure as a plain Error whose message
+    // embeds the original `terminated` — the hint must still fire on this shape.
+    expect(
+      isConnectionError(
+        new Error(
+          'Request failed after 3 retries: TypeError: terminated (Cause: SocketError: other side closed)',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for a clean HTTP/application error (not a connection failure)', () => {
+    expect(isConnectionError(new Error('Bad Request: 400'))).toBe(false);
+  });
+
+  it('returns false for a hard-quota rate-limit error whose code embeds `terminated`', () => {
+    // `access_terminated` is a hard-quota code (HARD_QUOTA_ERROR_CODES). The
+    // bare substring `terminated` must NOT classify this billing error as a
+    // dropped connection — otherwise we attach a misleading network hint.
+    const quota = new HttpRateLimitError({ status: 429, code: 'access_terminated' });
+    expect(quota.message).toContain('access_terminated');
+    expect(isHardQuotaCode('access_terminated')).toBe(true);
+    expect(isConnectionError(quota)).toBe(false);
+  });
+
+  it('returns false for an aborted/timed-out request (not a connection block)', () => {
+    const abort = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+    expect(isConnectionError(abort)).toBe(false);
+    expect(isConnectionError(new Error('Request timed out after 5000 ms'))).toBe(false);
+  });
+
+  it('returns false for non-Error values', () => {
+    expect(isConnectionError('terminated')).toBe(false);
+    expect(isConnectionError(undefined)).toBe(false);
+    expect(isConnectionError(null)).toBe(false);
+  });
+});
+
+describe('formatFetchError', () => {
+  it('surfaces the otherwise-hidden cause and code, with the real cause class name', () => {
+    const out = formatFetchError(makeTerminatedError());
+    expect(out).toContain('TypeError: terminated');
+    // Matches production output exactly: undici's cause is a SocketError.
+    expect(out).toContain('Cause: SocketError: other side closed');
+  });
+
+  it('includes the top-level code when present', () => {
+    const err = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    expect(formatFetchError(err)).toContain('(Code: ECONNREFUSED)');
+  });
+
+  it('falls back to the cause code when the outer error has none (undici AggregateError shape)', () => {
+    // Canonical Node ECONNREFUSED: `TypeError: fetch failed` with the code on an
+    // AggregateError cause. The outer error carries no code; surface the cause's.
+    const cause = Object.assign(new AggregateError([], ''), { code: 'ECONNREFUSED' });
+    const err = Object.assign(new TypeError('fetch failed'), { cause });
+    expect(formatFetchError(err)).toContain('(Code: ECONNREFUSED)');
+  });
+
+  it('renders a non-Error object cause as JSON instead of [object Object]', () => {
+    const err = Object.assign(new Error('boom'), { cause: { reason: 'blocked', port: 443 } });
+    const out = formatFetchError(err);
+    expect(out).toContain('"reason":"blocked"');
+    expect(out).not.toContain('[object Object]');
+  });
+
+  it('redacts secret-bearing fields in an object cause (this string is logged unsanitized)', () => {
+    // The formatted string is interpolated into a plain log message, which the
+    // logger does NOT sanitize. A raw JSON.stringify would leak the header, so
+    // formatErrorCause routes object causes through sanitizeObject first.
+    const err = Object.assign(new Error('fetch failed'), {
+      cause: {
+        url: 'https://api.promptfoo.app/api/v1/task',
+        headers: { authorization: 'Bearer sk-supersecret-123', 'x-api-key': 'pk-live-leakme' },
+      },
+    });
+    const out = formatFetchError(err);
+    expect(out).not.toContain('sk-supersecret-123');
+    expect(out).not.toContain('pk-live-leakme');
+    expect(out).toContain('[REDACTED]');
+    // Non-sensitive diagnostic context is preserved.
+    expect(out).toContain('api/v1/task');
+  });
+
+  it('degrades safely (no throw) when an object cause is not JSON-serializable (BigInt)', () => {
+    // A raw JSON.stringify throws on a BigInt value; sanitizeObject absorbs it
+    // (returning a placeholder) so formatFetchError never throws inside a logging
+    // call and never emits a bare `[object Object]`.
+    const err = Object.assign(new Error('boom'), { cause: { attempts: 3n } });
+    expect(() => formatFetchError(err)).not.toThrow();
+    const out = formatFetchError(err);
+    expect(out).toContain('boom');
+    expect(out).not.toContain('[object Object]');
+  });
+
+  it('handles a circular object cause without throwing', () => {
+    const circular: Record<string, unknown> = { reason: 'blocked' };
+    circular.self = circular;
+    const err = Object.assign(new Error('boom'), { cause: circular });
+    // Must not throw: sanitizeObject collapses the cycle, so JSON.stringify
+    // succeeds and the non-circular field still surfaces.
+    expect(() => formatFetchError(err)).not.toThrow();
+    expect(formatFetchError(err)).toContain('"reason":"blocked"');
+  });
+
+  it('stringifies non-Error values', () => {
+    expect(formatFetchError('boom')).toBe('boom');
+  });
+
+  it('does NOT append the connection-block hint (formatting only)', () => {
+    expect(formatFetchError(makeTerminatedError())).not.toContain(CONNECTION_BLOCK_HINT);
+  });
+});
+
+describe('describeFetchError', () => {
+  it('appends the network-block hint for a `terminated` connection error', () => {
+    const out = describeFetchError(makeTerminatedError());
+    // Still shows the raw diagnostics (the hidden cause, not just `terminated`)...
+    expect(out).toContain('TypeError: terminated');
+    expect(out).toContain('other side closed');
+    // ...plus the actionable hint that was missing in promptfoo#9679.
+    expect(out).toContain(CONNECTION_BLOCK_HINT);
+  });
+
+  it('does not append the hint for a non-connection error', () => {
+    const out = describeFetchError(new Error('Bad Request: 400'));
+    expect(out).toContain('Bad Request: 400');
+    expect(out).not.toContain(CONNECTION_BLOCK_HINT);
+  });
+
+  it('does not append the network hint to a hard-quota billing error', () => {
+    const quota = new HttpRateLimitError({ status: 429, code: 'access_terminated' });
+    const out = describeFetchError(quota);
+    expect(out).toContain('access_terminated');
+    expect(out).not.toContain(CONNECTION_BLOCK_HINT);
   });
 });
