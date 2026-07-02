@@ -1,3 +1,5 @@
+import { lookup } from 'node:dns/promises';
+
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
@@ -9,6 +11,9 @@ vi.mock('../../../src/redteam/shared');
 vi.mock('../../../src/redteam/remoteGeneration');
 vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 
 // Import after mocking
 import logger from '../../../src/logger';
@@ -30,7 +35,22 @@ const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+const mockedLookup = vi.mocked(lookup);
 const debugSpy = vi.spyOn(logger, 'debug');
+
+function jsonResponse(body: unknown, init?: ResponseInit): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init,
+  });
+}
+
+async function waitForFetchCalls(callCount: number): Promise<void> {
+  await vi.waitFor(() => {
+    expect(mockedFetchWithProxy.mock.calls.length).toBeGreaterThanOrEqual(callCount);
+  });
+}
 
 describe('Redteam Routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -852,6 +872,65 @@ describe('Redteam Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('No job currently running');
+    });
+  });
+
+  describe('configuration agent endpoints', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as any);
+      app = createApp();
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('sanitizes API key material from session and config responses', async () => {
+      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
+        const headers = options?.headers as Record<string, string> | undefined;
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        if (headers?.Authorization === 'Bearer sk-test-secret') {
+          return jsonResponse({
+            choices: [{ message: { content: 'hello' } }],
+          });
+        }
+        return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
+      });
+
+      const startResponse = await request(app)
+        .post('/api/redteam/config-agent/start')
+        .send({ baseUrl: 'https://api.example.com' });
+
+      expect(startResponse.status).toBe(200);
+      const { sessionId } = startResponse.body.data;
+
+      await waitForFetchCalls(3);
+
+      const inputResponse = await request(app).post('/api/redteam/config-agent/input').send({
+        sessionId,
+        type: 'api_key',
+        value: 'sk-test-secret',
+        field: 'apiKey',
+      });
+
+      expect(inputResponse.status).toBe(200);
+      expect(JSON.stringify(inputResponse.body)).not.toContain('sk-test-secret');
+      expect(Object.values(inputResponse.body.data.session.finalConfig.headers)).toContain(
+        'Bearer ••••cret',
+      );
+
+      const sessionResponse = await request(app).get(
+        `/api/redteam/config-agent/session/${sessionId}`,
+      );
+
+      expect(sessionResponse.status).toBe(200);
+      expect(JSON.stringify(sessionResponse.body)).not.toContain('sk-test-secret');
+      expect(Object.values(sessionResponse.body.data.config.headers)).toContain('Bearer ••••cret');
     });
   });
 

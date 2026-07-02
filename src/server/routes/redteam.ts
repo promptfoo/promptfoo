@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { ConfigurationAgent } from '../../redteam/configAgent/agent';
 import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
@@ -31,6 +32,13 @@ import {
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
 import type { Request, Response } from 'express';
+
+import type {
+  AgentMessage,
+  ConfigAgentSession,
+  DiscoveredConfig,
+  UserInput,
+} from '../../redteam/configAgent/types';
 
 export const redteamRouter = Router();
 
@@ -331,6 +339,293 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
 
   res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));
 });
+
+// ============================================================================
+// Configuration Agent Endpoints
+// ============================================================================
+
+// Store active configuration agent sessions
+const configAgentSessions = new Map<string, ConfigurationAgent>();
+
+// Maximum number of concurrent sessions allowed
+const MAX_CONFIG_AGENT_SESSIONS = 100;
+
+/**
+ * Sanitize session data to remove sensitive information before sending to client
+ */
+function isSensitiveName(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return (
+    normalized === 'authorization' ||
+    normalized.includes('api-key') ||
+    normalized.includes('apikey') ||
+    normalized.includes('key') ||
+    normalized.includes('secret') ||
+    normalized.includes('password') ||
+    normalized.includes('token')
+  );
+}
+
+function maskSensitiveValue(value: unknown): string {
+  const strValue = String(value);
+  return strValue.length > 4 ? `••••${strValue.slice(-4)}` : '••••';
+}
+
+function maskHeaderValue(value: string): string {
+  const authMatch = value.match(/^([a-z]+)\s+(.+)$/i);
+  if (authMatch) {
+    return `${authMatch[1]} ${maskSensitiveValue(authMatch[2])}`;
+  }
+  return maskSensitiveValue(value);
+}
+
+function sanitizeDiscoveredConfig<T extends Partial<DiscoveredConfig>>(config: T): T {
+  const sanitizedConfig = { ...config };
+
+  if (sanitizedConfig.headers) {
+    sanitizedConfig.headers = Object.fromEntries(
+      Object.entries(sanitizedConfig.headers).map(([key, value]) => [
+        key,
+        isSensitiveName(key) ? maskHeaderValue(value) : value,
+      ]),
+    );
+  }
+
+  return sanitizedConfig;
+}
+
+function sanitizeMessagesForClient(messages: AgentMessage[]): AgentMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    metadata: message.metadata
+      ? {
+          ...message.metadata,
+          discoveredConfig: message.metadata.discoveredConfig
+            ? sanitizeDiscoveredConfig(message.metadata.discoveredConfig)
+            : undefined,
+        }
+      : undefined,
+  }));
+}
+
+function sanitizeSessionForClient(session: ConfigAgentSession): ConfigAgentSession {
+  const sanitizedSession = structuredClone(session);
+
+  // Remove sensitive fields from userInputs
+  if (sanitizedSession.userInputs) {
+    const sanitizedInputs: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(sanitizedSession.userInputs)) {
+      if (isSensitiveName(key)) {
+        sanitizedInputs[key] = maskSensitiveValue(value);
+      } else {
+        sanitizedInputs[key] = value;
+      }
+    }
+    sanitizedSession.userInputs = sanitizedInputs;
+  }
+
+  if (sanitizedSession.finalConfig) {
+    sanitizedSession.finalConfig = sanitizeDiscoveredConfig(sanitizedSession.finalConfig);
+  }
+
+  if (sanitizedSession.bestMatch) {
+    sanitizedSession.bestMatch.discoveredConfig = sanitizeDiscoveredConfig(
+      sanitizedSession.bestMatch.discoveredConfig,
+    );
+  }
+
+  sanitizedSession.messages = sanitizeMessagesForClient(sanitizedSession.messages);
+
+  return sanitizedSession;
+}
+
+const CONFIG_AGENT_SESSION_TTL = 60 * 60 * 1000;
+
+function cleanExpiredConfigAgentSessions(): void {
+  const now = Date.now();
+  for (const [sessionId, agent] of configAgentSessions) {
+    const session = agent.getSession();
+    if (now - session.startedAt > CONFIG_AGENT_SESSION_TTL) {
+      agent.cancel();
+      configAgentSessions.delete(sessionId);
+      logger.debug('[ConfigAgent] Cleaned up expired session', { sessionId });
+    }
+  }
+}
+
+/**
+ * Start a new configuration agent session
+ */
+redteamRouter.post('/config-agent/start', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsedBody = RedteamSchemas.ConfigAgentStart.Request.safeParse(req.body);
+    if (!parsedBody.success) {
+      res
+        .status(400)
+        .json({ success: false, error: 'Invalid request', details: parsedBody.error.message });
+      return;
+    }
+
+    const { baseUrl } = parsedBody.data;
+
+    cleanExpiredConfigAgentSessions();
+
+    // Check session limit to prevent DoS
+    if (configAgentSessions.size >= MAX_CONFIG_AGENT_SESSIONS) {
+      res.status(503).json({
+        success: false,
+        error: 'Too many active sessions. Please try again later.',
+      });
+      return;
+    }
+
+    // Create new agent (may throw on invalid/blocked URLs)
+    let agent: ConfigurationAgent;
+    try {
+      agent = new ConfigurationAgent(baseUrl);
+    } catch (urlError) {
+      // URL validation failed (SSRF protection)
+      res.status(400).json({
+        success: false,
+        error: urlError instanceof Error ? urlError.message : 'Invalid URL',
+      });
+      return;
+    }
+
+    const session = agent.getSession();
+
+    // Store the agent
+    configAgentSessions.set(session.id, agent);
+
+    // Start discovery (async)
+    agent.startDiscovery().catch((err) => {
+      logger.error('[ConfigAgent] Discovery error', { error: err });
+    });
+
+    res.json(
+      RedteamSchemas.ConfigAgentStart.Response.parse({
+        success: true,
+        data: {
+          sessionId: session.id,
+          messages: sanitizeMessagesForClient(agent.getMessages()),
+        },
+      }),
+    );
+  } catch (error) {
+    logger.error('[ConfigAgent] Start error', { error });
+    res.status(500).json({ success: false, error: 'Failed to start configuration agent' });
+  }
+});
+
+/**
+ * Send user input to a configuration agent session
+ */
+redteamRouter.post('/config-agent/input', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsedBody = RedteamSchemas.ConfigAgentInput.Request.safeParse(req.body);
+    if (!parsedBody.success) {
+      res
+        .status(400)
+        .json({ success: false, error: 'Invalid request', details: parsedBody.error.message });
+      return;
+    }
+
+    cleanExpiredConfigAgentSessions();
+
+    const input: UserInput = parsedBody.data;
+    const agent = configAgentSessions.get(input.sessionId);
+
+    if (!agent) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    await agent.handleUserInput(input);
+
+    // Sanitize session data to remove sensitive information
+    const sanitizedSession = sanitizeSessionForClient(agent.getSession());
+
+    res.json(
+      RedteamSchemas.ConfigAgentInput.Response.parse({
+        success: true,
+        data: {
+          messages: sanitizeMessagesForClient(agent.getMessages()),
+          session: sanitizedSession,
+        },
+      }),
+    );
+  } catch (error) {
+    logger.error('[ConfigAgent] Input error', { error });
+    res.status(500).json({ success: false, error: 'Failed to process input' });
+  }
+});
+
+/**
+ * Get the current state of a configuration agent session
+ */
+redteamRouter.get(
+  '/config-agent/session/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      cleanExpiredConfigAgentSessions();
+
+      const sessionId = req.params.sessionId as string;
+      const agent = configAgentSessions.get(sessionId);
+
+      if (!agent) {
+        res.status(404).json({ success: false, error: 'Session not found' });
+        return;
+      }
+
+      // Sanitize session data to remove sensitive information
+      const sanitizedSession = sanitizeSessionForClient(agent.getSession());
+
+      res.json(
+        RedteamSchemas.ConfigAgentSession.Response.parse({
+          success: true,
+          data: {
+            messages: sanitizeMessagesForClient(agent.getMessages()),
+            session: sanitizedSession,
+            config: sanitizedSession.finalConfig,
+            isComplete: agent.isComplete(),
+          },
+        }),
+      );
+    } catch (error) {
+      logger.error('[ConfigAgent] Get session error', { error });
+      res.status(500).json({ success: false, error: 'Failed to get session' });
+    }
+  },
+);
+
+/**
+ * Cancel a configuration agent session
+ */
+redteamRouter.delete(
+  '/config-agent/session/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      cleanExpiredConfigAgentSessions();
+
+      const sessionId = req.params.sessionId as string;
+      const agent = configAgentSessions.get(sessionId);
+
+      if (agent) {
+        agent.cancel();
+        configAgentSessions.delete(sessionId);
+      }
+
+      res.json(RedteamSchemas.ConfigAgentDelete.Response.parse({ success: true, data: {} }));
+    } catch (error) {
+      logger.error('[ConfigAgent] Cancel error', { error });
+      res.status(500).json({ success: false, error: 'Failed to cancel session' });
+    }
+  },
+);
+
+// ============================================================================
+// Cloud Task Proxy (catch-all - must be last)
+// ============================================================================
 
 /**
  * Proxies requests to Promptfoo Cloud to invoke tasks.
