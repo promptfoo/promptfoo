@@ -794,6 +794,27 @@ describe('validateFunctionCall', () => {
       /Call to "testFunction" does not match schema/,
     );
   });
+
+  it('isolates schema identifiers between validations', () => {
+    const functions = [
+      sampleFunction,
+      {
+        name: 'unused',
+        parameters: {
+          $id: 'urn:promptfoo:pr9838:unused',
+          type: 'object' as const,
+          properties: {},
+        },
+      },
+    ];
+    const functionCall = {
+      name: 'testFunction',
+      arguments: JSON.stringify({ foo: 'test' }),
+    };
+
+    expect(() => validateFunctionCall(functionCall, functions, {})).not.toThrow();
+    expect(() => validateFunctionCall(functionCall, functions, {})).not.toThrow();
+  });
 });
 
 describe('formatOpenAiError', () => {

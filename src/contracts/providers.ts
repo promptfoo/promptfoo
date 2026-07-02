@@ -90,6 +90,10 @@ export interface ProviderResponse {
    * it operates on provider-normalized output, independent of test transforms.
    */
   providerTransformedOutput?: string | any;
+  /** Whether the provider-level transform changed the output. */
+  providerTransformChanged?: boolean;
+  /** Whether the test-level transform or postprocess changed the output. */
+  testTransformChanged?: boolean;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   /**
@@ -158,6 +162,48 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+const FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE = 'FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR';
+
+/**
+ * Signals that function-call validation could not run because its validator or
+ * schema was not configured correctly. Unlike an ordinary validation error,
+ * this must not satisfy a negated assertion.
+ */
+export class FunctionToolCallValidationSetupError extends Error {
+  readonly code = FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'FunctionToolCallValidationSetupError';
+  }
+}
+
+/**
+ * Recognizes setup errors across duplicate package instances and ESM/CJS
+ * boundaries as well as within the current runtime.
+ */
+export function isFunctionToolCallValidationSetupError(
+  error: unknown,
+): error is FunctionToolCallValidationSetupError {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  try {
+    const code = Object.getOwnPropertyDescriptor(error, 'code');
+    if (code?.value !== FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE) {
+      return false;
+    }
+    if (error instanceof Error) {
+      return true;
+    }
+    const name = Object.getOwnPropertyDescriptor(error, 'name');
+    const message = Object.getOwnPropertyDescriptor(error, 'message');
+    return typeof name?.value === 'string' && typeof message?.value === 'string';
+  } catch {
+    return false;
+  }
+}
+
 export interface FunctionToolCallValidator {
   validateFunctionToolCall(output: string | object, vars?: Record<string, VarValue>): void;
 }
@@ -165,10 +211,14 @@ export interface FunctionToolCallValidator {
 export function hasFunctionToolCallValidator(
   provider: unknown,
 ): provider is FunctionToolCallValidator {
-  return (
-    typeof provider === 'object' &&
-    provider !== null &&
-    'validateFunctionToolCall' in provider &&
-    typeof provider.validateFunctionToolCall === 'function'
-  );
+  try {
+    return (
+      typeof provider === 'object' &&
+      provider !== null &&
+      'validateFunctionToolCall' in provider &&
+      typeof provider.validateFunctionToolCall === 'function'
+    );
+  } catch {
+    return false;
+  }
 }

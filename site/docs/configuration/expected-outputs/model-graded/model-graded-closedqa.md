@@ -27,7 +27,11 @@ Under the hood, `model-graded-closedqa` uses OpenAI's closed QA evaluation promp
 - `Y` if the output meets the criterion
 - `N` if the output does not meet the criterion
 
-The assertion passes if the response ends with 'Y' and fails if it ends with 'N'.
+The assertion passes if the response ends with a standalone `Y` token and fails if it ends with a standalone `N` token.
+
+### Negation
+
+Use `not-model-graded-closedqa` when the output must not meet the criterion. A `Y` verdict becomes a failing score of 0, while an `N` verdict becomes a passing score of 1. Grader transport, refusal, empty-output, and malformed-response failures are not inverted because they do not provide a verdict.
 
 ### Example Configuration
 

@@ -34,13 +34,9 @@ tests:
       - type: contains-any
         value: ['customer', 'Stripe', 'payment', 'subscription']
         weight: 0.3
-      # Ensure authentication worked (no auth errors)
+      # Reject a user-visible authentication failure
       - type: not-contains
         value: 'authentication failed'
-        weight: 0.1
-      # Verify MCP tool was used successfully
-      - type: contains
-        value: 'MCP Tool Result'
         weight: 0.1
       # Quality validation
       - type: llm-rubric
@@ -56,9 +52,9 @@ tests:
       # Check for payment-related content
       - type: contains-any
         value: ['payment', 'method', 'card', 'bank']
-      # Ensure no MCP errors (including auth errors)
+      # Reject user-visible authentication failures
       - type: not-contains-any
-        value: ['MCP Tool Error', 'unauthorized', 'authentication failed']
+        value: ['unauthorized', 'authentication failed']
       # Validate API response quality
       - type: llm-rubric
         value: 'The response lists payment methods or explains payment options'
@@ -71,11 +67,6 @@ tests:
       - type: is-valid-openai-tools-call
       - type: contains-any
         value: ['subscription', 'plan', 'billing', 'active', 'status']
-      # Verify successful API integration
-      - type: contains
-        value: 'MCP Tool Result'
-        metric: api_integration_success
-        weight: 0
       - type: llm-rubric
         value: 'The response provides subscription status or billing information'
 # Note: This example requires a valid STRIPE_API_KEY environment variable

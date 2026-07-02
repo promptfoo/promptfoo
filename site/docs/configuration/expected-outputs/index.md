@@ -161,6 +161,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+
+For the function/tool-call and model-graded ClosedQA assertions, provider setup, schema, and grader errors remain failures rather than being treated as evidence for the negated condition. See their assertion-specific sections for details.
 :::
 
 ### Model-assisted eval metrics

@@ -54,12 +54,9 @@ tests:
       query: 'getting started guide'
       repo: 'facebook/react'
     assert:
-      # For approval-required provider, expect either approval request or explanation
+      # Check response content across approval configurations
       - type: contains-any
-        value: ['MCP Tool Result', 'react', 'React', 'would search', 'would look']
-      # Should not have tool errors
-      - type: not-contains
-        value: 'MCP Tool Error'
+        value: ['react', 'React', 'would search', 'would look']
       - type: llm-rubric
         value: 'The response provides information about React or explains what would be searched'
 
@@ -69,10 +66,7 @@ tests:
     assert:
       # Test different approval behaviors across providers
       - type: contains-any
-        value: ['API', 'MCP Tool Result', 'Python', 'client']
-      # Validate that at least one provider succeeded with MCP tools
-      - type: contains-any
-        value: ['MCP Tool Result', 'documentation', 'API client', 'library']
+        value: ['API', 'Python', 'client']
       - type: llm-rubric
         value: 'The response mentions API documentation or explains the search intent'
 
@@ -81,14 +75,56 @@ tests:
       query: 'installation instructions'
       repo: 'nodejs/node'
     assert:
-      # Comprehensive approval workflow testing
+      # Validate approval policy from the structured Responses API output.
+      - type: javascript
+        metric: approval_policy_enforced
+        value: |
+          const rawOutput = context.providerResponse?.raw?.output;
+          const label = context.provider?.label;
+          const interactions = Array.isArray(rawOutput)
+            ? rawOutput.filter(
+                (item) =>
+                  item &&
+                  typeof item === 'object' &&
+                  (item.type === 'mcp_call' || item.type === 'mcp_approval_request'),
+              )
+            : [];
+          const wellFormed = interactions.every(
+            (item) =>
+              typeof item.name === 'string' &&
+              item.name.length > 0 &&
+              item.server_label === 'deepwiki',
+          );
+          const matchesPolicy = interactions.every((item) => {
+            if (label === 'With Approval Required') {
+              return item.type === 'mcp_approval_request';
+            }
+            if (label === 'No Approval Required') {
+              return item.type === 'mcp_call';
+            }
+            if (label === 'Selective Approval') {
+              return item.type ===
+                (item.name === 'read_wiki_structure' ? 'mcp_call' : 'mcp_approval_request');
+            }
+            return false;
+          });
+          const pass = interactions.length > 0 && wellFormed && matchesPolicy;
+          const observed = interactions.slice(0, 10).map(({ type, name, server_label }) => ({
+            type,
+            name,
+            server_label,
+          }));
+          return {
+            pass,
+            score: pass ? 1 : 0,
+            reason: pass
+              ? `Observed approval behavior for ${label}.`
+              : `Expected approval behavior for ${label}; observed ${interactions.length} interaction(s): ${JSON.stringify(observed)}.`,
+          };
+      # Response relevance across approval configurations
       - type: contains-any
-        value: ['MCP Tool Result', 'installation', 'Node.js', 'setup']
-        metric: mcp_interaction_detected
-      # Ensure no unexpected errors
-      - type: not-contains
-        value: 'MCP Tool Error'
-        weight: 0.4
+        value: ['installation', 'Node.js', 'setup']
+        metric: approval_response_relevance
       # Quality check regardless of approval status
       - type: llm-rubric
         value: 'The response addresses installation, setup, or Node.js information'

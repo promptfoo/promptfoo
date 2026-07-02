@@ -259,10 +259,11 @@ providers:
 ```
 
 **Single-turn execution.** When the model returns a `tool_use` block, the provider
-executes the requested MCP tool and returns the **raw tool result** as the final
+executes the requested MCP tool and returns a rendered tool result as the final
 output. The result is not fed back to the model for a follow-up turn — there is no
-agent loop. Write your assertions against the tool output text directly, or wrap
-the provider in an agent harness if you need a synthesized natural-language answer.
+agent loop. Use `is-valid-openai-tools-call` to validate MCP execution from structured
+provider metadata; use content assertions only for properties of the returned payload.
+Wrap the provider in an agent harness if you need a synthesized natural-language answer.
 
 **Tool name collisions.** If an entry under `config.tools` has the same `name` as
 an MCP-discovered tool, the MCP version wins and the duplicate is dropped with a

@@ -8,6 +8,15 @@ import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
 let ajvInstance: Ajv | null = null;
 
+export function createAjv(): Ajv {
+  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+    strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
+  };
+  const instance = new Ajv(ajvOptions);
+  addFormats(instance);
+  return instance;
+}
+
 export function resetAjv(): void {
   if (getEnvString('NODE_ENV') !== 'test') {
     throw new Error('resetAjv can only be called in test environment');
@@ -17,11 +26,7 @@ export function resetAjv(): void {
 
 export function getAjv(): Ajv {
   if (!ajvInstance) {
-    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-    };
-    ajvInstance = new Ajv(ajvOptions);
-    addFormats(ajvInstance);
+    ajvInstance = createAjv();
   }
   return ajvInstance;
 }

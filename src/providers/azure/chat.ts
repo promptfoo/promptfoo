@@ -409,6 +409,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let flaggedInput = false;
     let flaggedOutput = false;
     let output = '';
+    let mcpToolCalls: Array<{
+      error?: string;
+      name: string;
+      status: 'error' | 'success';
+    }> = [];
+    let mcpToolCallsComplete = true;
     let logProbs: any;
     let finishReason: string;
 
@@ -455,36 +461,47 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
         }
 
-        if (output == null) {
-          // Handle tool_calls and function_call
-          const toolCalls = message?.tool_calls;
-          const functionCall = message?.function_call;
+        const toolCalls = message?.tool_calls;
+        const functionCall = message?.function_call;
+        const hasToolCalls = Array.isArray(toolCalls) ? toolCalls.length > 0 : Boolean(toolCalls);
+        const hasCalls = hasToolCalls || Boolean(functionCall);
+        const hasAssistantContent = output != null;
+        const shouldProcessCalls =
+          hasCalls &&
+          Boolean(this.mcpClient || (!hasAssistantContent && config.functionToolCallbacks));
+        let callsWereProcessed = false;
 
-          // Process function/tool calls if callbacks are configured or MCP is available
-          if (
-            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
-            (this.mcpClient && (toolCalls || functionCall))
-          ) {
-            // Combine all calls into a single array for processing
-            const allCalls = [];
-            if (toolCalls) {
-              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
-            }
-            if (functionCall) {
-              allCalls.push(functionCall);
-            }
+        if (shouldProcessCalls) {
+          // Combine all calls into a single array for processing
+          const allCalls = [];
+          if (toolCalls) {
+            allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
+          }
+          if (functionCall) {
+            allCalls.push(functionCall);
+          }
 
-            output = await this.functionCallbackHandler.processCalls(
-              allCalls.length === 1 ? allCalls[0] : allCalls,
-              config.functionToolCallbacks,
-            );
-          } else {
-            // No callbacks configured, return raw tool/function calls
+          const callbackResult = await this.functionCallbackHandler.processCallsDetailed(
+            allCalls.length === 1 ? allCalls[0] : allCalls,
+            hasAssistantContent ? undefined : config.functionToolCallbacks,
+          );
+          if (callbackResult.hasProcessedCalls) {
+            callsWereProcessed = true;
+            output = callbackResult.output;
+            mcpToolCalls = callbackResult.mcpToolCalls;
+            mcpToolCallsComplete = callbackResult.mcpToolCallsComplete;
+          } else if (!hasAssistantContent) {
             output = toolCalls ?? functionCall;
           }
-        } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
+        } else if (!hasAssistantContent) {
+          // No callbacks configured, return raw tool/function calls.
+          output = toolCalls ?? functionCall;
+        }
+        if (
+          hasAssistantContent &&
+          !callsWereProcessed &&
+          (config.response_format?.type === 'json_schema' ||
+            config.response_format?.type === 'json_object')
         ) {
           try {
             output = JSON.parse(output);
@@ -522,6 +539,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         latencyMs,
         logProbs,
         finishReason,
+        ...(mcpToolCalls.length > 0 ? { metadata: { mcpToolCalls, mcpToolCallsComplete } } : {}),
         cost: calculateAzureCost(
           this.deploymentName,
           config,

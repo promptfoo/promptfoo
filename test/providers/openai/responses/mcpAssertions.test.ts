@@ -3,6 +3,7 @@
 import './setup';
 
 import { describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../../src/assertions/index';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
@@ -63,14 +64,12 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
       // The output should contain MCP Tool Result
       expect(result.output).toContain('MCP Tool Result (ask_question)');
 
-      // Test the enhanced assertion
-      const { handleIsValidOpenAiToolsCall } = await import('../../../../src/assertions/openai');
-      const assertionResult = await handleIsValidOpenAiToolsCall({
+      const assertionResult = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },
-        output: result.output,
         provider,
         test: { vars: {} },
-      } as any);
+        providerResponse: result,
+      });
 
       expect(assertionResult.pass).toBe(true);
       expect(assertionResult.reason).toContain('MCP tool call succeeded for ask_question');
@@ -123,19 +122,68 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
       // The output should contain MCP Tool Error
       expect(result.output).toContain('MCP Tool Error (ask_question)');
 
-      // Test the enhanced assertion
-      const { handleIsValidOpenAiToolsCall } = await import('../../../../src/assertions/openai');
-      const assertionResult = await handleIsValidOpenAiToolsCall({
+      const assertionResult = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },
-        output: result.output,
         provider,
         test: { vars: {} },
-      } as any);
+        providerResponse: result,
+      });
 
       expect(assertionResult.pass).toBe(false);
       expect(assertionResult.reason).toContain(
         'MCP tool call failed for ask_question: Repository not found',
       );
+    });
+
+    it('should not treat an MCP success as complete when a function call is also present', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_mixed',
+          status: 'completed',
+          model: 'gpt-4.1',
+          output: [
+            {
+              type: 'mcp_call',
+              name: 'ask_question',
+              status: 'completed',
+              output: 'ok',
+              error: null,
+            },
+            {
+              type: 'function_call',
+              name: 'ordinary_tool',
+              arguments: '{"x":123}',
+              call_id: 'call_ordinary',
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const response = await provider.callApi('Use both tools');
+
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        const result = await runAssertion({
+          assertion: { type },
+          provider,
+          providerResponse: response,
+          test: { vars: {} },
+        });
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'MCP tool call provenance does not cover every tool call in the response',
+        });
+      }
     });
   });
 });

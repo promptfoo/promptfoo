@@ -1,3 +1,5 @@
+import { isDeepStrictEqual, types as nodeUtilTypes } from 'node:util';
+
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -45,6 +47,115 @@ export const TransformInputType = {
   VARS: 'vars',
 } as const;
 export type TransformInputType = (typeof TransformInputType)[keyof typeof TransformInputType];
+
+export interface TransformInputClone<T = unknown> {
+  reliable: boolean;
+  value: T;
+}
+
+export function isProxyValue(value: unknown): boolean {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    nodeUtilTypes.isProxy(value)
+  );
+}
+
+function hasExpectedTransformPrototype(value: object, prototype: object | null): boolean {
+  if (Array.isArray(value)) {
+    return prototype === Array.prototype;
+  }
+  if (nodeUtilTypes.isMap(value)) {
+    return prototype === Map.prototype;
+  }
+  if (nodeUtilTypes.isSet(value)) {
+    return prototype === Set.prototype;
+  }
+  if (nodeUtilTypes.isDate(value)) {
+    return prototype === Date.prototype;
+  }
+  if (nodeUtilTypes.isRegExp(value)) {
+    return prototype === RegExp.prototype;
+  }
+  return prototype === null || prototype === Object.prototype;
+}
+
+function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  if (isProxyValue(value)) {
+    return true;
+  }
+  seen.add(value);
+
+  if (nodeUtilTypes.isAnyArrayBuffer(value) || nodeUtilTypes.isArrayBufferView(value)) {
+    return true;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (isProxyValue(prototype) || !hasExpectedTransformPrototype(value, prototype)) {
+    return true;
+  }
+  if (nodeUtilTypes.isMap(value)) {
+    for (const [key, entryValue] of Map.prototype.entries.call(value)) {
+      if (hasUnclonedTransformState(key, seen) || hasUnclonedTransformState(entryValue, seen)) {
+        return true;
+      }
+    }
+  } else if (nodeUtilTypes.isSet(value)) {
+    for (const entryValue of Set.prototype.values.call(value)) {
+      if (hasUnclonedTransformState(entryValue, seen)) {
+        return true;
+      }
+    }
+  }
+
+  return Reflect.ownKeys(value).some((key) => {
+    if (Array.isArray(value) && key === 'length') {
+      return false;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return (
+      typeof key === 'symbol' ||
+      !descriptor ||
+      !descriptor.enumerable ||
+      !('value' in descriptor) ||
+      hasUnclonedTransformState(descriptor.value, seen)
+    );
+  });
+}
+
+export function cloneTransformInput<T>(value: T): TransformInputClone<T> {
+  const isReferenceLike =
+    value !== null && (typeof value === 'object' || typeof value === 'function');
+  if (!isReferenceLike) {
+    return { reliable: true, value };
+  }
+  try {
+    if (hasUnclonedTransformState(value)) {
+      return { reliable: false, value };
+    }
+    const snapshot = structuredClone(value) as T;
+    return {
+      reliable: isDeepStrictEqual(value, snapshot),
+      value: snapshot,
+    };
+  } catch {
+    return { reliable: false, value };
+  }
+}
+
+export function didTransformChange(input: unknown, output: unknown): boolean {
+  try {
+    if (hasUnclonedTransformState(output)) {
+      return true;
+    }
+    return !isDeepStrictEqual(input, output);
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Parses a file path string to extract the file path and function name.

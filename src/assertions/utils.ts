@@ -76,3 +76,11 @@ export function coerceString(value: string | object): string {
   }
   return JSON.stringify(value);
 }
+
+export function serializeAssertionOutput(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '[unserializable output]';
+  } catch {
+    return '[unserializable output]';
+  }
+}

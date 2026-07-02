@@ -7,6 +7,7 @@ import {
   getFinalTest,
   loadFromJavaScriptFile,
   processFileReference,
+  serializeAssertionOutput,
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -110,6 +111,21 @@ describe('coerceString', () => {
   it('should handle empty object', () => {
     const input = {};
     expect(coerceString(input)).toBe('{}');
+  });
+
+  it.each([
+    ['BigInt', { value: 1n }],
+    [
+      'cyclic input',
+      (() => {
+        const value: Record<string, unknown> = {};
+        value.self = value;
+        return value;
+      })(),
+    ],
+  ])('preserves strict serialization for %s', (_name, input) => {
+    expect(() => coerceString(input)).toThrow();
+    expect(serializeAssertionOutput(input)).toBe('[unserializable output]');
   });
 });
 

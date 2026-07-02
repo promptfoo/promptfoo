@@ -9,12 +9,9 @@ const mockTransform = vi.hoisted(() => vi.fn());
 const mockRunAssertions = vi.hoisted(() => vi.fn());
 
 // Mock the transform function to track calls
-vi.mock('../src/util/transform', () => ({
+vi.mock('../src/util/transform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/util/transform')>()),
   transform: mockTransform,
-  TransformInputType: {
-    OUTPUT: 'output',
-    VARS: 'vars',
-  },
 }));
 
 // Mock assertions to prevent timeouts
@@ -157,6 +154,7 @@ describe('Transformation integration', () => {
       expect.objectContaining({
         providerResponse: expect.objectContaining({
           output: 'PROVIDER TRANSFORMED - test transformed',
+          providerTransformChanged: true,
           providerTransformedOutput: 'PROVIDER TRANSFORMED',
         }),
       }),
@@ -283,6 +281,34 @@ describe('Transformation integration', () => {
     expect(results.results[0].response?.output).toBe('SPACED OUTPUT');
   });
 
+  it('records when a provider transform leaves output unchanged', async () => {
+    mockTransform.mockImplementation(async (_expression, input) => input);
+
+    const testSuite: TestSuite = {
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      providers: [
+        {
+          id: () => 'mock-provider',
+          callApi: async () => ({ output: 'unchanged output' }),
+          transform: 'output',
+        } as ApiProvider,
+      ],
+      tests: [{ assert: [{ type: 'equals', value: 'unchanged output' }] }],
+    };
+
+    await evaluate(testSuite, new Eval({}), { maxConcurrency: 1 });
+
+    expect(mockRunAssertions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerResponse: expect.objectContaining({
+          output: 'unchanged output',
+          providerTransformChanged: false,
+          providerTransformedOutput: 'unchanged output',
+        }),
+      }),
+    );
+  });
+
   it('passes raw provider output to context assertions when no transforms are configured', async () => {
     const testSuite: TestSuite = {
       prompts: [{ raw: 'Test prompt', label: 'Test' }],
@@ -318,6 +344,7 @@ describe('Transformation integration', () => {
             data: 'test',
             metadata: { extracted: 'metadata' },
           },
+          providerTransformChanged: false,
           providerTransformedOutput: {
             data: 'test',
             metadata: { extracted: 'metadata' },

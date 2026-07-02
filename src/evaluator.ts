@@ -7,6 +7,7 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
+  captureMcpToolCallProvenance,
   getAssertionBaseType,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
@@ -99,7 +100,12 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { TransformInputType, transform } from './util/transform';
+import {
+  cloneTransformInput,
+  didTransformChange,
+  TransformInputType,
+  transform,
+} from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
@@ -1226,7 +1232,13 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
+  const {
+    mcpToolCallProvenance,
+    processedResponse,
+    providerTransformChanged,
+    providerTransformedOutput,
+    testTransformChanged,
+  } = await transformRunEvalResponse({
     evalId,
     prompt,
     promptIdx,
@@ -1243,7 +1255,9 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
+    providerTransformChanged,
     providerTransformedOutput,
+    testTransformChanged,
   };
 
   if (deferGrading) {
@@ -1253,6 +1267,7 @@ async function gradeRunEvalResponse({
       { abortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
+          mcpToolCallProvenance,
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
@@ -1273,6 +1288,7 @@ async function gradeRunEvalResponse({
     { abortSignal, rateLimitRegistry },
     () =>
       runAssertions({
+        mcpToolCallProvenance,
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,
@@ -1306,25 +1322,49 @@ async function transformRunEvalResponse({
   testIdx: number;
   vars: Vars;
 }): Promise<{
+  mcpToolCallProvenance?: ReturnType<typeof captureMcpToolCallProvenance>;
   processedResponse: ProviderResponse;
+  providerTransformChanged: boolean;
   providerTransformedOutput: ProviderResponse['output'];
+  testTransformChanged: boolean;
 }> {
+  const mcpToolCallProvenance = captureMcpToolCallProvenance(response, test.assert);
+  const tracksStructuredMcpProvenance = mcpToolCallProvenance != null;
   const processedResponse = { ...response };
+  const changedWithoutSnapshot = (input: unknown, output: unknown) =>
+    (input !== null && (typeof input === 'object' || typeof input === 'function')) ||
+    !Object.is(input, output);
+  let providerTransformChanged = false;
   if (provider.transform) {
-    processedResponse.output = await transform(provider.transform, processedResponse.output, {
+    const providerTransformInput = processedResponse.output;
+    const clonedInput = tracksStructuredMcpProvenance
+      ? cloneTransformInput(providerTransformInput)
+      : undefined;
+    processedResponse.output = await transform(provider.transform, providerTransformInput, {
       vars,
       prompt,
     });
+    providerTransformChanged = clonedInput
+      ? !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output)
+      : changedWithoutSnapshot(providerTransformInput, processedResponse.output);
   }
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
+  let testTransformChanged = false;
   if (testTransform) {
-    processedResponse.output = await transform(testTransform, processedResponse.output, {
+    const testTransformInput = processedResponse.output;
+    const clonedInput = tracksStructuredMcpProvenance
+      ? cloneTransformInput(testTransformInput)
+      : undefined;
+    processedResponse.output = await transform(testTransform, testTransformInput, {
       vars,
       prompt,
       ...(response && response.metadata && { metadata: response.metadata }),
     });
+    testTransformChanged = clonedInput
+      ? !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output)
+      : changedWithoutSnapshot(testTransformInput, processedResponse.output);
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
@@ -1335,8 +1375,11 @@ async function transformRunEvalResponse({
   });
 
   return {
+    mcpToolCallProvenance,
     processedResponse: blobbedResponse || processedResponse,
+    providerTransformChanged,
     providerTransformedOutput,
+    testTransformChanged,
   };
 }
 

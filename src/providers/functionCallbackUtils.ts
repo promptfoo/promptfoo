@@ -15,6 +15,24 @@ import type {
 } from './functionCallbackTypes';
 import type { MCPClient } from './mcp/client';
 
+interface McpToolCallOutcome {
+  error?: string;
+  name: string;
+  status: 'error' | 'success';
+}
+
+interface DetailedFunctionCallResult extends FunctionCallResult {
+  processed: boolean;
+  mcpToolCall?: McpToolCallOutcome;
+}
+
+interface DetailedFunctionCallsResult {
+  hasProcessedCalls: boolean;
+  mcpToolCalls: McpToolCallOutcome[];
+  mcpToolCallsComplete: boolean;
+  output: any;
+}
+
 /**
  * Handles function callback execution for AI providers.
  * Provides a unified way to execute function callbacks across different provider formats.
@@ -37,6 +55,19 @@ export class FunctionCallbackHandler {
     callbacks?: FunctionCallbackConfig,
     context?: any,
   ): Promise<FunctionCallResult> {
+    const {
+      mcpToolCall: _mcpToolCall,
+      processed: _processed,
+      ...result
+    } = await this.processCallDetailed(call, callbacks, context);
+    return result;
+  }
+
+  private async processCallDetailed(
+    call: FunctionCall | ToolCall | any,
+    callbacks?: FunctionCallbackConfig,
+    context?: any,
+  ): Promise<DetailedFunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
 
@@ -58,6 +89,7 @@ export class FunctionCallbackHandler {
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
         isError: false,
+        processed: false,
       };
     }
 
@@ -72,6 +104,7 @@ export class FunctionCallbackHandler {
       return {
         output: result,
         isError: false,
+        processed: true,
       };
     } catch (error) {
       logger.debug(`Function callback failed for ${functionInfo.name}: ${error}`);
@@ -79,6 +112,8 @@ export class FunctionCallbackHandler {
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
         isError: true,
+        // Preserve the established fallback for a matched callback that failed.
+        processed: true,
       };
     }
   }
@@ -95,17 +130,34 @@ export class FunctionCallbackHandler {
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    _options?: { returnRawOnError?: boolean },
+    options?: { returnRawOnError?: boolean },
   ): Promise<any> {
+    return (await this.processCallsDetailed(calls, callbacks, context, options)).output;
+  }
+
+  /**
+   * Processes calls while preserving invocation-local MCP outcomes for provider metadata.
+   */
+  async processCallsDetailed(
+    calls: any,
+    callbacks?: FunctionCallbackConfig,
+    context?: any,
+    _options?: { returnRawOnError?: boolean },
+  ): Promise<DetailedFunctionCallsResult> {
     if (!calls) {
-      return calls;
+      return {
+        hasProcessedCalls: false,
+        mcpToolCallsComplete: true,
+        output: calls,
+        mcpToolCalls: [],
+      };
     }
 
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
     const results = await Promise.all(
-      callsArray.map((call) => this.processCall(call, callbacks, context)),
+      callsArray.map((call) => this.processCallDetailed(call, callbacks, context)),
     );
 
     // If any callback succeeded, return processed results
@@ -113,23 +165,30 @@ export class FunctionCallbackHandler {
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
 
+    let output: any;
     if (hasSuccess) {
       const outputs = results.map((r) => r.output);
       // For single call with successful callback, return just the output
       if (!isArray && outputs.length === 1) {
-        return outputs[0];
+        output = outputs[0];
+      } else {
+        // For multiple calls, join string results
+        output = outputs.every((value) => typeof value === 'string') ? outputs.join('\n') : outputs;
       }
-      // For multiple calls, join string results
-      return outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs;
+    } else if (!isArray && results.length === 1) {
+      // All failed or no callbacks - return the single stringified result.
+      output = results[0].output;
+    } else {
+      // For arrays, return the original array.
+      output = calls;
     }
 
-    // All failed or no callbacks - return stringified results
-    if (!isArray && results.length === 1) {
-      return results[0].output;
-    }
-
-    // For arrays, return the original array
-    return calls;
+    return {
+      hasProcessedCalls: results.some((result) => result.processed),
+      output,
+      mcpToolCalls: results.flatMap((result) => (result.mcpToolCall ? [result.mcpToolCall] : [])),
+      mcpToolCallsComplete: results.every((result) => result.mcpToolCall !== undefined),
+    };
   }
 
   /**
@@ -227,7 +286,10 @@ export class FunctionCallbackHandler {
   /**
    * Executes an MCP tool
    */
-  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
+  private async executeMcpTool(
+    toolName: string,
+    args: unknown,
+  ): Promise<DetailedFunctionCallResult> {
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
@@ -239,9 +301,12 @@ export class FunctionCallbackHandler {
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
+        const error = getMcpErrorMessage(result);
         return {
-          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
+          output: `MCP Tool Error (${toolName}): ${error}`,
           isError: true,
+          processed: true,
+          mcpToolCall: { name: toolName, status: 'error', error },
         };
       }
 
@@ -279,13 +344,20 @@ export class FunctionCallbackHandler {
       };
 
       const content = normalizeContent(result?.content);
-      return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
+      return {
+        output: `MCP Tool Result (${toolName}): ${content}`,
+        isError: false,
+        processed: true,
+        mcpToolCall: { name: toolName, status: 'success' },
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {
         output: `MCP Tool Error (${toolName}): ${errorMessage}`,
         isError: true,
+        processed: true,
+        mcpToolCall: { name: toolName, status: 'error', error: errorMessage },
       };
     }
   }

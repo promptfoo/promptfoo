@@ -772,6 +772,8 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 export interface AssertionParams {
   assertion: Assertion;
+  /** Whether the assertion-level transform changed the output. */
+  assertionTransformChanged?: boolean;
   baseType: AssertionType;
   /** Context passed to provider.callApi() for model-graded assertions */
   providerCallContext?: CallApiContextParams;

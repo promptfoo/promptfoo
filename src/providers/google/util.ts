@@ -3,12 +3,13 @@ import crypto from 'crypto';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
+import { FunctionToolCallValidationSetupError, type VarValue } from '../../types/index';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
-import { getAjv } from '../../util/json';
+import { createAjv, getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
@@ -21,8 +22,15 @@ import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
-import type { VarValue } from '../../types/shared';
-import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
+import type {
+  CompletionOptions,
+  Content,
+  FunctionCall,
+  FunctionDeclaration,
+  Part,
+  Schema,
+  Tool,
+} from './types';
 
 /**
  * Normalizes safety settings to use the correct Google API field name `threshold`.
@@ -834,10 +842,29 @@ export function normalizeTools(tools: Tool[]): Tool[] {
     // Sanitize function declarations to remove unsupported schema properties
     // This fixes issues like GitHub #6902 where additionalProperties causes API errors
     if (normalizedTool.functionDeclarations) {
-      normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => ({
-        ...fd,
-        parameters: fd.parameters ? (sanitizeSchemaForGemini(fd.parameters) as Schema) : undefined,
-      }));
+      if (!Array.isArray(normalizedTool.functionDeclarations)) {
+        throw new Error(
+          'Invalid function schema configured in provider: functionDeclarations must be an array',
+        );
+      }
+      normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => {
+        if (
+          fd.parameters !== undefined &&
+          (typeof fd.parameters !== 'object' ||
+            fd.parameters === null ||
+            Array.isArray(fd.parameters))
+        ) {
+          throw new Error(
+            `Invalid function schema configured in provider: parameters for "${fd.name}" must be an object`,
+          );
+        }
+        return {
+          ...fd,
+          parameters: fd.parameters
+            ? (sanitizeSchemaForGemini(fd.parameters) as Schema)
+            : undefined,
+        };
+      });
     }
 
     return normalizedTool;
@@ -1137,14 +1164,67 @@ export function geminiFormatAndSystemInstructions(
  * @param {object | any} schemaNode - The current node (object or value) being processed.
  * @returns {object | any} - The processed node with type keywords lowercased.
  */
-function normalizeSchemaTypes(schemaNode: any): any {
+function shouldSkipGoogleSchemaField(key: string, value: unknown): boolean {
+  if (key === 'propertyOrdering' || key === 'property_ordering') {
+    return true;
+  }
+  return (
+    key === 'format' &&
+    typeof value === 'string' &&
+    !Object.prototype.hasOwnProperty.call(
+      (ajv as unknown as { formats: Record<string, unknown> }).formats,
+      value,
+    )
+  );
+}
+
+function normalizeSchemaTypeValue(value: unknown): unknown {
+  if (typeof value === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)) {
+    return value.toLowerCase();
+  }
+  if (Array.isArray(value)) {
+    return value.map((type) =>
+      typeof type === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(type)
+        ? type.toLowerCase()
+        : type,
+    );
+  }
+  return normalizeSchemaTypes(value);
+}
+
+function normalizeSchemaField(key: string, value: unknown, isSchemaMap: boolean): unknown {
+  if (isSchemaMap) {
+    return normalizeSchemaTypes(value);
+  }
+  if (
+    (key === 'properties' || key === '$defs' || key === 'definitions') &&
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  ) {
+    return normalizeSchemaTypes(value, true);
+  }
+  if (key === 'type') {
+    return normalizeSchemaTypeValue(value);
+  }
+  if (
+    (key === 'minItems' || key === 'maxItems') &&
+    typeof value === 'string' &&
+    /^\d+$/.test(value)
+  ) {
+    return Number(value);
+  }
+  return normalizeSchemaTypes(value);
+}
+
+function normalizeSchemaTypes(schemaNode: any, isSchemaMap: boolean = false): any {
   // Handle non-objects (including null) and arrays directly by iterating/returning
   if (typeof schemaNode !== 'object' || schemaNode === null) {
     return schemaNode;
   }
 
   if (Array.isArray(schemaNode)) {
-    return schemaNode.map(normalizeSchemaTypes); // Recurse for array elements
+    return schemaNode.map((item) => normalizeSchemaTypes(item)); // Recurse for array elements
   }
 
   // Create a new object to avoid modifying the original
@@ -1154,28 +1234,11 @@ function normalizeSchemaTypes(schemaNode: any): any {
     if (Object.prototype.hasOwnProperty.call(schemaNode, key)) {
       const value = schemaNode[key];
 
-      if (key === 'type') {
-        if (
-          typeof value === 'string' &&
-          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
-        ) {
-          // Convert type value(s) to lowercase
-          newNode[key] = value.toLowerCase();
-        } else if (Array.isArray(value)) {
-          // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) =>
-            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
-              ? t.toLowerCase()
-              : t,
-          );
-        } else {
-          // Handle type used as function field rather than a schema type definition
-          newNode[key] = normalizeSchemaTypes(value);
-        }
-      } else {
-        // Recursively process nested objects/arrays
-        newNode[key] = normalizeSchemaTypes(value);
+      // Keys inside JSON Schema maps are user-defined names, not schema keywords.
+      if (!isSchemaMap && shouldSkipGoogleSchemaField(key, value)) {
+        continue;
       }
+      newNode[key] = normalizeSchemaField(key, value, isSchemaMap);
     }
   }
 
@@ -1187,6 +1250,41 @@ export function parseStringObject(input: string | any) {
     return JSON.parse(input);
   }
   return input;
+}
+
+function compileFunctionDeclarationValidators(functionDeclarations: FunctionDeclaration[]) {
+  const validationAjv = createAjv();
+  const validators = new Map<FunctionDeclaration, ReturnType<typeof validationAjv.compile>>();
+  const names = new Set<string>();
+  for (const functionDeclaration of functionDeclarations) {
+    if (names.has(functionDeclaration.name)) {
+      throw new FunctionToolCallValidationSetupError(
+        `Duplicate function schema configured for "${functionDeclaration.name}"`,
+      );
+    }
+    names.add(functionDeclaration.name);
+    if (functionDeclaration.parameters === undefined) {
+      continue;
+    }
+    if (
+      typeof functionDeclaration.parameters !== 'object' ||
+      functionDeclaration.parameters === null ||
+      Array.isArray(functionDeclaration.parameters)
+    ) {
+      throw new FunctionToolCallValidationSetupError(
+        `Invalid function schema configured in provider for "${functionDeclaration.name}"`,
+      );
+    }
+    try {
+      const parameterSchema = normalizeSchemaTypes(functionDeclaration.parameters);
+      validators.set(functionDeclaration, validationAjv.compile(parameterSchema as AnySchema));
+    } catch (err) {
+      throw new FunctionToolCallValidationSetupError(
+        `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
+      );
+    }
+  }
+  return validators;
 }
 
 export function validateFunctionCall(
@@ -1215,35 +1313,86 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  if (!Array.isArray(functionCalls) || functionCalls.length === 0) {
+    throw new Error(
+      `Google did not return a valid-looking function call: ${JSON.stringify(output)}`,
+    );
+  }
+
+  let interpolatedFunctions: Tool[];
+  try {
+    interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  } catch (error) {
+    throw new FunctionToolCallValidationSetupError((error as Error).message);
+  }
+
+  if (!Array.isArray(interpolatedFunctions)) {
+    throw new FunctionToolCallValidationSetupError(
+      'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+  const hasMalformedFunctionDeclarationGroup = interpolatedFunctions.some(
+    (tool) =>
+      typeof tool === 'object' &&
+      tool !== null &&
+      'functionDeclarations' in tool &&
+      !Array.isArray(tool.functionDeclarations),
+  );
+  const functionDeclarations: unknown[] = interpolatedFunctions.flatMap(
+    (tool) =>
+      (typeof tool === 'object' &&
+        tool !== null &&
+        'functionDeclarations' in tool &&
+        Array.isArray(tool.functionDeclarations) &&
+        tool.functionDeclarations) ||
+      [],
+  );
+  if (hasMalformedFunctionDeclarationGroup) {
+    throw new FunctionToolCallValidationSetupError(
+      'Invalid function schema configured in provider: functionDeclarations must be arrays of declarations with non-empty names',
+    );
+  }
+  if (functionDeclarations.length === 0) {
+    throw new FunctionToolCallValidationSetupError(
+      'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+  const isUsableFunctionDeclaration = (declaration: unknown): declaration is FunctionDeclaration =>
+    typeof declaration === 'object' &&
+    declaration !== null &&
+    'name' in declaration &&
+    typeof declaration.name === 'string' &&
+    declaration.name.trim().length > 0;
+  if (!functionDeclarations.every(isUsableFunctionDeclaration)) {
+    throw new FunctionToolCallValidationSetupError(
+      'Invalid function schema configured in provider: functionDeclarations must be arrays of declarations with non-empty names',
+    );
+  }
+
+  const validators = compileFunctionDeclarationValidators(functionDeclarations);
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
-    const functionArgs = parseStringObject(functionCall.args);
-    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-    const functionSchema = functionDeclarations?.functionDeclarations?.find(
-      (f) => f.name === functionName,
-    );
+    const functionArgs =
+      functionCall.args === undefined ? {} : parseStringObject(functionCall.args);
+    const functionSchema = functionDeclarations.find((f) => f.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
-    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
-      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
-      let validate;
-      try {
-        validate = ajv.compile(parameterSchema as AnySchema);
-      } catch (err) {
-        throw new Error(
-          `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
-        );
-      }
+    if (typeof functionArgs !== 'object' || functionArgs === null || Array.isArray(functionArgs)) {
+      throw new Error(
+        `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
+      );
+    }
+    if (functionSchema.parameters !== undefined) {
+      const validate = validators.get(functionSchema)!;
       if (!validate(functionArgs)) {
         throw new Error(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
         );
       }
-    } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
+    } else if (Object.keys(functionArgs).length !== 0) {
       throw new Error(
         `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
       );

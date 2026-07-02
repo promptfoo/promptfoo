@@ -12,6 +12,7 @@ interface TraceSpanCountValue {
 export const handleTraceSpanCount = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-count assertion');
@@ -56,9 +57,12 @@ export const handleTraceSpanCount = ({
     reason += `. Matched spans: ${spanNames.join(', ')}`;
   }
 
+  // `not-trace-span-count` negates the verdict; the reason still describes the
+  // measured span count.
+  const finalPass = inverse ? !pass : pass;
   return {
-    pass,
-    score: pass ? 1 : 0,
+    pass: finalPass,
+    score: finalPass ? 1 : 0,
     reason,
     assertion,
   };

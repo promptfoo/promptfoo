@@ -160,6 +160,25 @@ describe('runAssertions', () => {
     });
   });
 
+  it.each([
+    ['BigInt', { value: 1n }],
+    [
+      'cyclic output',
+      (() => {
+        const value: Record<string, unknown> = {};
+        value.self = value;
+        return value;
+      })(),
+    ],
+  ])('does not silently grade unserializable %s', async (_name, output) => {
+    await expect(
+      runAssertions({
+        providerResponse: { output },
+        test: { assert: [{ type: 'not-contains', value: 'needle' }] },
+      }),
+    ).rejects.toThrow();
+  });
+
   it('should fail when combined score is less than threshold', async () => {
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',

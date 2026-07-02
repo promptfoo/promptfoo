@@ -35,10 +35,6 @@ tests:
       - type: contains
         value: 'protocol'
         weight: 0.2
-      # Ensure MCP tool was actually used (check for tool result)
-      - type: contains
-        value: 'MCP Tool Result'
-        weight: 0.1
       # Validate the quality of the response
       - type: llm-rubric
         value: 'The response mentions transport protocols or MCP specification details'
@@ -52,9 +48,6 @@ tests:
       - type: is-valid-openai-tools-call
       - type: contains
         value: 'React'
-      # Verify MCP integration worked
-      - type: contains
-        value: 'MCP Tool Result'
       - type: llm-rubric
         value: 'The response explains React functionality or features'
 
@@ -66,9 +59,6 @@ tests:
       - type: is-valid-openai-tools-call
       - type: contains-any
         value: ['TypeScript', 'type']
-      # Ensure no MCP errors occurred
-      - type: not-contains
-        value: 'MCP Tool Error'
       - type: llm-rubric
         value: 'The response describes TypeScript features or type system'
 
@@ -81,10 +71,5 @@ tests:
         metric: mcp_tool_success
       - type: contains-any
         value: ['API', 'client', 'Python']
-      # Check that MCP tools were discovered and used
-      - type: contains
-        value: 'MCP Tool Result'
-        metric: mcp_tool_used
-        weight: 0
       - type: llm-rubric
         value: 'The response describes the OpenAI Python client library or API features'

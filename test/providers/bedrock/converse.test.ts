@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import logger from '../../../src/logger';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { mockProcessEnv } from '../../util/utils';
@@ -724,6 +725,79 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.output).toBe(
         'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
       );
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        { name: 'list_resources', status: 'success' },
+      ]);
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'List resources',
+            provider,
+            providerResponse: result,
+            test: { vars: {} },
+          }),
+        ),
+      );
+      expect(positive).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'MCP tool call succeeded for list_resources',
+      });
+      expect(inverse).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Expected output to not be a valid OpenAI tools call, but it was',
+      });
+    });
+
+    it('should not treat MCP plus a successful ordinary callback as complete provenance', async () => {
+      const ordinaryCallback = vi.fn().mockResolvedValue('ordinary result');
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          functionToolCallbacks: { ordinary_tool: ordinaryCallback },
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce({
+        output: {
+          message: {
+            role: 'assistant',
+            content: [
+              { toolUse: { toolUseId: 'mcp-1', name: 'list_resources', input: {} } },
+              { toolUse: { toolUseId: 'other-1', name: 'ordinary_tool', input: {} } },
+            ],
+          },
+        },
+        stopReason: 'tool_use',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        $metadata: {},
+      });
+
+      const response = await provider.callApi('Use tools');
+
+      expect(ordinaryCallback).toHaveBeenCalledOnce();
+      expect(response.metadata).toMatchObject({
+        mcpToolCalls: [{ name: 'list_resources', status: 'success' }],
+        mcpToolCallsComplete: false,
+      });
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        const result = await runAssertion({
+          assertion: { type },
+          provider,
+          providerResponse: response,
+          test: { vars: {} },
+        });
+        expect(result).toMatchObject({ pass: false, score: 0 });
+      }
     });
 
     it('should return MCP tool errors', async () => {
@@ -755,6 +829,13 @@ describe('AwsBedrockConverseProvider', () => {
       // assertions and exit codes treat broken MCP calls as failures rather than
       // greenlighting them on the strength of an embedded error string.
       expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'MCP server failed',
+        },
+      ]);
     });
 
     it('should propagate thrown MCP errors into ProviderResponse.error', async () => {
@@ -780,9 +861,16 @@ describe('AwsBedrockConverseProvider', () => {
 
       expect(result.error).toBe('MCP Tool Error (list_resources): connection refused');
       expect(result.output).toContain('MCP Tool Error (list_resources)');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'connection refused',
+        },
+      ]);
     });
 
-    it('should not crash on malformed JSON tool_use input from the model', async () => {
+    it('should reject malformed JSON tool_use input from the model', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
@@ -795,8 +883,6 @@ describe('AwsBedrockConverseProvider', () => {
 
       mockSend.mockResolvedValueOnce(
         createMockConverseResponse('', {
-          // String input that is not valid JSON. parseToolInput must coerce to {}
-          // rather than letting JSON.parse crash the eval row.
           toolUse: {
             id: 'tool-123',
             name: 'list_resources',
@@ -808,9 +894,30 @@ describe('AwsBedrockConverseProvider', () => {
       );
 
       const result = await provider.callApi('List resources');
-      // Falls through to normal MCP call with empty args; the loop must not crash.
-      expect(result.error).toBeUndefined();
-      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
+      expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'MCP Tool Error (list_resources): model emitted invalid JSON arguments',
+      );
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'model emitted invalid JSON arguments',
+        },
+      ]);
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            provider,
+            providerResponse: result,
+            test: { vars: {} },
+          }),
+        ),
+      );
+      expect(positive).toMatchObject({ pass: false, score: 0 });
+      expect(inverse).toMatchObject({ pass: true, score: 1 });
     });
 
     it('should drop config.tools entries that collide with MCP-discovered tool names', async () => {
@@ -1388,7 +1495,7 @@ describe('AwsBedrockConverseProvider', () => {
       );
     });
 
-    it('should coerce array tool_use input into empty args (parseToolInput safety)', async () => {
+    it('should reject array tool_use input', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
@@ -1401,14 +1508,23 @@ describe('AwsBedrockConverseProvider', () => {
 
       mockSend.mockResolvedValueOnce(
         createMockConverseResponse('', {
-          // Array isn't a valid tool input shape; parseToolInput must return {}.
           toolUse: { id: 'tool-123', name: 'list_resources', input: [{ a: 1 }] as any },
           stopReason: 'tool_use',
         }),
       );
 
-      await provider.callApi('hi');
-      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
+      const result = await provider.callApi('hi');
+      expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'MCP Tool Error (list_resources): model emitted invalid JSON arguments',
+      );
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'model emitted invalid JSON arguments',
+        },
+      ]);
     });
   });
 
@@ -3358,6 +3474,72 @@ Third line`;
       expect(result.output).toBe(
         'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
       );
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        { name: 'list_resources', status: 'success' },
+      ]);
+    });
+
+    it('should fail closed for streaming MCP plus ordinary tool use', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream([
+          {
+            contentBlockStart: {
+              contentBlockIndex: 0,
+              start: { toolUse: { toolUseId: 'mcp-1', name: 'list_resources' } },
+            },
+          },
+          {
+            contentBlockDelta: {
+              contentBlockIndex: 0,
+              delta: { toolUse: { input: '{}' } },
+            },
+          },
+          {
+            contentBlockStart: {
+              contentBlockIndex: 1,
+              start: { toolUse: { toolUseId: 'ordinary-1', name: 'ordinary_tool' } },
+            },
+          },
+          {
+            contentBlockDelta: {
+              contentBlockIndex: 1,
+              delta: { toolUse: { input: '{}' } },
+            },
+          },
+          { messageStop: { stopReason: 'tool_use' } },
+        ]),
+      });
+
+      const response = await provider.callApiStreaming('Use tools');
+
+      expect(response.metadata).toMatchObject({
+        mcpToolCalls: [{ name: 'list_resources', status: 'success' }],
+        mcpToolCallsComplete: false,
+      });
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        await expect(
+          runAssertion({
+            assertion: { type },
+            provider,
+            providerResponse: response,
+            test: { vars: {} },
+          }),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      }
     });
 
     it('should return MCP errors from streaming tool use responses', async () => {
@@ -3396,6 +3578,13 @@ Third line`;
 
       expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
       expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'MCP server failed',
+        },
+      ]);
     });
 
     it('should not invoke MCP from streaming when toolChoice is none', async () => {
@@ -3461,6 +3650,55 @@ Third line`;
       // Don't call MCP with garbage args
       expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
       expect(result.error).toContain('invalid JSON arguments');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'model emitted invalid JSON arguments',
+        },
+      ]);
+    });
+
+    it.each([
+      '[]',
+      'null',
+      '"scalar"',
+    ])('should reject non-object streaming tool_use input %s', async (input) => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream([
+          {
+            contentBlockStart: {
+              contentBlockIndex: 0,
+              start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+            },
+          },
+          { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input } } } },
+          { messageStop: { stopReason: 'tool_use' } },
+        ]),
+      });
+
+      const result = await provider.callApiStreaming('hi');
+
+      expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+      expect(result.error).toContain('invalid JSON arguments');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'model emitted invalid JSON arguments',
+        },
+      ]);
     });
 
     it('should combine streaming text with MCP tool results', async () => {

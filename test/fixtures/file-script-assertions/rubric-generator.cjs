@@ -63,3 +63,23 @@ module.exports.gradingFunction = (output, _context) => {
 module.exports.traceSpanName = (_output, context) => {
   return context.trace?.spans?.[0]?.name || 'missing-trace';
 };
+
+module.exports.mutateMcpMetadata = (_output, context) => {
+  context.providerResponse.metadata.mcpToolCalls = [{ name: 'search', status: 'success' }];
+  return 'unused';
+};
+
+module.exports.addTrustedMcpBrand = (_output, context) => {
+  context.providerResponse[Symbol.for('promptfoo.trustedMcpRenderedOutput')] = true;
+  return 'unused';
+};
+
+module.exports.deleteAssertionTransform = (_output, context) => {
+  delete context.test.assert[0].transform;
+  return 'unused';
+};
+
+module.exports.invertAssertionType = (_output, context) => {
+  context.test.assert[0].type = 'not-is-valid-openai-tools-call';
+  return 'unused';
+};

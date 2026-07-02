@@ -1291,6 +1291,47 @@ describe('AzureChatCompletionProvider', () => {
   });
 
   describe('Function Tool Callbacks', () => {
+    it('preserves assistant content instead of invoking an ordinary callback', async () => {
+      const ordinaryCallback = vi.fn().mockResolvedValue('callback output');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'assistant summary',
+                tool_calls: [
+                  {
+                    id: 'call_123',
+                    type: 'function',
+                    function: { name: 'ordinary_tool', arguments: '{}' },
+                  },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: { ordinary_tool: ordinaryCallback },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Use a tool');
+
+      expect(ordinaryCallback).not.toHaveBeenCalled();
+      expect(result.output).toBe('assistant summary');
+      expect(result.metadata?.mcpToolCalls).toBeUndefined();
+    });
+
     it('should execute function callbacks and return the result', async () => {
       const mockResponse = {
         id: 'mock-id',

@@ -7,6 +7,7 @@ import {
   DocxInjectionPlacementSchema,
   EmailSchema,
   ErrorResponseSchema,
+  FunctionToolCallValidationSetupError,
   GetUserIdResponseSchema,
   GetUserResponseSchema,
   getInputDescription,
@@ -14,6 +15,7 @@ import {
   hasFunctionToolCallValidator,
   InputDefinitionObjectSchema,
   InputsSchema,
+  isFunctionToolCallValidationSetupError,
   isTransformFunction,
   LoginRequestSchema,
   NunjucksFilterMapSchema,
@@ -72,6 +74,63 @@ describe('contracts leaf surface', () => {
       expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
         false,
       );
+
+      let capabilityTraps = 0;
+      const hostileProvider = new Proxy(
+        {},
+        {
+          has() {
+            capabilityTraps += 1;
+            throw new Error('capability trap exploded');
+          },
+        },
+      );
+      expect(hasFunctionToolCallValidator(hostileProvider)).toBe(false);
+      expect(capabilityTraps).toBe(1);
+
+      const setupError = new FunctionToolCallValidationSetupError('schema unavailable');
+      expect(isFunctionToolCallValidationSetupError(setupError)).toBe(true);
+      expect(
+        isFunctionToolCallValidationSetupError(
+          Object.assign(new Error('schema unavailable'), { code: setupError.code }),
+        ),
+      ).toBe(true);
+      expect(isFunctionToolCallValidationSetupError({ code: setupError.code })).toBe(false);
+      expect(isFunctionToolCallValidationSetupError(new Error('invalid output'))).toBe(false);
+      expect(
+        isFunctionToolCallValidationSetupError({
+          name: 'ValidationError',
+          message: 'ordinary invalid call',
+          get code() {
+            throw new Error('code getter exploded');
+          },
+        }),
+      ).toBe(false);
+
+      const inherited = Object.create({
+        code: setupError.code,
+        message: 'ordinary invalid call',
+        name: 'ValidationError',
+      });
+      expect(isFunctionToolCallValidationSetupError(inherited)).toBe(false);
+      expect(
+        isFunctionToolCallValidationSetupError(
+          Object.create(FunctionToolCallValidationSetupError.prototype),
+        ),
+      ).toBe(false);
+
+      let codeReads = 0;
+      expect(
+        isFunctionToolCallValidationSetupError({
+          name: 'ValidationError',
+          message: 'ordinary invalid call',
+          get code() {
+            codeReads += 1;
+            return setupError.code;
+          },
+        }),
+      ).toBe(false);
+      expect(codeReads).toBe(0);
     });
   });
 

@@ -531,6 +531,85 @@ describe('FunctionCallbackHandler', () => {
       });
     });
 
+    it('keeps concurrent MCP outcomes invocation-local', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'successful_tool', description: 'Succeeds' },
+        { name: 'failing_tool', description: 'Fails' },
+      ]);
+      mockMCPClient.callTool.mockImplementation(async (name: string) =>
+        name === 'successful_tool' ? { content: 'ok' } : { content: '', error: 'boom' },
+      );
+
+      const [success, failure] = await Promise.all([
+        handler.processCallsDetailed({ name: 'successful_tool', arguments: '{}' }, {}),
+        handler.processCallsDetailed({ name: 'failing_tool', arguments: '{}' }, {}),
+      ]);
+
+      expect(success).toEqual({
+        hasProcessedCalls: true,
+        mcpToolCallsComplete: true,
+        output: 'MCP Tool Result (successful_tool): ok',
+        mcpToolCalls: [{ name: 'successful_tool', status: 'success' }],
+      });
+      expect(failure).toEqual({
+        hasProcessedCalls: true,
+        mcpToolCallsComplete: true,
+        output: 'MCP Tool Error (failing_tool): boom',
+        mcpToolCalls: [{ name: 'failing_tool', status: 'error', error: 'boom' }],
+      });
+    });
+
+    it('marks mixed MCP and ordinary callback calls as incomplete', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'MCP tool' }]);
+      mockMCPClient.callTool.mockResolvedValue({ content: 'ok' });
+      const ordinaryCallback = vi.fn().mockResolvedValue('ordinary result');
+
+      const result = await handler.processCallsDetailed(
+        [
+          { name: 'mcp_tool', arguments: '{}' },
+          { name: 'ordinary_tool', arguments: '{}' },
+        ],
+        { ordinary_tool: ordinaryCallback },
+      );
+
+      expect(result).toMatchObject({
+        hasProcessedCalls: true,
+        mcpToolCallsComplete: false,
+        mcpToolCalls: [{ name: 'mcp_tool', status: 'success' }],
+      });
+      expect(ordinaryCallback).toHaveBeenCalledOnce();
+    });
+
+    it('reports unmatched calls as unprocessed', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'MCP tool' }]);
+      const call = { name: 'ordinary_tool', arguments: '{}' };
+
+      const result = await handler.processCallsDetailed(call, {});
+
+      expect(result).toEqual({
+        hasProcessedCalls: false,
+        mcpToolCalls: [],
+        mcpToolCallsComplete: false,
+        output: JSON.stringify(call),
+      });
+    });
+
+    it('preserves the matched-callback fallback when callback execution fails', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([]);
+      const call = { name: 'ordinary_tool', arguments: 'invalid json' };
+
+      const result = await handler.processCallsDetailed(call, {
+        ordinary_tool: vi.fn().mockRejectedValue(new Error('callback failed')),
+      });
+
+      expect(result).toEqual({
+        hasProcessedCalls: true,
+        mcpToolCalls: [],
+        mcpToolCallsComplete: false,
+        output: JSON.stringify(call),
+      });
+    });
+
     it('should handle MCP tool errors gracefully', async () => {
       mockMCPClient.getAllTools.mockReturnValue([
         { name: 'failing_tool', description: 'A tool that fails' },

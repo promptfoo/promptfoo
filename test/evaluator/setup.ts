@@ -84,6 +84,9 @@ function mockMetadataTransform(code: string, input: any, context?: any) {
 }
 
 async function mockTransform(code: unknown, input: any, context?: any) {
+  if (typeof code === 'function') {
+    return code(input, context);
+  }
   if (typeof code !== 'string') {
     return input;
   }
@@ -98,11 +101,8 @@ async function mockTransform(code: unknown, input: any, context?: any) {
   );
 }
 
-vi.mock('../../src/util/transform', () => ({
-  TransformInputType: {
-    OUTPUT: 'output',
-    VARS: 'vars',
-  },
+vi.mock('../../src/util/transform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/transform')>()),
   // Provide a process shim for ESM compatibility in inline JavaScript code
   getProcessShim: vi.fn().mockReturnValue(process),
   transform: vi.fn().mockImplementation(mockTransform),
