@@ -255,12 +255,13 @@ async function runEventSchemaProbe(sdkModule: any, signal?: AbortSignal): Promis
   const probeDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-sdk-preflight-'));
   const preloadPath = path.join(probeDirectory, 'emit-events.cjs');
   fs.writeFileSync(preloadPath, EVENT_SCHEMA_CANARY_SOURCE, 'utf8');
+  let codex: any;
 
   try {
     // NODE_OPTIONS makes the current Node executable act as a zero-token fake Codex CLI. This
     // drives representative JSONL through the SDK's real child-process framing and parser on the
     // active Node runtime without contacting an API.
-    const codex = new sdkModule.Codex({
+    codex = new sdkModule.Codex({
       codexPathOverride: process.execPath,
       env: {
         NODE_OPTIONS: `--require ${JSON.stringify(preloadPath)}`,
@@ -286,7 +287,17 @@ async function runEventSchemaProbe(sdkModule: any, signal?: AbortSignal): Promis
       );
     }
   } finally {
-    fs.rmSync(probeDirectory, { recursive: true, force: true });
+    try {
+      if (typeof codex?.destroy === 'function') {
+        await codex.destroy();
+      } else if (typeof codex?.cleanup === 'function') {
+        await codex.cleanup();
+      } else if (typeof codex?.close === 'function') {
+        await codex.close();
+      }
+    } finally {
+      fs.rmSync(probeDirectory, { recursive: true, force: true });
+    }
   }
 }
 

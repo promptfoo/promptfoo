@@ -11,6 +11,7 @@ import { preflightCodexSdkCliCompatibility } from '../../../src/providers/openai
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockSchemaRun = vi.hoisted(() => vi.fn());
 const mockSchemaStartThread = vi.hoisted(() => vi.fn());
+const mockSchemaDestroy = vi.hoisted(() => vi.fn());
 const MockSchemaCodex = vi.hoisted(() => vi.fn());
 
 vi.mock('node:child_process', async (importOriginal) => ({
@@ -104,9 +105,11 @@ describe('preflightCodexSdkCliCompatibility', () => {
     });
     mockSchemaStartThread.mockReset();
     mockSchemaStartThread.mockReturnValue({ run: mockSchemaRun });
+    mockSchemaDestroy.mockReset();
+    mockSchemaDestroy.mockResolvedValue(undefined);
     MockSchemaCodex.mockReset();
     MockSchemaCodex.mockImplementation(function () {
-      return { startThread: mockSchemaStartThread };
+      return { startThread: mockSchemaStartThread, destroy: mockSchemaDestroy };
     });
   });
 
@@ -172,6 +175,7 @@ describe('preflightCodexSdkCliCompatibility', () => {
     expect(mockSchemaRun).toHaveBeenCalledWith('compatibility-preflight', {
       signal: expect.any(AbortSignal),
     });
+    expect(mockSchemaDestroy).toHaveBeenCalledOnce();
   });
 
   it('rejects the r7 SDK and custom CLI mismatch', async () => {
@@ -389,6 +393,7 @@ describe('preflightCodexSdkCliCompatibility', () => {
     ).rejects.toThrow(
       /cannot parse the supported CLI event schema on Node .*U\+2028\/U\+2029 was split or rejected.*No Codex API request was made/,
     );
+    expect(mockSchemaDestroy).toHaveBeenCalledOnce();
   });
 
   it('passes caller cancellation to the SDK event schema probe', async () => {
