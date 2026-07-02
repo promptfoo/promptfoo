@@ -226,6 +226,85 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
     });
 }
 
+function createClaudeResultMetrics(finalMsg: SDKResultMessage): {
+  cost: number;
+  sessionId: string;
+  tokenUsage: ProviderResponse['tokenUsage'];
+} {
+  const prompt = finalMsg.usage?.input_tokens;
+  const completion = finalMsg.usage?.output_tokens;
+
+  return {
+    cost: finalMsg.total_cost_usd ?? 0,
+    sessionId: finalMsg.session_id,
+    tokenUsage: {
+      prompt,
+      completion,
+      total:
+        typeof prompt === 'number' && typeof completion === 'number'
+          ? prompt + completion
+          : undefined,
+    },
+  };
+}
+
+function createClaudeResultMetadata(
+  finalMsg: SDKResultMessage,
+  toolCalls: ToolCallEntry[],
+  assistantErrors: AssistantErrorEntry[],
+): NonNullable<ProviderResponse['metadata']> {
+  const apiErrorStatus = 'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
+
+  return {
+    skillCalls: deriveSkillCalls(toolCalls),
+    toolCalls,
+    numTurns: finalMsg.num_turns,
+    durationMs: finalMsg.duration_ms,
+    durationApiMs: finalMsg.duration_api_ms,
+    modelUsage: finalMsg.modelUsage,
+    permissionDenials: finalMsg.permission_denials,
+    ...(finalMsg.terminal_reason === undefined ? {} : { terminalReason: finalMsg.terminal_reason }),
+    ...(apiErrorStatus === undefined || apiErrorStatus === null ? {} : { apiErrorStatus }),
+    ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
+  };
+}
+
+function createClaudeResultResponse(
+  finalMsg: SDKResultMessage,
+  metrics: ReturnType<typeof createClaudeResultMetrics>,
+  metadata: ReturnType<typeof createClaudeResultMetadata>,
+  assistantErrors: AssistantErrorEntry[],
+): ProviderResponse {
+  const raw = JSON.stringify(finalMsg);
+  const response = {
+    ...metrics,
+    raw,
+    metadata,
+  };
+
+  if (finalMsg.subtype !== 'success') {
+    const lastAssistantError =
+      assistantErrors.length > 0 ? assistantErrors[assistantErrors.length - 1].error : undefined;
+    return {
+      ...response,
+      error: lastAssistantError
+        ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
+        : `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+    };
+  }
+
+  return {
+    ...response,
+    output: finalMsg.structured_output === undefined ? finalMsg.result : finalMsg.structured_output,
+    metadata: {
+      ...metadata,
+      ...(finalMsg.structured_output === undefined
+        ? {}
+        : { structuredOutput: finalMsg.structured_output }),
+    },
+  };
+}
+
 /**
  * Claude Agent SDK Provider
  *
@@ -1567,145 +1646,80 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 
-          // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
-          // definitive answer, so only warn when origin was unavailable for
-          // every result (lastMainResultMsg defaulted to the last result) AND
-          // we saw >1 results AND the chosen result is a non-terminal success.
-          //
-          // Gate on subtype === 'success' because non-success subtypes
-          // ('error_during_execution', 'error_max_turns', etc.) are themselves
-          // a definitive terminal signal — they're how the SDK reports the
-          // run ending in error, not a truncation indicator. Warning on those
-          // would be a false positive on every legitimate main-agent failure
-          // that follows a background sub-agent.
-          const usedPositionHeuristic =
-            !lastMainResultMsg || lastMainResultMsg.origin === undefined;
-          if (
-            usedPositionHeuristic &&
-            resultMsgCount > 1 &&
-            finalMsg.subtype === 'success' &&
-            finalMsg.terminal_reason === undefined
-          ) {
-            logger.warn(
-              `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
+          const metrics = createClaudeResultMetrics(finalMsg);
+          const metadata = createClaudeResultMetadata(
+            finalMsg,
+            Array.from(toolCallsMap.values()),
+            assistantErrors,
+          );
+
+          try {
+            // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
+            // definitive answer, so only warn when origin was unavailable for
+            // every result (lastMainResultMsg defaulted to the last result) AND
+            // we saw >1 results AND the chosen result is a non-terminal success.
+            //
+            // Gate on subtype === 'success' because non-success subtypes
+            // ('error_during_execution', 'error_max_turns', etc.) are themselves
+            // a definitive terminal signal — they're how the SDK reports the
+            // run ending in error, not a truncation indicator. Warning on those
+            // would be a false positive on every legitimate main-agent failure
+            // that follows a background sub-agent.
+            const usedPositionHeuristic =
+              !lastMainResultMsg || lastMainResultMsg.origin === undefined;
+            if (
+              usedPositionHeuristic &&
+              resultMsgCount > 1 &&
+              finalMsg.subtype === 'success' &&
+              finalMsg.terminal_reason === undefined
+            ) {
+              logger.warn(
+                `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
+              );
+              otelTrace.getActiveSpan()?.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: 'stream closed without terminal_reason after multiple result messages',
+              });
+            }
+
+            // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
+            // Mark the provider span ERROR directly — without poisoning the
+            // response's `output`/`error` contract, since any produced output is
+            // still useful and downstream assertions may depend on it.
+            const abortedTerminalReason =
+              typeof finalMsg.terminal_reason === 'string' &&
+              (finalMsg.terminal_reason.startsWith('aborted_') ||
+                finalMsg.terminal_reason === 'hook_stopped')
+                ? finalMsg.terminal_reason
+                : undefined;
+            if (abortedTerminalReason) {
+              otelTrace.getActiveSpan()?.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: `aborted: ${abortedTerminalReason}`,
+              });
+            }
+
+            const response = createClaudeResultResponse(
+              finalMsg,
+              metrics,
+              metadata,
+              assistantErrors,
             );
-            otelTrace.getActiveSpan()?.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: 'stream closed without terminal_reason after multiple result messages',
-            });
-          }
-          const raw = JSON.stringify(finalMsg);
-          const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: finalMsg.usage?.input_tokens,
-            completion: finalMsg.usage?.output_tokens,
-            total:
-              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
-                : undefined,
-          };
-          const cost = finalMsg.total_cost_usd ?? 0;
-          const sessionId = finalMsg.session_id;
 
-          const toolCallsArray = Array.from(toolCallsMap.values());
-          const skillCalls = deriveSkillCalls(toolCallsArray);
+            if (finalMsg.subtype === 'success') {
+              logger.debug(`Claude Agent SDK response: ${response.raw}`);
+              await cacheResponse(cacheResult, response, 'Claude Agent SDK');
+            }
 
-          // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
-          // Mark the provider span ERROR directly — without poisoning the
-          // response's `output`/`error` contract, since any produced output is
-          // still useful and downstream assertions may depend on it.
-          const abortedTerminalReason =
-            typeof finalMsg.terminal_reason === 'string' &&
-            (finalMsg.terminal_reason.startsWith('aborted_') ||
-              finalMsg.terminal_reason === 'hook_stopped')
-              ? finalMsg.terminal_reason
-              : undefined;
-          if (abortedTerminalReason) {
-            otelTrace.getActiveSpan()?.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: `aborted: ${abortedTerminalReason}`,
-            });
-          }
-
-          // Only SDKResultSuccess carries `api_error_status` per the SDK types;
-          // guarding with `'api_error_status' in finalMsg` avoids leaking the
-          // field as `undefined` onto unrelated result shapes.
-          const apiErrorStatus =
-            'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
-
-          if (finalMsg.subtype === 'success') {
-            logger.debug(`Claude Agent SDK response: ${raw}`);
-            // When structured output is enabled and available, use it as the output
-            // Otherwise fall back to the text result
-            const output =
-              finalMsg.structured_output === undefined
-                ? finalMsg.result
-                : finalMsg.structured_output;
-            const response: ProviderResponse = {
-              output,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-              metadata: {
-                skillCalls,
-                toolCalls: toolCallsArray,
-                numTurns: finalMsg.num_turns,
-                durationMs: finalMsg.duration_ms,
-                durationApiMs: finalMsg.duration_api_ms,
-                modelUsage: finalMsg.modelUsage,
-                permissionDenials: finalMsg.permission_denials,
-                ...(finalMsg.terminal_reason === undefined
-                  ? {}
-                  : { terminalReason: finalMsg.terminal_reason }),
-                ...(finalMsg.structured_output === undefined
-                  ? {}
-                  : { structuredOutput: finalMsg.structured_output }),
-                ...(apiErrorStatus === undefined || apiErrorStatus === null
-                  ? {}
-                  : { apiErrorStatus }),
-                ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
-              },
-            };
-
-            // Cache the response using shared utilities
-            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
             return response;
+          } catch (postStreamError) {
+            logger.error(`Error processing Claude Agent SDK result: ${postStreamError}`);
+            return {
+              error: `Error processing Claude Agent SDK result: ${postStreamError}`,
+              ...metrics,
+              metadata,
+            };
           }
-
-          // Surface the last assistant error code (`model_not_found`,
-          // `rate_limit`, etc.) alongside the subtype so callers can tell
-          // apart "ran out of turns" from "model doesn't exist" without
-          // digging into metadata.
-          const lastAssistantError =
-            assistantErrors.length > 0
-              ? assistantErrors[assistantErrors.length - 1].error
-              : undefined;
-          const errorMessage = lastAssistantError
-            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
-            : `Claude Agent SDK call failed: ${finalMsg.subtype}`;
-          return {
-            error: errorMessage,
-            tokenUsage,
-            cost,
-            raw,
-            sessionId,
-            metadata: {
-              skillCalls,
-              toolCalls: toolCallsArray,
-              numTurns: finalMsg.num_turns,
-              durationMs: finalMsg.duration_ms,
-              durationApiMs: finalMsg.duration_api_ms,
-              modelUsage: finalMsg.modelUsage,
-              permissionDenials: finalMsg.permission_denials,
-              ...(finalMsg.terminal_reason === undefined
-                ? {}
-                : { terminalReason: finalMsg.terminal_reason }),
-              ...(apiErrorStatus === undefined || apiErrorStatus === null
-                ? {}
-                : { apiErrorStatus }),
-              ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
-            },
-          };
         },
         (response) => {
           const metadata = response.metadata ?? {};
