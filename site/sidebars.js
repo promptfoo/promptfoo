@@ -418,6 +418,7 @@ const sidebars = {
                 'guides/evaluate-osworld-with-inspect',
                 'guides/test-agent-skills',
                 'guides/factuality-eval',
+                'guides/evaluate-agent-tool-routing',
                 'guides/llm-as-a-judge',
                 'guides/testing-llm-chains',
                 'guides/evaluate-llm-temperature',
