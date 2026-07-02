@@ -87,7 +87,13 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
 > = {
   'owasp:llm:01': {
     // Prompt Injection
-    plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'prompt-extraction', 'harmful'],
+    plugins: [
+      'ascii-smuggling',
+      'indirect-prompt-injection',
+      'cross-agent-injection',
+      'prompt-extraction',
+      'harmful',
+    ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
@@ -278,7 +284,7 @@ export const OWASP_AGENTIC_TOP_10_MAPPING: Record<
   'owasp:agentic:asi07': {
     // ASI07: Insecure Inter-Agent Communication
     // Multi-agent systems face spoofed identities, replayed messages, tampering
-    plugins: ['indirect-prompt-injection', 'hijacking', 'imitation'],
+    plugins: ['cross-agent-injection', 'indirect-prompt-injection', 'hijacking', 'imitation'],
     strategies: ['jailbreak-templates'],
   },
   'owasp:agentic:asi08': {
