@@ -63,6 +63,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [math-equivalent](#math-equivalent)                             | output is mathematically equivalent to expected (LaTeX-aware)      |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
@@ -962,6 +963,138 @@ tests:
       - type: levenshtein
         threshold: 2
         value: '{{expected}}'
+```
+
+### Math equivalent
+
+The `math-equivalent` assertion checks whether the model output is mathematically
+equivalent to the expected value, even when the surface form differs (LaTeX
+formatting, units, prose around the answer, decimal vs fraction, etc.).
+
+It's pure TypeScript — comparison runs through the [CortexJS Compute
+Engine](https://cortexjs.io/compute-engine/), so there is no Python dependency.
+
+Example:
+
+```yaml
+tests:
+  - vars:
+      question: 'What is one half?'
+    assert:
+      - type: math-equivalent
+        value: '0.5' # passes for "\\frac{1}{2}", "\\boxed{\\dfrac{1}{2}}", "**0.5**", etc.
+```
+
+Numeric expected values are also accepted:
+
+```yaml
+assert:
+  - type: math-equivalent
+    value: 0.5
+```
+
+The assertion answers the question "are these two expressions the same value?"
+by symbolically simplifying `actual - expected` and checking the result is
+zero. As a side effect it tolerates a number of common formatting quirks that
+trip up `equals` and `contains`:
+
+- `\boxed{...}` with nested braces — the last box wins unless later visible final-answer text follows it
+- Display math `$$ ... $$` and `\[ ... \]`, inline math `\( ... \)` and `$ ... $`
+- Markdown bold `**...**` and italic `*...*`
+- Explicitly marked hidden-thought text such as `<think>...</think>` /
+  `<thinking>...</thinking>`, signed or redacted `Thinking:` blocks, and
+  individually prefixed `Reasoning:` lines
+- Unicode minus `−`, multiplication `×` and `·`, division `÷`, and root `√`
+- `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
+  `\frac{1}\pi` (backslash-command denominator)
+- European decimal commas (`2,00625` → `2.00625`) and US thousands
+  separators (`1,234,567` → `1234567`)
+- Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`),
+  whether whitespace-separated (`10 kg`), directly attached (`10kg`, `45deg`),
+  or following a fraction / LaTeX command (`1/2 m`, `\frac{1}{2} kg`,
+  `\sqrt{2} m`, `sqrt2 m`, `10\,\mathrm{m}`). Units are only stripped when
+  a self-contained math value is the immediate left context, so algebraic
+  expressions like `x + m` and an expected `2*m` are left intact.
+- Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
+- Approximation symbols (`≈`, `\approx`) treated as equality, including in
+  chain form (`1/2 ≈ 0.5` is graded against `0.5`)
+- Equality chains (`230/530 = 23/53`) when each stated step is symbolically
+  equivalent — the final segment is used as the answer
+- "Total: 14", "Answer: 42", and "Final answer is 42" label prefixes
+- `, attained at (-2,3)` and similar comma-suffixed prose after the answer
+- Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42",
+  "The answer is 1 / 2", "The answer is (x + y)", "The answer is cos(x)",
+  "Therefore 6 ÷ 2" (the contiguous trailing math expression on a prose line
+  wins, including Unicode operators `×`, `÷`, `−`, `·`; trailing sentence
+  punctuation `. , ; : ?` is stripped from the extracted tokens, while `!`
+  is preserved as factorial)
+- A labelled final-line answer beats earlier display blocks:
+  `$$2$$\nAnswer: 3` is graded against `3`, not `2`
+- A pure-prose final line ("This is the final result.", "Done.") is
+  ignored — extraction falls back to the previous display block, so a
+  correct `$$\frac{1}{2}$$` answer still grades against `0.5`
+
+The CortexJS Compute Engine is loaded lazily via dynamic `import()` so
+the published CommonJS entrypoint (`require('promptfoo')`) keeps loading
+without paying the engine cost or pulling in an ESM-only dependency at
+module-load time. The `math-equivalent` assertion is therefore async
+under the hood — the assertion handler is `async` and existing config
+files need no changes.
+
+- `*` and `**` between digits/letters stay as multiplication operators
+  (`2*3*4 = 24`), not stripped as Markdown emphasis
+- Display math inside `<think>...</think>` (or redacted-thinking blocks) is
+  ignored — only the visible answer is graded
+
+Cases that intentionally do **not** pass:
+
+- Numerically-close-but-unequal values, e.g. `49/106` vs `\frac{23}{53}`
+- Tiny nonzero residuals, e.g. `0` vs `10^{-50}`
+- Same angle modulo 2π is not the same value (`5\pi/3` vs `-\pi/3`)
+- Extra factors like a stray `\pi`
+- Pure prose that contains no parseable expression
+- Constraint equations (`x^2 = 4`, `\sin{x} = 1`) and systems
+  (`x = 1, y = 2`, `x = 1 and y = 2`, or separate assignment lines) are not silently reduced to one
+  right-hand value
+- Explicitly negated or unequal claims such as "The answer is not 42" or
+  "The answer isn't 42" are not extracted as the positive answer `42`,
+  even when the negation is inside a boxed `\text{...}` value
+- Relational or rejected-answer claims such as "The answer is less than 42",
+  "The answer is ≤ 42", "The value cannot be 42", and "Incorrect answer: 42"
+  are not graded as `42`
+
+To prevent pathological misuse like `value: 'apple'` matching any output that
+happens to contain the same letters, the assertion rejects "prose-shaped"
+candidates: text that has no digits, operators (`+ - * / ^`), braces, `\` LaTeX
+commands, or `_` and contains 3 or more letters is treated as unparseable.
+
+Negate with `not-math-equivalent`:
+
+```yaml
+assert:
+  - type: not-math-equivalent
+    value: '0.5'
+```
+
+`not-math-equivalent` only inverts the equivalence comparison; if the model
+output (or expected value) cannot be parsed as a math expression at all, the
+assertion fails with a generic parse-error reason rather than passing. This avoids
+silently accepting empty / refused / garbage outputs.
+
+Non-finite numeric expected values (`NaN`, `±Infinity`) are rejected with a
+clear reason. Use `\infty` in a string value if you want symbolic infinity.
+
+`value` can also reference template variables — useful when the ground truth
+comes from your dataset:
+
+```yaml
+tests:
+  - vars:
+      question: 'Compute $\int_{0}^{1} x\,dx$'
+      ground_truth: '\frac{1}{2}'
+    assert:
+      - type: math-equivalent
+        value: '{{ground_truth}}'
 ```
 
 ### Perplexity
