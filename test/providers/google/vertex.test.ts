@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -164,6 +165,45 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
 
   return cacheSetKey;
 }
+
+describe('VertexChatProvider.callApi tracing', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('preserves cache-read and reasoning details for the GenAI span', async () => {
+    const provider = new VertexChatProvider('gemini-2.5-flash');
+    const tracedResult = vi.fn();
+    const response = {
+      output: 'traced response',
+      cached: false,
+      tokenUsage: {
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: { reasoning: 2, cacheReadInputTokens: 6 },
+      },
+    };
+    vi.spyOn(provider, 'callGeminiApi').mockResolvedValue(response);
+    vi.spyOn(genaiTracer, 'withGenAISpan').mockImplementation(
+      async (_context, operation, resultExtractor) => {
+        const result = await operation({} as Parameters<typeof operation>[0]);
+        tracedResult(resultExtractor?.(result));
+        return result;
+      },
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(tracedResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenUsage: expect.objectContaining({
+          completionDetails: { reasoning: 2, cacheReadInputTokens: 6 },
+        }),
+      }),
+    );
+  });
+});
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
@@ -1160,6 +1200,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
               candidatesTokenCount: 20,
               totalTokenCount: 30,
               thoughtsTokenCount: 50, // Thinking tokens
+              cachedContentTokenCount: 6,
+              cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 6 }],
             },
           },
         ],
@@ -1184,8 +1226,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
           reasoning: 50,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 6,
         },
       });
+      expect(response.cost).toBeCloseTo(0.00017638, 10);
     });
 
     it('should handle response without thinking tokens', async () => {
@@ -1305,6 +1349,112 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(response.output).toBe('cached response with thinking');
       // Note: The current implementation doesn't preserve completionDetails in cached responses
       // This is a limitation that could be addressed in a future fix
+    });
+
+    it('should not surface cacheReadInputTokens from a disk-cache hit', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      // A previously persisted live response that recorded a Gemini context-cache read.
+      const mockCachedResponse = {
+        output: 'cached response',
+        tokenUsage: {
+          total: 30,
+          prompt: 10,
+          completion: 20,
+          completionDetails: {
+            reasoning: 50,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 6,
+          },
+        },
+        cached: true,
+      };
+
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.cached).toBe(true);
+      // No Google request happened on a disk-cache hit, so the Gemini context-cache
+      // read must not be re-reported, while reasoning details remain intact.
+      expect(response.tokenUsage).toEqual({
+        total: 30,
+        prompt: 10,
+        completion: 20,
+        cached: 30,
+        completionDetails: {
+          reasoning: 50,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+      expect(response.tokenUsage?.completionDetails).not.toHaveProperty('cacheReadInputTokens');
+    });
+
+    it('should drop completionDetails entirely when a cache hit only carried cacheReadInputTokens', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      const mockCachedResponse = {
+        output: 'cached response',
+        tokenUsage: {
+          total: 30,
+          prompt: 10,
+          completion: 20,
+          completionDetails: {
+            cacheReadInputTokens: 6,
+          },
+        },
+        cached: true,
+      };
+
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.cached).toBe(true);
+      expect(response.tokenUsage).toEqual({
+        total: 30,
+        prompt: 10,
+        completion: 20,
+        cached: 30,
+      });
+      expect(response.tokenUsage).not.toHaveProperty('completionDetails');
+    });
+
+    it('should surface cacheReadInputTokens on a live (non-cached) response', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'live response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              cachedContentTokenCount: 6,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      // The live path still reports the real Gemini context-cache read.
+      expect(response.cached).toBe(false);
+      expect(response.tokenUsage?.completionDetails).toEqual({
+        cacheReadInputTokens: 6,
+      });
     });
   });
 
@@ -1480,6 +1630,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               totalTokenCount: 5,
               promptTokenCount: 5,
               candidatesTokenCount: 0,
+              cachedContentTokenCount: 3,
             },
           },
         ],
@@ -1516,6 +1667,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(response.metadata?.modelArmor).toEqual({
         blockReason: 'MODEL_ARMOR',
         blockReasonMessage: 'Prompt was blocked by Model Armor: Prompt Injection detected',
+      });
+      expect(response.tokenUsage).toEqual({
+        total: 5,
+        prompt: 5,
+        completion: 0,
+        completionDetails: { cacheReadInputTokens: 3 },
       });
     });
 
@@ -1683,6 +1840,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               totalTokenCount: 10,
               promptTokenCount: 5,
               candidatesTokenCount: 5,
+              cachedContentTokenCount: 4,
             },
           },
         ],
@@ -1715,6 +1873,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
         flaggedInput: false,
         flaggedOutput: true,
         reason: 'Content was blocked due to safety settings with finish reason: SAFETY.',
+      });
+      expect(response.tokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        completionDetails: { cacheReadInputTokens: 4 },
       });
     });
 

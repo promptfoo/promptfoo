@@ -5,8 +5,8 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  extractProviderResponseAttributes,
   type GenAISpanContext,
-  type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -32,6 +32,7 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getGoogleTokenUsageCompletionDetails,
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
@@ -95,6 +96,24 @@ function getVertexApiHost(
     getEnvString('VERTEX_API_HOST') ||
     (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
   );
+}
+
+/**
+ * Remove Gemini context-cache read details from a token usage object served from
+ * promptfoo's disk cache. `cacheReadInputTokens` reflects a read against Gemini's
+ * server-side context cache, which only happens on a live request. A disk-cache hit
+ * replays a stored payload without contacting Google, so re-surfacing this field would
+ * double-count reads that never occurred (aggregate usage/traces sum it per result).
+ * Reasoning/prediction details are left intact since they describe the cached response.
+ */
+function stripCachedContextReadDetails(tokenUsage: TokenUsage): void {
+  const { completionDetails } = tokenUsage;
+  if (completionDetails && 'cacheReadInputTokens' in completionDetails) {
+    delete completionDetails.cacheReadInputTokens;
+    if (Object.keys(completionDetails).length === 0) {
+      delete tokenUsage.completionDetails;
+    }
+  }
 }
 
 function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): string {
@@ -231,20 +250,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      extractProviderResponseAttributes,
+    );
   }
 
   private async callApiInternal(
@@ -578,6 +588,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
+          // A disk-cache hit serves a stored payload without contacting Google, so no
+          // Gemini context-cache read occurred. Strip the persisted cacheReadInputTokens
+          // so repeated cache-served evals don't keep re-reporting reads that never
+          // happened (aggregate usage/traces sum these per result).
+          stripCachedContextReadDetails(tokenUsage);
         }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
@@ -676,10 +691,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
               datum.promptFeedback.blockReasonMessage ||
               `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
 
+            const completionDetails = getGoogleTokenUsageCompletionDetails(datum.usageMetadata);
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
               completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              ...(completionDetails && { completionDetails }),
             };
 
             // Build guardrails response with Model Armor details
@@ -722,10 +739,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ];
           if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
             const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
+            const completionDetails = getGoogleTokenUsageCompletionDetails(datum.usageMetadata);
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
               completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              ...(completionDetails && { completionDetails }),
             };
             // Build guardrails response for safety blocks
             const guardrails: GuardrailResponse = {
@@ -738,7 +757,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
               // Refusals are not errors during redteams, they're actually successes.
               return { output: finishReason, tokenUsage, guardrails };
             }
-            return { error: finishReason, guardrails };
+            return { error: finishReason, tokenUsage, guardrails };
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
             // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
@@ -770,17 +789,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
         const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
         const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
+        const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: promptTokenCount || 0,
           completion: completionTokenCount || 0,
-          ...(thoughtsTokenCount !== undefined && {
-            completionDetails: {
-              reasoning: thoughtsTokenCount,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          }),
+          ...(completionDetails && { completionDetails }),
         };
         // Include thinking tokens in output cost - Google bills them as output tokens
         const completionForCost =
@@ -793,6 +807,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           promptTokenCount,
           completionForCost,
           true,
+          lastData.usageMetadata,
         );
 
         response = {

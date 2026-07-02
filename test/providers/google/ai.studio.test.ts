@@ -594,6 +594,12 @@ describe('AIStudioChatProvider', () => {
               { category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' },
             ],
           },
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 0,
+            totalTokenCount: 10,
+            cachedContentTokenCount: 4,
+          },
         },
         cached: false,
         status: 200,
@@ -607,6 +613,13 @@ describe('AIStudioChatProvider', () => {
       // NEGLIGIBLE should be filtered out from the safety ratings summary
       expect(response.error).toMatch(/Safety ratings: HARM_CATEGORY_HATE_SPEECH: HIGH\)/);
       expect(response.error).not.toMatch(/Safety ratings:.*HARM_CATEGORY_HARASSMENT.*HIGH/); // Only check it's not in the summary with HIGH
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 0,
+        total: 10,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 4 },
+      });
     });
 
     it('should handle candidates blocked with finish reason', async () => {
@@ -639,6 +652,12 @@ describe('AIStudioChatProvider', () => {
               ],
             },
           ],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 2,
+            totalTokenCount: 12,
+            cachedContentTokenCount: 3,
+          },
         },
         cached: false,
         status: 200,
@@ -650,6 +669,13 @@ describe('AIStudioChatProvider', () => {
       expect(response.error).toContain('Response was blocked with finish reason: RECITATION');
       expect(response.error).toContain("too similar to content from the model's training data");
       expect(response.error).toContain('HARM_CATEGORY_DANGEROUS_CONTENT: MEDIUM');
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 2,
+        total: 12,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 3 },
+      });
     });
   });
 
@@ -930,6 +956,47 @@ describe('AIStudioChatProvider', () => {
         cached: true,
         metadata: {},
       });
+    });
+
+    it('does not surface cacheReadInputTokens on a cache hit (no live context-cache read occurred)', async () => {
+      // A fetchWithCache hit replays the raw usageMetadata, including cachedContentTokenCount.
+      // The cached branch must report reasoning only and omit cacheReadInputTokens so repeated
+      // cache-served evals don't keep re-counting reads that never happened. Guards against a
+      // future refactor that switches the cached branch to getGoogleTokenUsageCompletionDetails.
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+            thoughtsTokenCount: 4,
+            cachedContentTokenCount: 8,
+          },
+        },
+        cached: true,
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.cached).toBe(true);
+      expect(response.cost).toBeUndefined();
+      expect(response.tokenUsage).toEqual({
+        cached: 15,
+        total: 15,
+        numRequests: 0,
+        completionDetails: { reasoning: 4, acceptedPrediction: 0, rejectedPrediction: 0 },
+      });
+      expect(response.tokenUsage?.completionDetails).not.toHaveProperty('cacheReadInputTokens');
     });
 
     it('should use v1alpha API for thinking model', async () => {
@@ -2174,6 +2241,8 @@ describe('AIStudioChatProvider', () => {
               candidatesTokenCount: 20,
               totalTokenCount: 30,
               thoughtsTokenCount: 50, // Thinking tokens
+              cachedContentTokenCount: 5,
+              cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 5 }],
             },
           },
           cached: false,
@@ -2199,11 +2268,12 @@ describe('AIStudioChatProvider', () => {
             reasoning: 50,
             acceptedPrediction: 0,
             rejectedPrediction: 0,
+            cacheReadInputTokens: 5,
           },
         });
       });
 
-      it('should handle response without thinking tokens', async () => {
+      it('should track cached input tokens without thinking tokens', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
           config: {
             apiKey: 'test-key',
@@ -2217,7 +2287,8 @@ describe('AIStudioChatProvider', () => {
               promptTokenCount: 10,
               candidatesTokenCount: 20,
               totalTokenCount: 30,
-              // No thoughtsTokenCount field
+              cachedContentTokenCount: 4,
+              cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 4 }],
             },
           },
           cached: false,
@@ -2239,8 +2310,72 @@ describe('AIStudioChatProvider', () => {
           completion: 20,
           total: 30,
           numRequests: 1,
-          // No completionDetails field when thoughtsTokenCount is absent
+          completionDetails: {
+            cacheReadInputTokens: 4,
+          },
         });
+        expect(response.cost).toBeCloseTo(0.00005192, 10);
+      });
+
+      it('should preserve a valid response when cache metadata is malformed', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'test-key' },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'valid response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              cachedContentTokenCount: 4,
+              cacheTokensDetails: [{ modality: 7, tokenCount: 4 }],
+            },
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('valid response');
+        expect(response.cost).toBeCloseTo(0.000053, 10);
+      });
+
+      it('should price partially cached audio from prompt and cache modality details', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'test-key' },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'audio response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10000,
+              candidatesTokenCount: 0,
+              totalTokenCount: 10000,
+              cachedContentTokenCount: 8000,
+              promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 10000 }],
+              cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+            },
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.output).toBe('audio response');
+        expect(response.cost).toBeCloseTo(0.0028, 10);
+        expect(response.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(8000);
       });
 
       it('should track thinking tokens with zero value', async () => {

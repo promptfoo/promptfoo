@@ -19,6 +19,7 @@ import {
   clearCachedAuth,
   collectGroundingMetadata,
   geminiFormatAndSystemInstructions,
+  getGoogleTokenUsageCompletionDetails,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
@@ -2574,6 +2575,61 @@ describe('util', () => {
     });
   });
 
+  describe('getGoogleTokenUsageCompletionDetails', () => {
+    it('clamps cache-read usage to the reported prompt token count', () => {
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          thoughtsTokenCount: 7,
+          promptTokenCount: 10,
+          cachedContentTokenCount: 12,
+        }),
+      ).toEqual({
+        reasoning: 7,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+        cacheReadInputTokens: 10,
+      });
+    });
+
+    it('bounds negative cache-read usage at zero', () => {
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          promptTokenCount: 10,
+          cachedContentTokenCount: -1,
+        }),
+      ).toEqual({ cacheReadInputTokens: 0 });
+    });
+
+    it('passes through cache-read usage unclamped when the prompt token count is absent', () => {
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          cachedContentTokenCount: 12,
+        }),
+      ).toEqual({ cacheReadInputTokens: 12 });
+    });
+
+    it('bounds negative reasoning tokens at zero and drops non-finite ones', () => {
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          thoughtsTokenCount: -5,
+          promptTokenCount: 10,
+        }),
+      ).toEqual({ reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 });
+
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          thoughtsTokenCount: Number.NaN,
+          promptTokenCount: 10,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('returns undefined when no usage metadata is present', () => {
+      expect(getGoogleTokenUsageCompletionDetails(undefined)).toBeUndefined();
+      expect(getGoogleTokenUsageCompletionDetails({})).toBeUndefined();
+    });
+  });
+
   describe('calculateGoogleCost', () => {
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
@@ -2604,6 +2660,459 @@ describe('util', () => {
       const cost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
       // Expected: (1000 * 0.3 + 500 * 2.5) / 1M = (300 + 1250) / 1M = 0.00155
       expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should discount cached prompt tokens at the cache-read rate (standard pricing)', () => {
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M. 10000 prompt tokens of which
+      // 8000 text tokens were served from context cache at 0.025/1M, 5000 output.
+      const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const discounted = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      });
+      expect(full).toBeCloseTo(0.003, 10);
+      // cached cost = 8000 * 0.025/1M; uncached prompt = 2000 * 0.1/1M.
+      // Before the fix, cached tokens were billed at the full input rate (0.003).
+      expect(discounted).toBeCloseTo(0.0024, 10);
+      expect(discounted as number).toBeLessThan(full as number);
+    });
+
+    it('should discount cached prompt tokens under tiered pricing', () => {
+      // gemini-3.1-pro-preview above 200k: input=4.0/1M. 100000 of 250000 prompt
+      // tokens cached.
+      const discounted = calculateGoogleCost('gemini-3.1-pro-preview', {}, 250000, 50000, false, {
+        cachedContentTokenCount: 100000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 100000 }],
+      });
+      // base 1.9; cached cost = 100000 * 0.4/1M, uncached prompt = 150000 * 4.0/1M.
+      expect(discounted).toBeCloseTo(1.54, 10);
+    });
+
+    it('should discount cached prompt tokens under the base Gemini 3 Pro tier', () => {
+      const discounted = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000, false, {
+        cachedContentTokenCount: 40000,
+      });
+      // base 0.8; cached cost = 40000 * 0.2/1M instead of 2.0/1M.
+      expect(discounted).toBeCloseTo(0.728, 10);
+    });
+
+    it('should apply Gemini 3 Flash cache pricing to every reported modality', () => {
+      const full = calculateGoogleCost('gemini-3-flash-preview', {}, 10000, 5000);
+      const textCached = calculateGoogleCost('gemini-3-flash-preview', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      });
+      const mixedCached = calculateGoogleCost('gemini-3-flash-preview', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        promptTokensDetails: [
+          { modality: 'TEXT', tokenCount: 8000 },
+          { modality: 'AUDIO', tokenCount: 2000 },
+        ],
+        cacheTokensDetails: [
+          { modality: 'TEXT', tokenCount: 6000 },
+          { modality: 'AUDIO', tokenCount: 2000 },
+        ],
+      });
+
+      expect(full).toBeCloseTo(0.02, 10);
+      expect(textCached).toBeCloseTo(0.0164, 10);
+      expect(mixedCached).toBeCloseTo(0.0165, 10);
+    });
+
+    it('should reprice cached DOCUMENT tokens at the image cache-read rate', () => {
+      // Google bills DOCUMENT (e.g. PDF) tokens at the image rate, so cached DOCUMENT
+      // tokens must use the textImageVideo cache-read rate rather than staying at the
+      // full input estimate. gemini-2.0-flash: input=0.1/1M, cacheRead=0.025/1M.
+      const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const documentCached = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'DOCUMENT', tokenCount: 8000 }],
+      });
+      expect(full).toBeCloseTo(0.003, 10);
+      // cached cost = 8000 * 0.025/1M; uncached prompt = 2000 * 0.1/1M (same as TEXT).
+      expect(documentCached).toBeCloseTo(0.0024, 10);
+      expect(documentCached as number).toBeLessThan(full as number);
+    });
+
+    it('should keep explicit cost overrides authoritative when cached tokens are present', () => {
+      const config = { cost: 0.001 };
+      const full = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000);
+      const withCache = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      });
+      expect(withCache).toBe(full);
+    });
+
+    it('should keep an explicit inputCost authoritative when cached tokens are present', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const full = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000);
+      const withCache = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      });
+
+      expect(full).toBe(25);
+      expect(withCache).toBe(full);
+    });
+
+    it('should still discount cached input when only outputCost is overridden', () => {
+      const discounted = calculateGoogleCost(
+        'gemini-2.0-flash',
+        { outputCost: 1 / 1e6 },
+        10000,
+        5000,
+        false,
+        {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+        },
+      );
+      expect(discounted).toBeCloseTo(0.0054, 10);
+    });
+
+    it('should price text and audio modalities in a mixed cached prompt', () => {
+      const discounted = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        promptTokensDetails: [
+          { modality: 'TEXT', tokenCount: 8000 },
+          { modality: 'AUDIO', tokenCount: 2000 },
+        ],
+        cacheTokensDetails: [
+          { modality: 'TEXT', tokenCount: 6000 },
+          { modality: 'AUDIO', tokenCount: 2000 },
+        ],
+      });
+      // Re-price 6000 text tokens at $0.03/M and 2000 audio tokens at $0.10/M.
+      expect(discounted).toBeCloseTo(0.01348, 10);
+    });
+
+    it('should price partially cached audio using the full prompt modality breakdown', () => {
+      const discounted = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0, false, {
+        cachedContentTokenCount: 8000,
+        promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 10000 }],
+        cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+      });
+
+      // 2000 uncached audio tokens at $1.00/M + 8000 cached at $0.10/M.
+      expect(discounted).toBeCloseTo(0.0028, 10);
+    });
+
+    it('should price mixed prompt and cache modality details together', () => {
+      const discounted = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0, false, {
+        cachedContentTokenCount: 8000,
+        promptTokensDetails: [
+          { modality: 'TEXT', tokenCount: 5000 },
+          { modality: 'AUDIO', tokenCount: 5000 },
+        ],
+        cacheTokensDetails: [
+          { modality: 'TEXT', tokenCount: 4000 },
+          { modality: 'AUDIO', tokenCount: 4000 },
+        ],
+      });
+
+      // 1000 uncached text at $0.30/M + 1000 uncached audio at $1.00/M,
+      // plus 4000 cached text at $0.03/M and 4000 cached audio at $0.10/M.
+      expect(discounted).toBeCloseTo(0.00182, 10);
+    });
+
+    it('should not reprice audio without a complete prompt modality breakdown', () => {
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0);
+      const cacheUsage = {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+      };
+
+      expect(calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0, false, cacheUsage)).toBe(full);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0, false, {
+          ...cacheUsage,
+          promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 9000 }],
+        }),
+      ).toBe(full);
+    });
+
+    it('should skip cache repricing when cached audio exceeds prompt audio', () => {
+      const promptTokensDetails = [
+        { modality: 'TEXT', tokenCount: 6000 },
+        { modality: 'AUDIO', tokenCount: 4000 },
+      ];
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0, false, {
+        cachedContentTokenCount: 0,
+        promptTokensDetails,
+      });
+      const inconsistent = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 0, false, {
+        cachedContentTokenCount: 8000,
+        promptTokensDetails,
+        cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+      });
+
+      expect(inconsistent).toBe(full);
+    });
+
+    it('should leave unmatched cached tokens at the normal input rate', () => {
+      const discounted = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 6000 }],
+      });
+      expect(discounted).toBeCloseTo(0.00255, 10);
+    });
+
+    it('should clamp cached token details to the aggregate and prompt counts', () => {
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 10000 }],
+        }),
+      ).toBeCloseTo(0.0024, 10);
+
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 12000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 12000 }],
+        }),
+      ).toBeCloseTo(0.00225, 10);
+    });
+
+    it('should skip repricing when inconsistent mixed-modality details exceed the aggregate', () => {
+      const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const discounted = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [
+          { modality: 'TEXT', tokenCount: 6000 },
+          { modality: 'AUDIO', tokenCount: 4000 },
+        ],
+      });
+      expect(discounted).toBe(full);
+    });
+
+    it('should skip repricing when known and unknown details exceed the aggregate', () => {
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      const discounted = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [
+          { modality: 'TEXT', tokenCount: 6000 },
+          { modality: 'FUTURE_MODALITY', tokenCount: 4000 },
+        ],
+      });
+
+      expect(discounted).toBe(full);
+    });
+
+    it('should use Vertex cache pricing and fall back to model cache rates', () => {
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, true, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+        }),
+      ).toBeCloseTo(0.0036, 10);
+
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, true, {
+          cachedContentTokenCount: 8000,
+          promptTokensDetails: [
+            { modality: 'AUDIO', tokenCount: 8000 },
+            { modality: 'TEXT', tokenCount: 2000 },
+          ],
+          cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+        }),
+      ).toBeCloseTo(0.0053, 10);
+
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, true, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+        }),
+      ).toBeCloseTo(0.01334, 10);
+    });
+
+    it.each([
+      'gemini-2.0-flash-lite',
+      'gemini-2.0-flash-lite-001',
+    ])('should use Vertex-only cache pricing for %s', (modelName) => {
+      const textCacheUsage = {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      };
+      const audioCacheUsage = {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+      };
+
+      // Google AI Studio has no published cache-read rate for these models.
+      expect(calculateGoogleCost(modelName, {}, 10000, 5000, false, textCacheUsage)).toBeCloseTo(
+        0.00225,
+        10,
+      );
+
+      // Vertex bills text and audio cache reads at the same scalar rate, so
+      // aggregate-only usage can also be priced safely.
+      expect(
+        calculateGoogleCost(modelName, {}, 10000, 5000, true, {
+          cachedContentTokenCount: 8000,
+        }),
+      ).toBeCloseTo(0.0018, 10);
+      expect(calculateGoogleCost(modelName, {}, 10000, 5000, true, textCacheUsage)).toBeCloseTo(
+        0.0018,
+        10,
+      );
+      expect(calculateGoogleCost(modelName, {}, 10000, 5000, true, audioCacheUsage)).toBeCloseTo(
+        0.0018,
+        10,
+      );
+
+      expect(
+        calculateGoogleCost(modelName, { inputCost: 1 / 1e6 }, 10000, 5000, true, textCacheUsage),
+      ).toBeCloseTo(0.0115, 10);
+    });
+
+    it('should not discount aggregate-only cache usage when modality rates differ', () => {
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+        }),
+      ).toBe(full);
+    });
+
+    it('should price audio and unspecified cache modalities at their documented rates', () => {
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          promptTokensDetails: [
+            { modality: 'AUDIO', tokenCount: 8000 },
+            { modality: 'TEXT', tokenCount: 2000 },
+          ],
+          cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+        }),
+      ).toBeCloseTo(0.0139, 10);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'MODALITY_UNSPECIFIED', tokenCount: 8000 }],
+        }),
+      ).toBeCloseTo(0.01334, 10);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ tokenCount: 8000 }],
+        }),
+      ).toBeCloseTo(0.01334, 10);
+    });
+
+    it('should not change cost when there are no cached tokens', () => {
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 0,
+          cacheTokensDetails: [],
+        }),
+      ).toBeCloseTo(0.003, 10);
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, undefined),
+      ).toBeCloseTo(0.003, 10);
+    });
+
+    it('should fall back to the undiscounted cost when a cache detail token count is malformed', () => {
+      // A negative or non-finite per-detail tokenCount voids cache repricing entirely
+      // (getGoogleCacheReadUsage returns undefined), so cost equals the full base cost.
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      expect(full).toBeCloseTo(0.0155, 10);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: Number.NaN }],
+        }),
+      ).toBe(full);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: -5 }],
+        }),
+      ).toBe(full);
+    });
+
+    it.each([
+      ['non-array details', { 0: { modality: 'TEXT', tokenCount: 8000 }, length: 1 }],
+      ['a null detail', [null]],
+      ['a non-string modality', [{ modality: 7, tokenCount: 8000 }]],
+    ])('should ignore malformed cache metadata with %s', (_description, cacheTokensDetails) => {
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      const actual = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails,
+      } as any);
+
+      expect(actual).toBe(full);
+    });
+
+    it('should fall back when individually finite detail counts overflow in aggregate', () => {
+      const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const actual = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [
+          { modality: 'TEXT', tokenCount: Number.MAX_VALUE },
+          { modality: 'TEXT', tokenCount: Number.MAX_VALUE },
+        ],
+      });
+
+      expect(actual).toBe(full);
+    });
+
+    it('should not discount when every cached detail has an unknown modality', () => {
+      // An unrecognized modality is left unpriced (pricedTokenCount === 0), so the whole
+      // cache-read adjustment is skipped and the undiscounted base cost is returned.
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'FUTURE_MODALITY', tokenCount: 8000 }],
+        }),
+      ).toBe(full);
+    });
+
+    it('should clamp number-form cache pricing to the prompt token count', () => {
+      // gemini-3.1-pro-preview uses number-form cacheRead (0.2/1M at the base tier). When
+      // cachedContentTokenCount exceeds promptTokens, only promptTokens are repriced.
+      const discounted = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000, false, {
+        cachedContentTokenCount: 120000,
+      });
+      // base 0.8; all 100000 prompt tokens repriced at 0.2/1M instead of 2.0/1M.
+      expect(discounted).toBeCloseTo(0.62, 10);
+    });
+
+    it('should use the base-tier cache rate for a tiered model below its threshold', () => {
+      // gemini-3.1-pro-preview has a tieredCost, but a 100k prompt stays under the
+      // 200k threshold, so cached tokens must be repriced at the base cacheRead
+      // (0.2/1M), not the above-threshold rate (0.4/1M).
+      const discounted = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000, false, {
+        cachedContentTokenCount: 40000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 40000 }],
+      });
+      // base 0.8; cached cost = 40000 * 0.2/1M instead of 2.0/1M.
+      expect(discounted).toBeCloseTo(0.728, 10);
+    });
+
+    it.each([
+      ['gemini-3.5-flash', 100000, undefined, 0.15],
+      ['gemini-2.5-pro', 100000, undefined, 0.125],
+      ['gemini-2.5-pro', 250001, undefined, 0.25],
+      ['gemini-3.1-flash-lite', 100000, 'AUDIO', 0.05],
+      ['gemini-2.5-flash-lite', 100000, 'TEXT', 0.01],
+      ['gemini-2.5-flash-lite', 100000, 'AUDIO', 0.03],
+      ['gemini-2.0-flash', 100000, 'AUDIO', 0.175],
+    ])('should pin the %s cache rate for %s tokens of %s modality', (modelName, tokenCount, modality, expectedRatePerMillion) => {
+      const cacheUsage = {
+        cachedContentTokenCount: tokenCount,
+        ...(modality && {
+          cacheTokensDetails: [{ modality, tokenCount }],
+          promptTokensDetails: [{ modality, tokenCount }],
+        }),
+      };
+
+      expect(calculateGoogleCost(modelName, {}, tokenCount, 0, false, cacheUsage)).toBeCloseTo(
+        (tokenCount * expectedRatePerMillion) / 1e6,
+        10,
+      );
     });
 
     it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
@@ -2677,6 +3186,35 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.002, 10);
     });
 
+    it('should not invent cache pricing for Gemini Computer Use', () => {
+      const full = calculateGoogleCost('gemini-2.5-computer-use-preview-10-2025', {}, 10000, 5000);
+      const cacheUsage = {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      };
+
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-computer-use-preview-10-2025',
+          {},
+          10000,
+          5000,
+          false,
+          cacheUsage,
+        ),
+      ).toBe(full);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-computer-use-preview-10-2025',
+          {},
+          10000,
+          5000,
+          true,
+          cacheUsage,
+        ),
+      ).toBe(full);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2739,15 +3277,28 @@ describe('util', () => {
     });
 
     it('should calculate cost for gemini-flash-latest using flash pricing', () => {
-      // gemini-flash-latest aliases the current Flash snapshot: input=0.3/1M, output=2.5/1M
+      // The rolling alias tracks the current stable Gemini 3.5 Flash release.
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.00155, 10);
+      expect(cost).toBeCloseTo(0.006, 10);
+      expect(cost).toBe(calculateGoogleCost('gemini-3.5-flash', {}, 1000, 500));
+
+      const cachedCost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500, false, {
+        cachedContentTokenCount: 800,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 800 }],
+      });
+      expect(cachedCost).toBeCloseTo(0.00492, 10);
     });
 
     it('should calculate cost for gemini-flash-lite-latest using flash-lite alias pricing', () => {
-      // gemini-flash-lite-latest tracks the current Flash-Lite tier: input=0.1/1M, output=0.4/1M
+      // gemini-flash-lite-latest tracks the current Gemini 3.1 Flash-Lite release.
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0003, 10);
+      expect(cost).toBeCloseTo(0.001, 10);
+
+      const cachedCost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500, false, {
+        cachedContentTokenCount: 800,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 800 }],
+      });
+      expect(cachedCost).toBeCloseTo(0.00082, 10);
     });
 
     it('should return undefined for shutdown models', () => {
@@ -2778,6 +3329,18 @@ describe('util', () => {
       // Legacy PaLM models don't have pricing
       expect(calculateGoogleCost('chat-bison', {}, 100, 50)).toBeUndefined();
       expect(calculateGoogleCost('gemma', {}, 100, 50)).toBeUndefined();
+    });
+
+    it('keeps Vertex cache pricing self-consistent (every vertexCost defines cacheRead when its base cost does)', () => {
+      // In Vertex mode the base input rate comes from vertexCost.input while the cache-read
+      // discount reads cacheRead from the same source. If a model defined vertexCost without
+      // a cacheRead while its AI Studio cost has one, repricing would mix a Vertex input rate
+      // with an AI Studio cache rate. This invariant prevents that drift as models are added.
+      for (const model of GOOGLE_MODELS) {
+        if (model.vertexCost && model.cost?.cacheRead != null) {
+          expect(model.vertexCost.cacheRead).not.toBeUndefined();
+        }
+      }
     });
 
     it('should respect custom cost override in config', () => {

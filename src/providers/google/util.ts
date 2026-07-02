@@ -10,14 +10,9 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import {
-  calculateCost,
-  type ProviderConfig,
-  parseChatPrompt,
-  transformToolChoice,
-} from '../shared';
+import { type ProviderConfig, parseChatPrompt, transformToolChoice } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GOOGLE_MODELS, type GoogleModelCost } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -211,6 +206,236 @@ export function stripExecutableToolFileReferences(
   return stripExecutableToolFileReferencesFromValue(renderVarsInObject(tools, vars));
 }
 
+interface GeminiTokenDetails {
+  modality?: string;
+  tokenCount?: number;
+}
+
+export interface GeminiCacheUsageMetadata {
+  cachedContentTokenCount?: number;
+  cacheTokensDetails?: GeminiTokenDetails[];
+  promptTokensDetails?: GeminiTokenDetails[];
+}
+
+interface GoogleCacheReadUsage {
+  costAdjustment: number;
+}
+
+interface GooglePromptInputUsage {
+  audioTokens: number;
+  cost: number;
+  hasCompleteModalityDetails: boolean;
+}
+
+// Modalities Google bills at the text/image/video rate. An unspecified or omitted
+// modality defaults to this tier, and DOCUMENT (e.g. PDF) tokens use the image rate.
+const TEXT_IMAGE_VIDEO_MODALITIES = new Set([
+  '',
+  'modality_unspecified',
+  'text',
+  'image',
+  'video',
+  'document',
+]);
+
+type GoogleTokenModality = 'audio' | 'textImageVideo';
+
+interface ParsedGoogleTokenDetails {
+  details: Array<{ modality: GoogleTokenModality | undefined; tokenCount: number }>;
+  tokenCount: number;
+}
+
+function getGoogleTokenModality(modality: unknown): GoogleTokenModality | undefined {
+  if (modality != null && typeof modality !== 'string') {
+    return undefined;
+  }
+
+  const normalizedModality = modality?.toLowerCase() ?? '';
+  if (TEXT_IMAGE_VIDEO_MODALITIES.has(normalizedModality)) {
+    return 'textImageVideo';
+  }
+  return normalizedModality === 'audio' ? 'audio' : undefined;
+}
+
+function parseGoogleTokenDetails(details: unknown): ParsedGoogleTokenDetails | undefined {
+  if (!Array.isArray(details)) {
+    return undefined;
+  }
+
+  const parsedDetails: ParsedGoogleTokenDetails['details'] = [];
+  let totalTokenCount = 0;
+  for (const rawDetail of details) {
+    if (rawDetail == null || typeof rawDetail !== 'object') {
+      return undefined;
+    }
+
+    const { modality, tokenCount } = rawDetail as GeminiTokenDetails;
+    if (
+      (modality != null && typeof modality !== 'string') ||
+      !Number.isFinite(tokenCount) ||
+      tokenCount == null ||
+      tokenCount < 0
+    ) {
+      return undefined;
+    }
+
+    totalTokenCount += tokenCount;
+    if (!Number.isFinite(totalTokenCount)) {
+      return undefined;
+    }
+    parsedDetails.push({ modality: getGoogleTokenModality(modality), tokenCount });
+  }
+
+  return { details: parsedDetails, tokenCount: totalTokenCount };
+}
+
+function getGooglePromptInputUsage(
+  cost: GoogleModelCost,
+  promptTokens: number,
+  promptTokensDetails: unknown,
+): GooglePromptInputUsage {
+  const fallback = {
+    audioTokens: 0,
+    cost: promptTokens * cost.input,
+    hasCompleteModalityDetails: false,
+  };
+  if (cost.audioInput == null || !Array.isArray(promptTokensDetails)) {
+    return fallback;
+  }
+
+  const parsedDetails = parseGoogleTokenDetails(promptTokensDetails);
+  if (
+    parsedDetails == null ||
+    parsedDetails.tokenCount !== promptTokens ||
+    parsedDetails.details.some(({ modality }) => modality == null)
+  ) {
+    return fallback;
+  }
+
+  const audioTokens = parsedDetails.details.reduce(
+    (total, detail) => total + (detail.modality === 'audio' ? detail.tokenCount : 0),
+    0,
+  );
+  return {
+    audioTokens,
+    cost: fallback.cost + audioTokens * (cost.audioInput - cost.input),
+    hasCompleteModalityDetails: true,
+  };
+}
+
+function getGoogleCacheAdjustmentRate(
+  cost: GoogleModelCost,
+  promptInputUsage: GooglePromptInputUsage,
+  modality: GoogleTokenModality,
+): number | undefined {
+  const cacheReadRate =
+    typeof cost.cacheRead === 'number' ? cost.cacheRead : cost.cacheRead?.[modality];
+  if (cacheReadRate == null) {
+    return undefined;
+  }
+  if (modality === 'audio') {
+    return promptInputUsage.hasCompleteModalityDetails && cost.audioInput != null
+      ? cacheReadRate - cost.audioInput
+      : undefined;
+  }
+  return cacheReadRate - cost.input;
+}
+
+function getGoogleCacheReadUsage(
+  cost: GoogleModelCost | undefined,
+  promptTokens: number,
+  promptInputUsage: GooglePromptInputUsage,
+  cacheUsage: GeminiCacheUsageMetadata | undefined,
+): GoogleCacheReadUsage | undefined {
+  const cachedTokens = cacheUsage?.cachedContentTokenCount;
+  if (
+    !cost?.cacheRead ||
+    !Number.isFinite(promptTokens) ||
+    promptTokens <= 0 ||
+    !Number.isFinite(cachedTokens) ||
+    cachedTokens == null ||
+    cachedTokens <= 0
+  ) {
+    return undefined;
+  }
+
+  const cachedTokenLimit = Math.min(promptTokens, cachedTokens);
+  if (typeof cost.cacheRead === 'number' && cost.audioInput == null) {
+    return {
+      costAdjustment: cachedTokenLimit * (cost.cacheRead - cost.input),
+    };
+  }
+
+  const parsedDetails = parseGoogleTokenDetails(cacheUsage?.cacheTokensDetails);
+  if (parsedDetails == null || parsedDetails.tokenCount === 0) {
+    return undefined;
+  }
+
+  if (promptInputUsage.hasCompleteModalityDetails) {
+    const cachedAudioTokens = parsedDetails.details.reduce(
+      (total, detail) => total + (detail.modality === 'audio' ? detail.tokenCount : 0),
+      0,
+    );
+    const cachedTextImageVideoTokens = parsedDetails.details.reduce(
+      (total, detail) => total + (detail.modality === 'textImageVideo' ? detail.tokenCount : 0),
+      0,
+    );
+    if (
+      cachedAudioTokens > promptInputUsage.audioTokens ||
+      cachedTextImageVideoTokens > promptTokens - promptInputUsage.audioTokens
+    ) {
+      return undefined;
+    }
+  }
+
+  let costAdjustment = 0;
+  let pricedTokenCount = 0;
+  let hasUnpricedTokens = false;
+  const adjustmentRates = new Set<number>();
+
+  for (const { modality, tokenCount } of parsedDetails.details) {
+    if (tokenCount === 0) {
+      continue;
+    }
+    if (modality == null) {
+      hasUnpricedTokens = true;
+      continue;
+    }
+
+    const adjustmentRate = getGoogleCacheAdjustmentRate(cost, promptInputUsage, modality);
+    if (adjustmentRate == null) {
+      hasUnpricedTokens = true;
+      continue;
+    }
+
+    pricedTokenCount += tokenCount;
+    adjustmentRates.add(adjustmentRate);
+    costAdjustment += tokenCount * adjustmentRate;
+    if (!Number.isFinite(pricedTokenCount) || !Number.isFinite(costAdjustment)) {
+      return undefined;
+    }
+  }
+
+  if (pricedTokenCount === 0) {
+    return undefined;
+  }
+
+  if (parsedDetails.tokenCount > cachedTokenLimit) {
+    // If the aggregate and mixed-modality detail disagree, there is no safe way
+    // to know which modality counts fit within the reported cached-token total.
+    if (hasUnpricedTokens || adjustmentRates.size > 1) {
+      return undefined;
+    }
+
+    // Every detailed token has the same known adjustment, so the priced count can be
+    // safely capped without multiplying an overflowed aggregate.
+    const [adjustmentRate] = adjustmentRates;
+    return { costAdjustment: cachedTokenLimit * adjustmentRate };
+  }
+
+  return { costAdjustment };
+}
+
 /**
  * Calculates the cost for a Google API call.
  *
@@ -223,6 +448,7 @@ export function stripExecutableToolFileReferences(
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
+ * @param cacheUsage - Prompt and cached input token modality breakdowns
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -231,27 +457,53 @@ export function calculateGoogleCost(
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
+  cacheUsage?: GeminiCacheUsageMetadata,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
-
-  // Check for tiered pricing (higher rates above token threshold)
-  if (promptTokens != null && completionTokens != null) {
-    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
-
-    // Use Vertex-specific pricing when available
-    if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
+  if (promptTokens == null || completionTokens == null) {
+    return undefined;
   }
 
-  // Use standard calculation for non-tiered pricing
-  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  const specialCostSource =
+    model?.tieredCost && promptTokens > model.tieredCost.threshold
+      ? model.tieredCost.above
+      : isVertexMode
+        ? model?.vertexCost
+        : undefined;
+  const costSource = specialCostSource ?? model?.cost;
+  if (
+    costSource == null ||
+    (specialCostSource == null &&
+      (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)))
+  ) {
+    return undefined;
+  }
+
+  const explicitInputCost = config.inputCost ?? config.cost;
+  const promptInputUsage =
+    explicitInputCost == null
+      ? getGooglePromptInputUsage(costSource, promptTokens, cacheUsage?.promptTokensDetails)
+      : {
+          audioTokens: 0,
+          cost: promptTokens * explicitInputCost,
+          hasCompleteModalityDetails: false,
+        };
+  const outputCost = config.outputCost ?? config.cost ?? costSource.output;
+  const baseCost = promptInputUsage.cost + outputCost * completionTokens;
+
+  // Explicit input-cost overrides remain authoritative. An output-only override still
+  // permits the built-in prompt-modality and cache-read rates.
+  if (explicitInputCost != null) {
+    return baseCost;
+  }
+
+  const cacheReadUsage = getGoogleCacheReadUsage(
+    costSource,
+    promptTokens,
+    promptInputUsage,
+    cacheUsage,
+  );
+  return baseCost + (cacheReadUsage?.costAdjustment ?? 0);
 }
 
 const ajv = getAjv();
@@ -292,11 +544,70 @@ interface Candidate {
   webSearchQueries?: string[];
 }
 
-interface GeminiUsageMetadata {
+interface GeminiUsageMetadata extends GeminiCacheUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
   thoughtsTokenCount?: number;
+}
+
+/**
+ * Build the completion-token details for a Gemini response that carries reasoning
+ * (thinking) tokens, returning `undefined` when no usable reasoning count is present.
+ * A negative or non-finite count is treated as malformed and bounded/dropped.
+ *
+ * This deliberately reports ONLY reasoning details and never `cacheReadInputTokens`.
+ * The cached (promptfoo cache-hit) provider branches use this helper because a cache hit
+ * performs no Gemini context-cache read, so surfacing a read would double-count it (see
+ * `stripCachedContextReadDetails` in vertex.ts for the disk-cache equivalent).
+ */
+export function getCachedReasoningDetails(
+  thoughtsTokenCount: number | undefined,
+): { reasoning: number; acceptedPrediction: number; rejectedPrediction: number } | undefined {
+  if (thoughtsTokenCount == null || !Number.isFinite(thoughtsTokenCount)) {
+    return undefined;
+  }
+  return {
+    reasoning: Math.max(0, thoughtsTokenCount),
+    acceptedPrediction: 0,
+    rejectedPrediction: 0,
+  };
+}
+
+export function getGoogleTokenUsageCompletionDetails(
+  usageMetadata:
+    | {
+        thoughtsTokenCount?: number;
+        promptTokenCount?: number;
+        cachedContentTokenCount?: number;
+      }
+    | undefined,
+) {
+  const reasoningDetails = getCachedReasoningDetails(usageMetadata?.thoughtsTokenCount);
+  const reportedCacheReadInputTokens = usageMetadata?.cachedContentTokenCount;
+  const promptTokens = usageMetadata?.promptTokenCount;
+  const boundedPromptTokens =
+    promptTokens != null && Number.isFinite(promptTokens) ? Math.max(0, promptTokens) : undefined;
+  const cacheReadInputTokens =
+    reportedCacheReadInputTokens != null && Number.isFinite(reportedCacheReadInputTokens)
+      ? Math.max(
+          0,
+          boundedPromptTokens === undefined
+            ? reportedCacheReadInputTokens
+            : Math.min(reportedCacheReadInputTokens, boundedPromptTokens),
+        )
+      : undefined;
+  const hasCacheReadTokens = cacheReadInputTokens !== undefined;
+  if (!reasoningDetails && !hasCacheReadTokens) {
+    return undefined;
+  }
+
+  return {
+    ...reasoningDetails,
+    ...(hasCacheReadTokens && {
+      cacheReadInputTokens,
+    }),
+  };
 }
 
 export interface GeminiErrorResponse {
