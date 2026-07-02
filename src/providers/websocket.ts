@@ -39,6 +39,10 @@ function getWebSocketErrorMessage(err: WebSocket.ErrorEvent | Error | unknown): 
   const error =
     err && typeof err === 'object' && 'error' in err ? (err as WebSocket.ErrorEvent).error : err;
 
+  if (typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean') {
+    return String(error);
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
