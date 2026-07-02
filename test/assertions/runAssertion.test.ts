@@ -3735,6 +3735,34 @@ describe('runAssertion', () => {
       );
     });
 
+    it('should handle file references in nested object values', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: {
+          expected: 'file://expected_output.txt',
+        },
+      };
+
+      const expectedContent = 'Expected output';
+      vi.mocked(fs.readFileSync).mockReturnValue(expectedContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '{"expected":"Expected output"}' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/expected_output.txt', 'utf8');
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.renderedAssertionValue).toEqual({
+        expected: 'Expected output',
+      });
+    });
+
     it('should handle file reference in object value', async () => {
       const assertion: Assertion = {
         type: 'is-json',
@@ -3811,6 +3839,74 @@ describe('runAssertion', () => {
       });
 
       expect(result.metadata?.renderedAssertionValue).toBe('apple, banana, cherry');
+    });
+
+    it('should store rendered array assertion values', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: ['{{ expected_name }}'],
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          expected_name: 'Jane',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: '["John"]' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.renderedAssertionValue).toEqual(['Jane']);
+      expect(result.assertion?.value).toEqual(['{{ expected_name }}']);
+    });
+
+    it('should render nested object assertion values', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: {
+          user: {
+            name: '{{ expected_name }}',
+            roles: ['{{ expected_role }}'],
+          },
+        },
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          expected_name: 'Jane',
+          expected_role: 'admin',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: '{"user":{"name":"John","roles":["admin"]}}' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.renderedAssertionValue).toEqual({
+        user: {
+          name: 'Jane',
+          roles: ['admin'],
+        },
+      });
+      expect(result.reason).toContain('"Jane"');
+      expect(result.reason).not.toContain('{{ expected_name }}');
+      expect(result.assertion?.value).toEqual({
+        user: {
+          name: '{{ expected_name }}',
+          roles: ['{{ expected_role }}'],
+        },
+      });
     });
 
     it('should not store rendered value when template equals original', async () => {

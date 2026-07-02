@@ -122,6 +122,38 @@ describe('EvalOutputPromptDialog', () => {
     expect(document.body.querySelector('svg.text-emerald-600')).toBeInTheDocument();
   });
 
+  it('displays JSON diffs for failed object equality assertions', async () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        output={JSON.stringify({ name: 'Jane', role: 'admin', enabled: true })}
+        gradingResults={[
+          {
+            pass: false,
+            score: 0,
+            assertion: {
+              type: 'equals' as AssertionType,
+              value: { name: 'John', role: 'user', enabled: true },
+            },
+            reason: 'JSON differs',
+          } satisfies GradingResult,
+        ]}
+      />,
+    );
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
+    });
+
+    expect(screen.getByText('2 differences found')).toBeInTheDocument();
+    expect(screen.getByText('name')).toBeInTheDocument();
+    expect(screen.getByText('expected: "John"')).toBeInTheDocument();
+    expect(screen.getByText('actual: "Jane"')).toBeInTheDocument();
+    expect(screen.getByText('role')).toBeInTheDocument();
+    expect(screen.getByText('expected: "user"')).toBeInTheDocument();
+    expect(screen.getByText('actual: "admin"')).toBeInTheDocument();
+  });
+
   it('does not display metrics column when no metrics are present', async () => {
     const propsWithoutMetrics = {
       ...defaultProps,
