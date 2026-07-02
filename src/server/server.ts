@@ -179,26 +179,66 @@ export function createApp() {
     },
   );
 
+  app.get('/api/results/:id/rows/:testIdx/:promptIdx', async (req: Request, res: Response) => {
+    const paramsResult = ServerSchemas.ResultRow.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      replyValidationError(res, paramsResult.error);
+      return;
+    }
+    const queryResult = ServerSchemas.ResultRow.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      replyValidationError(res, queryResult.error);
+      return;
+    }
+    const { id, testIdx, promptIdx } = paramsResult.data;
+    const { resultId } = queryResult.data;
+
+    try {
+      if (!(await Eval.exists(id))) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+      const result = await Eval.getResultByIdAndIndices(id, testIdx, promptIdx, resultId);
+      if (!result) {
+        res.status(404).json({ error: 'Result row not found' });
+        return;
+      }
+      res.json(ServerSchemas.ResultRow.Response.parse({ data: result }));
+    } catch (error) {
+      sendError(res, 500, 'Failed to load result row', error);
+    }
+  });
+
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ServerSchemas.Result.Params.safeParse(req.params);
     if (!paramsResult.success) {
       replyValidationError(res, paramsResult.error);
       return;
     }
-    const { id } = paramsResult.data;
-    const file = await readResult(id);
-    if (!file) {
-      res.status(404).json({ error: 'Result not found' });
+    const queryResult = ServerSchemas.Result.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      replyValidationError(res, queryResult.error);
       return;
     }
-    res.json(
-      ServerSchemas.Result.Response.parse({
-        data: {
-          ...file.result,
-          config: redactAzureBlobSasTokens(file.result.config),
-        },
-      }),
-    );
+    const { id } = paramsResult.data;
+    const { includeTraces, resultProjection } = queryResult.data;
+    try {
+      const file = await readResult(id, { includeTraces, resultProjection });
+      if (!file) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+      res.json(
+        ServerSchemas.Result.Response.parse({
+          data: {
+            ...file.result,
+            config: redactAzureBlobSasTokens(file.result.config),
+          },
+        }),
+      );
+    } catch (error) {
+      sendError(res, 500, 'Failed to load result', error);
+    }
   });
 
   app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {

@@ -1,3 +1,4 @@
+import { getActualPrompt } from '@app/utils/providerResponse';
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
 import {
   deserializePolicyIdFromMetric,
@@ -22,6 +23,39 @@ export interface TestWithMetadata {
   };
 }
 
+function stringifyReportValue(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+export function getReportPrompt(result: EvaluateResult, injectVar: string): string {
+  const actualPrompt = getActualPrompt(result.response);
+  if (actualPrompt !== undefined) {
+    return actualPrompt;
+  }
+
+  const candidateVars = [injectVar, 'query', 'prompt', 'question'];
+  for (const key of new Set(candidateVars)) {
+    if (!Object.prototype.hasOwnProperty.call(result.vars, key)) {
+      continue;
+    }
+    const value = stringifyReportValue(result.vars?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return result.prompt.raw;
+}
+
 export function getStrategyIdFromTest(test: TestWithMetadata): string {
   // Check metadata directly on test
   if (test.metadata?.strategyId) {
@@ -38,12 +72,22 @@ export function getStrategyIdFromTest(test: TestWithMetadata): string {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  if (
-    result.metadata?.pluginId &&
-    // Policy plugins are handled separately
-    result.metadata.pluginId !== 'policy'
-  ) {
-    return result.metadata.pluginId as string;
+  const resultPluginId = result.metadata?.pluginId;
+  const testCasePluginId = result.testCase?.metadata?.pluginId;
+  const isPolicy = testCasePluginId === 'policy' || resultPluginId === 'policy';
+  if (isPolicy) {
+    const policyId = result.testCase?.metadata?.policyId ?? result.metadata?.policyId;
+    if (typeof policyId === 'string') {
+      return policyId;
+    }
+  }
+
+  // Policy plugins are handled separately above.
+  if (typeof resultPluginId === 'string' && resultPluginId !== 'policy') {
+    return resultPluginId;
+  }
+  if (typeof testCasePluginId === 'string' && testCasePluginId !== 'policy') {
+    return testCasePluginId;
   }
 
   const harmCategory = result.vars?.harmCategory || result.metadata?.harmCategory;
@@ -55,7 +99,7 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
     result.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
 
   for (const metric of metricNames) {
-    if (!metric) {
+    if (typeof metric !== 'string' || !metric) {
       continue;
     }
 

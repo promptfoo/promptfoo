@@ -1,6 +1,8 @@
+import { mockCallApiResponse, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { mockWindowOpen } from '@app/tests/browserMocks';
+import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,8 +14,17 @@ vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(),
 }));
 
+vi.mock('@app/utils/api');
+
+const { mockEvalOutputPromptDialog } = vi.hoisted(() => ({
+  mockEvalOutputPromptDialog: vi.fn(),
+}));
+
 vi.mock('../../../eval/components/EvalOutputPromptDialog', () => ({
-  default: () => null,
+  default: (props: Record<string, unknown>) => {
+    mockEvalOutputPromptDialog(props);
+    return null;
+  },
 }));
 
 vi.mock('./PluginStrategyFlow', () => ({
@@ -80,6 +91,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetCallApiMock();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
     mockWindowOpen();
@@ -97,6 +109,28 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
     expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
     expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it('uses test-case plugin identity when result metadata is unavailable', async () => {
+    const user = userEvent.setup();
+    const result = {
+      ...createMockEvaluateResult({}),
+      metadata: undefined,
+      testCase: { ...mockTestCase, metadata: { pluginId: 'harmful:violent-crime' } },
+    };
+    renderWithProviders(
+      <RiskCategoryDrawer
+        {...defaultProps}
+        failures={[{ ...defaultProps.failures[0], result }]}
+        category="harmful:violent-crime"
+      />,
+    );
+
+    await user.click(screen.getByText('View All Logs'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22harmful%3Aviolent-crime%22%7D%5D',
+    );
   });
 
   it('should open in new tab when ctrl/cmd clicking View All Logs button', async () => {
@@ -216,6 +250,273 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
     expect(stringifySpy).toHaveBeenCalledWith(complexOutput);
     expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
+  });
+
+  it('loads full grading details on demand using the coordinate fallback', async () => {
+    const fullResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola', storedGraderResult: { large: 'payload' } }),
+      response: { output: 'Full output', prompt: 'Full provider prompt' },
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Failed test',
+        metadata: { renderedGradingPrompt: 'Full grading prompt' },
+      },
+    };
+    mockCallApiResponse({
+      data: fullResult,
+    });
+    const user = userEvent.setup();
+
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith('/results/test-eval-123/rows/0/0', {
+        cache: 'no-store',
+      });
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          open: true,
+          output: 'Full output',
+          providerPrompt: 'Full provider prompt',
+          gradingResults: [fullResult.gradingResult],
+          metadata: fullResult.metadata,
+        }),
+      );
+    });
+  });
+
+  it('caches selected full result details by result id', async () => {
+    const compactResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      id: 'result/id with space',
+    };
+    const fullResult = {
+      ...compactResult,
+      response: { output: 'Full output', prompt: 'Full provider prompt' },
+    };
+    mockCallApiResponse({ data: fullResult });
+    const user = userEvent.setup();
+    const props = {
+      ...defaultProps,
+      failures: [{ ...defaultProps.failures[0], result: compactResult }],
+    };
+
+    renderWithProviders(<RiskCategoryDrawer {...props} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith(
+        '/results/test-eval-123/rows/0/0?resultId=result%2Fid%20with%20space',
+        { cache: 'no-store' },
+      );
+      expect(screen.getByRole('button', { name: 'Details' })).toBeEnabled();
+    });
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reuse cached details for different result ids with the same coordinates', async () => {
+    const firstCompactResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      id: 'result-a',
+    };
+    const secondCompactResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      id: 'result-b',
+    };
+    const firstFullResult = {
+      ...firstCompactResult,
+      response: { output: 'First full output' },
+    };
+    const secondFullResult = {
+      ...secondCompactResult,
+      response: { output: 'Second full output' },
+    };
+    mockCallApiRoutes([
+      {
+        path: '/results/test-eval-123/rows/0/0?resultId=result-a',
+        response: { data: firstFullResult },
+      },
+      {
+        path: '/results/test-eval-123/rows/0/0?resultId=result-b',
+        response: { data: secondFullResult },
+      },
+    ]);
+    const user = userEvent.setup();
+    const props = {
+      ...defaultProps,
+      failures: [
+        { ...defaultProps.failures[0], result: firstCompactResult },
+        { ...defaultProps.failures[0], result: secondCompactResult },
+      ],
+    };
+
+    renderWithProviders(<RiskCategoryDrawer {...props} />);
+
+    const detailsButtons = screen.getAllByRole('button', { name: 'Details' });
+    await user.click(detailsButtons[0]);
+    await waitFor(() => {
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: true, output: 'First full output' }),
+      );
+    });
+    await user.click(detailsButtons[1]);
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: true, output: 'Second full output' }),
+      );
+    });
+  });
+
+  it('keeps detail fetch failures visible in the category drawer', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockCallApiResponse({ error: 'forced failure' }, { status: 500 });
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(
+      await screen.findByText('Some detailed evaluation data could not be loaded.', {
+        selector: 'p[role="alert"]',
+      }),
+    ).toBeVisible();
+    expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: false }),
+    );
+    expect(screen.getByRole('button', { name: 'Details' })).toBeEnabled();
+
+    rerender(<RiskCategoryDrawer {...defaultProps} open={false} />);
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Some detailed evaluation data could not be loaded.', {
+          selector: 'p[role="alert"]',
+        }),
+      ).not.toBeInTheDocument();
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('ignores stale detail responses after switching categories', async () => {
+    const staleResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      response: { output: 'Stale category output' },
+    };
+    const staleBody = { data: staleResult };
+    let resolveRequest: (body: typeof staleBody) => void = () => {};
+    const pendingRequest = new Promise<typeof staleBody>((resolve) => {
+      resolveRequest = resolve;
+    });
+    mockCallApiRoutes([
+      {
+        path: '/results/test-eval-123/rows/0/0',
+        response: () => pendingRequest,
+      },
+    ]);
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+    expect(screen.getByRole('button', { name: 'Loading...' })).toBeDisabled();
+    expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: false }),
+    );
+    rerender(<RiskCategoryDrawer {...defaultProps} category="sql-injection" />);
+
+    await act(async () => {
+      resolveRequest(staleBody);
+      await pendingRequest;
+    });
+
+    await waitFor(() => {
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false }),
+      );
+    });
+    expect(mockEvalOutputPromptDialog).not.toHaveBeenCalledWith(
+      expect.objectContaining({ output: 'Stale category output' }),
+    );
+  });
+
+  it('ignores stale detail responses after the category drawer closes', async () => {
+    const staleResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      response: { output: 'Stale closed-drawer output' },
+    };
+    const staleBody = { data: staleResult };
+    let resolveRequest: (body: typeof staleBody) => void = () => {};
+    const pendingRequest = new Promise<typeof staleBody>((resolve) => {
+      resolveRequest = resolve;
+    });
+    mockCallApiRoutes([
+      {
+        path: '/results/test-eval-123/rows/0/0',
+        response: () => pendingRequest,
+      },
+    ]);
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+    rerender(<RiskCategoryDrawer {...defaultProps} open={false} />);
+
+    await act(async () => {
+      resolveRequest(staleBody);
+      await pendingRequest;
+    });
+
+    await waitFor(() => {
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false }),
+      );
+    });
+    expect(mockEvalOutputPromptDialog).not.toHaveBeenCalledWith(
+      expect.objectContaining({ output: 'Stale closed-drawer output' }),
+    );
+  });
+
+  it('ignores stale detail responses after switching evaluations', async () => {
+    const staleResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      response: { output: 'Stale output', prompt: 'Stale prompt' },
+    };
+    const staleBody = { data: staleResult };
+    let resolveRequest: (body: typeof staleBody) => void = () => {};
+    const pendingRequest = new Promise<typeof staleBody>((resolve) => {
+      resolveRequest = resolve;
+    });
+    mockCallApiRoutes([
+      {
+        path: '/results/test-eval-123/rows/0/0',
+        response: () => pendingRequest,
+      },
+    ]);
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+    rerender(<RiskCategoryDrawer {...defaultProps} evalId="next-eval" />);
+
+    await act(async () => {
+      resolveRequest(staleBody);
+      await pendingRequest;
+    });
+
+    await waitFor(() => {
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false }),
+      );
+    });
+    expect(mockEvalOutputPromptDialog).not.toHaveBeenCalledWith(
+      expect.objectContaining({ output: 'Stale output' }),
+    );
   });
 });
 
