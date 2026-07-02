@@ -1,6 +1,6 @@
 import useApiConfig from '@app/stores/apiConfig';
 import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
-import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
+import type { ResultDetailResponse, UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
 
 export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
@@ -47,6 +47,25 @@ export async function fetchUserId(): Promise<string | null> {
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch the full prompt, provider response, and test case for a table cell whose
+ * large fields were omitted from `/eval/:id/table`.
+ */
+export async function fetchCellDetail(
+  evalId: string,
+  resultId: string,
+): Promise<ResultDetailResponse | null> {
+  try {
+    const response = await callApi(`/eval/${evalId}/results/${resultId}/detail`);
+    if (!response.ok) {
+      return null;
+    }
+    return response.json();
+  } catch {
     return null;
   }
 }

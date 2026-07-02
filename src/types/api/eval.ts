@@ -109,6 +109,22 @@ export const EvalTableQuerySchema = z
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
+// GET /api/eval/:evalId/results/:resultId/detail
+
+export const ResultDetailParamsSchema = z.object({
+  evalId: z.string().min(1),
+  resultId: z.string().min(1),
+});
+
+export const ResultDetailResponseSchema = z.object({
+  prompt: z.string(),
+  response: z.record(z.string(), z.unknown()).optional(),
+  testCase: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type ResultDetailParams = z.infer<typeof ResultDetailParamsSchema>;
+export type ResultDetailResponse = z.infer<typeof ResultDetailResponseSchema>;
+
 const ShallowEvaluateTableSchema = z
   .object({
     head: z
@@ -371,6 +387,10 @@ export const EvalSchemas = {
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
     JsonExportResponse: EvalTableJsonExportResponseSchema,
+  },
+  ResultDetail: {
+    Params: ResultDetailParamsSchema,
+    Response: ResultDetailResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,
