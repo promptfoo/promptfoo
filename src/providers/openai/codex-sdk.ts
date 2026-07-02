@@ -642,6 +642,19 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
   }
 }
 
+interface CodexCompatibilityPreflightEntry {
+  controller: AbortController;
+  promise: Promise<void>;
+  settled: boolean;
+  waiters: number;
+}
+
+function createCodexCompatibilityAbortError(): Error {
+  const error = new Error('The Codex compatibility preflight was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
     // GPT-5.6 limited-preview models
@@ -682,7 +695,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
   private threadRunQueues: Map<string, Promise<void>> = new Map();
-  private compatibilityPreflights: Map<string, Promise<void>> = new Map();
+  private compatibilityPreflights: Map<string, CodexCompatibilityPreflightEntry> = new Map();
+  private activeCompatibilityPreflights: Set<Promise<void>> = new Set();
   private deepTracingWarningShown = false; // Show warning once per instance
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
@@ -750,7 +764,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Clean up threads
     this.threads.clear();
     this.threadRunQueues.clear();
+    const cachedCompatibilityPreflights = [...this.compatibilityPreflights.values()];
+    for (const entry of cachedCompatibilityPreflights) {
+      if (!entry.settled) {
+        entry.controller.abort();
+      }
+    }
     this.compatibilityPreflights.clear();
+    await Promise.allSettled([...this.activeCompatibilityPreflights]);
+    this.activeCompatibilityPreflights.clear();
 
     // Clean up Codex instances to release resources (child processes, file handles)
     for (const instance of this.codexInstances.values()) {
@@ -2193,7 +2215,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig.skip_git_repo_check,
       );
 
-      const codexInstance = await this.getCodexInstanceForTurn(env, resolvedConfig, apiKey);
+      const codexInstance = await this.getCodexInstanceForTurn(
+        env,
+        resolvedConfig,
+        apiKey,
+        callOptions?.abortSignal,
+      );
       const activeInstance = codexInstance.activeInstance;
       localInstance = codexInstance.localInstance;
       useLocalInstance = codexInstance.useLocalInstance;
@@ -2250,6 +2277,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
     apiKey: string | undefined,
+    abortSignal?: AbortSignal,
   ): Promise<{
     activeInstance: any;
     instanceKey: string;
@@ -2262,7 +2290,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexSdkEntryPoint = loadedSdk.entryPoint;
     }
 
-    await this.ensureCodexCompatibility(env, resolvedConfig);
+    await this.ensureCodexCompatibility(env, resolvedConfig, abortSignal);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
@@ -2299,7 +2327,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private async ensureCodexCompatibility(
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
+    if (abortSignal?.aborted) {
+      throw createCodexCompatibilityAbortError();
+    }
     if (!this.codexSdkEntryPoint) {
       throw new Error('Codex SDK entry point is unavailable for compatibility preflight');
     }
@@ -2323,20 +2355,90 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       resolvedConfig.codex_path_override ?? '<bundled>',
       preflightEnvHash,
     ].join('\0');
-    let preflight = this.compatibilityPreflights.get(cacheKey);
-    if (!preflight) {
-      preflight = preflightCodexSdkCliCompatibility({
+    let entry = this.compatibilityPreflights.get(cacheKey);
+    if (!entry) {
+      const controller = new AbortController();
+      entry = {
+        controller,
+        promise: Promise.resolve(),
+        settled: false,
+        waiters: 0,
+      };
+      const currentEntry = entry;
+      entry.promise = preflightCodexSdkCliCompatibility({
         sdkEntryPoint: this.codexSdkEntryPoint,
         sdkModule: this.codexModule,
         codexPathOverride: resolvedConfig.codex_path_override,
         env: preflightEnv,
-      }).then((result) => {
-        logger.debug('[CodexSDK] CLI compatibility preflight passed', { ...result });
-      });
-      this.compatibilityPreflights.set(cacheKey, preflight);
+        signal: controller.signal,
+      })
+        .then(
+          (result) => {
+            logger.debug('[CodexSDK] CLI compatibility preflight passed', { ...result });
+          },
+          (error) => {
+            if (this.compatibilityPreflights.get(cacheKey) === currentEntry) {
+              this.compatibilityPreflights.delete(cacheKey);
+            }
+            throw error;
+          },
+        )
+        .finally(() => {
+          currentEntry.settled = true;
+        });
+      const currentPromise = entry.promise;
+      this.activeCompatibilityPreflights.add(currentPromise);
+      void currentPromise.then(
+        () => this.activeCompatibilityPreflights.delete(currentPromise),
+        () => this.activeCompatibilityPreflights.delete(currentPromise),
+      );
+      this.compatibilityPreflights.set(cacheKey, entry);
     }
 
-    await preflight;
+    entry.waiters += 1;
+    try {
+      await this.waitForCompatibilityPreflight(entry.promise, abortSignal);
+    } finally {
+      entry.waiters -= 1;
+      if (
+        !entry.settled &&
+        entry.waiters === 0 &&
+        this.compatibilityPreflights.get(cacheKey) === entry
+      ) {
+        this.compatibilityPreflights.delete(cacheKey);
+        entry.controller.abort();
+      }
+    }
+  }
+
+  private waitForCompatibilityPreflight(
+    preflight: Promise<void>,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    if (!abortSignal) {
+      return preflight;
+    }
+    if (abortSignal.aborted) {
+      return Promise.reject(createCodexCompatibilityAbortError());
+    }
+
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        abortSignal.removeEventListener('abort', onAbort);
+        reject(createCodexCompatibilityAbortError());
+      };
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+      preflight.then(
+        () => {
+          abortSignal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        (error) => {
+          abortSignal.removeEventListener('abort', onAbort);
+          reject(error);
+        },
+      );
+    });
   }
 
   private warnOnceForDeepTracingThreadOptions(resolvedConfig: OpenAICodexSDKConfig): void {

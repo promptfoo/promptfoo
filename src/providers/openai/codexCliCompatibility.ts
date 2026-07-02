@@ -77,6 +77,11 @@ export interface CodexCliCompatibilityOptions {
   sdkModule: any;
   codexPathOverride?: string;
   env: Record<string, string>;
+  signal?: AbortSignal;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function readJsonFile(filePath: string): PackageManifest {
@@ -180,6 +185,7 @@ function getBundledCliInvocation(
 function runVersionProbe(
   invocation: CodexCliInvocation,
   env: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<string> {
   const args = [...invocation.args, 'exec', '--experimental-json', '--version'];
 
@@ -190,11 +196,16 @@ function runVersionProbe(
       {
         encoding: 'utf8',
         env,
+        signal,
         timeout: CODEX_VERSION_TIMEOUT_MS,
         windowsHide: true,
       },
       (error, stdout, stderr) => {
         if (error) {
+          if (isAbortError(error)) {
+            reject(error);
+            return;
+          }
           const detail = [error.message, stdout, stderr]
             .filter(
               (value): value is string => typeof value === 'string' && value.trim().length > 0,
@@ -236,7 +247,7 @@ function runVersionProbe(
   });
 }
 
-async function runEventSchemaProbe(sdkModule: any): Promise<void> {
+async function runEventSchemaProbe(sdkModule: any, signal?: AbortSignal): Promise<void> {
   if (typeof sdkModule?.Codex !== 'function') {
     throw new Error('Loaded Codex SDK does not export a Codex constructor');
   }
@@ -259,9 +270,9 @@ async function runEventSchemaProbe(sdkModule: any): Promise<void> {
       workingDirectory: probeDirectory,
       skipGitRepoCheck: true,
     });
-    const result = await thread.run('compatibility-preflight', {
-      signal: AbortSignal.timeout(CODEX_EVENT_SCHEMA_TIMEOUT_MS),
-    });
+    const timeoutSignal = AbortSignal.timeout(CODEX_EVENT_SCHEMA_TIMEOUT_MS);
+    const probeSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+    const result = await thread.run('compatibility-preflight', { signal: probeSignal });
     const commandItem = result?.items?.find(
       (item: any) => item?.type === 'command_execution' && item?.id === 'compatibility-command',
     );
@@ -332,8 +343,11 @@ export async function preflightCodexSdkCliCompatibility(
 
   let selectedCliVersion: string;
   try {
-    selectedCliVersion = await runVersionProbe(invocation, options.env);
+    selectedCliVersion = await runVersionProbe(invocation, options.env, options.signal);
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Codex SDK/CLI compatibility preflight failed for SDK ${sdkVersion}: ${message}. ` +
@@ -353,8 +367,11 @@ export async function preflightCodexSdkCliCompatibility(
   }
 
   try {
-    await runEventSchemaProbe(options.sdkModule);
+    await runEventSchemaProbe(options.sdkModule, options.signal);
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     const detail = message.startsWith('Failed to parse item:')
       ? 'valid command output containing U+2028/U+2029 was split or rejected'

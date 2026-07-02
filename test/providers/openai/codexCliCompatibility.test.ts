@@ -132,12 +132,14 @@ describe('preflightCodexSdkCliCompatibility', () => {
 
   it('accepts a custom CLI with the exact SDK-declared event protocol version', async () => {
     const { sdkEntryPoint } = createSdkFixture();
+    const abortController = new AbortController();
 
     const result = await preflightCodexSdkCliCompatibility({
       sdkEntryPoint,
       sdkModule: mockSdkModule,
       codexPathOverride: '/custom/codex',
       env: { PATH: '/usr/bin' },
+      signal: abortController.signal,
     });
 
     expect(result).toEqual({
@@ -152,6 +154,7 @@ describe('preflightCodexSdkCliCompatibility', () => {
       expect.objectContaining({
         encoding: 'utf8',
         env: { PATH: '/usr/bin' },
+        signal: abortController.signal,
         timeout: 60_000,
       }),
       expect.any(Function),
@@ -279,6 +282,44 @@ describe('preflightCodexSdkCliCompatibility', () => {
     );
   });
 
+  it('preserves cancellation during the CLI version probe', async () => {
+    const { sdkEntryPoint } = createSdkFixture();
+    const abortController = new AbortController();
+    mockExecFile.mockImplementation(
+      (
+        _command: string,
+        _args: string[],
+        options: { signal: AbortSignal },
+        callback: (...args: any[]) => void,
+      ) => {
+        options.signal.addEventListener(
+          'abort',
+          () => {
+            const error = new Error('The operation was aborted');
+            error.name = 'AbortError';
+            callback(error, '', '');
+          },
+          { once: true },
+        );
+      },
+    );
+
+    const preflight = preflightCodexSdkCliCompatibility({
+      sdkEntryPoint,
+      sdkModule: mockSdkModule,
+      codexPathOverride: '/custom/codex',
+      env: {},
+      signal: abortController.signal,
+    });
+    abortController.abort();
+
+    await expect(preflight).rejects.toMatchObject({
+      message: 'The operation was aborted',
+      name: 'AbortError',
+    });
+    expect(MockSchemaCodex).not.toHaveBeenCalled();
+  });
+
   it('fails closed when the CLI version output is unrecognized', async () => {
     const { sdkEntryPoint } = createSdkFixture();
     mockExecFile.mockImplementation(
@@ -350,30 +391,67 @@ describe('preflightCodexSdkCliCompatibility', () => {
     );
   });
 
-  it('runs the zero-token event schema canary through the real installed SDK parser', async () => {
-    const sdkManifest = JSON.parse(
-      fs.readFileSync(path.resolve(path.dirname(realSdkEntryPoint), '../package.json'), 'utf8'),
+  it('passes caller cancellation to the SDK event schema probe', async () => {
+    const { sdkEntryPoint } = createSdkFixture();
+    const abortController = new AbortController();
+    mockSchemaRun.mockImplementation(
+      (_prompt: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener(
+            'abort',
+            () => {
+              const error = new Error('The operation was aborted');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true },
+          );
+        }),
     );
-    const supportedCliVersion = sdkManifest.dependencies['@openai/codex'];
-    mockVersionProbe(supportedCliVersion);
-    const realSdkModule = await import(pathToFileURL(realSdkEntryPoint).href);
-    const preflight = preflightCodexSdkCliCompatibility({
-      sdkEntryPoint: realSdkEntryPoint,
-      sdkModule: realSdkModule,
-      env: {},
-    });
 
-    if (await runtimeReadlineSplitsUnicodeSeparators()) {
-      const escapedNodeVersion = process.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      await expect(preflight).rejects.toThrow(
-        new RegExp(`cannot parse the supported CLI event schema on Node ${escapedNodeVersion}`),
-      );
-    } else {
-      await expect(preflight).resolves.toMatchObject({
-        sdkVersion: sdkManifest.version,
-        supportedCliVersion,
-        selectedCliVersion: supportedCliVersion,
-      });
-    }
+    const preflight = preflightCodexSdkCliCompatibility({
+      sdkEntryPoint,
+      sdkModule: mockSdkModule,
+      codexPathOverride: '/custom/codex',
+      env: {},
+      signal: abortController.signal,
+    });
+    await vi.waitFor(() => expect(mockSchemaRun).toHaveBeenCalledOnce());
+    abortController.abort();
+
+    await expect(preflight).rejects.toMatchObject({
+      message: 'The operation was aborted',
+      name: 'AbortError',
+    });
   });
+
+  it.skipIf(!fs.existsSync(realSdkEntryPoint))(
+    'runs the zero-token event schema canary through the real installed SDK parser',
+    async () => {
+      const sdkManifest = JSON.parse(
+        fs.readFileSync(path.resolve(path.dirname(realSdkEntryPoint), '../package.json'), 'utf8'),
+      );
+      const supportedCliVersion = sdkManifest.dependencies['@openai/codex'];
+      mockVersionProbe(supportedCliVersion);
+      const realSdkModule = await import(pathToFileURL(realSdkEntryPoint).href);
+      const preflight = preflightCodexSdkCliCompatibility({
+        sdkEntryPoint: realSdkEntryPoint,
+        sdkModule: realSdkModule,
+        env: {},
+      });
+
+      if (await runtimeReadlineSplitsUnicodeSeparators()) {
+        const escapedNodeVersion = process.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        await expect(preflight).rejects.toThrow(
+          new RegExp(`cannot parse the supported CLI event schema on Node ${escapedNodeVersion}`),
+        );
+      } else {
+        await expect(preflight).resolves.toMatchObject({
+          sdkVersion: sdkManifest.version,
+          supportedCliVersion,
+          selectedCliVersion: supportedCliVersion,
+        });
+      }
+    },
+  );
 });
