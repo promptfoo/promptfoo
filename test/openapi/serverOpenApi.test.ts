@@ -147,7 +147,26 @@ describe('server OpenAPI generation', () => {
     expect(
       getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.url,
-    ).toEqual({ type: ['string', 'null'] });
+    ).toEqual(
+      expect.objectContaining({
+        description: 'Provider URL; local file URLs are replaced with the media API URL',
+        type: ['string', 'null'],
+      }),
+    );
+    expect(
+      getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
+        ?.data?.properties?.apiUrl,
+    ).toEqual(
+      expect.objectContaining({
+        description:
+          'Server-relative API path for fetching the media bytes; prepend any configured deployment base path',
+        type: 'string',
+      }),
+    );
+    expect(
+      getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
+        ?.data?.required,
+    ).not.toContain('apiUrl');
     expect(
       modelAuditScanOperation?.requestBody?.content?.['application/json']?.schema?.properties
         ?.options?.properties?.timeout,
