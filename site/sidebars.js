@@ -332,6 +332,11 @@ const redTeamSidebar = [
         label: 'Detecting Model Drift',
         id: 'red-team/model-drift',
       },
+      {
+        type: 'doc',
+        label: 'Multi-Turn Conversations',
+        id: 'red-team/multi-turn-conversations',
+      },
     ],
   },
 ];
