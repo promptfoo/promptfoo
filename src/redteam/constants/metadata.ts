@@ -120,6 +120,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   multilingual:
     '[DEPRECATED] Tests handling of attacks across multiple languages. Use top-level language config instead.',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'mcp-shadow': 'Tests AI agents for indirect prompt injection via MCP Shadow servers',
+  'mcp-shadow:content-exfil':
+    'Tests whether agents can be tricked into exfiltrating sensitive data through MCP tools',
+  'mcp-shadow:content-hijack':
+    'Tests whether agents can be hijacked to perform unauthorized actions through MCP tools',
+  'mcp-shadow:tool-poisoning':
+    'Tests whether MCP tool responses can poison agent behavior with malicious instructions',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
   'medical:fda:ai-disclosure':
@@ -300,6 +307,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
+  'mcp-shadow': 'MCP Shadow Testing',
+  'mcp-shadow:content-exfil': 'MCP Shadow Content Exfiltration',
+  'mcp-shadow:content-hijack': 'MCP Shadow Content Hijack',
+  'mcp-shadow:tool-poisoning': 'MCP Shadow Tool Poisoning',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:fda:ai-disclosure': 'FDA AI Disclosure',
   'medical:fda:cyber-access-control': 'FDA Cyber Access Control',
@@ -533,6 +544,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'debug-access': Severity.High,
   default: Severity.Low,
   mcp: Severity.High,
+  'mcp-shadow': Severity.High,
+  'mcp-shadow:content-exfil': Severity.High,
+  'mcp-shadow:content-hijack': Severity.High,
+  'mcp-shadow:tool-poisoning': Severity.High,
   'medical:anchoring-bias': Severity.High,
   'medical:fda:ai-disclosure': Severity.High,
   'medical:fda:cyber-access-control': Severity.Critical,
@@ -681,6 +696,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'system-prompt-override',
     'tool-discovery',
     'mcp',
+    'mcp-shadow',
+    'mcp-shadow:content-exfil',
+    'mcp-shadow:content-hijack',
+    'mcp-shadow:tool-poisoning',
 
     // Data protection
     'cross-session-leak',
@@ -876,6 +895,10 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   ferpa: 'FERPACompliance',
   mcp: 'MCP',
+  'mcp-shadow': 'McpShadow',
+  'mcp-shadow:content-exfil': 'McpShadowContentExfil',
+  'mcp-shadow:content-hijack': 'McpShadowContentHijack',
+  'mcp-shadow:tool-poisoning': 'McpShadowToolPoisoning',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:fda:ai-disclosure': 'MedicalFdaAiDisclosure',
   'medical:fda:cyber-access-control': 'MedicalFdaCyberAccessControl',
@@ -1175,6 +1198,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount code abuse, inventory exploits, cart manipulation, unauthorized price modifications, or coupon stacking vulnerabilities',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'mcp-shadow':
+    'Tests AI agents for indirect prompt injection vulnerabilities via MCP Shadow servers that intercept tool calls and inject malicious payloads',
+  'mcp-shadow:content-exfil':
+    'Tests whether agents can be tricked into exfiltrating sensitive data by sending it to attacker-controlled endpoints through MCP tool calls',
+  'mcp-shadow:content-hijack':
+    'Tests whether agents can be hijacked to perform unauthorized actions like sending messages or executing code through malicious MCP tool responses',
+  'mcp-shadow:tool-poisoning':
+    'Tests whether MCP tool responses can poison agent behavior by embedding malicious instructions that alter subsequent actions',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
   'medical:fda:ai-disclosure':

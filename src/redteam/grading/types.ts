@@ -1,6 +1,7 @@
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ImageOutput, ProviderResponse } from '../../types/providers';
 import type { TraceData } from '../../types/tracing';
+import type { McpShadowGradingSignals } from '../plugins/mcpShadowTypes';
 import type { RedteamHistoryEntry } from '../types';
 
 /**
@@ -28,4 +29,6 @@ export interface RedteamGradingContext {
     userAgent: string;
     queryParams: Record<string, string>;
   }>;
+  // MCP Shadow grading signals (for mcp-shadow grader)
+  mcpShadowGradingSignals?: McpShadowGradingSignals;
 }

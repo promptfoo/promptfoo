@@ -357,6 +357,10 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'mcp-shadow',
+  'mcp-shadow:content-exfil',
+  'mcp-shadow:content-hijack',
+  'mcp-shadow:tool-poisoning',
   'model-identification',
   'medical:anchoring-bias',
   'medical:fda:ai-disclosure',
@@ -448,6 +452,10 @@ type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
   'agentic:memory-poisoning',
+  'mcp-shadow',
+  'mcp-shadow:content-exfil',
+  'mcp-shadow:content-hijack',
+  'mcp-shadow:tool-poisoning',
 ] as const;
 
 // Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
