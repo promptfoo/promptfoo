@@ -333,6 +333,41 @@ describe('file utilities', () => {
       cliState.basePath = undefined;
     });
 
+    it('should prefer an explicit declaring-file base path', () => {
+      cliState.basePath = '/decoy';
+      vi.mocked(fs.readFileSync).mockReturnValue('type: equals\nvalue: DECLARING');
+
+      const result = maybeLoadConfigFromExternalFile(
+        'file://assertion.yaml',
+        'assertion',
+        '/suite/defaults',
+      );
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        path.resolve('/suite/defaults/assertion.yaml'),
+        'utf8',
+      );
+      expect(result).toEqual({ type: 'equals', value: 'DECLARING' });
+      cliState.basePath = undefined;
+    });
+
+    it.each([
+      ['js', 'check'],
+      ['py', 'check'],
+      ['rb', 'check'],
+      ['rb', 'MyModule::Nested.method'],
+    ])('should rebase preserved %s assertion executables from an explicit base', (extension, functionName) => {
+      const result = maybeLoadFromExternalFile(
+        `file://assert.${extension}:${functionName}`,
+        'assertion',
+        '/suite/defaults',
+        '/suite',
+      );
+
+      expect(result).toBe(`file://defaults/assert.${extension}:${functionName}`);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
     it('should handle relative paths correctly', () => {
       const basePath = './relative/path';
       cliState.basePath = basePath;
@@ -785,6 +820,12 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve mixed-case Python files with function names in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.PY:get_assert', 'assertion');
+        expect(result).toBe('file://assert.PY:get_assert');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should preserve JavaScript files in assertion context', () => {
         const result = maybeLoadFromExternalFile('file://assert.js', 'assertion');
         expect(result).toBe('file://assert.js');
@@ -794,6 +835,12 @@ describe('file utilities', () => {
       it('should preserve TypeScript files in assertion context', () => {
         const result = maybeLoadFromExternalFile('file://assert.ts', 'assertion');
         expect(result).toBe('file://assert.ts');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve named Ruby files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.rb:check', 'assertion');
+        expect(result).toBe('file://assert.rb:check');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 

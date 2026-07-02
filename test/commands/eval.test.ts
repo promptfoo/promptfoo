@@ -103,7 +103,7 @@ const chokidarMocks = vi.hoisted(() => {
   return {
     handlers,
     watcher,
-    watch: vi.fn(() => watcher),
+    watch: vi.fn((_paths: string | string[]) => watcher),
   };
 });
 
@@ -1283,13 +1283,30 @@ describe('evalCommand', () => {
     const config = {
       prompts: ['file://prompts/main.txt', { id: 'file://prompts/object.txt' }],
       providers: ['file://providers/provider.yaml'],
-      tests: ['file://vars/scenario.yaml', { vars: { body: 'file://vars/body.txt', inline: 'x' } }],
+      tests: [
+        'file://vars/scenario.yaml',
+        {
+          vars: {
+            body: 'file://vars/body.txt',
+            inline: 'x',
+            nested: { report: 'file://vars/nested/report.txt' },
+            items: ['plain', 'file://vars/nested/item.txt'],
+          },
+        },
+      ],
     } as UnifiedConfig;
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config,
       testSuite: {
         prompts: [],
         providers: [],
+        tests: [
+          {
+            vars: {
+              external: { report: `file://${path.resolve('/suite/fixtures/external.txt')}` },
+            },
+          },
+        ],
       },
       basePath: path.resolve('/suite'),
     });
@@ -1312,6 +1329,9 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'providers/provider.yaml'),
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
+        path.resolve('/suite', 'vars/nested/report.txt'),
+        path.resolve('/suite', 'vars/nested/item.txt'),
+        path.resolve('/suite/fixtures/external.txt'),
       ]),
       { ignored: /^\./, persistent: true },
     );
@@ -1330,6 +1350,248 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
+  it.each([
+    ['generators/cases.py:build_cases', path.resolve('/suite/generators/cases.py')],
+    ['file://generators/cases.js:buildCases', path.resolve('/suite/generators/cases.js')],
+  ])('should watch a scalar resolved test override %s', async (testSource, expectedPath) => {
+    const defaultConfig = {
+      prompts: [],
+      providers: [],
+      tests: 'file://configured-tests.yaml',
+    } as unknown as UnifiedConfig;
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: testSource,
+    } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      {
+        watch: true,
+        config: ['/suite/promptfooconfig.yaml'],
+        tests: testSource,
+        write: false,
+      },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(expect.arrayContaining([expectedPath]), {
+      ignored: /^\./,
+      persistent: true,
+    });
+  });
+
+  it('should watch a scalar scenario source from the default config', async () => {
+    const defaultConfig = {
+      scenarios: 'file://scenarios/scenario.yaml',
+    } as unknown as UnifiedConfig;
+    const config = { prompts: [], providers: [], tests: [] } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([path.resolve('/suite/scenarios/scenario.yaml')]),
+      { ignored: /^\./, persistent: true },
+    );
+  });
+
+  it('should watch scenario test-array sources from the default config', async () => {
+    const defaultConfig = {
+      scenarios: [
+        {
+          config: [],
+          tests: [
+            'file://scenarios/cases.yaml',
+            'scenarios/generated.js:buildCases',
+            { path: 'scenarios/generated.py:build_cases' },
+            { vars: 'file://scenarios/vars.yaml' },
+            { vars: ['file://scenarios/first.yaml', 'file://scenarios/second.json'] },
+            { vars: 'scenarios/bare.yaml' },
+            { vars: ['scenarios/bare-first.yaml', 'scenarios/bare-second.json'] },
+            {
+              vars: {
+                nested: [
+                  'file://scenarios/nested.txt',
+                  'file://scenarios/reports.js:archive/report.txt',
+                ],
+                remote: 'https://example.com/remote.txt',
+              },
+            },
+            null,
+          ],
+        },
+      ],
+    } as unknown as UnifiedConfig;
+    const config = { prompts: [], providers: [], tests: [] } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        path.resolve('/suite/scenarios/cases.yaml'),
+        path.resolve('/suite/scenarios/generated.js'),
+        path.resolve('/suite/scenarios/generated.py'),
+        path.resolve('/suite/scenarios/vars.yaml'),
+        path.resolve('/suite/scenarios/first.yaml'),
+        path.resolve('/suite/scenarios/second.json'),
+        path.resolve('/suite/scenarios/bare.yaml'),
+        path.resolve('/suite/scenarios/bare-first.yaml'),
+        path.resolve('/suite/scenarios/bare-second.json'),
+        path.resolve('/suite/scenarios/nested.txt'),
+        path.resolve('/suite/scenarios/reports.js:archive/report.txt'),
+      ]),
+      { ignored: /^\./, persistent: true },
+    );
+    const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+    expect(watchPaths).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/:(?:buildCases|build_cases)$/)]),
+    );
+    expect(watchPaths).not.toEqual(expect.arrayContaining(['https://example.com/remote.txt']));
+  });
+
+  it('should use the resolved config base for directory-glob watch sources', async () => {
+    const defaultConfig = {
+      scenarios: [{ config: [], tests: ['file://scenarios/cases.yaml'] }],
+    } as unknown as UnifiedConfig;
+    const config = {
+      prompts: ['file://prompts/main.txt'],
+      providers: [],
+      tests: [],
+    } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite/a'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/*/promptfooconfig.yaml'], write: false },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    const directoryGlobWatchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+    expect(directoryGlobWatchPaths).toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/a/prompts/main.txt'),
+        path.resolve('/suite/a/scenarios/cases.yaml'),
+      ]),
+    );
+    expect(directoryGlobWatchPaths).not.toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/*/prompts/main.txt'),
+        path.resolve('/suite/*/scenarios/cases.yaml'),
+      ]),
+    );
+  });
+
+  it('should normalize canonical Windows file URLs for direct watch sources', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    const dirnameSpy = vi
+      .spyOn(path, 'dirname')
+      .mockImplementation((input) => path.win32.dirname(input));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    const config = {
+      prompts: [
+        'file:///C:/suite/prompts/main.txt',
+        { id: 'file:///C:/suite/prompts/object.js:buildPrompt' },
+      ],
+      providers: ['file:///C:/suite/providers/provider.py:call_api'],
+      tests: ['file:///C:/suite/tests.yaml', { path: 'file:///C:/suite/tests-object.yaml' }],
+      defaultTest: 'file:///C:/suite/default.yaml',
+      scenarios: [
+        'file:///C:/suite/scenarios.yaml',
+        { tests: 'file:///C:/suite/scenario-tests.yaml' },
+      ],
+    } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: 'D:\\repo',
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    try {
+      await doEval(
+        {
+          watch: true,
+          config: ['D:\\repo\\promptfooconfig.yaml'],
+          write: false,
+        },
+        config,
+        undefined,
+        {},
+      );
+
+      const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+      expect(watchPaths).toEqual(
+        expect.arrayContaining([
+          'C:\\suite\\prompts\\main.txt',
+          'C:\\suite\\prompts\\object.js',
+          'C:\\suite\\providers\\provider.py',
+          'C:\\suite\\tests.yaml',
+          'C:\\suite\\tests-object.yaml',
+          'C:\\suite\\default.yaml',
+          'C:\\suite\\scenarios.yaml',
+          'C:\\suite\\scenario-tests.yaml',
+        ]),
+      );
+      expect(watchPaths).not.toEqual(expect.arrayContaining([expect.stringMatching(/^D:\\C:\\/)]));
+    } finally {
+      resolveSpy.mockRestore();
+      dirnameSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
+  });
+
   it('should resume an existing eval with persisted prompts', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.prompts = [
@@ -1341,6 +1603,7 @@ describe('evalCommand', () => {
       maxConcurrency: 2,
       delay: 0,
       providerFilter: 'selected-target',
+      configBasePath: '/suite/config',
     };
     const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1378,6 +1641,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        '/suite/config',
       );
     } finally {
       findByIdSpy.mockRestore();
@@ -1387,7 +1652,10 @@ describe('evalCommand', () => {
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
-    latestEval.runtimeOptions = { providerFilter: 'selected-target' };
+    latestEval.runtimeOptions = {
+      providerFilter: 'selected-target',
+      configBasePath: '/suite/config',
+    };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1417,6 +1685,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         latestEval.config,
+        undefined,
+        '/suite/config',
       );
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);

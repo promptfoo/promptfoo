@@ -15,6 +15,7 @@ import {
   ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
+  getConfigDependencyPaths,
   logConfigResolutionError,
   maybeReadConfig,
   readConfig,
@@ -23,9 +24,16 @@ import {
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
-import { readTests } from '../../../src/util/testCaseReader';
+import {
+  getVarFileDependencyPaths,
+  readTest,
+  readTests,
+  rebaseTestCaseVarFileReferences,
+} from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
+
+const MOCK_CWD = path.join(path.parse(import.meta.filename).root, 'mock', 'cwd');
 
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
@@ -71,7 +79,7 @@ vi.mock('glob', () => ({
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+    return /[*?[\]{}]|[+@!](?=\()/.test(p);
   }),
 }));
 
@@ -140,16 +148,15 @@ vi.mock('../../../src/util/file', async () => {
 });
 
 vi.mock('../../../src/util/testCaseReader', () => ({
+  getVarFileDependencyPaths: vi.fn().mockReturnValue([]),
   readTest: vi.fn().mockImplementation(async (test) => test),
   readTests: vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
       return [];
     }
-    if (Array.isArray(tests)) {
-      return tests;
-    }
-    return [];
+    return Array.isArray(tests) ? tests : [tests];
   }),
+  rebaseTestCaseVarFileReferences: vi.fn().mockImplementation((test) => test),
 }));
 
 vi.mock('../../../src/providers', async () => {
@@ -216,13 +223,14 @@ vi.mock('../../../src/assertions', () => ({
 // Global setup for all tests - set default mock implementation for $RefParser
 beforeEach(() => {
   mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  vi.mocked(getVarFileDependencyPaths).mockReturnValue([]);
 });
 
 describe('combineConfigs', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
-    vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    vi.spyOn(process, 'cwd').mockReturnValue(MOCK_CWD);
     vi.mocked(globSync).mockImplementation((pathOrGlob) => {
       const filePart =
         typeof pathOrGlob === 'string'
@@ -418,6 +426,362 @@ describe('combineConfigs', () => {
       sharing: false,
       tracing: undefined,
     });
+  });
+
+  it('preserves each config directory when combining nested var references', async () => {
+    const firstConfig = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: [{ vars: { context: { report: 'file://data/report.txt' } } }],
+      scenarios: [
+        {
+          config: [{ vars: { context: { report: 'file://data/scenario.txt' } } }],
+          tests: [{ vars: { context: { report: 'file://data/test.txt' } } }],
+        },
+      ],
+    };
+    const secondConfig = {
+      providers: ['provider2'],
+      prompts: ['prompt2'],
+      tests: [{ vars: { context: { report: 'file://data/report.txt' } } }],
+      defaultTest: 'file://defaults/default.json',
+      scenarios: ['file://scenarios/scenario.yaml'],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      expect.objectContaining({ vars: firstConfig.tests[0].vars }),
+      path.resolve('/suite/a'),
+      path.resolve('/suite/a'),
+      expect.any(WeakSet),
+    );
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      expect.objectContaining({ vars: secondConfig.tests[0].vars }),
+      path.resolve('/suite/b'),
+      path.resolve('/suite/a'),
+      expect.any(WeakSet),
+    );
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      expect.objectContaining({ vars: firstConfig.scenarios[0].config[0].vars }),
+      path.resolve('/suite/a'),
+      path.resolve('/suite/a'),
+      expect.any(WeakSet),
+    );
+    expect(result.defaultTest).toBe('file://../b/defaults/default.json');
+    expect(result.scenarios).toContain('file://../b/scenarios/scenario.yaml');
+  });
+
+  it('rebases scalar scenario sources from later configs', async () => {
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      scenarios: 'file://scenarios/scenario.yaml',
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.scenarios).toEqual(['file://../b/scenarios/scenario.yaml']);
+    expect(getConfigDependencyPaths(result)).toContain(
+      path.resolve('/suite/b/scenarios/scenario.yaml'),
+    );
+    expect(getConfigDependencyPaths(result)).not.toContain(
+      path.resolve('/suite/a/scenarios/scenario.yaml'),
+    );
+  });
+
+  it('rebases array scenario test sources from later configs', async () => {
+    const inlineTest = { vars: { marker: 'inline' } };
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      scenarios: [
+        {
+          config: [],
+          tests: [
+            'file://scenarios/cases.yaml',
+            {
+              path: 'file://scenarios/cases.py:build_cases',
+              config: {
+                data: 'file://scenarios/data.json',
+                nested: ['literal', 'https://example.com/data.json', 'file://shared/meta.yaml'],
+              },
+            },
+            { vars: 'file://scenarios/vars.yaml' },
+            { vars: ['file://scenarios/first.yaml', 'file://scenarios/second.json'] },
+            inlineTest,
+          ],
+        },
+      ],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.scenarios).toEqual([
+      {
+        config: [],
+        tests: [
+          'file://../b/scenarios/cases.yaml',
+          {
+            path: 'file://../b/scenarios/cases.py:build_cases',
+            config: {
+              data: 'file://../b/scenarios/data.json',
+              nested: ['literal', 'https://example.com/data.json', 'file://../b/shared/meta.yaml'],
+            },
+          },
+          { vars: 'file://../b/scenarios/vars.yaml' },
+          {
+            vars: ['file://../b/scenarios/first.yaml', 'file://../b/scenarios/second.json'],
+          },
+          inlineTest,
+        ],
+      },
+    ]);
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      inlineTest,
+      path.resolve('/suite/b'),
+      path.resolve('/suite/a'),
+      expect.any(WeakSet),
+    );
+    expect(getConfigDependencyPaths(result)).toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/b/scenarios/cases.yaml'),
+        path.resolve('/suite/b/scenarios/cases.py'),
+        path.resolve('/suite/b/scenarios/data.json'),
+        path.resolve('/suite/b/shared/meta.yaml'),
+        path.resolve('/suite/b/scenarios/vars.yaml'),
+        path.resolve('/suite/b/scenarios/first.yaml'),
+        path.resolve('/suite/b/scenarios/second.json'),
+      ]),
+    );
+  });
+
+  it('rebases bare scalar scenario test sources from later configs', async () => {
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      scenarios: [{ config: [], tests: 'scenarios/cases.yaml' }],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.scenarios).toEqual([{ config: [], tests: '../b/scenarios/cases.yaml' }]);
+    expect(getConfigDependencyPaths(result)).toContain(
+      path.resolve('/suite/b/scenarios/cases.yaml'),
+    );
+    expect(getConfigDependencyPaths(result)).not.toContain(
+      path.resolve('/suite/a/scenarios/cases.yaml'),
+    );
+  });
+
+  it('preserves named exports when rebasing executable test sources', async () => {
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: [
+        'file://generators/cases.js:buildCases',
+        {
+          path: 'file://generators/cases.py:build_cases',
+          config: { data: 'file://data.json' },
+        },
+      ],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.tests).toEqual([
+      'file://../b/generators/cases.js:buildCases',
+      {
+        path: 'file://../b/generators/cases.py:build_cases',
+        config: { data: 'file://../b/data.json' },
+      },
+    ]);
+    expect(getConfigDependencyPaths(result)).toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/b/generators/cases.js'),
+        path.resolve('/suite/b/generators/cases.py'),
+        path.resolve('/suite/b/data.json'),
+      ]),
+    );
+  });
+
+  it('strips named exports from bare executable config dependencies', async () => {
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: ['generators/cases.js:buildCases', { path: 'generators/cases.py:build_cases' }],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.tests).toEqual([
+      '../b/generators/cases.js:buildCases',
+      { path: '../b/generators/cases.py:build_cases' },
+    ]);
+    expect(getConfigDependencyPaths(result)).toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/b/generators/cases.js'),
+        path.resolve('/suite/b/generators/cases.py'),
+      ]),
+    );
+    expect(getConfigDependencyPaths(result)).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/:(?:buildCases|build_cases)$/)]),
+    );
+  });
+
+  it('normalizes canonical Windows URLs in combined config dependencies', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    const dirnameSpy = vi
+      .spyOn(path, 'dirname')
+      .mockImplementation((input) => path.win32.dirname(input));
+    const isAbsoluteSpy = vi
+      .spyOn(path, 'isAbsolute')
+      .mockImplementation((input) => path.win32.isAbsolute(input));
+    const relativeSpy = vi
+      .spyOn(path, 'relative')
+      .mockImplementation((from, to) => path.win32.relative(from, to));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const config = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: ['file:///C:/suite/tests.yaml', { path: 'file:///C:/suite/tests-object.yaml' }],
+      defaultTest: 'file:///C:/suite/default.yaml',
+      scenarios: [
+        'file:///C:/suite/scenarios.yaml',
+        { tests: 'file:///C:/suite/scenario-tests.yaml' },
+      ],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    try {
+      const result = await combineConfigs(['D:\\repo\\promptfooconfig.json']);
+      const dependencies = getConfigDependencyPaths(result);
+
+      expect(dependencies).toEqual(
+        expect.arrayContaining([
+          'C:\\suite\\tests.yaml',
+          'C:\\suite\\tests-object.yaml',
+          'C:\\suite\\default.yaml',
+          'C:\\suite\\scenarios.yaml',
+          'C:\\suite\\scenario-tests.yaml',
+        ]),
+      );
+      expect(dependencies).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/^D:\\C:\\/)]),
+      );
+    } finally {
+      resolveSpy.mockRestore();
+      dirnameSpy.mockRestore();
+      isAbsoluteSpy.mockRestore();
+      relativeSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
+  });
+
+  it('expands extglob config dependencies before watch registration', async () => {
+    const config = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: ['file://cases/@(alpha|beta).yaml'],
+    };
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input).includes('@(')
+        ? ['/suite/cases/alpha.yaml', '/suite/cases/beta.yaml']
+        : [String(input)],
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['/suite/promptfooconfig.json']);
+    const dependencies = getConfigDependencyPaths(result);
+
+    expect(dependencies).toEqual(
+      expect.arrayContaining(['/suite/cases/alpha.yaml', '/suite/cases/beta.yaml']),
+    );
+    expect(dependencies).not.toContain('/suite/cases/@(alpha|beta).yaml');
+  });
+
+  it('preserves raw inline tests and their vars-file dependency when combining configs', async () => {
+    const config = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: [
+        {
+          provider: { id: 'echo', config: { label: 'test provider' } },
+          vars: 'fixtures/vars.yaml',
+        },
+      ],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['/suite/promptfooconfig.json']);
+
+    expect(readTests).not.toHaveBeenCalled();
+    expect(result.tests).toEqual(config.tests);
+    expect(JSON.parse(JSON.stringify(result.tests))).toEqual(config.tests);
+    expect(getConfigDependencyPaths(result)).toContain(path.resolve('/suite/fixtures/vars.yaml'));
   });
 
   it('preserves whether scenarios were omitted', async () => {
@@ -1083,7 +1447,6 @@ describe('combineConfigs', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(externalDefaultTest));
-    vi.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
 
     const config = {
       providers: ['provider1'],
@@ -1118,6 +1481,9 @@ describe('combineConfigs', () => {
     vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
+    vi.mocked(globSync)
+      .mockReturnValueOnce([path.join(MOCK_CWD, 'config1.json')])
+      .mockReturnValueOnce([path.join(MOCK_CWD, 'config2.json')]);
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
@@ -1531,7 +1897,7 @@ describe('resolveConfigs', () => {
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(globSync).mockReset();
-    vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    vi.spyOn(process, 'cwd').mockReturnValue(MOCK_CWD);
     cliState.selectedProviderConfigs = undefined;
 
     // Reset path.parse to use actual implementation (other tests may have mocked it)
@@ -1560,6 +1926,53 @@ describe('resolveConfigs', () => {
     await resolveConfigs(cmdObj, defaultConfig);
 
     expect(cliState.basePath).toBe(path.dirname('config.json'));
+  });
+
+  it('retains loaded vars-file dependencies before runtime filtering', async () => {
+    const loadedTest = { vars: { marker: 'loaded' } };
+    const dependencies = [
+      path.resolve('/suite/vars/root.yaml'),
+      path.resolve('/suite/vars/context.yaml'),
+    ];
+    vi.mocked(readTests).mockResolvedValueOnce([loadedTest]);
+    vi.mocked(getVarFileDependencyPaths).mockImplementation((value) =>
+      value === loadedTest ? dependencies : [],
+    );
+
+    const result = await resolveConfigs(
+      {},
+      { prompts: ['prompt'], providers: ['echo'], tests: [loadedTest] },
+      undefined,
+      path.resolve('/suite'),
+    );
+
+    expect(getConfigDependencyPaths(result.config)).toEqual(expect.arrayContaining(dependencies));
+  });
+
+  it('uses the first matched config directory as the base for directory globs', async () => {
+    const configGlob = path.resolve('/suite/*/config.json');
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input) === configGlob
+        ? [path.resolve('/suite/a/config.json'), path.resolve('/suite/b/config.json')]
+        : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      JSON.stringify({
+        prompts: ['prompt'],
+        providers: ['echo'],
+        tests: ['file://cases.yaml'],
+        metadata: { source: path.basename(path.dirname(String(filePath))) },
+      }),
+    );
+
+    const result = await resolveConfigs({ config: [configGlob] }, {});
+
+    expect(result.basePath).toBe(path.resolve('/suite/a'));
+    expect(cliState.basePath).toBe(path.resolve('/suite/a'));
+    expect(readTests).toHaveBeenCalledWith(
+      ['file://cases.yaml', 'file://../b/cases.yaml'],
+      path.resolve('/suite/a'),
+    );
   });
 
   it('should return the provider configs selected by a target filter', async () => {
@@ -1598,15 +2011,17 @@ describe('resolveConfigs', () => {
       JSON.stringify({
         prompts: [prompt],
         providers: ['openai:gpt-4'],
-        scenarios: 'file://scenarios.yaml',
+        scenarios: 'file://scenarios/scenario.yaml',
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
 
-    vi.mocked(readTests).mockResolvedValue(externalTests);
+    vi.mocked(readTests).mockResolvedValueOnce([]).mockResolvedValueOnce(externalTests);
+    const scenarioVarDependency = path.resolve(MOCK_CWD, 'scenarios/context.yaml');
+    vi.mocked(getVarFileDependencyPaths).mockImplementation((value) =>
+      value === externalTests[0] ? [scenarioVarDependency] : [],
+    );
 
     vi.mocked(globSync).mockReturnValue(['config.json']);
 
@@ -1626,10 +2041,14 @@ describe('resolveConfigs', () => {
       }),
     ]);
 
-    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+    const { config, testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/scenario.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledTimes(1);
+    expect(readTests).toHaveBeenCalledWith(
+      'file://scenarios/tests.yaml',
+      path.dirname('config.json'),
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [
@@ -1644,16 +2063,118 @@ describe('resolveConfigs', () => {
         }),
       ],
       scenarios: resolvedScenarios,
-      tests: externalTests,
+      tests: [],
       defaultTest: expect.objectContaining({
         metadata: {},
       }),
     });
 
     expect(testSuite.prompts[0].raw).toBe(prompt);
-    expect(testSuite.tests).toEqual(externalTests);
+    expect(testSuite.tests).toEqual([]);
     expect(testSuite.scenarios).toEqual(resolvedScenarios);
-    expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://tests.yaml' }]);
+    expect(getConfigDependencyPaths(config)).toContain(
+      path.resolve('/mock/cwd/scenarios/tests.yaml'),
+    );
+    expect(getConfigDependencyPaths(config)).toContain(scenarioVarDependency);
+    expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://scenarios/tests.yaml' }]);
+  });
+
+  it('should rebase array test sources from an external scenario file', async () => {
+    const inlineTest = { vars: { marker: 'inline' } };
+    const scenario = {
+      config: [],
+      tests: [
+        'file://cases.yaml',
+        'generators/bare.js:buildCases',
+        {
+          path: 'file://generators/cases.js:buildCases',
+          config: {
+            data: 'file://data.json',
+            nested: ['file://shared/meta.yaml', 'literal', 'https://example.com/data.json'],
+          },
+        },
+        { path: 'file://generators/cases.py:build_cases' },
+        { vars: 'file://vars.yaml' },
+        { vars: ['file://first.yaml', 'file://second.json'] },
+        inlineTest,
+      ],
+    };
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt'],
+        providers: ['echo'],
+        scenarios: ['file://scenarios/login/scenario.yaml'],
+      }),
+    );
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce([scenario]);
+
+    const { config } = await resolveConfigs({ config: ['config.json'] }, {});
+
+    const expectedTests = [
+      'file://scenarios/login/cases.yaml',
+      'scenarios/login/generators/bare.js:buildCases',
+      {
+        path: 'file://scenarios/login/generators/cases.js:buildCases',
+        config: {
+          data: 'file://scenarios/login/data.json',
+          nested: [
+            'file://scenarios/login/shared/meta.yaml',
+            'literal',
+            'https://example.com/data.json',
+          ],
+        },
+      },
+      { path: 'file://scenarios/login/generators/cases.py:build_cases' },
+      { vars: 'file://scenarios/login/vars.yaml' },
+      {
+        vars: ['file://scenarios/login/first.yaml', 'file://scenarios/login/second.json'],
+      },
+      inlineTest,
+    ];
+    expect(readTests).toHaveBeenCalledWith(expectedTests, path.dirname('config.json'));
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      inlineTest,
+      path.resolve(MOCK_CWD, 'scenarios/login'),
+      path.dirname('config.json'),
+      expect.any(WeakSet),
+    );
+    expect(getConfigDependencyPaths(config)).toEqual(
+      expect.arrayContaining([
+        path.resolve(MOCK_CWD, 'scenarios/login/cases.yaml'),
+        path.resolve(MOCK_CWD, 'scenarios/login/generators/bare.js'),
+        path.resolve(MOCK_CWD, 'scenarios/login/generators/cases.js'),
+        path.resolve(MOCK_CWD, 'scenarios/login/generators/cases.py'),
+        path.resolve(MOCK_CWD, 'scenarios/login/data.json'),
+        path.resolve(MOCK_CWD, 'scenarios/login/shared/meta.yaml'),
+        path.resolve(MOCK_CWD, 'scenarios/login/vars.yaml'),
+        path.resolve(MOCK_CWD, 'scenarios/login/first.yaml'),
+        path.resolve(MOCK_CWD, 'scenarios/login/second.json'),
+      ]),
+    );
+  });
+
+  it('should load a single scenario file from the default config', async () => {
+    const scenario = { description: 'Scenario', tests: [] };
+    vi.mocked(maybeLoadFromExternalFile).mockReset().mockResolvedValueOnce([scenario]);
+    vi.mocked(readTests)
+      .mockReset()
+      .mockImplementation(async (tests) => (Array.isArray(tests) ? (tests as TestCase[]) : []));
+
+    const result = await resolveConfigs(
+      {},
+      {
+        prompts: ['prompt'],
+        providers: ['echo'],
+        scenarios: 'file://scenarios/scenario.yaml' as unknown as Scenario[],
+      },
+      undefined,
+      path.resolve('/suite'),
+    );
+
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/scenario.yaml']);
+    expect(result.testSuite.scenarios).toEqual([expect.objectContaining(scenario)]);
   });
 
   it('should apply configured seeded sampling independently to default config scenarios', async () => {
@@ -2560,19 +3081,109 @@ describe('resolveConfigs with external defaultTest', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
-    vi.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
+    vi.mocked(readTest).mockResolvedValueOnce(externalDefaultTest as TestCase);
+    vi.mocked(getVarFileDependencyPaths).mockImplementation((value) =>
+      value === externalDefaultTest
+        ? [
+            path.resolve('/mock/cwd/shared/vars.yaml'),
+            path.resolve('/mock/cwd/shared/context.yaml'),
+          ]
+        : [],
+    );
     vi.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
     vi.mocked(globSync).mockReturnValue(['config.json']);
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://shared/defaultTest.yaml');
+    expect(readTest).toHaveBeenCalledWith(
+      'shared/defaultTest.yaml',
+      path.dirname('config.json'),
+      true,
+    );
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: externalDefaultTest.assert,
         vars: externalDefaultTest.vars,
       }),
     );
+    expect(getConfigDependencyPaths(result.config)).toEqual(
+      expect.arrayContaining([
+        path.resolve('/mock/cwd/shared/vars.yaml'),
+        path.resolve('/mock/cwd/shared/context.yaml'),
+      ]),
+    );
+  });
+
+  it('should normalize a canonical Windows file URL before reading defaultTest', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    vi.mocked(readTest).mockResolvedValueOnce({ vars: { loaded: true } });
+
+    try {
+      await resolveConfigs(
+        {},
+        {
+          prompts: ['prompt'],
+          providers: ['echo'],
+          defaultTest: 'file:///C:/suite/default.yaml',
+        },
+        undefined,
+        'D:/config',
+      );
+
+      expect(readTest).toHaveBeenCalledWith('C:/suite/default.yaml', 'D:/config', true);
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('uses a canonical Windows scenario URL as the nested vars declaring base', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    const dirnameSpy = vi
+      .spyOn(path, 'dirname')
+      .mockImplementation((input) => path.win32.dirname(input));
+    const isAbsoluteSpy = vi
+      .spyOn(path, 'isAbsolute')
+      .mockImplementation((input) => path.win32.isAbsolute(input));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const scenarioTest = { vars: { context: { report: 'file://data/report.txt' } } };
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce([{ tests: [scenarioTest] }]);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+
+    try {
+      await resolveConfigs(
+        {},
+        {
+          prompts: ['prompt'],
+          providers: ['echo'],
+          scenarios: 'file:///C:/suite/scenarios.yaml' as unknown as Scenario[],
+        },
+        undefined,
+        'D:\\decoy',
+      );
+
+      expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+        scenarioTest,
+        'C:\\suite',
+        'D:\\decoy',
+        expect.any(WeakSet),
+      );
+    } finally {
+      resolveSpy.mockRestore();
+      dirnameSpy.mockRestore();
+      isAbsoluteSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
   });
 
   it('should handle inline defaultTest object in resolveConfigs', async () => {

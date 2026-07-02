@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
+import * as path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -13,7 +14,11 @@ import { type TestCase } from '../../../src/types/index';
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readFilters } from '../../../src/util/index';
-import { readTests } from '../../../src/util/testCaseReader';
+import {
+  getVarFileDependencyPaths,
+  readTests,
+  rebaseTestCaseVarFileReferences,
+} from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 
 vi.mock('fs');
@@ -56,6 +61,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Setup default mocks
     vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Test prompt', label: 'Test prompt' }]);
+    vi.mocked(getVarFileDependencyPaths).mockReturnValue([]);
     vi.mocked(readProviderPromptMap).mockReturnValue({});
     vi.mocked(loadApiProviders).mockResolvedValue([
       createMockProvider({ id: 'openai:gpt-3.5-turbo' }),
@@ -161,12 +167,11 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input)) {
-        // Simulate two glob patterns each returning different scenarios
-        return [
-          [scenarios[0], scenarios[1]], // group1/*.yaml
-          [scenarios[2]], // group2/*.yaml
-        ];
+      if (Array.isArray(input) && input[0] === 'file://group1/*.yaml') {
+        return [[scenarios[0], scenarios[1]]];
+      }
+      if (Array.isArray(input) && input[0] === 'file://group2/*.yaml') {
+        return [[scenarios[2]]];
       }
       return input;
     });
@@ -179,6 +184,49 @@ describe('Scenario loading with glob patterns', () => {
     // Verify all scenarios are flattened into a single array
     expect(testSuite.scenarios).toHaveLength(3);
     expect(testSuite.scenarios).toEqual(scenarios);
+  });
+
+  it('should retain each declaring directory for recursive scenario globs', async () => {
+    const configBasePath = path.dirname('/test/path/config.yaml');
+    const scenarioA = {
+      config: [{ vars: { context: { report: 'file://data/report.txt' } } }],
+      tests: [],
+    };
+    const scenarioB = {
+      config: [{ vars: { context: { report: 'file://data/report.txt' } } }],
+      tests: [],
+    };
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      yaml.dump({
+        prompts: ['Test prompt'],
+        providers: ['openai:gpt-3.5-turbo'],
+        scenarios: ['file://scenarios/**/*.json'],
+      }),
+    );
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input).includes('scenarios')
+        ? ['/test/path/scenarios/a/one.json', '/test/path/scenarios/b/two.json']
+        : ['/test/path/config.yaml'],
+    );
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) =>
+      String((input as string[])[0]).includes('/a/') ? [scenarioA] : [scenarioB],
+    );
+
+    await resolveConfigs({ config: ['/test/path/config.yaml'] }, {});
+
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      scenarioA.config[0],
+      path.resolve('/test/path/scenarios/a'),
+      configBasePath,
+      expect.any(WeakSet),
+    );
+    expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+      scenarioB.config[0],
+      path.resolve('/test/path/scenarios/b'),
+      configBasePath,
+      expect.any(WeakSet),
+    );
   });
 
   it('should handle mixed scenario loading (direct and glob)', async () => {
@@ -218,9 +266,8 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input)) {
-        // First element is direct scenario, second is glob pattern
-        return [directScenario, globScenarios];
+      if (Array.isArray(input) && input[0] === 'file://scenarios/*.yaml') {
+        return [globScenarios];
       }
       return input;
     });

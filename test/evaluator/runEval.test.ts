@@ -548,6 +548,212 @@ describe('runEval', () => {
     );
   });
 
+  it('should render nested helper vars that reference multiple runtime registers', async () => {
+    const registers = { favoriteFruit: 'apple', reason: 'crisp' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ message }}', label: 'register-helper' },
+      test: {
+        vars: {
+          message: '{{ question }} Because it is {{ reason }}; repeat {{ favoriteFruit }}.',
+          question: 'Why {{ favoriteFruit }}?',
+        },
+      },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith(
+      'Why apple? Because it is crisp; repeat apple.',
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('should keep adversarial runtime register values literal through helper vars', async () => {
+    vi.stubEnv('PROMPTFOO_REGISTER_SECRET', 'must-not-render');
+    const registers = {
+      storedTemplate: '{{ env.PROMPTFOO_REGISTER_SECRET }}',
+      storedFile: 'file:///etc/passwd',
+      storedPackage: 'package:evil:fn',
+      replacementToken: '$&',
+    };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    try {
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: '{{ message }}', label: 'adversarial-register-helper' },
+        test: {
+          vars: {
+            message:
+              'T={{ storedTemplate }} F={{ storedFile }} P={{ storedPackage }} R={{ replacementToken }}',
+          },
+        },
+        conversations: {},
+        registers,
+      });
+
+      expect(results[0].success).toBe(true);
+      expect(callApi).toHaveBeenCalledWith(
+        'T={{ env.PROMPTFOO_REGISTER_SECRET }} F=file:///etc/passwd P=package:evil:fn R=$&',
+        expect.anything(),
+        undefined,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('should keep Nunjucks operations over runtime registers unrendered', async () => {
+    const registers = { storedPath: '.nvmrc' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ message }}', label: 'register-operation-boundary' },
+      test: { vars: { message: '{% include storedPath %}' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith('{% include storedPath %}', expect.anything(), undefined);
+  });
+
+  it('should render protected helper vars in JSON prompts', async () => {
+    const registers = { favoriteFruit: 'apple', reason: 'crisp' };
+    const callApi = vi.fn(async (_prompt: string) => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{"message":"{{ message }}"}', label: 'register-helper-json' },
+      test: { vars: { message: '{{ favoriteFruit }} is {{ reason }}' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(JSON.parse(callApi.mock.calls[0][0])).toEqual({ message: 'apple is crisp' });
+  });
+
+  it('should render constant helper templates alongside runtime registers', async () => {
+    const registers = { favoriteFruit: 'apple' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ system }} {{ favoriteFruit }}', label: 'constant-register-helper' },
+      test: { vars: { system: '{{ "be concise" | upper }}' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith('BE CONCISE apple', expect.anything(), undefined);
+  });
+
+  it('should render safe object helpers alongside runtime registers', async () => {
+    const registers = { favoriteFruit: 'apple' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ message }}', label: 'safe-object-register-helper' },
+      test: {
+        vars: {
+          docs: ['a', 'b'],
+          summary: '{{ docs | length }}',
+          message: '{{ summary }} {{ favoriteFruit }}',
+        },
+      },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith('2 apple', expect.anything(), undefined);
+  });
+
+  it('should keep transitive template-loading helpers opaque with runtime registers', async () => {
+    const registers = { stored: 'secret' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+    const helper = '{% include "helper.njk" %}';
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ helper }}', label: 'transitive-register-helper' },
+      test: { vars: { helper } },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith(helper, expect.anything(), undefined);
+  });
+
+  it('should render protected helpers before reporting provider failures', async () => {
+    const registers = { favoriteFruit: 'apple', reason: 'crisp' };
+    const callApi = vi.fn(async () => {
+      throw new Error('provider failed');
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('failing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ message }}', label: 'register-helper-failure' },
+      test: { vars: { message: '{{ favoriteFruit }} is {{ reason }}' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(callApi).toHaveBeenCalledWith('apple is crisp', expect.anything(), undefined);
+    expect(results[0].success).toBe(false);
+    expect(results[0].error).toContain('provider failed');
+  });
+
   it('should store output in register when specified', async () => {
     const registers = {};
 
@@ -562,6 +768,71 @@ describe('runEval', () => {
     const result = results[0];
     expect(result.success).toBe(true);
     expect(registers).toHaveProperty('myOutput', 'Test output');
+  });
+
+  it('should keep file:// and package: references from runtime registers literal', async () => {
+    // A model output captured via storeOutputAs is untrusted; when reused as a var
+    // it must never be loaded as a file/package, at the top level or nested.
+    const registers = {
+      saved: { nested: 'file:///etc/passwd' },
+      topLevel: 'file:///etc/hostname',
+      pkg: 'package:evil:fn',
+    };
+    const captured: string[] = [];
+    const capturingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi: vi.fn(async (prompt: string) => {
+        captured.push(prompt);
+        return { output: 'ok' };
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: capturingProvider,
+      prompt: { raw: 'A:{{ saved.nested }} B:{{ topLevel }} C:{{ pkg }}', label: 'reg' },
+      test: {},
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(captured[0]).toBe('A:file:///etc/passwd B:file:///etc/hostname C:package:evil:fn');
+    // Register values remain literal and are not mutated.
+    expect(registers.saved.nested).toBe('file:///etc/passwd');
+  });
+
+  it('should not evaluate Nunjucks syntax captured in runtime registers', async () => {
+    vi.stubEnv('PROMPTFOO_REGISTER_SECRET', 'must-not-render');
+    const registers = {
+      stored: '{{ env.PROMPTFOO_REGISTER_SECRET }}',
+      include: '{% include ".nvmrc" %}',
+    };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    try {
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'A:{{ stored }} B:{{ include }}', label: 'reg-template' },
+        test: {},
+        conversations: {},
+        registers,
+      });
+
+      expect(results[0].success).toBe(true);
+      expect(callApi).toHaveBeenCalledWith(
+        'A:{{ env.PROMPTFOO_REGISTER_SECRET }} B:{% include ".nvmrc" %}',
+        expect.anything(),
+        undefined,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('should handle provider errors', async () => {

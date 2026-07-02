@@ -793,6 +793,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  runtimeRegisterNames,
   test,
   testSuite,
   vars,
@@ -801,6 +802,7 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  runtimeRegisterNames?: string[];
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
@@ -814,6 +816,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    runtimeRegisterNames,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1442,7 +1445,13 @@ async function runEvalInternal({
     test,
     vars: state.vars,
   });
-  Object.assign(state.vars, registers);
+  const runtimeRegisterNames = registers ? Object.keys(registers) : undefined;
+  // Registers hold untrusted provider output captured via storeOutputAs. Keep
+  // each root opaque during preprocessing; the final prompt can still interpolate
+  // the stored value as literal data without loading files or evaluating templates.
+  if (registers) {
+    Object.assign(state.vars, registers);
+  }
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
@@ -1463,6 +1472,7 @@ async function runEvalInternal({
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      runtimeRegisterNames,
       test,
       testSuite,
       vars: state.vars,

@@ -5,7 +5,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -18,8 +18,15 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
-import { maybeLoadConfigFromExternalFile } from './file';
+import {
+  getNunjucksEngineForFilePath,
+  loadConfigFromFilePath,
+  maybeLoadConfigFromExternalFile,
+} from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseRubyFileReference } from './fileUrl';
+import { parseFileUrl } from './functions/loadFunction';
+import { toPosixPath } from './pathUtils';
 import { parseXlsxFile } from './xlsx';
 
 import type {
@@ -41,29 +48,426 @@ type StandaloneTestsFileMetadata = {
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
+const varFileDependencyPaths = new WeakMap<object, string[]>();
+
+function getExternalFileDependencyPaths(reference: string, declaringBasePath: string): string[] {
+  if (!reference.startsWith('file://')) {
+    return [];
+  }
+  const renderedReference = getNunjucksEngineForFilePath().renderString(reference, {});
+  const { filePath } = parseFileUrl(renderedReference);
+  const physicalPath = parseRubyFileReference(filePath)?.filePath ?? filePath;
+  const absolutePath = path.isAbsolute(physicalPath)
+    ? physicalPath
+    : path.resolve(declaringBasePath, physicalPath);
+  const matches = hasMagic(physicalPath, {
+    magicalBraces: true,
+    windowsPathsNoEscape: true,
+  })
+    ? (globSync(absolutePath, { windowsPathsNoEscape: true }) ?? [])
+    : [absolutePath];
+  return matches.map((matchedPath) => path.resolve(matchedPath));
+}
+
+function collectExternalFileDependencies(
+  value: unknown,
+  declaringBasePath: string,
+  dependencyPaths: Set<string>,
+  visited = new WeakSet<object>(),
+): void {
+  if (typeof value === 'string') {
+    getExternalFileDependencyPaths(value, declaringBasePath).forEach((dependencyPath) =>
+      dependencyPaths.add(dependencyPath),
+    );
+    return;
+  }
+  if (typeof value !== 'object' || value === null || visited.has(value)) {
+    return;
+  }
+  visited.add(value);
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && 'value' in descriptor) {
+      collectExternalFileDependencies(
+        descriptor.value,
+        declaringBasePath,
+        dependencyPaths,
+        visited,
+      );
+    }
+  }
+}
+
+export function getVarFileDependencyPaths(value: unknown): string[] {
+  return typeof value === 'object' && value !== null
+    ? [...(varFileDependencyPaths.get(value) ?? [])]
+    : [];
+}
+
+function resolveVarFileReference(
+  reference: string,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  resolveDirectReference: boolean,
+  visited: WeakSet<object>,
+  loadStructuredReference: boolean,
+  dependencyPaths?: Set<string>,
+): unknown {
+  const shouldRender = reference.includes('{{') || reference.includes('{%');
+  const renderedReference = shouldRender
+    ? maybeLoadConfigFromExternalFile(reference, 'vars')
+    : reference;
+  if (
+    typeof renderedReference !== 'string' ||
+    !renderedReference.startsWith('file://') ||
+    !resolveDirectReference
+  ) {
+    return renderedReference;
+  }
+
+  const { filePath, functionName } = parseFileUrl(renderedReference);
+  const absolutePath = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(declaringBasePath, filePath);
+  const structuredPaths = loadStructuredReference
+    ? getStructuredVarFilePaths(filePath, absolutePath, declaringBasePath)
+    : undefined;
+  if (structuredPaths) {
+    return loadStructuredVarFileReference(
+      absolutePath,
+      structuredPaths,
+      resolutionBasePath,
+      visited,
+      dependencyPaths,
+    );
+  }
+  dependencyPaths?.add(path.resolve(absolutePath));
+
+  if (path.isAbsolute(filePath)) {
+    return renderedReference;
+  }
+  const rebasedPath = path.relative(path.resolve(resolutionBasePath), absolutePath);
+  const rebasedReference = `file://${toPosixPath(rebasedPath)}`;
+  return functionName ? `${rebasedReference}:${functionName}` : rebasedReference;
+}
+
+function resolveVarFileReferences(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  resolveDirectReferences = false,
+  visited = new WeakSet<object>(),
+  loadStructuredReferences = false,
+  dependencyPaths?: Set<string>,
+): void {
+  if (typeof value !== 'object' || value === null || visited.has(value)) {
+    return;
+  }
+  visited.add(value);
+
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor) || descriptor.writable !== true) {
+      continue;
+    }
+
+    const nestedValue = descriptor.value;
+    if (typeof nestedValue === 'string' && nestedValue.startsWith('file://')) {
+      const resolvedValue = resolveVarFileReference(
+        nestedValue,
+        declaringBasePath,
+        resolutionBasePath,
+        resolveDirectReferences,
+        visited,
+        loadStructuredReferences,
+        dependencyPaths,
+      );
+      if (resolvedValue !== nestedValue) {
+        Object.defineProperty(value, key, { ...descriptor, value: resolvedValue });
+      }
+    } else if (Array.isArray(nestedValue) || isPlainObject(nestedValue)) {
+      resolveVarFileReferences(
+        nestedValue,
+        declaringBasePath,
+        resolutionBasePath,
+        true,
+        visited,
+        loadStructuredReferences,
+        dependencyPaths,
+      );
+    }
+  }
+}
+
+const STRUCTURED_VAR_FILE_EXTENSIONS = new Set(['.csv', '.json', '.yaml', '.yml']);
+
+type StructuredVarFileSource = {
+  isGlob: boolean;
+  matchedPaths: string[];
+};
+
+function hasStructuredVarFileExtension(filePath: string): boolean {
+  return STRUCTURED_VAR_FILE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function hasStructuredVarFileExtensionPattern(filePath: string): boolean {
+  const extensionPattern = path.extname(filePath).toLowerCase();
+  return (
+    STRUCTURED_VAR_FILE_EXTENSIONS.has(extensionPattern) ||
+    /\.(?:csv|json|yaml|yml)(?=$|[)}|,])/.test(filePath.toLowerCase()) ||
+    /(?:^|[({|,])(?:csv|json|yaml|yml)(?=$|[)}|,])/.test(extensionPattern)
+  );
+}
+
+function getStructuredVarFilePaths(
+  filePath: string,
+  absolutePath: string,
+  declaringBasePath: string,
+): StructuredVarFileSource | undefined {
+  const hasLoaderMagic = hasMagic(filePath, { windowsPathsNoEscape: true });
+  if (hasLoaderMagic) {
+    const extensionPattern = path.extname(filePath);
+    const hasStructuredExtensionPattern = hasStructuredVarFileExtensionPattern(filePath);
+    const hasLiteralExtension = /^\.[a-z0-9_-]+$/i.test(extensionPattern);
+    if (hasLiteralExtension && !hasStructuredExtensionPattern) {
+      return undefined;
+    }
+    const matchedPaths = path.isAbsolute(filePath)
+      ? globSync(filePath, { windowsPathsNoEscape: true })
+      : globSync(filePath, {
+          absolute: true,
+          cwd: declaringBasePath,
+          windowsPathsNoEscape: true,
+        });
+    if (matchedPaths.length === 0) {
+      return hasStructuredExtensionPattern ? { isGlob: true, matchedPaths } : undefined;
+    }
+    return matchedPaths.every(hasStructuredVarFileExtension)
+      ? { isGlob: true, matchedPaths }
+      : undefined;
+  }
+
+  const hasBraceMagic = hasMagic(filePath, {
+    magicalBraces: true,
+    windowsPathsNoEscape: true,
+  });
+  return !hasBraceMagic && hasStructuredVarFileExtension(filePath)
+    ? { isGlob: false, matchedPaths: [absolutePath] }
+    : undefined;
+}
+
+function rebaseLoadedStructuredValue(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  visited: WeakSet<object>,
+  dependencyPaths?: Set<string>,
+): unknown {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return resolveVarFileReference(
+      value,
+      declaringBasePath,
+      resolutionBasePath,
+      true,
+      visited,
+      false,
+      dependencyPaths,
+    );
+  }
+  if (typeof value === 'object' && value !== null) {
+    resolveVarFileReferences(
+      value,
+      declaringBasePath,
+      resolutionBasePath,
+      true,
+      visited,
+      false,
+      dependencyPaths,
+    );
+  }
+  return value;
+}
+
+function loadStructuredVarFileReference(
+  absolutePath: string,
+  source: StructuredVarFileSource,
+  resolutionBasePath: string,
+  visited: WeakSet<object>,
+  dependencyPaths?: Set<string>,
+): unknown {
+  for (const matchedPath of source.matchedPaths) {
+    dependencyPaths?.add(path.resolve(matchedPath));
+  }
+  if (!source.isGlob) {
+    return rebaseLoadedStructuredValue(
+      loadConfigFromFilePath(absolutePath),
+      path.dirname(absolutePath),
+      resolutionBasePath,
+      visited,
+      dependencyPaths,
+    );
+  }
+
+  if (source.matchedPaths.length === 0) {
+    throw new Error(`No files found matching pattern: ${absolutePath}`);
+  }
+
+  const loadedValues: unknown[] = [];
+  for (const matchedPath of source.matchedPaths) {
+    let loadedValue: unknown;
+    try {
+      loadedValue = loadConfigFromFilePath(matchedPath);
+    } catch (error) {
+      if (error instanceof Error && error.message === `File does not exist: ${matchedPath}`) {
+        logger.debug(`File disappeared during glob expansion: ${matchedPath}`);
+        continue;
+      }
+      throw error;
+    }
+    const extension = path.extname(matchedPath).toLowerCase();
+    if ((extension === '.yaml' || extension === '.yml') && loadedValue == null) {
+      continue;
+    }
+    const rebasedValue = rebaseLoadedStructuredValue(
+      loadedValue,
+      path.dirname(matchedPath),
+      resolutionBasePath,
+      visited,
+      dependencyPaths,
+    );
+    if (Array.isArray(rebasedValue)) {
+      loadedValues.push(...rebasedValue);
+    } else {
+      loadedValues.push(rebasedValue);
+    }
+  }
+  return loadedValues;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+export function rebaseTestCaseVarFileReferences(
+  testCase: TestCase,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  visited = new WeakSet<object>(),
+): TestCase {
+  resolveVarFileReferences(testCase.vars, declaringBasePath, resolutionBasePath, false, visited);
+  return testCase;
+}
+
+function loadTopLevelVarsFileReferences(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  visited: WeakSet<object>,
+  dependencyPaths?: Set<string>,
+): unknown {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      !descriptor ||
+      !('value' in descriptor) ||
+      descriptor.writable !== true ||
+      typeof descriptor.value !== 'string' ||
+      !descriptor.value.startsWith('file://')
+    ) {
+      continue;
+    }
+
+    const renderedReference = maybeLoadConfigFromExternalFile(descriptor.value, 'vars');
+    if (typeof renderedReference !== 'string' || !renderedReference.startsWith('file://')) {
+      continue;
+    }
+    const { filePath } = parseFileUrl(renderedReference);
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(declaringBasePath, filePath);
+    const structuredPaths = getStructuredVarFilePaths(filePath, absolutePath, declaringBasePath);
+    let loadedValue: unknown;
+    if (structuredPaths) {
+      loadedValue = loadStructuredVarFileReference(
+        absolutePath,
+        structuredPaths,
+        resolutionBasePath,
+        visited,
+        dependencyPaths,
+      );
+    } else {
+      loadedValue = resolveVarFileReference(
+        renderedReference,
+        declaringBasePath,
+        resolutionBasePath,
+        true,
+        visited,
+        false,
+        dependencyPaths,
+      );
+    }
+    Object.defineProperty(value, key, { ...descriptor, value: loadedValue });
+  }
+
+  return value;
+}
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
+  resolutionBasePath: string = basePath || process.cwd(),
 ): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
   }
 
   const ret: Record<string, string | string[] | object> = {};
+  const dependencyPaths = new Set<string>();
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const renderedPathOrGlob = pathOrGlob.startsWith('file://')
+      ? maybeLoadConfigFromExternalFile(pathOrGlob, 'vars')
+      : pathOrGlob;
+    const filePathOrGlob = renderedPathOrGlob.startsWith('file://')
+      ? parseFileUrl(renderedPathOrGlob).filePath
+      : renderedPathOrGlob;
+    const resolvedPath = path.resolve(basePath, filePathOrGlob);
 
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
 
     for (const p of paths) {
+      dependencyPaths.add(path.resolve(p));
       const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData);
+      const visited = new WeakSet<object>();
+      const yamlData = loadTopLevelVarsFileReferences(
+        rawData,
+        path.dirname(p),
+        resolutionBasePath,
+        visited,
+        dependencyPaths,
+      );
+      resolveVarFileReferences(
+        yamlData,
+        path.dirname(p),
+        resolutionBasePath,
+        false,
+        visited,
+        true,
+        dependencyPaths,
+      );
       Object.assign(ret, yamlData);
     }
   }
+  varFileDependencyPaths.set(ret, [...dependencyPaths]);
   return ret;
 }
 
@@ -118,7 +522,40 @@ export async function readStandaloneTestsFile(
     });
     rows = await fetchCsvFromSharepoint(varsPath);
   } else {
-    return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
+    const testCases = await readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
+    const { fileExtension, pathWithoutFunction } = getStandaloneTestsFileMetadata(
+      varsPath,
+      basePath,
+    );
+    if (
+      fileExtension === 'json' ||
+      fileExtension === 'jsonl' ||
+      fileExtension === 'yaml' ||
+      fileExtension === 'yml'
+    ) {
+      const declaringBasePath = path.dirname(pathWithoutFunction);
+      const visited = new WeakSet<object>();
+      const loadedTestCases: TestCase[] = [];
+      for (const testCase of testCases) {
+        const loadedTestCase = await loadTestWithVars(
+          testCase,
+          declaringBasePath,
+          basePath || process.cwd(),
+        );
+        loadedTestCases.push(
+          typeof testCase.vars === 'string' || Array.isArray(testCase.vars)
+            ? loadedTestCase
+            : rebaseTestCaseVarFileReferences(
+                loadedTestCase,
+                declaringBasePath,
+                basePath || process.cwd(),
+                visited,
+              ),
+        );
+      }
+      return loadedTestCases;
+    }
+    return testCases;
   }
 
   return csvRowsToTestCases(rows);
@@ -248,23 +685,41 @@ function getStandaloneTestsFileMetadata(
   varsPath: string,
   basePath: string,
 ): StandaloneTestsFileMetadata {
-  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  // Split on the last colon to handle Windows drive letters correctly
-  const colonCount = resolvedVarsPath.split(':').length - 1;
+  const parsedFileUrl = varsPath.startsWith('file://') ? parseFileUrl(varsPath) : undefined;
+  const resolvedVarsPath = path.resolve(basePath, parsedFileUrl?.filePath ?? varsPath);
+  if (parsedFileUrl?.functionName) {
+    const pathWithoutFunction = resolvedVarsPath;
+    const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+    return {
+      resolvedVarsPath,
+      pathWithoutFunction,
+      maybeFunctionName: parsedFileUrl.functionName,
+      fileExtension,
+      extensionWithoutSheet: fileExtension.split('#')[0],
+    };
+  }
   const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
+  const candidateFilePath = resolvedVarsPath.slice(0, lastColonIndex);
+  const candidateFunctionName = resolvedVarsPath.slice(lastColonIndex + 1);
+  const lastColonIsInDirectory = /[\\/]/.test(candidateFunctionName);
+  const hasFunctionSuffix =
+    lastColonIndex > 1 &&
+    !lastColonIsInDirectory &&
+    (isJavascriptFile(candidateFilePath) || candidateFilePath.endsWith('.py'));
 
-  // For Windows paths, we need to account for the drive letter colon
-  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
-  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
-
-  if (effectiveColonCount > 1) {
+  const basename = parsePath(resolvedVarsPath).base;
+  const firstBasenameColon = basename.indexOf(':');
+  const hasMultipleExecutableSuffixes =
+    firstBasenameColon > 0 &&
+    basename.indexOf(':', firstBasenameColon + 1) > firstBasenameColon &&
+    (isJavascriptFile(basename.slice(0, firstBasenameColon)) ||
+      basename.slice(0, firstBasenameColon).endsWith('.py'));
+  if (hasMultipleExecutableSuffixes) {
     throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
   }
 
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
-  const maybeFunctionName =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
+  const pathWithoutFunction = hasFunctionSuffix ? candidateFilePath : resolvedVarsPath;
+  const maybeFunctionName = hasFunctionSuffix ? candidateFunctionName : undefined;
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
   // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
   const extensionWithoutSheet = fileExtension.split('#')[0];
@@ -383,14 +838,96 @@ function parseYamlTestCases(fileContent: string): TestCase[] {
 async function loadTestWithVars(
   testCase: TestCaseWithVarsFile,
   testBasePath: string,
+  resolutionBasePath: string = testBasePath || process.cwd(),
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readTestFiles(testCase.vars, testBasePath);
+    ret.vars = await readTestFiles(testCase.vars, testBasePath, resolutionBasePath);
+    varFileDependencyPaths.set(ret, getVarFileDependencyPaths(ret.vars));
   } else {
     ret.vars = testCase.vars;
   }
   return ret;
+}
+
+function loadExternalDefaultTestAssertionValues(
+  assertions: TestCase['assert'],
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  dependencyPaths: Set<string>,
+): void {
+  if (!Array.isArray(assertions)) {
+    return;
+  }
+  const pending: Array<{
+    assertions: unknown[];
+    index: number;
+    loadStringEntries: boolean;
+  }> = assertions.map((_, index) => ({
+    assertions: assertions as unknown[],
+    index,
+    loadStringEntries: true,
+  }));
+  const visited = new WeakSet<object>();
+  while (pending.length > 0) {
+    const { assertions: assertionList, index, loadStringEntries } = pending.pop()!;
+    let assertion = assertionList[index];
+    const loadedFromString = typeof assertion === 'string';
+    let assertionSourcePaths: string[] = [];
+    if (typeof assertion === 'string') {
+      if (!loadStringEntries) {
+        continue;
+      }
+      assertionSourcePaths = getExternalFileDependencyPaths(assertion, declaringBasePath);
+      assertionSourcePaths.forEach((dependencyPath) => dependencyPaths.add(dependencyPath));
+      assertion = maybeLoadConfigFromExternalFile(
+        assertion,
+        'assertion',
+        declaringBasePath,
+        resolutionBasePath,
+      );
+      assertionList[index] = assertion;
+    }
+    if (typeof assertion !== 'object' || assertion === null || visited.has(assertion)) {
+      continue;
+    }
+    if (loadedFromString && assertionSourcePaths.length === 1) {
+      const assertionBasePath = path.dirname(assertionSourcePaths[0]);
+      collectExternalFileDependencies(assertion, assertionBasePath, dependencyPaths);
+      resolveVarFileReferences(
+        assertion,
+        assertionBasePath,
+        resolutionBasePath,
+        true,
+        new WeakSet<object>(),
+        false,
+      );
+    }
+    visited.add(assertion);
+    const record = assertion as Record<string, unknown>;
+    if (record.type === 'assert-set' && Array.isArray(record.assert)) {
+      pending.push(
+        ...record.assert.map((_, childIndex) => ({
+          assertions: record.assert as unknown[],
+          index: childIndex,
+          loadStringEntries: !loadedFromString && loadStringEntries,
+        })),
+      );
+    }
+    if (
+      !loadedFromString &&
+      loadStringEntries &&
+      Object.prototype.hasOwnProperty.call(record, 'value')
+    ) {
+      collectExternalFileDependencies(record.value, declaringBasePath, dependencyPaths);
+      record.value = maybeLoadConfigFromExternalFile(
+        record.value,
+        'assertion',
+        declaringBasePath,
+        resolutionBasePath,
+      );
+    }
+  }
 }
 
 export async function readTest(
@@ -400,15 +937,34 @@ export async function readTest(
 ): Promise<TestCase> {
   let testCase: TestCase;
   let effectiveBasePath = basePath;
+  const externalDefaultTestDependencyPaths = new Set<string>();
 
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
+    const rawTestCase = (
+      isDefaultTest ? rawContent : maybeLoadConfigFromExternalFile(rawContent)
+    ) as TestCaseWithVarsFile;
+    if (isDefaultTest) {
+      loadExternalDefaultTestAssertionValues(
+        rawTestCase.assert,
+        effectiveBasePath,
+        basePath || process.cwd(),
+        externalDefaultTestDependencyPaths,
+      );
+    }
+    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath, basePath || process.cwd());
+    if (externalDefaultTestDependencyPaths.size > 0) {
+      varFileDependencyPaths.set(testCase, [
+        ...new Set([...getVarFileDependencyPaths(testCase), ...externalDefaultTestDependencyPaths]),
+      ]);
+    }
+    if (typeof rawTestCase.vars !== 'string' && !Array.isArray(rawTestCase.vars)) {
+      rebaseTestCaseVarFileReferences(testCase, effectiveBasePath, basePath || process.cwd());
+    }
   } else {
-    testCase = await loadTestWithVars(test, basePath);
+    testCase = await loadTestWithVars(test, basePath, basePath || process.cwd());
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
@@ -465,7 +1021,7 @@ export async function loadTestsFromGlob(
   }
 
   if (loadTestsGlob.startsWith('file://')) {
-    loadTestsGlob = loadTestsGlob.slice('file://'.length);
+    loadTestsGlob = parseFileUrl(loadTestsGlob).filePath;
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
@@ -501,6 +1057,7 @@ export async function loadTestsFromGlob(
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
+    let testCasesDeclareNestedVarPaths = false;
     // Extract path without function name (Windows-aware)
     const lastColonIndex = testFile.lastIndexOf(':');
     const pathWithoutFunction: string =
@@ -521,6 +1078,7 @@ export async function loadTestsFromGlob(
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
+      testCasesDeclareNestedVarPaths = true;
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = fileContent
@@ -529,10 +1087,12 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
+      testCasesDeclareNestedVarPaths = true;
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
+      testCasesDeclareNestedVarPaths = true;
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }
@@ -541,8 +1101,18 @@ export async function loadTestsFromGlob(
       if (!Array.isArray(testCases) && typeof testCases === 'object') {
         testCases = [testCases];
       }
+      const visited = new WeakSet<object>();
       for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+        const loadedTestCase = await readTest(testCase, path.dirname(testFile));
+        if (testCasesDeclareNestedVarPaths) {
+          rebaseTestCaseVarFileReferences(
+            loadedTestCase,
+            path.dirname(testFile),
+            basePath || process.cwd(),
+            visited,
+          );
+        }
+        ret.push(loadedTestCase);
       }
     }
   }

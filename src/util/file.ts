@@ -12,8 +12,9 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { parseRubyFileReference } from './fileUrl';
 import { parseFileUrl } from './functions/loadFunction';
-import { safeResolve } from './pathUtils';
+import { safeResolve, toPosixPath } from './pathUtils';
 import { renderVarsInObject } from './render';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
@@ -59,6 +60,66 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 }
 
 /**
+ * Loads one exact local file without interpreting glob metacharacters in its path.
+ */
+export function loadConfigFromFilePath(filePath: string): any {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+    throw new Error(`Failed to read file ${filePath}: ${error}`);
+  }
+  if (filePath.endsWith('.json')) {
+    try {
+      return JSON.parse(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse JSON file ${filePath}: ${error}`);
+    }
+  }
+  if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    try {
+      return yaml.load(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse YAML file ${filePath}: ${error}`);
+    }
+  }
+  if (filePath.endsWith('.csv')) {
+    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      columns: true as const,
+    };
+    const records = csvParse<Record<string, string>>(contents, csvOptions);
+    if (records.length > 0 && Object.keys(records[0]).length === 1) {
+      return records.map((record) => Object.values(record)[0]);
+    }
+    return records;
+  }
+  return contents;
+}
+
+function rebasePreservedAssertionReference(
+  renderedFilePath: string,
+  cleanPath: string,
+  functionName: string | undefined,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+): string {
+  if (path.isAbsolute(cleanPath)) {
+    return renderedFilePath;
+  }
+  const rubyReference = parseRubyFileReference(cleanPath);
+  const executablePath = rubyReference?.filePath ?? cleanPath;
+  const executableFunctionName = functionName ?? rubyReference?.functionName;
+  const absolutePath = path.resolve(declaringBasePath, executablePath);
+  const rebasedPath = path.relative(path.resolve(resolutionBasePath), absolutePath);
+  return `file://${toPosixPath(rebasedPath)}${
+    executableFunctionName ? `:${executableFunctionName}` : ''
+  }`;
+}
+
+/**
  * Loads content from an external file if the input is a file path, otherwise
  * returns the input as-is. Supports Nunjucks templating for file paths.
  *
@@ -66,6 +127,8 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
  * preserves Python/JS file references instead of loading their content.
+ * @param basePath - Optional declaring-file base path. Defaults to the active config base.
+ * @param resolutionBasePath - Base retained by preserved executable references.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -75,10 +138,12 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
+  resolutionBasePath: string = basePath ?? cliState.basePath ?? '',
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, context);
+      const content: any = maybeLoadFromExternalFile(path, context, basePath, resolutionBasePath);
       return content;
     });
   }
@@ -97,12 +162,22 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve executable file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
-    return renderedFilePath;
+  const isPythonFile = /\.py(?::[^/\\]+)?$/i.test(renderedFilePath);
+  const isRubyFile = /\.rb(?::[^/\\]+)?$/i.test(renderedFilePath);
+  if (context === 'assertion' && (isJavascriptFile(cleanPath) || isPythonFile || isRubyFile)) {
+    logger.debug(`Preserving executable file reference in assertion context: ${renderedFilePath}`);
+    return basePath === undefined
+      ? renderedFilePath
+      : rebasePreservedAssertionReference(
+          renderedFilePath,
+          cleanPath,
+          functionName,
+          basePath,
+          resolutionBasePath,
+        );
   }
 
   // In vars contexts, preserve all file:// references for test case expansion
@@ -127,7 +202,7 @@ export function maybeLoadFromExternalFile(
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
-  const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
+  const resolvedPath = path.resolve(basePath ?? cliState.basePath ?? '', pathToUse);
 
   // Check if the path contains glob patterns
   if (hasMagic(pathToUse)) {
@@ -190,44 +265,7 @@ export function maybeLoadFromExternalFile(
     return allContents;
   }
 
-  // Original single file logic
-  const finalPath = resolvedPath;
-
-  let contents: string;
-  try {
-    contents = fs.readFileSync(finalPath, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`File does not exist: ${finalPath}`);
-    }
-    throw new Error(`Failed to read file ${finalPath}: ${error}`);
-  }
-  if (finalPath.endsWith('.json')) {
-    try {
-      return JSON.parse(contents);
-    } catch (error) {
-      throw new Error(`Failed to parse JSON file ${finalPath}: ${error}`);
-    }
-  }
-  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    try {
-      return yaml.load(contents);
-    } catch (error) {
-      throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
-    }
-  }
-  if (finalPath.endsWith('.csv')) {
-    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-      columns: true as const,
-    };
-    const records = csvParse<Record<string, string>>(contents, csvOptions);
-    // If single column, return array of values
-    if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record) => Object.values(record)[0]);
-    }
-    return records;
-  }
-  return contents;
+  return loadConfigFromFilePath(resolvedPath);
 }
 
 /**
@@ -253,14 +291,20 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param basePath - Optional declaring-file base path. Defaults to the active config base.
+ * @param resolutionBasePath - Base retained by preserved executable references.
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
+  resolutionBasePath: string = basePath ?? cliState.basePath ?? '',
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
+    return config.map((item) =>
+      maybeLoadConfigFromExternalFile(item, context, basePath, resolutionBasePath),
+    );
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
@@ -278,7 +322,12 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = maybeLoadConfigFromExternalFile(
+        config[key],
+        childContext,
+        basePath,
+        resolutionBasePath,
+      );
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -293,7 +342,7 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  return maybeLoadFromExternalFile(config, context, basePath, resolutionBasePath);
 }
 
 /**

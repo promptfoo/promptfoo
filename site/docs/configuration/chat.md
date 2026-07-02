@@ -332,6 +332,12 @@ tests:
 
 This creates `favoriteFruit` and `reason` vars on-the-go, as the chatbot answers questions.
 
+:::note
+
+Provider output is untrusted, so stored values are treated as literal data when reused. A `file://` or `package:` reference is not loaded, and Nunjucks syntax in stored text is not evaluated before interpolation.
+
+:::
+
 ### Manipulating outputs with `transform`
 
 Outputs can be modified before storage using the `transform` property:

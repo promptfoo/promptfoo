@@ -204,6 +204,18 @@ export function sanitizeRuntimeOptions(
   return sanitized;
 }
 
+/** Removes local-only runtime metadata before exports or remote sharing. */
+export function sanitizeRuntimeOptionsForOutput(
+  options?: EvalRuntimeOptions,
+): EvalRuntimeOptions | undefined {
+  const sanitized = sanitizeRuntimeOptions(options);
+  if (!sanitized) {
+    return undefined;
+  }
+  delete sanitized.configBasePath;
+  return sanitized;
+}
+
 /**
  * Check if a value looks like a secret based on common patterns.
  * Detects API keys, tokens, and other credential patterns.

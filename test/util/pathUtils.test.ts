@@ -1,7 +1,7 @@
 import path from 'path';
 
 import { describe, expect, it } from 'vitest';
-import { safeJoin, safeResolve } from '../../src/util/pathUtils';
+import { safeJoin, safeResolve, toPosixPath } from '../../src/util/pathUtils';
 
 /**
  * Helper to create file:// URLs in a cross-platform way
@@ -13,6 +13,16 @@ function getFileUrl(path: string): string {
 }
 
 describe('pathUtils', () => {
+  describe('toPosixPath', () => {
+    it('normalizes Windows separators for file reference serialization', () => {
+      expect(toPosixPath('fixtures\\data\\report.txt')).toBe('fixtures/data/report.txt');
+    });
+
+    it('preserves existing POSIX separators', () => {
+      expect(toPosixPath('fixtures/data/report.txt')).toBe('fixtures/data/report.txt');
+    });
+  });
+
   describe('safeResolve', () => {
     it('returns absolute path unchanged', () => {
       const absolutePath = path.resolve('/absolute/path/file.txt');

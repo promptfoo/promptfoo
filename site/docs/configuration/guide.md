@@ -188,6 +188,25 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
+`file://` references also work inside nested objects and arrays. A nested string can also map directly to a top-level file-backed variable with `{{ variable }}` (quote it so YAML treats it as a string):
+
+```yaml
+tests:
+  - vars:
+      file_content: file://path/to/report.txt
+      reporting_period:
+        previous:
+          period: '2022-12-31'
+          report: file://path/to/report.txt
+        current:
+          period: '2023-12-31'
+          report: '{{ file_content }}'
+```
+
+Relative nested references in an external YAML or JSON test/vars file are resolved from the directory containing that file. Inline references are resolved from the configuration base directory.
+
+During prompt rendering, nested text files are loaded as trimmed strings and YAML files as JSON strings. The external vars-file loader preserves its existing one-pass behavior: direct JSON, YAML, and CSV references already present in that file are parsed as structured values, including wildcard and extglob patterns for those formats, but references found inside a newly loaded structured file are not parsed recursively. Top-level brace-only patterns remain deferred to normal variable expansion. Binary files and JavaScript, Python, PDF, or media references remain literal when nested; use a top-level variable for the existing executable, PDF, and media behavior.
+
 Javascript and Python variable files are supported. For example:
 
 ```yaml

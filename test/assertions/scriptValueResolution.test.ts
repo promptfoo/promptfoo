@@ -365,6 +365,25 @@ describe('Script value resolution', () => {
   });
 
   describe('edge cases', () => {
+    it('should preserve colons in executable assertion directories', async () => {
+      vi.mocked(importModule).mockResolvedValueOnce(() => true);
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file://reports.js:archive/check.js:check',
+        },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve(cliState.basePath!, 'reports.js:archive/check.js'),
+        'check',
+      );
+      expect(result.pass).toBe(true);
+    });
+
     it('should handle empty string from script', async () => {
       const result = await runAssertion({
         assertion: {

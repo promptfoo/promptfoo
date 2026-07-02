@@ -48,3 +48,16 @@ export function isAudioFile(filePath: string): boolean {
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return audioExtensions.includes(fileExtension);
 }
+
+/** Whether a nested var reference can be loaded as inert text without execution or decoding. */
+export function isSupportedNestedTextFile(filePath: string): boolean {
+  const extension = filePath.split('.').pop()?.toLowerCase() || '';
+  return !(
+    isJavascriptFile(filePath) ||
+    extension === 'py' ||
+    extension === 'pdf' ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
+  );
+}
