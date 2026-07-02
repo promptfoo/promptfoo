@@ -2677,6 +2677,25 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.002, 10);
     });
 
+    it('should calculate cost for gemini-embedding-2-preview (tracks gemini-embedding-2)', () => {
+      // gemini-embedding-2-preview: input=0.2/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-2-preview', {}, 10000, 0);
+      expect(cost).toBeCloseTo(0.002, 10);
+    });
+
+    it('should apply Gemini 3 Pro tiered pricing for the gemini-pro-latest alias', () => {
+      // gemini-pro-latest resolves to the current Gemini Pro snapshot
+      // (gemini-3.1-pro-preview): base input=2.0/1M, output=12.0/1M;
+      // tiered (>200k): input=4.0/1M, output=18.0/1M.
+      const costBelowThreshold = calculateGoogleCost('gemini-pro-latest', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-pro-latest', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2738,16 +2757,16 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
-    it('should calculate cost for gemini-flash-latest using flash pricing', () => {
-      // gemini-flash-latest aliases the current Flash snapshot: input=0.3/1M, output=2.5/1M
+    it('should calculate cost for gemini-flash-latest using the tier it currently resolves to', () => {
+      // gemini-flash-latest resolves server-side to gemini-3.5-flash: input=1.5/1M, output=9/1M
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.00155, 10);
+      expect(cost).toBeCloseTo(0.006, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using flash-lite alias pricing', () => {
-      // gemini-flash-lite-latest tracks the current Flash-Lite tier: input=0.1/1M, output=0.4/1M
+    it('should calculate cost for gemini-flash-lite-latest using the tier it currently resolves to', () => {
+      // gemini-flash-lite-latest resolves server-side to gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0003, 10);
+      expect(cost).toBeCloseTo(0.001, 10);
     });
 
     it('should return undefined for shutdown models', () => {
