@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/collapsible';
 import { ExpandLessIcon, ExpandMoreIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import type { ScanAsset, ScanCheck } from '../ModelAudit.types';
@@ -195,7 +196,9 @@ export default function ChecksSection({
     <div>
       {/* Section Header */}
       <div className="flex items-center gap-4 mb-4">
-        <h3 className="text-lg font-semibold">Security Checks</h3>
+        <Typography variant="subtitle" as="h3">
+          Security Checks
+        </Typography>
 
         {/* Summary badges */}
         {totalChecks !== undefined && (
