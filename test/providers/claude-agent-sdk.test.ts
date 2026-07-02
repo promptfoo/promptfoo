@@ -1116,19 +1116,20 @@ describe('ClaudeCodeSDKProvider', () => {
 
     describe('assistant errors and api_error_status', () => {
       const buildAssistantMessage = (
-        error: SDKAssistantMessageError | undefined,
+        error: SDKAssistantMessageError | 'overloaded' | undefined,
         opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
-      ): Partial<SDKMessage> => ({
-        type: 'assistant',
-        message: createMockBetaMessage([{ type: 'text', text: 'hello' }]) as any,
-        parent_tool_use_id: null,
-        uuid: (opts.uuid ??
-          '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
-        session_id: 'test-session-123',
-        ...(error ? { error } : {}),
-        ...(opts.request_id ? { request_id: opts.request_id } : {}),
-        ...(opts.subagent_type ? { subagent_type: opts.subagent_type } : {}),
-      });
+      ): Partial<SDKMessage> =>
+        ({
+          type: 'assistant',
+          message: createMockBetaMessage([{ type: 'text', text: 'hello' }]) as any,
+          parent_tool_use_id: null,
+          uuid: (opts.uuid ??
+            '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
+          session_id: 'test-session-123',
+          ...(error ? { error } : {}),
+          ...(opts.request_id ? { request_id: opts.request_id } : {}),
+          ...(opts.subagent_type ? { subagent_type: opts.subagent_type } : {}),
+        }) as unknown as Partial<SDKMessage>;
 
       it('exposes api_error_status on success metadata when the SDK reports it', async () => {
         mockQuery.mockReturnValue(

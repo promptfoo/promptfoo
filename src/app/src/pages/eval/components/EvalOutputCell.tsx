@@ -1,9 +1,20 @@
 import React, { useCallback, useId, useMemo } from 'react';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@app/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useToast } from '@app/hooks/useToast';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -29,6 +40,7 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
@@ -1048,6 +1060,7 @@ function renderOutputActions({
   handleRowShareLink,
   handleRating,
   handleSetScore,
+  handleDeleteClick,
   handleCommentOpen,
   handlePromptOpen,
   handlePromptClose,
@@ -1075,6 +1088,7 @@ function renderOutputActions({
   handleRowShareLink: () => void;
   handleRating: (isPass: boolean) => void;
   handleSetScore: () => void;
+  handleDeleteClick: () => void;
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
   handlePromptClose: () => void;
@@ -1186,6 +1200,19 @@ function renderOutputActions({
         <TooltipTrigger asChild>
           <button
             type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors text-destructive"
+            onClick={handleDeleteClick}
+            aria-label="Delete eval result"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Delete eval result</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
             className="action p-1 rounded hover:bg-muted transition-colors"
             onClick={handleCommentOpen}
             aria-label="Edit comment"
@@ -1246,6 +1273,7 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
+  onDeleteResult?: (resultId: string) => Promise<void>;
   evaluationId?: string;
   testCaseId?: string;
 }
@@ -1275,6 +1303,7 @@ function EvalOutputCell({
   rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
+  onDeleteResult,
   firstOutput,
   showDiffs,
   searchText,
@@ -1299,6 +1328,7 @@ function EvalOutputCell({
   } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { showToast } = useToast();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
@@ -1451,6 +1481,8 @@ function EvalOutputCell({
   };
 
   const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const handleSetScore = () => {
     setScoreDialogOpen(true);
@@ -1459,6 +1491,29 @@ function EvalOutputCell({
   const handleScoreSave = (score: number) => {
     onRating(undefined, score, commentText);
     setScoreDialogOpen(false);
+  };
+  const handleDeleteResult = async () => {
+    if (!onDeleteResult) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await onDeleteResult(output.id);
+      setDeleteDialogOpen(false);
+      showToast('Eval result deleted', 'success');
+    } catch (error) {
+      logger.error('Failed to delete eval result', {
+        error: getErrorMessage(error),
+        resultId: output.id,
+      });
+      showToast(
+        `Failed to delete eval result: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const [linked, setLinked] = React.useState(false);
@@ -1645,6 +1700,7 @@ function EvalOutputCell({
         handleRowShareLink,
         handleRating,
         handleSetScore,
+        handleDeleteClick: () => setDeleteDialogOpen(true),
         handleCommentOpen,
         handlePromptOpen,
         handlePromptClose,
@@ -1672,6 +1728,28 @@ function EvalOutputCell({
           onClose={() => setScoreDialogOpen(false)}
           onSave={handleScoreSave}
         />
+      )}
+      {deleteDialogOpen && (
+        <AlertDialog
+          open={deleteDialogOpen}
+          onOpenChange={(open) => !isDeleting && setDeleteDialogOpen(open)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete eval result?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the selected prompt output from the evaluation and recalculates
+                metrics. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteResult} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );

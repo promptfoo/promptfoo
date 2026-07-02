@@ -60,7 +60,7 @@
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
-    "build": "concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
+    "build": "node -e \"if (process.env.CI === 'true') { process.stdout.write('ci') }\" | grep -q ci && npm run tsc && NODE_OPTIONS='--max-old-space-size=8192' tsdown && npm run build:app || concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
     "postbuild": "tsx scripts/postbuild.ts",
     "citation:generate": "tsx scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",

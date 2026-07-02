@@ -315,6 +315,18 @@ export const SaveEvalResponseSchema = z.object({
 export type SaveEvalRequest = z.infer<typeof SaveEvalRequestSchema>;
 export type SaveEvalResponse = z.infer<typeof SaveEvalResponseSchema>;
 
+// DELETE /api/eval/:evalId/results/:id
+
+export const DeleteEvalResultParamsSchema = z.object({
+  evalId: z.string().min(1),
+  id: z.string().min(1),
+});
+
+export const DeleteEvalResultResponseSchema = MessageResponseSchema;
+
+export type DeleteEvalResultParams = z.infer<typeof DeleteEvalResultParamsSchema>;
+export type DeleteEvalResultResponse = z.infer<typeof DeleteEvalResultResponseSchema>;
+
 // DELETE /api/eval/:id
 
 export const DeleteEvalParamsSchema = EvalIdParamSchema;
@@ -384,6 +396,10 @@ export const EvalSchemas = {
     Params: SubmitRatingParamsSchema,
     Request: SubmitRatingRequestSchema,
     Response: SubmitRatingResponseSchema,
+  },
+  DeleteResult: {
+    Params: DeleteEvalResultParamsSchema,
+    Response: DeleteEvalResultResponseSchema,
   },
   Save: {
     Request: SaveEvalRequestSchema,

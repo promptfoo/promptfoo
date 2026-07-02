@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   },
   createShareableUrl: vi.fn(),
   deleteEval: vi.fn(),
+  deleteEvalResult: vi.fn(),
   deleteEvals: vi.fn(),
   determineShareDomain: vi.fn(),
   doRedteamRun: vi.fn(),
@@ -203,6 +204,7 @@ vi.mock('../../../src/util/apiHealth', () => ({
 
 vi.mock('../../../src/util/database', () => ({
   deleteEval: mocks.deleteEval,
+  deleteEvalResult: mocks.deleteEvalResult,
   deleteEvals: mocks.deleteEvals,
   getPrompts: mocks.getPrompts,
   getPromptsForTestCasesHash: mocks.getPromptsForTestCasesHash,
@@ -298,6 +300,7 @@ function setupDefaultMocks() {
   mocks.cloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.dev');
   mocks.cloudConfig.isEnabled.mockReturnValue(false);
   mocks.deleteEval.mockResolvedValue(undefined);
+  mocks.deleteEvalResult.mockResolvedValue({ evalId: 'eval-1', promptIdx: 0, testIdx: 0 });
   mocks.deleteEvals.mockReturnValue(undefined);
   mocks.determineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' });
   mocks.evalModel.findById.mockResolvedValue(null);
@@ -505,6 +508,12 @@ const smokeCases: SmokeCase[] = [
     path: '/api/eval/eval-1/results/result-1/rating',
     body: {},
     expectedStatus: 400,
+  },
+  {
+    method: 'delete',
+    openApiPath: '/api/eval/{evalId}/results/{id}',
+    path: '/api/eval/eval-1/results/result-1',
+    expectedStatus: 200,
   },
   {
     method: 'post',

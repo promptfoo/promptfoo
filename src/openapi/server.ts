@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -624,6 +624,23 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('SaveEvalResponse', EvalSchemas.Save.Response),
       400: validationError(),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'delete',
+    path: '/api/eval/{evalId}/results/{id}',
+    operationId: 'deleteEvalResult',
+    tags: ['Eval'],
+    summary: 'Delete one evaluation result',
+    request: {
+      params: params('DeleteEvalResultParams', EvalSchemas.DeleteResult.Params),
+    },
+    responses: {
+      200: jsonResponse('DeleteEvalResultResponse', EvalSchemas.DeleteResult.Response),
+      400: validationError(),
+      404: notFound('Result or evaluation not found'),
       500: serverError(),
     },
   });

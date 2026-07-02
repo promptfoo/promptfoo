@@ -3,6 +3,7 @@ import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
+  blobReferencesTable,
   datasetsTable,
   evalResultsTable,
   evalsTable,
@@ -437,6 +438,82 @@ export async function getEvalFromId(hash: string) {
     }
   }
   return undefined;
+}
+
+export async function deleteEvalResult(
+  resultId: string,
+  evalId?: string,
+): Promise<{ evalId: string; testIdx: number; promptIdx: number }> {
+  const db = await getDb();
+  const existing = await db
+    .select({
+      id: evalResultsTable.id,
+      evalId: evalResultsTable.evalId,
+      testIdx: evalResultsTable.testIdx,
+      promptIdx: evalResultsTable.promptIdx,
+    })
+    .from(evalResultsTable)
+    .where(eq(evalResultsTable.id, resultId))
+    .get();
+
+  if (!existing) {
+    throw new Error(`Eval result with ID ${resultId} not found`);
+  }
+
+  if (evalId && existing.evalId !== evalId) {
+    throw new Error(`Eval result ${resultId} does not belong to evaluation ${evalId}`);
+  }
+
+  const evalRecord = await Eval.findById(existing.evalId);
+  if (!evalRecord) {
+    throw new Error(`Eval with ID ${existing.evalId} not found`);
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(blobReferencesTable)
+      .where(
+        and(
+          eq(blobReferencesTable.evalId, existing.evalId),
+          eq(blobReferencesTable.testIdx, existing.testIdx),
+          eq(blobReferencesTable.promptIdx, existing.promptIdx),
+        ),
+      )
+      .run();
+    await tx.delete(evalResultsTable).where(eq(evalResultsTable.id, resultId)).run();
+  });
+
+  const { recalculatePromptMetrics } = await import('../node/retry');
+  await recalculatePromptMetrics(evalRecord);
+  notifyEvaluationChanged(existing.evalId);
+
+  return {
+    evalId: existing.evalId,
+    testIdx: existing.testIdx,
+    promptIdx: existing.promptIdx,
+  };
+}
+
+export async function deleteEvalResultsByTestIndex(
+  evalId: string,
+  testIdx: number,
+): Promise<number> {
+  const db = await getDb();
+  const existing = await db
+    .select({ id: evalResultsTable.id })
+    .from(evalResultsTable)
+    .where(and(eq(evalResultsTable.evalId, evalId), eq(evalResultsTable.testIdx, testIdx)))
+    .all();
+
+  if (existing.length === 0) {
+    throw new Error(`No eval results found for evaluation ${evalId} with testIdx=${testIdx}`);
+  }
+
+  for (const row of existing) {
+    await deleteEvalResult(row.id, evalId);
+  }
+
+  return existing.length;
 }
 
 export async function deleteEval(evalId: string) {

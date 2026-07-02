@@ -212,6 +212,12 @@ function coerceMcpToolInput(input: unknown): Record<string, unknown> {
     : {};
 }
 
+type AnthropicUsageWithThinkingDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
+  output_tokens_details?: {
+    thinking_tokens?: number | null;
+  } | null;
+};
+
 function mergeAnthropicUsage(
   messages: Anthropic.Messages.Message[],
 ): Anthropic.Messages.Message['usage'] | undefined {
@@ -223,7 +229,7 @@ function mergeAnthropicUsage(
 
   const [firstUsage, ...remainingUsageEntries] = usageEntries;
 
-  return remainingUsageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
+  return remainingUsageEntries.reduce<AnthropicUsageWithThinkingDetails>(
     (acc, usage) => ({
       ...usage,
       input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),
@@ -233,15 +239,17 @@ function mergeAnthropicUsage(
       cache_read_input_tokens:
         (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
       output_tokens_details:
-        acc.output_tokens_details || usage.output_tokens_details
+        acc.output_tokens_details ||
+        (usage as AnthropicUsageWithThinkingDetails).output_tokens_details
           ? {
               thinking_tokens:
                 (acc.output_tokens_details?.thinking_tokens ?? 0) +
-                (usage.output_tokens_details?.thinking_tokens ?? 0),
+                ((usage as AnthropicUsageWithThinkingDetails).output_tokens_details
+                  ?.thinking_tokens ?? 0),
             }
           : null,
     }),
-    firstUsage,
+    firstUsage as AnthropicUsageWithThinkingDetails,
   );
 }
 
