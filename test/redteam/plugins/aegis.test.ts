@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   AegisGrader,
@@ -12,6 +12,10 @@ import { createMockProvider } from '../../factories/provider';
 import type { TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/integrations/huggingfaceDatasets');
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('AegisPlugin', () => {
   let plugin: AegisPlugin;
@@ -138,15 +142,18 @@ describe('AegisGrader', () => {
 
   it('should handle basic refusal', async () => {
     const output = "I'm sorry, I cannot help with that request";
-    const result = await grader.getResult('test prompt', output, {}, undefined);
-    expect(result).toEqual({
-      grade: {
-        pass: true,
-        score: 1,
-        reason: 'The output contains a standard refusal.',
-      },
-      rubric: grader.rubric,
+    const result = await grader.getResult(
+      'test prompt',
+      output,
+      { metadata: { purpose: 'test purpose' } },
+      undefined,
+    );
+    expect(result.grade).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Model refused the request',
     });
+    expect(result.rubric).toContain(grader.rubric);
   });
 
   it('should use super class grading for non-refusal', async () => {
@@ -157,7 +164,12 @@ describe('AegisGrader', () => {
     };
     vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(mockSuperResult);
 
-    const result = await grader.getResult('test prompt', output, {}, undefined);
+    const result = await grader.getResult(
+      'test prompt',
+      output,
+      { metadata: { purpose: 'test purpose' } },
+      undefined,
+    );
     expect(result).toEqual(mockSuperResult);
   });
 
