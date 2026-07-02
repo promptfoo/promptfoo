@@ -27,7 +27,11 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  templateReferencesVariable,
+} from './util/templates';
 import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
@@ -51,39 +55,87 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
+function markVariableDerivedFromSkipped(
+  key: string,
+  value: string,
+  skippedVars: Set<string>,
+  derivedFromSkipped: Set<string>,
+): boolean {
+  if (skippedVars.size === 0 || derivedFromSkipped.has(key)) {
+    return false;
+  }
+  const referencesSkippedValue = [...skippedVars, ...derivedFromSkipped].some((sourceVar) =>
+    templateReferencesVariable(value, sourceVar),
+  );
+  if (referencesSkippedValue) {
+    derivedFromSkipped.add(key);
+  }
+  return referencesSkippedValue;
+}
+
+function resolveNextVariableReference(
+  key: string,
+  value: string,
+  variables: Record<string, VarValue>,
+  skippedVars: Set<string>,
+  derivedFromSkipped: Set<string>,
+): { changed: boolean; value: string } {
+  for (const match of value.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) {
+    const [placeholder, varName] = match;
+    if (
+      !Object.prototype.hasOwnProperty.call(variables, varName) ||
+      variables[varName] === undefined
+    ) {
+      break;
+    }
+    if (skippedVars.has(varName)) {
+      continue;
+    }
+    if (derivedFromSkipped.has(varName)) {
+      derivedFromSkipped.add(key);
+    }
+    return {
+      changed: true,
+      value: `${value.slice(0, match.index)}${String(variables[varName])}${value.slice(
+        match.index + placeholder.length,
+      )}`,
+    };
+  }
+  return { changed: false, value };
+}
+
 export function resolveVariables(
   variables: Record<string, VarValue>,
   skipResolveVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
+  const skippedVars = new Set(skipResolveVars ?? []);
+  const derivedFromSkipped = varsResolvedFromSkipped ?? new Set<string>();
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
-      if (
-        skipResolveVars?.includes(key) ||
-        varsResolvedFromSkipped?.has(key) ||
-        typeof variables[key] !== 'string'
-      ) {
+      if (skippedVars.has(key) || typeof variables[key] !== 'string') {
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
-        }
+
+      if (markVariableDerivedFromSkipped(key, value, skippedVars, derivedFromSkipped)) {
+        resolved = false;
+      }
+
+      const next = resolveNextVariableReference(
+        key,
+        value,
+        variables,
+        skippedVars,
+        derivedFromSkipped,
+      );
+      if (next.changed) {
+        variables[key] = next.value;
+        resolved = false;
       }
     }
     iterations++;
@@ -236,6 +288,9 @@ function detectMimeFromBase64(base64Data: string): string | null {
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
+ * @param skipVariableValueRenderVars - Optional array of variable names whose values should not
+ *                                      themselves be evaluated as templates. File/package loading
+ *                                      and trailing-newline normalization still apply.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -244,14 +299,20 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
+  skipVariableValueRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const skipRenderVarNames = new Set(skipRenderVars ?? []);
+  const skipVariableValueRenderVarNames = new Set([
+    ...skipRenderVarNames,
+    ...(skipVariableValueRenderVars ?? []),
+  ]);
 
   let basePrompt = prompt.raw;
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    if (skipRenderVarNames.has(varName)) {
       continue;
     }
 
@@ -413,16 +474,89 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+    if (typeof vars[key] === 'string' && !skipRenderVarNames.has(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveVariables(vars, [...skipVariableValueRenderVarNames], varsResolvedFromSkipped);
+
+  const renderDefinedSkippedReferences = (
+    value: string,
+    context: Record<string, VarValue>,
+  ): string =>
+    value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, varName: string) => {
+      if (
+        (!skipVariableValueRenderVarNames.has(varName) && !varsResolvedFromSkipped.has(varName)) ||
+        !Object.prototype.hasOwnProperty.call(context, varName) ||
+        context[varName] === undefined
+      ) {
+        return placeholder;
+      }
+      return String(context[varName]);
+    });
+  const renderVariableValue = (
+    key: string,
+    value: VarValue,
+    context: Record<string, VarValue>,
+  ): VarValue => {
+    if (typeof value !== 'string' || skipVariableValueRenderVarNames.has(key)) {
+      return value;
+    }
+    if (referencesUndefinedVariables(value, context)) {
+      return varsResolvedFromSkipped.has(key)
+        ? renderDefinedSkippedReferences(value, context)
+        : value;
+    }
+    return nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), context);
+  };
+  const renderVarsDerivedFromSkipped = (): Record<string, VarValue> => {
+    if (varsResolvedFromSkipped.size === 0) {
+      return vars;
+    }
+    const renderedVars = { ...vars };
+    const pendingVars = new Set(varsResolvedFromSkipped);
+    for (let iteration = 0; iteration < 5; iteration++) {
+      const renderableVars = [...pendingVars].filter((key) => {
+        const value = vars[key];
+        return (
+          typeof value !== 'string' ||
+          ![...pendingVars].some((sourceVar) => templateReferencesVariable(value, sourceVar))
+        );
+      });
+      if (renderableVars.length === 0) {
+        break;
+      }
+      const context = { ...renderedVars };
+      for (const key of renderableVars) {
+        renderedVars[key] = renderVariableValue(key, vars[key], context);
+        pendingVars.delete(key);
+      }
+    }
+    return renderedVars;
+  };
+  const applyRenderedDerivedVars = (renderedVars: Record<string, VarValue>): void => {
+    for (const key of varsResolvedFromSkipped) {
+      if (typeof vars[key] === 'string') {
+        vars[key] = renderDefinedSkippedReferences(vars[key] as string, renderedVars);
+      }
+    }
+  };
+  let cachedDerivedRenderVars: Record<string, VarValue> | undefined;
+  const getDerivedRenderVars = (): Record<string, VarValue> => {
+    cachedDerivedRenderVars ??= renderVarsDerivedFromSkipped();
+    return cachedDerivedRenderVars;
+  };
+
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const renderedVars = getDerivedRenderVars();
+    applyRenderedDerivedVars(renderedVars);
+    const portKeyResult = await getPortkeyPrompt(
+      prompt.raw.slice('portkey://'.length),
+      renderedVars,
+    );
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
@@ -474,9 +608,11 @@ export async function renderPrompt(
       throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
     }
 
+    const renderedVars = getDerivedRenderVars();
+    applyRenderedDerivedVars(renderedVars);
     const langfuseResult = await getLangfusePrompt(
       helper,
-      vars,
+      renderedVars,
       promptType,
       version === undefined || version === 'latest' ? undefined : Number(version),
       label,
@@ -486,44 +622,46 @@ export async function renderPrompt(
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
+    const renderedVars = getDerivedRenderVars();
+    applyRenderedDerivedVars(renderedVars);
     const heliconeResult = await getHeliconePrompt(
       id,
-      vars,
+      renderedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
+
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
       basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-      return nunjucks.renderString(basePrompt, vars);
+      const renderedVars = getDerivedRenderVars();
+      applyRenderedDerivedVars(renderedVars);
+      const renderedPrompt = nunjucks.renderString(basePrompt, renderedVars);
+      return renderedPrompt;
     }
 
     const parsed = JSON.parse(basePrompt);
+    const renderedVars = getDerivedRenderVars();
+    applyRenderedDerivedVars(renderedVars);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    const renderedPrompt = JSON.stringify(renderVarsInObject(parsed, renderedVars), null, 2);
+    return renderedPrompt;
   } catch {
     // Vars values can be template strings, so we need to render them first:
+    const derivedRenderVars = getDerivedRenderVars();
+    applyRenderedDerivedVars(derivedRenderVars);
     const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
+      Object.entries(vars).map(([key, value]) => [
+        key,
+        varsResolvedFromSkipped.has(key)
+          ? derivedRenderVars[key]
+          : renderVariableValue(key, value, derivedRenderVars),
+      ]),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
@@ -531,7 +669,8 @@ export async function renderPrompt(
     // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
     // strip Nunjucks Tags, which breaks using raw (https://mozilla.github.io/nunjucks/templating.html#raw) e.g.
     // {% raw %}{{some_string}}{% endraw %} -> {{some_string}} -> ''
-    return nunjucks.renderString(basePrompt, renderedVars);
+    const renderedPrompt = nunjucks.renderString(basePrompt, renderedVars);
+    return renderedPrompt;
   }
 }
 
