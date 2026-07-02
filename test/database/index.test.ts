@@ -28,7 +28,7 @@ const WAL_PROBE_RESULT_PREFIX = 'PROMPTFOO_WAL_PROBE_RESULT=';
 
 async function runWalCheckpointProbe(
   tempConfigDir: string,
-  holdReader: boolean,
+  contention: 'none' | 'reader' | 'writer',
 ): Promise<WalCheckpointProbeResult> {
   const { stdout } = await execFileAsync(
     process.execPath,
@@ -42,7 +42,8 @@ async function runWalCheckpointProbe(
         LOG_LEVEL: 'error',
         PROMPTFOO_CONFIG_DIR: tempConfigDir,
         PROMPTFOO_DISABLE_WAL_MODE: 'false',
-        PROMPTFOO_WAL_HOLD_READER: String(holdReader),
+        PROMPTFOO_WAL_HOLD_READER: String(contention === 'reader'),
+        PROMPTFOO_WAL_HOLD_WRITER: String(contention === 'writer'),
       },
     },
   );
@@ -264,7 +265,7 @@ describe('database', () => {
 
   describe('closeDb', () => {
     it('logs a successful file-backed WAL checkpoint', async () => {
-      const result = await runWalCheckpointProbe(tempConfigDir, false);
+      const result = await runWalCheckpointProbe(tempConfigDir, 'none');
 
       expect(result.logs).toContainEqual(
         expect.objectContaining({
@@ -283,7 +284,7 @@ describe('database', () => {
     });
 
     it('warns when a file-backed WAL checkpoint is incomplete', async () => {
-      const result = await runWalCheckpointProbe(tempConfigDir, true);
+      const result = await runWalCheckpointProbe(tempConfigDir, 'reader');
 
       expect(result.logs).toContainEqual(
         expect.objectContaining({
@@ -303,7 +304,21 @@ describe('database', () => {
       ).toBe(false);
       expect(result.isDbOpen).toBe(false);
       expect(result.rowCount).toBe(2);
-      expect(result.elapsedMs).toBeLessThan(1_000);
+      // The bounded 1500ms checkpoint busy timeout plus close overhead must stay
+      // well under the 3s force-exit watchdog.
+      expect(result.elapsedMs).toBeLessThan(2_500);
+    });
+
+    it('preserves acknowledged writes when a competing writer briefly holds the lock', async () => {
+      const result = await runWalCheckpointProbe(tempConfigDir, 'writer');
+
+      // A checkpoint racing a short-lived writer must not discard the insert that
+      // already reported success before close (regression for the zeroed busy
+      // timeout, which made the checkpoint fail instantly and lose the row).
+      expect(result.insertAcknowledged).toBe(true);
+      expect(result.rowCount).toBe(2);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.elapsedMs).toBeLessThan(2_500);
     });
 
     it('should close database connection and reset instances', async () => {
