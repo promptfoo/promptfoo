@@ -282,33 +282,30 @@ describe('preflightCodexSdkCliCompatibility', () => {
     );
   });
 
-  it.skipIf(!fs.existsSync(realSdkEntryPoint))(
-    'runs the zero-token event schema canary through the real installed SDK parser',
-    async () => {
-      const sdkManifest = JSON.parse(
-        fs.readFileSync(path.resolve(path.dirname(realSdkEntryPoint), '../package.json'), 'utf8'),
-      );
-      const supportedCliVersion = sdkManifest.dependencies['@openai/codex'];
-      mockVersionProbe(supportedCliVersion);
-      const realSdkModule = await import(pathToFileURL(realSdkEntryPoint).href);
-      const preflight = preflightCodexSdkCliCompatibility({
-        sdkEntryPoint: realSdkEntryPoint,
-        sdkModule: realSdkModule,
-        env: {},
-      });
+  it('runs the zero-token event schema canary through the real installed SDK parser', async () => {
+    const sdkManifest = JSON.parse(
+      fs.readFileSync(path.resolve(path.dirname(realSdkEntryPoint), '../package.json'), 'utf8'),
+    );
+    const supportedCliVersion = sdkManifest.dependencies['@openai/codex'];
+    mockVersionProbe(supportedCliVersion);
+    const realSdkModule = await import(pathToFileURL(realSdkEntryPoint).href);
+    const preflight = preflightCodexSdkCliCompatibility({
+      sdkEntryPoint: realSdkEntryPoint,
+      sdkModule: realSdkModule,
+      env: {},
+    });
 
-      if (await runtimeReadlineSplitsUnicodeSeparators()) {
-        const escapedNodeVersion = process.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        await expect(preflight).rejects.toThrow(
-          new RegExp(`cannot parse the supported CLI event schema on Node ${escapedNodeVersion}`),
-        );
-      } else {
-        await expect(preflight).resolves.toMatchObject({
-          sdkVersion: sdkManifest.version,
-          supportedCliVersion,
-          selectedCliVersion: supportedCliVersion,
-        });
-      }
-    },
-  );
+    if (await runtimeReadlineSplitsUnicodeSeparators()) {
+      const escapedNodeVersion = process.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      await expect(preflight).rejects.toThrow(
+        new RegExp(`cannot parse the supported CLI event schema on Node ${escapedNodeVersion}`),
+      );
+    } else {
+      await expect(preflight).resolves.toMatchObject({
+        sdkVersion: sdkManifest.version,
+        supportedCliVersion,
+        selectedCliVersion: supportedCliVersion,
+      });
+    }
+  });
 });
