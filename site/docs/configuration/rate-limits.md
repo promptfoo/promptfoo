@@ -101,6 +101,13 @@ Promptfoo has two retry layers:
 
 When a provider config includes `maxRetries`, promptfoo propagates that value to both layers. Explicit per-call overrides (e.g. a provider that passes a specific `maxRetries` to `fetchWithRetries`) still take precedence. For direct `fetchWithProxy` calls, transient retries (502/503/504/524) are disabled when the provider sets `maxRetries: 0`.
 
+Providers that explicitly manage a complete retry budget, including Google AI Studio and
+Vertex Gemini text providers, disable the scheduler and transport retry loops for that call.
+The scheduler still observes final rate-limit responses and adapts concurrency. These Google
+providers cap locally computed exponential delays at 60 seconds but do not shorten a longer
+server-provided `Retry-After`; the overall request timeout can end the call before that delay
+completes.
+
 Example — disable retries for a provider to fail fast on rate limits:
 
 ```yaml

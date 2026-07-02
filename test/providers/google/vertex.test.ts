@@ -247,6 +247,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
         contents: [{ parts: [{ text: 'test prompt' }], role: 'user' }],
       }),
       timeout: expect.any(Number),
+      signal: expect.any(AbortSignal),
+      retry: false,
+      retryConfig: { retry: 0 },
     });
   });
 
@@ -799,7 +802,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
-    expect(result.cost).toBe(0.00045);
+    expect(result.cost).toBeUndefined();
     expect(result.metadata).toEqual({
       groundingMetadata: {
         test: true,

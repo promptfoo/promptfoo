@@ -662,6 +662,62 @@ describe('fetchWithCache', () => {
       ).rejects.toThrow('timeout');
     });
 
+    it('should enforce the timeout while reading a stalled response body', async () => {
+      vi.useFakeTimers();
+      mockFetchWithRetries.mockImplementationOnce(async (_requestUrl, requestOptions) => {
+        const signal = requestOptions?.signal;
+        if (!signal) {
+          throw new Error('Expected fetchWithCache to provide a body timeout signal');
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'content-type': 'application/json' }),
+          text: () =>
+            new Promise((_resolve, reject) => {
+              signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            }),
+        } as unknown as Response;
+      });
+
+      const pending = fetchWithCache(url, { method: 'POST', body: '{}' }, 100);
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(100);
+
+      await rejection;
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(mockFetchWithRetries.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('should preserve the transport retry loop timeout semantics', async () => {
+      vi.useFakeTimers();
+      mockFetchWithRetries.mockImplementationOnce(
+        (_requestUrl, requestOptions) =>
+          new Promise((resolve, reject) => {
+            const signal = requestOptions?.signal;
+            const timer = setTimeout(
+              () => resolve(mockFetchWithRetriesResponse(true, response)),
+              150,
+            );
+            signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                reject(signal?.reason);
+              },
+              { once: true },
+            );
+          }),
+      );
+
+      const pending = fetchWithCache(url, {}, 100);
+      const result = expect(pending).resolves.toMatchObject({ data: response });
+      await vi.advanceTimersByTimeAsync(150);
+
+      await result;
+    });
+
     it('should handle network errors', async () => {
       mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
       await expect(fetchWithCache(url, {}, 100)).rejects.toThrow('Network error');

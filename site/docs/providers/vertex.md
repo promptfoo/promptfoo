@@ -36,6 +36,16 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
 
+#### Gemini retries
+
+Vertex Gemini text calls retry transient HTTP and connection failures with bounded exponential
+backoff, honor server `Retry-After` guidance, and fail fast on hard quota or safety-blocked
+responses. Configure the number of retries after the initial request with `config.maxRetries`
+(default `3`, or `0` to disable) and the initial delay in milliseconds with
+`config.baseRetryDelay`. All attempts share one request timeout and cancellation signal. See
+the [Google provider retry configuration](/docs/providers/google#configuration-options) for an
+example and the non-idempotency and billing caveat.
+
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
