@@ -285,8 +285,9 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release
+- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently resolves to `gemini-3.1-pro-preview`, same pricing)
+- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently resolves to `gemini-3.5-flash`, same pricing)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently resolves to `gemini-3.1-flash-lite`, same pricing)
 
 ### Embedding Models
 
@@ -294,6 +295,7 @@ Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to
 
 - `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
 - `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
+- `google:embedding:gemini-embedding-2-preview` - Preview alias for Gemini Embedding 2 ($0.20/1M input tokens)
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
@@ -309,9 +311,13 @@ Imagen models are available through both **Google AI Studio** and **Vertex AI**.
 
 #### Imagen 4 Models (Available in both Google AI Studio and Vertex AI)
 
-- `google:image:imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
-- `google:image:imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)
-- `google:image:imagen-4.0-fast-generate-preview-06-06` - Fast generation ($0.02/image)
+- `google:image:imagen-4.0-ultra-generate-001` - Ultra quality ($0.06/image)
+- `google:image:imagen-4.0-generate-001` - Standard quality ($0.04/image)
+- `google:image:imagen-4.0-fast-generate-001` - Fast generation ($0.02/image)
+
+:::warning
+Google has deprecated the Imagen 4 models with an August 17, 2026 shutdown and recommends [`gemini-3.1-flash-image`](#gemini-native-image-generation-models) as the replacement. The earlier `imagen-4.0-*-preview-06-06` ids are already shut down.
+:::
 
 #### Imagen 3 Models (Vertex AI only)
 
@@ -369,7 +375,7 @@ Gemini models can generate images natively using the `generateContent` API. Mode
 - `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K, ~$0.24 at 4K)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
 
-`gemini-3.1-flash-image` and `gemini-3-pro-image` also accept their `-preview` aliases (`gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`), which resolve to the same models. Nano Banana 2 Lite has no `-preview` alias — use `gemini-3.1-flash-lite-image`.
+Use the GA ids above; Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on June 25, 2026. Nano Banana 2 Lite never had a `-preview` alias.
 
 Configuration options:
 
@@ -378,7 +384,7 @@ providers:
   - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
-      imageSize: '2K' # 512px (3.1 only), 1K, 2K, 4K
+      imageSize: '2K' # 512px, 1K, 2K, 4K on this model; flash-lite is 1K only, pro is 1K/2K/4K
       temperature: 0.7
 ```
 
@@ -386,7 +392,7 @@ Key differences from Imagen:
 
 - Uses same namespace as Gemini chat (`google:model-name`)
 - More aspect ratio options (includes 1:4, 1:8, 2:3, 3:2, 4:1, 4:5, 5:4, 8:1, 21:9)
-- Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
+- Resolution control via `imageSize`: `512px`/`1K`/`2K`/`4K` on `gemini-3.1-flash-image`, `1K`/`2K`/`4K` on `gemini-3-pro-image`; `gemini-3.1-flash-lite-image` is `1K` only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
 - Supports Google Search grounding via `tools` (on `gemini-3.1-flash-image` and `gemini-3-pro-image`; **not** `gemini-3.1-flash-lite-image`)

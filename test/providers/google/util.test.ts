@@ -2757,16 +2757,16 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
-    it('should calculate cost for gemini-flash-latest using flash pricing', () => {
-      // gemini-flash-latest aliases the current Flash snapshot: input=0.3/1M, output=2.5/1M
+    it('should calculate cost for gemini-flash-latest using the tier it currently resolves to', () => {
+      // gemini-flash-latest resolves server-side to gemini-3.5-flash: input=1.5/1M, output=9/1M
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.00155, 10);
+      expect(cost).toBeCloseTo(0.006, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using flash-lite alias pricing', () => {
-      // gemini-flash-lite-latest tracks the current Flash-Lite tier: input=0.1/1M, output=0.4/1M
+    it('should calculate cost for gemini-flash-lite-latest using the tier it currently resolves to', () => {
+      // gemini-flash-lite-latest resolves server-side to gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0003, 10);
+      expect(cost).toBeCloseTo(0.001, 10);
     });
 
     it('should return undefined for shutdown models', () => {

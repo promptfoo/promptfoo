@@ -257,6 +257,22 @@ describe('GoogleImageProvider', async () => {
     }
   });
 
+  it('should not report cost for cached responses', async () => {
+    const provider = new GoogleImageProvider('imagen-4.0-fast-generate-001');
+    mockFetchWithCache.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
+      },
+      cached: true,
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+  });
+
   describe('Google AI Studio', () => {
     beforeEach(() => {
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });

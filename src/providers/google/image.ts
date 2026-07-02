@@ -330,7 +330,8 @@ export class GoogleImageProvider implements ApiProvider {
       images: imageOutputs,
       cached,
       latencyMs,
-      cost: totalCost,
+      // Cached responses were already paid for on the original request.
+      cost: cached ? undefined : totalCost,
     };
   }
 
