@@ -62,7 +62,9 @@ export type CodexAppServerReasoningEffort =
   | 'low'
   | 'medium'
   | 'high'
-  | 'xhigh';
+  | 'xhigh'
+  | 'max'
+  | 'ultra';
 export type CodexAppServerReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
 export type CodexAppServerServiceTier = 'fast' | 'flex';
 export type CodexAppServerPersonality = 'none' | 'friendly' | 'pragmatic';
@@ -377,6 +379,8 @@ const CodexAppServerReasoningEffortSchema = z.enum([
   'medium',
   'high',
   'xhigh',
+  'max',
+  'ultra',
 ]);
 
 const CodexAppServerGranularApprovalPolicySchema = z

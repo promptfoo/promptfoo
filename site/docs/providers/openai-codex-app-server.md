@@ -152,7 +152,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `additional_directories`   | string[]      | Additional directories added to workspace-write sandbox roots.                                                                                                      | None                 |
 | `skip_git_repo_check`      | boolean       | Skip the default Git repository safety check.                                                                                                                       | `false`              |
 | `codex_path_override`      | string        | Path to a specific `codex` binary.                                                                                                                                  | `codex`              |
-| `model`                    | string        | Model id, such as `gpt-5.5`. Can also be set in the provider id.                                                                                                    | Codex default        |
+| `model`                    | string        | Model id, such as `gpt-5.5` or the limited-preview `gpt-5.6-sol`. Can also be set in the provider id.                                                               | Codex default        |
 | `model_provider`           | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
 | `service_tier`             | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
 | `sandbox_mode`             | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
@@ -160,7 +160,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `network_access_enabled`   | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
 | `approval_policy`          | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object. `on-failure` is accepted for compatibility but deprecated by Codex.           | `never`              |
 | `approvals_reviewer`       | string        | `user` or `auto_review`. `guardian_subagent` is still accepted as a legacy alias.                                                                                   | App-server default   |
-| `model_reasoning_effort`   | string        | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.                                                                                                             | App-server default   |
+| `model_reasoning_effort`   | string        | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`. `max` and `ultra` are GPT-5.6 Sol preview options; `ultra` enables proactive subagent use.  | App-server default   |
 | `reasoning_summary`        | string        | `auto`, `concise`, `detailed`, or `none`.                                                                                                                           | App-server default   |
 | `personality`              | string        | `none`, `friendly`, or `pragmatic`.                                                                                                                                 | App-server default   |
 | `base_instructions`        | string        | Base instructions passed to `thread/start` and `thread/resume`.                                                                                                     | None                 |
@@ -185,6 +185,10 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `startup_timeout_ms`       | number        | `initialize` timeout.                                                                                                                                               | `30000`              |
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
+
+:::note `max`/`ultra` depend on the Codex runtime catalog
+`max` and `ultra` only take effect when the installed Codex runtime recognizes the selected GPT-5.6 model for your account. If the bundled Codex model catalog does not include GPT-5.6, the app-server **silently falls back to its default reasoning** — the value is ignored and **no error is raised**. Confirm the effective reasoning with `deep_tracing`. For `max`, the [Responses API](/docs/providers/openai#gpt-56-limited-preview) path (`openai:responses:gpt-5.6-sol`) applies it directly.
+:::
 
 ### Granular Approval Policy
 
