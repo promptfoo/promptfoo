@@ -272,6 +272,51 @@ describe('redteamRunCommand', () => {
       );
     });
 
+    it('should override cloud message length limits when CLI flags are provided', async () => {
+      const mockConfig = {
+        redteam: { maxCharsPerMessage: 250 },
+        commandLineOptions: { maxCharsPerMessage: 250, minCharsPerMessage: 150 } as any,
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--config',
+        configUUID,
+        '--target',
+        targetUUID,
+        '--max-chars-per-message',
+        '180',
+        '--min-chars-per-message',
+        '120',
+      ]);
+
+      expect(doRedteamRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          liveRedteamConfig: expect.objectContaining({
+            redteam: expect.objectContaining({
+              maxCharsPerMessage: 180,
+              minCharsPerMessage: 120,
+            }),
+            commandLineOptions: {},
+          }),
+          maxCharsPerMessage: 180,
+          minCharsPerMessage: 120,
+          eventSource: 'cli',
+        }),
+      );
+    });
+
     it('should keep original description when --description flag is not provided', async () => {
       const originalDescription = 'Original Cloud Description';
       const mockConfig = {
@@ -343,6 +388,23 @@ describe('redteamRunCommand', () => {
       // Verify that the description was overridden using short flag
       expect(mockConfig.description).toBe(customDescription);
     });
+  });
+
+  it.each([
+    '1.5',
+    '1e3',
+    '12junk',
+    '0',
+    '-1',
+  ])('should reject malformed message length limit %s', (value) => {
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+    runCommand!.exitOverride();
+
+    expect(() => runCommand!.parseOptions(['--min-chars-per-message', value])).toThrow(
+      'must be a positive integer',
+    );
+    expect(doRedteamRun).not.toHaveBeenCalled();
   });
 
   describe('--tag flag for run-specific eval tags', () => {

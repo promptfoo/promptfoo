@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { createMockProvider } from '../../factories/provider';
@@ -122,6 +123,7 @@ describe('RedteamGoatProvider', () => {
   });
 
   afterEach(() => {
+    cliState.config = undefined;
     fs.rmSync(tempDir, { recursive: true, force: true });
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -169,9 +171,57 @@ describe('RedteamGoatProvider', () => {
     const targetProvider = createMockTargetProvider();
     const context = createMockContext(targetProvider);
 
-    await provider.callApi('test prompt', context);
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('maxCharsPerMessage=5');
 
     expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should enforce minCharsPerMessage from provider config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      minCharsPerMessage: 20,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('minCharsPerMessage=20');
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should prefer global minCharsPerMessage over provider config', async () => {
+    cliState.config = { redteam: { minCharsPerMessage: 20 } };
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      minCharsPerMessage: 1,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('minCharsPerMessage=20');
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should prefer provider maxCharsPerMessage over plugin config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 500,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, undefined, {
+      metadata: { pluginConfig: { maxCharsPerMessage: 5 } },
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalled();
   });
 
   it('should preserve an explicit maxTurns value of 0', async () => {

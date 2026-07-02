@@ -129,6 +129,28 @@ describe('MemoryPoisoningProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context, undefined);
   });
 
+  it('should validate every scenario prompt before making target calls', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ memory: 'memory text', followUp: 'short' }),
+    } as Response);
+
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: {
+        metadata: {
+          purpose: 'test purpose',
+          strategyConfig: { minCharsPerMessage: 10 },
+        },
+      },
+    };
+
+    await expect(provider.callApi('test prompt', context)).rejects.toThrow('minCharsPerMessage=10');
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should include target context in scenario generation requests', async () => {
     provider = new MemoryPoisoningProvider({ config: { targetId: 'cloud-target-123' } });
     mockFetch.mockResolvedValueOnce(

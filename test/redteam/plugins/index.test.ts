@@ -173,6 +173,27 @@ describe('Plugins', () => {
   });
 
   describe('max chars retries', () => {
+    it('should not nest factory retries around local plugin retries', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.spyOn(mockProvider, 'callApi').mockResolvedValue({
+        output: 'Prompt: short',
+        error: undefined,
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { minCharsPerMessage: 100 },
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(3);
+    });
+
     it('should retry oversized local PII generations', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
@@ -204,6 +225,41 @@ describe('Plugins', () => {
         expect.stringContaining('Generate replacement prompts only'),
       );
       expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    });
+
+    it('should describe mixed prompt length retry violations', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: tiny\nPrompt: this prompt is too long',
+          error: undefined,
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: acceptable\nPrompt: suitable',
+          error: undefined,
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: { minCharsPerMessage: 5, maxCharsPerMessage: 12 },
+        delayMs: 0,
+      });
+
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('below the 5-character minimum'),
+      );
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('above the 12-character maximum'),
+      );
     });
 
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
@@ -247,7 +303,7 @@ describe('Plugins', () => {
       expect(fetchWithCache).toHaveBeenCalledTimes(2);
 
       const retryRequestBody = JSON.parse((vi.mocked(fetchWithCache).mock.calls[1][1] as any).body);
-      expect(retryRequestBody.config.modifiers.__maxCharsPerMessageRetry).toContain(
+      expect(retryRequestBody.config.modifiers.__charsPerMessageRetry).toContain(
         'Generate replacement prompts only',
       );
 

@@ -64,6 +64,9 @@ export function getUnifiedConfig(
       ...(config.maxCharsPerMessage && {
         maxCharsPerMessage: config.maxCharsPerMessage,
       }),
+      ...(config.minCharsPerMessage && {
+        minCharsPerMessage: config.minCharsPerMessage,
+      }),
       ...(config.provider && { provider: config.provider }),
       ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
       ...(config.language && { language: config.language }),

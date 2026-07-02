@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { getGeneratedTestCaseLengthViolation } from '../shared/promptLength';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -62,6 +63,15 @@ export async function addLayerTestCases(
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const stepObj = typeof step === 'string' ? { id: step } : step;
+    const {
+      maxCharsPerMessage: _inheritedMaxCharsPerMessage,
+      minCharsPerMessage: _inheritedMinCharsPerMessage,
+      ...inheritedStepConfig
+    } = config || {};
+    const stepConfig = {
+      ...inheritedStepConfig,
+      ...(stepObj.config || {}),
+    };
 
     // ═══════════════════════════════════════════════════════════════════════
     // CHECK: Is this an attack provider (hydra, crescendo, etc.)?
@@ -84,6 +94,32 @@ export async function addLayerTestCases(
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
+      const { steps: _steps, ...layerConfig } = config || {};
+      // A trailing per-turn transform may impose the final target-prompt limit.
+      // Preserve the layer/attack-provider precedence, but carry a trailing limit
+      // when no earlier scope declares that key so runtime target checks can see it.
+      const trailingCharLimits = remainingSteps.reduce<{
+        maxCharsPerMessage?: number;
+        minCharsPerMessage?: number;
+      }>((limits, step) => {
+        if (typeof step === 'string' || !step.config) {
+          return limits;
+        }
+        return {
+          ...limits,
+          ...(typeof step.config.maxCharsPerMessage === 'number'
+            ? { maxCharsPerMessage: step.config.maxCharsPerMessage }
+            : {}),
+          ...(typeof step.config.minCharsPerMessage === 'number'
+            ? { minCharsPerMessage: step.config.minCharsPerMessage }
+            : {}),
+        };
+      }, {});
+      const attackProviderConfig = {
+        ...trailingCharLimits,
+        ...layerConfig,
+        ...(stepObj.config || {}),
+      };
 
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,
@@ -102,7 +138,7 @@ export async function addLayerTestCases(
             config: {
               injectVar,
               scanId,
-              ...stepObj.config,
+              ...attackProviderConfig,
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
@@ -117,6 +153,9 @@ export async function addLayerTestCases(
           metadata: {
             ...testCase.metadata,
             strategyId,
+            ...(Object.keys(attackProviderConfig).length > 0 && {
+              strategyConfig: attackProviderConfig,
+            }),
             originalText,
           },
         };
@@ -158,16 +197,46 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
-    const next = await stepAction(applicable, injectVar, {
-      ...(stepObj.config || {}),
-      ...(config || {}),
-    });
+    const next = await stepAction(applicable, injectVar, stepConfig);
+    const maxCharsPerMessage = stepObj.config?.maxCharsPerMessage as number | undefined;
+    const minCharsPerMessage = stepObj.config?.minCharsPerMessage as number | undefined;
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
-    current = next as TestCaseWithPlugin[];
+    current = (next as TestCaseWithPlugin[]).filter((testCase) => {
+      const violation = getGeneratedTestCaseLengthViolation(
+        testCase.vars,
+        injectVar,
+        { maxCharsPerMessage, minCharsPerMessage },
+        { useCliStateFallback: false },
+      );
+      if (!violation) {
+        return true;
+      }
+      const limitKey = violation.kind === 'max' ? 'maxCharsPerMessage' : 'minCharsPerMessage';
+      const verb = violation.kind === 'max' ? 'exceeds' : 'is below';
+      logger.warn(
+        `[Layer strategy ${stepObj.id}] Dropping generated test case that ${verb} ${limitKey}=${violation.limit} (${violation.length} chars)`,
+      );
+      return false;
+    });
   }
 
-  return current;
+  // Inherited layer limits describe the completed pipeline, not every intermediate
+  // transform. Step-specific limits above remain immediate constraints.
+  const finalMaxCharsPerMessage = config.maxCharsPerMessage as number | undefined;
+  const finalMinCharsPerMessage = config.minCharsPerMessage as number | undefined;
+  return current.filter(
+    (testCase) =>
+      !getGeneratedTestCaseLengthViolation(
+        testCase.vars,
+        injectVar,
+        {
+          maxCharsPerMessage: finalMaxCharsPerMessage,
+          minCharsPerMessage: finalMinCharsPerMessage,
+        },
+        { useCliStateFallback: false },
+      ),
+  );
 }
 
 /**

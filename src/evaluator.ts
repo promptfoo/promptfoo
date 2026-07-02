@@ -28,9 +28,16 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import {
+  isMcpProviderWithTools,
+  maybeWrapMcpProviderForRedteam,
+} from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
-import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  isDeferredMinimumAgenticSeed,
+  throwIfTargetPromptViolatesCharLimits,
+} from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
@@ -816,7 +823,26 @@ async function renderRunEvalPrompt({
     skipRenderVars,
   );
   if (isRedteam) {
-    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+    const testCharLimits = getTargetPromptCharLimits({ test } as CallApiContextParams);
+    const strategyId =
+      typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : undefined;
+    const isAgenticSeed = isDeferredMinimumAgenticSeed({
+      providerId: provider.id(),
+      strategyId,
+    });
+    const isMcpTarget = isMcpProviderWithTools(provider);
+    throwIfTargetPromptViolatesCharLimits(
+      renderedPrompt,
+      {
+        maxCharsPerMessage:
+          testSuite?.redteam?.maxCharsPerMessage ?? testCharLimits.maxCharsPerMessage,
+        minCharsPerMessage:
+          isAgenticSeed || isMcpTarget
+            ? undefined
+            : (testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage),
+      },
+      { useCliStateFallback: !isAgenticSeed && !isMcpTarget },
+    );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });

@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { type Command, InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -13,11 +14,72 @@ import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
 import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
-import type { Command } from 'commander';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
 type RedteamRunCliOptions = Omit<RedteamRunOptions, 'tags'> & { tag?: Record<string, string> };
+
+function parsePositiveSafeInteger(value: string): number {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new InvalidArgumentError('must be a positive integer');
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new InvalidArgumentError('must be a positive integer');
+  }
+  return parsed;
+}
+
+function applyCloudRunOverrides(config: Record<string, unknown>, opts: RedteamRunOptions) {
+  if (opts.description) {
+    config.description = opts.description;
+  }
+
+  const redteam = (config.redteam ??= {}) as Record<string, unknown>;
+  const commandLineOptions = config.commandLineOptions as Record<string, unknown> | undefined;
+  if (opts.maxCharsPerMessage !== undefined) {
+    redteam.maxCharsPerMessage = opts.maxCharsPerMessage;
+    delete commandLineOptions?.maxCharsPerMessage;
+  }
+  if (opts.minCharsPerMessage !== undefined) {
+    redteam.minCharsPerMessage = opts.minCharsPerMessage;
+    delete commandLineOptions?.minCharsPerMessage;
+  }
+}
+
+async function resolveCloudRunConfig(opts: RedteamRunOptions) {
+  if (!opts.config || !UUID_REGEX.test(opts.config)) {
+    if (opts.target) {
+      logger.error(
+        `Target ID (-t) can only be used when -c is used. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}. `,
+      );
+      process.exitCode = 1;
+      return false;
+    }
+    return true;
+  }
+
+  if (opts.target && !UUID_REGEX.test(opts.target)) {
+    throw new Error('Invalid target ID, it must be a valid UUID');
+  }
+  const configObj = await getConfigFromCloud(opts.config, opts.target);
+
+  // backwards compatible for old cloud servers
+  if (
+    opts.target &&
+    UUID_REGEX.test(opts.target) &&
+    (!configObj.targets || configObj.targets?.length === 0)
+  ) {
+    configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+  }
+
+  // Override cloud config fields provided via CLI flags.
+  applyCloudRunOverrides(configObj, opts);
+  opts.liveRedteamConfig = configObj;
+  opts.config = undefined;
+  opts.loadedFromCloud = true;
+  return true;
+}
 
 export function redteamRunCommand(program: Command) {
   program
@@ -64,6 +126,16 @@ export function redteamRunCommand(program: Command) {
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option('-d, --description <text>', 'Custom description/name for this scan run')
     .option(
+      '--max-chars-per-message <number>',
+      'Maximum characters per generated message',
+      parsePositiveSafeInteger,
+    )
+    .option(
+      '--min-chars-per-message <number>',
+      'Minimum characters per generated message',
+      parsePositiveSafeInteger,
+    )
+    .option(
       '--tag <key=value>',
       'Set an eval tag in key=value format. Can be specified multiple times; CLI tags override config tags.',
       (value: string, previous: Record<string, string> | undefined) =>
@@ -75,35 +147,7 @@ export function redteamRunCommand(program: Command) {
       setupEnv(opts.envPath);
       telemetry.record('redteam run', {});
 
-      if (opts.config && UUID_REGEX.test(opts.config)) {
-        if (opts.target && !UUID_REGEX.test(opts.target)) {
-          throw new Error('Invalid target ID, it must be a valid UUID');
-        }
-        const configObj = await getConfigFromCloud(opts.config, opts.target);
-
-        // backwards compatible for old cloud servers
-        if (
-          opts.target &&
-          UUID_REGEX.test(opts.target) &&
-          (!configObj.targets || configObj.targets?.length === 0)
-        ) {
-          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
-        }
-
-        // Override description if provided via CLI flag
-        if (opts.description) {
-          configObj.description = opts.description;
-        }
-
-        opts.liveRedteamConfig = configObj;
-        opts.config = undefined;
-
-        opts.loadedFromCloud = true;
-      } else if (opts.target) {
-        logger.error(
-          `Target ID (-t) can only be used when -c is used. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}. `,
-        );
-        process.exitCode = 1;
+      if (!(await resolveCloudRunConfig(opts))) {
         return;
       }
 

@@ -329,6 +329,232 @@ describe('synthesize', () => {
       );
     });
 
+    it('does not apply the final minimum to an agentic strategy seed', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+      cliState.config = { redteam: { minCharsPerMessage: 10 } };
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
+        key: 'mockPlugin',
+      });
+      const strategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: { query: 'long enough final attack' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({ action: strategyAction, id: 'goat' });
+
+      try {
+        const result = await synthesize({
+          minCharsPerMessage: 10,
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'goat' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(strategyAction).toHaveBeenCalledWith(
+          expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+          'query',
+          expect.any(Object),
+          'goat',
+        );
+        expect(result.testCases).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+          ]),
+        );
+        expect(result.testCases).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        );
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('preserves a short agentic wrapper seed for runtime generation', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
+        key: 'mockPlugin',
+      });
+      const strategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: { query: 'long enough final attack' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: strategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat', config: { minCharsPerMessage: 10 } }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(strategyAction).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        'query',
+        expect.any(Object),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+        ]),
+      );
+    });
+
+    it('preserves a short agentic seed with a plugin-scoped minimum', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
+        key: 'mockPlugin',
+      });
+      const strategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: { query: 'long enough final attack' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: strategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1, config: { minCharsPerMessage: 10 } }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(strategyAction).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        'query',
+        expect.any(Object),
+        'goat',
+      );
+      expect(vi.mocked(Plugins.find).mock.results[0].value.action).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            modifiers: expect.not.objectContaining({
+              minCharsPerMessage: expect.anything(),
+            }),
+          }),
+        }),
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+        ]),
+      );
+    });
+
+    it('preserves effective limits when a plugin intentionally omits pluginConfig', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi
+          .fn()
+          .mockResolvedValue([
+            { vars: { query: 'long enough' }, metadata: { pluginConfig: undefined } },
+          ]),
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        minCharsPerMessage: 10,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases[0].metadata?.pluginConfig).toBeUndefined();
+      expect(result.testCases[0].metadata?.strategyConfig).toEqual(
+        expect.objectContaining({ minCharsPerMessage: 10 }),
+      );
+    });
+
+    it('should drop short strategy outputs using strategy minCharsPerMessage', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'long enough' } }]),
+        key: 'mockPlugin',
+      });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]),
+        id: 'mockStrategy',
+      });
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'test-strategy', config: { minCharsPerMessage: 10 } }],
+        targetIds: ['test-provider'],
+      });
+      expect(result.testCases).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'short' } })]),
+      );
+    });
+
+    it('should pass minCharsPerMessage through synthesize and drop short generated tests', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockResolvedValue([{ vars: { query: 'short' } }, { vars: { query: 'long enough' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+      const result = await synthesize({
+        minCharsPerMessage: 10,
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            minCharsPerMessage: 10,
+            modifiers: expect.objectContaining({
+              minCharsPerMessage: 'Each generated user message must be 10 characters or more.',
+            }),
+          }),
+        }),
+      );
+      expect(result.testCases).toEqual([
+        expect.objectContaining({
+          vars: { query: 'long enough' },
+          metadata: expect.objectContaining({
+            pluginConfig: expect.objectContaining({ minCharsPerMessage: 10 }),
+          }),
+        }),
+      ]);
+    });
+
+    it('should preserve minCharsPerMessage when expanding plugin collections', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'long enough' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'harmful', numTests: 1, config: { minCharsPerMessage: 10 } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ minCharsPerMessage: 10 }),
+        }),
+      );
+    });
+
     it('should pass shared generation options through custom file plugins', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-shared-options.yaml';
@@ -473,6 +699,42 @@ describe('synthesize', () => {
       );
     });
 
+    it('does not defer a custom plugin minimum for an unrelated agentic strategy', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: vi.fn().mockImplementation((testCases) => testCases),
+        id: 'goat',
+      });
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-minimum.yaml';
+      const pluginId = 'file://./' + pluginPath;
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockImplementation((filePath) => {
+        if (String(filePath).endsWith(pluginPath)) {
+          return {
+            generator: 'Prompt: custom minimum probe',
+            grader: 'Grade the response based on {{ purpose }}',
+            metric: 'custom-minimum',
+          };
+        }
+        return filePath;
+      });
+      mockProvider.callApi.mockResolvedValue({ output: 'tiny' });
+
+      const result = await synthesize({
+        minCharsPerMessage: 5,
+        numTests: 1,
+        plugins: [{ id: pluginId, numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Custom plugin purpose',
+        strategies: [{ id: 'goat', config: { plugins: ['different-plugin'] } }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(0);
+      expect(result.failedPlugins).toEqual([{ pluginId, requested: 1 }]);
+    });
+
     it('should pass target inputs into custom file plugins in multi-input mode', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-multi-input.yaml';
@@ -540,6 +802,33 @@ describe('synthesize', () => {
           }),
         }),
       ]);
+    });
+
+    it('should drop short multi-input generated values instead of counting the JSON wrapper', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: {
+              [MULTI_INPUT_VAR]: '{"user_message":"short","retrieved_context":"long enough"}',
+              user_message: 'short',
+              retrieved_context: 'long enough',
+            },
+          },
+        ]),
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        inputs: { user_message: 'user input', retrieved_context: 'retrieved input' },
+        minCharsPerMessage: 10,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{user_message}}\n{{retrieved_context}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toEqual([]);
     });
 
     it('should warn about unregistered plugins', async () => {

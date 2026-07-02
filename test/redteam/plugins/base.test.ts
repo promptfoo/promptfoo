@@ -270,7 +270,9 @@ describe('RedteamPluginBase', () => {
     );
     expect(provider.callApi).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('The longest rejected prompt was 20 characters.'),
+      expect.stringContaining(
+        '1 prompt was above the 10-character maximum; the longest was 20 characters.',
+      ),
     );
     expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
       language: 'German',

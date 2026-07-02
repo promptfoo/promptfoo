@@ -12,7 +12,10 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../shared/promptLength';
 
 import type {
   ApiProvider,
@@ -25,6 +28,8 @@ import type {
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;
   targetId?: string;
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
 }
 
 export default class AuthoritativeMarkupInjectionProvider implements ApiProvider {
@@ -38,6 +43,8 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     options: ProviderOptions & {
       injectVar?: string;
       targetId?: string;
+      maxCharsPerMessage?: number;
+      minCharsPerMessage?: number;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -49,6 +56,12 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     this.config = {
       injectVar: options.injectVar,
       targetId: options.targetId,
+      ...(options.maxCharsPerMessage !== undefined && {
+        maxCharsPerMessage: options.maxCharsPerMessage,
+      }),
+      ...(options.minCharsPerMessage !== undefined && {
+        minCharsPerMessage: options.minCharsPerMessage,
+      }),
     };
     logger.debug('[AuthoritativeMarkupInjection] Constructor options', {
       injectVar: options.injectVar,
@@ -124,7 +137,10 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     const totalTokenUsage = createEmptyTokenUsage();
 
     // Call the target provider with the injected attack
-    throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
+    throwIfTargetPromptViolatesCharLimits(
+      renderedAttackerPrompt,
+      getTargetPromptCharLimits(context, this.config),
+    );
     const targetResponse = await targetProvider.callApi(renderedAttackerPrompt, context, options);
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 

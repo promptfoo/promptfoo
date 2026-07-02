@@ -27,7 +27,11 @@ import {
   buildRemoteMaterializedInputVariables,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  isTargetPromptCharLimitError,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -103,6 +107,7 @@ interface GoatConfig {
   injectVar: string;
   targetId?: string;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   stateful: boolean;
@@ -146,6 +151,7 @@ export default class GoatProvider implements ApiProvider {
     options: ProviderOptions & {
       maxTurns?: number;
       maxCharsPerMessage?: number;
+      minCharsPerMessage?: number;
       injectVar?: string;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
@@ -168,6 +174,7 @@ export default class GoatProvider implements ApiProvider {
     this.config = {
       maxTurns,
       ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
+      ...(options.minCharsPerMessage ? { minCharsPerMessage: options.minCharsPerMessage } : {}),
       injectVar: options.injectVar,
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
@@ -215,12 +222,7 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
-    const maxCharsPerMessage =
-      this.config.maxCharsPerMessage ??
-      (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: number } | undefined)
-        ?.maxCharsPerMessage ??
-      (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
-        ?.maxCharsPerMessage;
+    const charLimits = getTargetPromptCharLimits(context, this.config);
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
@@ -320,7 +322,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingTargetPrompt = transformResult.prompt;
             }
 
-            throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
+            throwIfTargetPromptViolatesCharLimits(unblockingTargetPrompt, charLimits);
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
@@ -576,7 +578,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         const iterationStart = Date.now();
-        throwIfTargetPromptExceedsMaxChars(targetPrompt, maxCharsPerMessage);
+        throwIfTargetPromptViolatesCharLimits(targetPrompt, charLimits);
         const targetContext = context
           ? {
               ...context,
@@ -819,7 +821,7 @@ export default class GoatProvider implements ApiProvider {
           logger.debug('[GOAT] Operation aborted');
           throw error;
         }
-        if (isRemoteMaterializationUpgradeError(error)) {
+        if (isRemoteMaterializationUpgradeError(error) || isTargetPromptCharLimitError(error)) {
           throw error;
         }
         logger.error(
