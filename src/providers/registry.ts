@@ -65,6 +65,7 @@ import { MCPProvider } from './mcp/index';
 import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
+import { createMoonshotProvider } from './moonshot';
 import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
@@ -656,7 +657,7 @@ export const providerMap: ProviderFactory[] = [
         if (!modelName) {
           throw new Error(
             `Invalid groq:responses provider path: "${providerPath}". ` +
-              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+              'Use format groq:responses:<model> (e.g., groq:responses:openai/gpt-oss-120b)',
           );
         }
         return new GroqResponsesProvider(modelName, providerOptions);
@@ -667,7 +668,7 @@ export const providerMap: ProviderFactory[] = [
       if (!modelName) {
         throw new Error(
           `Invalid groq provider path: "${providerPath}". ` +
-            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+            'Use format groq:<model> (e.g., groq:openai/gpt-oss-120b)',
         );
       }
       return new GroqProvider(modelName, providerOptions);
@@ -785,9 +786,25 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new MistralEmbeddingProvider(providerOptions);
+        return new MistralEmbeddingProvider({
+          ...providerOptions,
+          modelName: modelName || undefined,
+        });
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('moonshot:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMoonshotProvider(providerPath, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
     },
   },
   {

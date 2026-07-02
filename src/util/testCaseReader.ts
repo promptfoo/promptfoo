@@ -35,7 +35,6 @@ type StandaloneTestsFileMetadata = {
   pathWithoutFunction: string;
   maybeFunctionName: string | undefined;
   fileExtension: string;
-  extensionWithoutSheet: string;
 };
 
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
@@ -179,13 +178,8 @@ async function readLocalStandaloneTestsFile(
   basePath: string,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
-  const {
-    resolvedVarsPath,
-    pathWithoutFunction,
-    maybeFunctionName,
-    fileExtension,
-    extensionWithoutSheet,
-  } = getStandaloneTestsFileMetadata(varsPath, basePath);
+  const { resolvedVarsPath, pathWithoutFunction, maybeFunctionName, fileExtension } =
+    getStandaloneTestsFileMetadata(varsPath, basePath);
 
   if (isJavascriptFile(pathWithoutFunction)) {
     telemetry.record('feature_used', {
@@ -206,7 +200,7 @@ async function readLocalStandaloneTestsFile(
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
   }
-  if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
+  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -265,16 +259,20 @@ function getStandaloneTestsFileMetadata(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
-  const extensionWithoutSheet = fileExtension.split('#')[0];
+  // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
+  // characters in parent directories and non-Excel filenames.
+  const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
+  const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
+  const fileExtension =
+    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
+      ? sheetAwareExtension
+      : parsePath(pathWithoutFunction).ext.slice(1);
 
   return {
     resolvedVarsPath,
     pathWithoutFunction,
     maybeFunctionName,
     fileExtension,
-    extensionWithoutSheet,
   };
 }
 
@@ -364,7 +362,7 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
       const row = JSON.parse(line);
       return {
         ...row,
-        description: `Row #${idx + 1}`,
+        description: row.description || `Row #${idx + 1}`,
       };
     });
 }

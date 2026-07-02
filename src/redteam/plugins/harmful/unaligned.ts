@@ -74,7 +74,7 @@ async function processPromptForInputs(
 }
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,
+  { purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
@@ -83,6 +83,7 @@ export async function getHarmfulTests(
     n: Math.min(n, maxHarmfulTests),
     harmCategory: plugin,
     config,
+    targetId,
   });
 
   const generatePrompts = async (): Promise<string[]> => {
