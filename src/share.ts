@@ -15,6 +15,7 @@ import {
   getOrgContext,
   makeRequest as makeCloudRequest,
 } from './util/cloud';
+import { buildProviderShareConfig } from './util/eval/providerSelection';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { redactAzureBlobSasTokens } from './util/sanitizer';
@@ -138,17 +139,28 @@ async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
+  remoteConfig: Eval['config'],
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
+  const redactedConfig = redactAzureBlobSasTokens(remoteConfig);
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
+  const {
+    configBasePath: _localConfigBasePath,
+    configEnvPaths: _localConfigEnvPaths,
+    configEnvSource: _localConfigEnvSource,
+    promptSelection: _localPromptSelection,
+    providerSelection: _localProviderSelection,
+    testCaseSelection: _localTestCaseSelection,
+    ...remoteRuntimeOptions
+  } = evalRecord.runtimeOptions ?? {};
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
     results: [],
+    runtimeOptions: evalRecord.runtimeOptions ? remoteRuntimeOptions : undefined,
     traces,
   };
   if (cloudConfig.isEnabled()) {
@@ -420,7 +432,10 @@ async function sendChunkedResults(
   const { silent = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
-  await checkCloudPermissions(evalRecord.config);
+  const remoteConfig = evalRecord.runtimeOptions?.providerSelection
+    ? buildProviderShareConfig(evalRecord.config, evalRecord.runtimeOptions.providerSelection)
+    : evalRecord.config;
+  await checkCloudPermissions(remoteConfig);
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
@@ -488,7 +503,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers, remoteConfig);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry

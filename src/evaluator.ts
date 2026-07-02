@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -57,6 +58,7 @@ import {
   type AtomicTestCase,
   type CompletedPrompt,
   type EnvOverrides,
+  type EvalTestCaseSelection,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -2122,7 +2124,13 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
-function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
+const DEFERRED_SCENARIO_INDEX = '__promptfoo_deferred_scenario_index';
+type DeferredScenarioTest = AtomicTestCase & { [DEFERRED_SCENARIO_INDEX]?: number };
+
+function buildTestsFromSuite(
+  testSuite: TestSuite,
+  options: { includeDefaultTest?: boolean } = {},
+): AtomicTestCase[] {
   const tests = getInitialTests(testSuite);
   if (!testSuite.scenarios?.length) {
     return tests;
@@ -2132,11 +2140,344 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
     for (const data of scenario.config) {
-      tests.push(...buildScenarioTests(testSuite, scenario, data, scenarioIndex));
+      tests.push(
+        ...buildScenarioTests(
+          testSuite,
+          scenario,
+          data,
+          scenarioIndex,
+          options.includeDefaultTest !== false,
+        ),
+      );
       scenarioIndex++;
     }
   }
   return tests;
+}
+
+/** Logical tests before defaultTest and extension hooks mutate the selected cases. */
+export function getTestCasesForSelection(testSuite: TestSuite): AtomicTestCase[] {
+  return buildTestsFromSuite(testSuite, { includeDefaultTest: false });
+}
+
+function stableSerializeSelection(
+  value: unknown,
+  seen = new WeakSet<object>(),
+  sortKeys = false,
+): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'bigint') {
+    return JSON.stringify({ bigint: value.toString() });
+  }
+  if (typeof value === 'function') {
+    return JSON.stringify({ function: Function.prototype.toString.call(value) });
+  }
+  if (typeof value === 'symbol') {
+    return JSON.stringify({ symbol: String(value) });
+  }
+  if (typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
+  if (seen.has(value)) {
+    return '"[Circular]"';
+  }
+  seen.add(value);
+
+  try {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableSerializeSelection(item, seen, sortKeys)).join(',')}]`;
+    }
+    if (value instanceof Date) {
+      return JSON.stringify(value.toISOString());
+    }
+
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (sortKeys) {
+      keys.sort();
+    }
+    return `{${keys
+      .map(
+        (key) => `${JSON.stringify(key)}:${stableSerializeSelection(record[key], seen, sortKeys)}`,
+      )
+      .join(',')}}`;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function canonicalizeSelectionFingerprintValue(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (typeof value === 'function') {
+    return { __promptfooFunction: Function.prototype.toString.call(value) };
+  }
+  if (typeof value === 'bigint') {
+    return { __promptfooBigInt: value.toString() };
+  }
+  if (typeof value === 'symbol') {
+    return { __promptfooSymbol: String(value) };
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => canonicalizeSelectionFingerprintValue(item, seen));
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        canonicalizeSelectionFingerprintValue(item, seen),
+      ]),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
+const TEST_SELECTION_SECRET_FIELDS = new Set([
+  'accesskeyid',
+  'accesstoken',
+  'apikey',
+  'apisecret',
+  'auth',
+  'authorization',
+  'authtoken',
+  'bearer',
+  'bearertoken',
+  'clientsecret',
+  'cookie',
+  'credentials',
+  'idtoken',
+  'passphrase',
+  'passwd',
+  'password',
+  'privatekey',
+  'pwd',
+  'refreshtoken',
+  'secret',
+  'secretaccesskey',
+  'secretkey',
+  'secrets',
+  'session',
+  'sessionid',
+  'setcookie',
+  'sig',
+  'signature',
+  'token',
+  'xapikey',
+  'xauth',
+  'xaccesstoken',
+  'xauthtoken',
+  'xsecret',
+]);
+
+function isTestSelectionSecretField(key: string): boolean {
+  const normalized = key.toLowerCase().replaceAll(/[-_.]/g, '');
+  return TEST_SELECTION_SECRET_FIELDS.has(normalized) || normalized.endsWith('apikey');
+}
+
+function sanitizeProviderUrlForSelection(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.password) {
+      url.password = '[REDACTED]';
+    }
+    for (const key of url.searchParams.keys()) {
+      if (isTestSelectionSecretField(key)) {
+        url.searchParams.set(key, '[REDACTED]');
+      }
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeProviderForTestSelection(value: unknown, key?: string): unknown {
+  if (key && isTestSelectionSecretField(key)) {
+    return '[REDACTED]';
+  }
+  if (typeof value === 'string' && key && /^(?:base)?url$/i.test(key)) {
+    return sanitizeProviderUrlForSelection(value);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeProviderForTestSelection(item));
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([childKey, childValue]) => [
+      childKey,
+      sanitizeProviderForTestSelection(childValue, childKey),
+    ]),
+  );
+}
+
+function sanitizeAssertionProviderForSelection(assertion: unknown): unknown {
+  if (!assertion || typeof assertion !== 'object' || Array.isArray(assertion)) {
+    return assertion;
+  }
+  const record = assertion as Record<string, unknown>;
+  return {
+    ...record,
+    ...('provider' in record
+      ? {
+          provider: sanitizeProviderForTestSelection(record.provider),
+        }
+      : {}),
+    ...(Array.isArray(record.assert)
+      ? { assert: record.assert.map(sanitizeAssertionProviderForSelection) }
+      : {}),
+  };
+}
+
+function getTestCaseFingerprintInput(testCase: unknown): unknown {
+  const canonical = canonicalizeSelectionFingerprintValue(testCase);
+  if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
+    return canonical;
+  }
+  const record = canonical as Record<string, unknown>;
+  const options =
+    record.options && typeof record.options === 'object' && !Array.isArray(record.options)
+      ? (record.options as Record<string, unknown>)
+      : undefined;
+  return {
+    ...record,
+    ...('provider' in record
+      ? {
+          provider: sanitizeProviderForTestSelection(record.provider),
+        }
+      : {}),
+    ...('providers' in record
+      ? {
+          providers: sanitizeProviderForTestSelection(record.providers),
+        }
+      : {}),
+    ...(options && 'provider' in options
+      ? {
+          options: {
+            ...options,
+            provider: sanitizeProviderForTestSelection(options.provider),
+          },
+        }
+      : {}),
+    ...(Array.isArray(record.assert)
+      ? { assert: record.assert.map(sanitizeAssertionProviderForSelection) }
+      : {}),
+  };
+}
+
+function getTestCaseFingerprint(testCase: unknown): string {
+  return createHash('sha256')
+    .update(stableSerializeSelection(getTestCaseFingerprintInput(testCase)))
+    .digest('hex');
+}
+
+function getTestCaseProvenanceFingerprint(testCase: unknown): string {
+  return createHash('sha256')
+    .update(
+      stableSerializeSelection(getTestCaseFingerprintInput(testCase), new WeakSet<object>(), true),
+    )
+    .digest('hex');
+}
+
+/** Persist selected logical tests without storing their potentially sensitive definitions. */
+export function createTestCaseSelection(
+  testCases: unknown[],
+  indices: number[],
+): EvalTestCaseSelection {
+  const invalidIndices = indices.filter(
+    (index) => !Number.isSafeInteger(index) || index < 0 || index >= testCases.length,
+  );
+  if (invalidIndices.length > 0) {
+    throw new Error(
+      `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${testCases.length - 1}`,
+    );
+  }
+
+  return {
+    tests: indices.map((index) => ({
+      index,
+      fingerprint: getTestCaseFingerprint(testCases[index]),
+    })),
+  };
+}
+
+/** Restore a persisted test selection by identity, preserving its original execution order. */
+export function restoreTestCaseSelection(
+  testCases: unknown[],
+  selection: EvalTestCaseSelection,
+): number[] {
+  if (!selection || !Array.isArray(selection.tests)) {
+    throw new Error('Stored test case selection is invalid.');
+  }
+  const fingerprintsByIndex = new Map<number, string>();
+  const fingerprintAt = (index: number) => {
+    let fingerprint = fingerprintsByIndex.get(index);
+    if (fingerprint === undefined) {
+      fingerprint = getTestCaseFingerprint(testCases[index]);
+      fingerprintsByIndex.set(index, fingerprint);
+    }
+    return fingerprint;
+  };
+  const restoredIndices: Array<number | undefined> = new Array(selection.tests.length);
+  const unresolvedByFingerprint = new Map<string, number[]>();
+
+  selection.tests.forEach((entry, selectionIndex) => {
+    if (
+      !Number.isSafeInteger(entry.index) ||
+      entry.index < 0 ||
+      typeof entry.fingerprint !== 'string' ||
+      entry.fingerprint.length === 0
+    ) {
+      throw new Error(`Stored test case selection entry ${selectionIndex} is invalid.`);
+    }
+    if (entry.index < testCases.length && fingerprintAt(entry.index) === entry.fingerprint) {
+      restoredIndices[selectionIndex] = entry.index;
+      return;
+    }
+    const unresolvedEntries = unresolvedByFingerprint.get(entry.fingerprint) ?? [];
+    unresolvedEntries.push(selectionIndex);
+    unresolvedByFingerprint.set(entry.fingerprint, unresolvedEntries);
+  });
+
+  for (let index = 0; index < testCases.length && unresolvedByFingerprint.size > 0; index++) {
+    const fingerprint = fingerprintAt(index);
+    const unresolvedEntries = unresolvedByFingerprint.get(fingerprint);
+    if (unresolvedEntries) {
+      for (const selectionIndex of unresolvedEntries) {
+        restoredIndices[selectionIndex] = index;
+      }
+      unresolvedByFingerprint.delete(fingerprint);
+    }
+  }
+
+  const missingSelectionIndex = restoredIndices.findIndex((index) => index === undefined);
+  if (missingSelectionIndex !== -1) {
+    const entry = selection.tests[missingSelectionIndex];
+    if (entry) {
+      throw new Error(
+        `Selected test case ${missingSelectionIndex} (original index ${entry.index}) no longer exists in the resolved configuration. The evaluation was not changed.`,
+      );
+    }
+  }
+  return restoredIndices as number[];
 }
 
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
@@ -2151,9 +2492,12 @@ function buildScenarioTests(
   scenario: NonNullable<TestSuite['scenarios']>[number],
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   scenarioIndex: number,
+  includeDefaultTest: boolean,
 ): AtomicTestCase[] {
   const scenarioTests = scenario.tests || [{}];
-  return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
+  return scenarioTests.map((test) =>
+    mergeScenarioTest(testSuite, data, test, scenarioIndex, includeDefaultTest),
+  );
 }
 
 function mergeScenarioTest(
@@ -2161,16 +2505,19 @@ function mergeScenarioTest(
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   test: NonNullable<TestSuite['scenarios']>[number]['tests'][number],
   scenarioIndex: number,
+  includeDefaultTest: boolean,
 ): AtomicTestCase {
-  const defaultTest = getDefaultTest(testSuite);
+  const defaultTest = includeDefaultTest ? getDefaultTest(testSuite) : undefined;
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),
     ...data.metadata,
     ...test.metadata,
   };
-  mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+  if (includeDefaultTest) {
+    mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+  }
 
-  return {
+  const mergedTest = {
     ...(defaultTest || {}),
     ...data,
     ...test,
@@ -2187,6 +2534,63 @@ function mergeScenarioTest(
     assert: [...(data.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
+  if (!includeDefaultTest) {
+    Object.defineProperty(mergedTest, DEFERRED_SCENARIO_INDEX, {
+      configurable: true,
+      enumerable: false,
+      value: scenarioIndex,
+    });
+  }
+  return mergedTest;
+}
+
+function cloneSelectedTestCase(testCase: AtomicTestCase): AtomicTestCase {
+  const cloned = { ...testCase } as DeferredScenarioTest;
+  const scenarioIndex = (testCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX];
+  if (scenarioIndex !== undefined) {
+    Object.defineProperty(cloned, DEFERRED_SCENARIO_INDEX, {
+      configurable: true,
+      enumerable: false,
+      value: scenarioIndex,
+    });
+  }
+  return cloned;
+}
+
+function applyDeferredScenarioDefaults(
+  testSuite: TestSuite,
+  testCase: AtomicTestCase,
+  fallbackScenarioIndex?: number,
+): AtomicTestCase {
+  const deferredTest = testCase as DeferredScenarioTest;
+  const scenarioIndex = deferredTest[DEFERRED_SCENARIO_INDEX] ?? fallbackScenarioIndex;
+  if (scenarioIndex === undefined) {
+    return testCase;
+  }
+
+  const defaultTest = getDefaultTest(testSuite);
+  const metadata = {
+    ...(defaultTest?.metadata || {}),
+    ...testCase.metadata,
+  };
+  metadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+
+  const mergedTest = {
+    ...(defaultTest || {}),
+    ...testCase,
+    vars: {
+      ...(defaultTest?.vars || {}),
+      ...testCase.vars,
+    },
+    options: {
+      ...(defaultTest?.options || {}),
+      ...testCase.options,
+    },
+    assert: [...(testCase.assert || [])],
+    metadata,
+  } as DeferredScenarioTest;
+  delete mergedTest[DEFERRED_SCENARIO_INDEX];
+  return mergedTest;
 }
 
 async function prepareTestVariables(
@@ -4539,10 +4943,69 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithMaxScoreAssertion = new Set<number>();
 
     ensureDefaultTestForExtensions(testSuite);
+    const hasTestCaseSelection = options.testCaseSelection !== undefined;
+    let deferredScenarioIndicesByFingerprint: Map<string, number[]> | undefined;
+    let deferredScenarioIndicesByPosition: Array<number | undefined> | undefined;
+    if (options.testCaseIndices || hasTestCaseSelection) {
+      const unresolvedTests = getTestCasesForSelection(testSuite);
+      const selectedTestCaseIndices = hasTestCaseSelection
+        ? restoreTestCaseSelection(unresolvedTests, options.testCaseSelection!)
+        : options.testCaseIndices!;
+      const invalidIndices = selectedTestCaseIndices.filter(
+        (index) => !Number.isSafeInteger(index) || index < 0 || index >= unresolvedTests.length,
+      );
+      if (invalidIndices.length > 0) {
+        throw new Error(
+          `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${unresolvedTests.length - 1}`,
+        );
+      }
+      const selectedTests = selectedTestCaseIndices.map((index) =>
+        cloneSelectedTestCase(unresolvedTests[index]),
+      );
+      deferredScenarioIndicesByFingerprint = new Map<string, number[]>();
+      deferredScenarioIndicesByPosition = selectedTests.map((testCase) => {
+        const scenarioIndex = (testCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX];
+        if (scenarioIndex !== undefined) {
+          const fingerprint = getTestCaseProvenanceFingerprint(testCase);
+          const scenarioIndices = deferredScenarioIndicesByFingerprint!.get(fingerprint) ?? [];
+          scenarioIndices.push(scenarioIndex);
+          deferredScenarioIndicesByFingerprint!.set(fingerprint, scenarioIndices);
+        }
+        return scenarioIndex;
+      });
+      testSuite = {
+        ...testSuite,
+        tests: selectedTests,
+        scenarios: [],
+      };
+    }
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
     });
     testSuite = beforeAllOut.suite;
+    if ((options.testCaseIndices || hasTestCaseSelection) && testSuite.tests) {
+      const fallbackIndices = new Map(
+        [...(deferredScenarioIndicesByFingerprint?.entries() ?? [])].map(
+          ([fingerprint, indices]) => [fingerprint, [...indices]],
+        ),
+      );
+      const canUsePositionFallback =
+        deferredScenarioIndicesByPosition?.length === testSuite.tests.length;
+      testSuite = {
+        ...testSuite,
+        tests: testSuite.tests.map((testCase, index) => {
+          const atomicTestCase = testCase as AtomicTestCase;
+          const hasDirectProvenance =
+            (atomicTestCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX] !== undefined;
+          const fingerprint = getTestCaseProvenanceFingerprint(atomicTestCase);
+          const fallbackScenarioIndex = hasDirectProvenance
+            ? undefined
+            : (fallbackIndices.get(fingerprint)?.shift() ??
+              (canUsePositionFallback ? deferredScenarioIndicesByPosition?.[index] : undefined));
+          return applyDeferredScenarioDefaults(testSuite, atomicTestCase, fallbackScenarioIndex);
+        }),
+      };
+    }
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
@@ -4554,7 +5017,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
 
     let tests = buildTestsFromSuite(testSuite);
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    if (!hasTestCaseSelection) {
+      tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    }
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

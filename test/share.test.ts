@@ -15,7 +15,7 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
@@ -683,6 +683,67 @@ describe('createShareableUrl', () => {
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
         }),
       );
+    });
+
+    it('uses a provider-scoped remote config for both authorization and upload', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      mockEval.config = {
+        providers: [
+          { id: 'echo', config: { apiKey: 'local-secret' } },
+          { id: 'http', config: { url: 'https://excluded.example.com' } },
+        ],
+        prompts: ['Hello'],
+      };
+      mockEval.runtimeOptions = {
+        configEnvSource: 'cli',
+        promptSelection: {
+          prompts: [{ id: 'prompt-id', fingerprint: '1'.repeat(64) }],
+        },
+        providerSelection: {
+          providers: [
+            {
+              index: 0,
+              id: 'echo',
+              label: 'selected',
+              fingerprint: '0'.repeat(64),
+            },
+          ],
+        },
+        testCaseSelection: {
+          tests: [{ index: 0, fingerprint: '2'.repeat(64) }],
+        },
+      };
+      const remoteConfig = {
+        ...mockEval.config,
+        providers: [{ id: 'echo', label: 'selected' }],
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'scoped-eval-id' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEval as Eval);
+
+      expect(checkCloudPermissions).toHaveBeenCalledWith(remoteConfig);
+      const initialRequest = mockFetch.mock.calls[0];
+      const requestBody = JSON.parse(initialRequest[1].body);
+      expect(requestBody.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
+      expect(requestBody.runtimeOptions).not.toHaveProperty('promptSelection');
+      expect(requestBody.runtimeOptions).not.toHaveProperty('providerSelection');
+      expect(requestBody.runtimeOptions).not.toHaveProperty('testCaseSelection');
+      expect(requestBody.runtimeOptions).not.toHaveProperty('configEnvSource');
+      expect(JSON.stringify(requestBody.config)).not.toContain('local-secret');
+      expect(JSON.stringify(requestBody.config)).not.toContain('excluded.example.com');
+      expect(mockEval.config.providers).toHaveLength(2);
     });
 
     it('uploads local blob refs before manually sharing a previously unshared eval', async () => {

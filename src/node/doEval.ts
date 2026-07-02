@@ -6,11 +6,11 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache } from '../cache';
+import { disableCache, withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { createTestCaseSelection, evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -44,9 +44,17 @@ import {
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
+import {
+  applyProviderSelection,
+  buildProviderPermissionConfig,
+} from '../util/eval/providerSelection';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
+import {
+  applyPromptSelection,
+  createPromptSelection,
+  getPromptsForReplay,
+} from '../util/eval/replay';
 import { generateEvalSummary } from '../util/eval/summary';
-import { maybeLoadFromExternalFile } from '../util/file';
 import {
   printBorder,
   setupEnv,
@@ -59,15 +67,23 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  assertErrorResultsReplaced,
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
 
 import type {
   CommandLineOptions,
+  EvalPromptSelection,
+  EvalProviderSelection,
   EvalRuntimeOptions,
-  Scenario,
+  EvalTestCaseSelection,
   TestSuite,
+  TestSuiteConfig,
   UnifiedConfig,
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
@@ -88,6 +104,48 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
+export type TestSuiteTransform = (
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  context?: { selectedProviderConfigs?: TestSuiteConfig['providers'] },
+) => void | Promise<void>;
+export type PostFilterTestSuiteTransform = (
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  context: { deferredFilterRange?: string },
+) => void | Promise<void>;
+
+function resolveEnvPathsForPersistence(
+  envPath: string | string[] | undefined,
+): string | string[] | undefined {
+  if (!envPath) {
+    return undefined;
+  }
+
+  const resolvedPaths = (Array.isArray(envPath) ? envPath : [envPath])
+    .flatMap((envFile) =>
+      envFile.includes(',')
+        ? envFile.split(',').map((candidate) => candidate.trim())
+        : envFile.trim(),
+    )
+    .filter((envFile) => envFile.length > 0)
+    .map((envFile) => path.resolve(envFile));
+
+  if (resolvedPaths.length === 0) {
+    return undefined;
+  }
+  return resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths;
+}
+export interface EvalRunCustomization {
+  beforeFilterTestSuite?: TestSuiteTransform;
+  afterFilterTestSuite?: PostFilterTestSuiteTransform;
+  evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
+  allowConfigFilterRange?: boolean;
+  allowConfigFilterSample?: boolean;
+  disablePromptSuggestions?: boolean;
+  skipRedteamEmailPreflight?: boolean;
+}
+
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -103,7 +161,13 @@ function runtimeTagsForEval(
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
+  options: { allowConfigFilterSample?: boolean; loadEnvFiles?: boolean } = {},
 ): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+  if (options.loadEnvFiles && evalRecord.runtimeOptions?.configEnvPaths) {
+    setupEnv(evalRecord.runtimeOptions.configEnvPaths);
+  }
+  const loadResolvedConfigEnv =
+    options.loadEnvFiles && evalRecord.runtimeOptions?.configEnvSource !== 'cli';
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
   );
@@ -119,12 +183,54 @@ async function resolveReplayConfigs(
     );
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, evalRecord.config);
+  const hasPersistedTestSelection =
+    evalRecord.runtimeOptions?.testCaseSelection !== undefined ||
+    evalRecord.runtimeOptions?.testCaseIndices !== undefined;
+  const allowConfigFilterSample = hasPersistedTestSelection
+    ? false
+    : options.allowConfigFilterSample;
+  const configs = await resolveConfigs(providerFilterOptions, evalRecord.config, undefined, {
+    ...options,
+    loadEnvFiles: loadResolvedConfigEnv,
+    ...(evalRecord.runtimeOptions?.configBasePath
+      ? { configBasePath: evalRecord.runtimeOptions.configBasePath }
+      : {}),
+    ...(allowConfigFilterSample === undefined ? {} : { allowConfigFilterSample }),
+  });
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
   // from its raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
+  const providerSelection = evalRecord.runtimeOptions?.providerSelection;
+  if (providerSelection) {
+    try {
+      const selected = applyProviderSelection(
+        configs.testSuite.providers,
+        Array.isArray(configs.selectedProviderConfigs)
+          ? configs.selectedProviderConfigs
+          : undefined,
+        providerSelection,
+      );
+      configs.testSuite.providers = selected.providers;
+      configs.selectedProviderConfigs = selected.providerConfigs;
+      cliState.selectedProviderConfigs = selected.providerConfigs;
+    } catch (error) {
+      throw new ConfigResolutionError(
+        `Could not restore provider selection while ${action} evaluation ${evalRecord.id}: ${error instanceof Error ? error.message : String(error)}. The evaluation was not changed.`,
+      );
+    }
+  }
+  const promptSelection = evalRecord.runtimeOptions?.promptSelection;
+  if (promptSelection) {
+    try {
+      configs.testSuite.prompts = applyPromptSelection(configs.testSuite.prompts, promptSelection);
+    } catch (error) {
+      throw new ConfigResolutionError(
+        `Could not restore prompt selection while ${action} evaluation ${evalRecord.id}: ${error instanceof Error ? error.message : String(error)}. The evaluation was not changed.`,
+      );
+    }
+  }
   return configs;
 }
 
@@ -226,15 +332,19 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
+  customization: EvalRunCustomization = {},
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
+  const cliEnvPaths = resolveEnvPathsForPersistence(cmdObj.envPath);
   const isCliInvocation = isCliEventSource(evaluateOptions);
+  const shouldLoadConfigEnv = cliEnvPaths === undefined;
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let selectedProviderConfigs: TestSuiteConfig['providers'] | undefined = undefined;
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -272,6 +382,9 @@ export async function doEval(
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
+    let validatedPromptSelection: EvalPromptSelection | undefined;
+    let validatedProviderSelection: EvalProviderSelection | undefined;
+    let validatedTestCaseSelection: EvalTestCaseSelection | undefined;
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -382,17 +495,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'resuming'));
+        selectedProviderConfigs,
+      } = await resolveReplayConfigs(resumeEval, 'resuming', {
+        loadEnvFiles: shouldLoadConfigEnv,
+      }));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        testSuite.prompts = getPromptsForReplay(resumeEval.prompts, testSuite.prompts);
       }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
@@ -439,18 +548,14 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
+        selectedProviderConfigs,
+      } = await resolveReplayConfigs(resumeEval, 'retrying errors for', {
+        loadEnvFiles: shouldLoadConfigEnv,
+      }));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        testSuite.prompts = getPromptsForReplay(resumeEval.prompts, testSuite.prompts);
       }
     } else {
       ({
@@ -458,7 +563,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+        selectedProviderConfigs,
+      } = await resolveConfigs(cmdObj, defaultConfig, undefined, {
+        ...(customization.allowConfigFilterSample === undefined
+          ? {}
+          : { allowConfigFilterSample: customization.allowConfigFilterSample }),
+        loadEnvFiles: shouldLoadConfigEnv,
+      }));
     }
 
     const persistedProviderFilterOptions = resumeEval
@@ -485,10 +596,43 @@ export async function doEval(
       }
     }
 
-    // Phase 2: Load environment from config files if not already set via CLI
-    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
-      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
+    const resolvedProvidersBeforeCustomization = [...testSuite.providers];
+    if (resumeEval?.runtimeOptions?.providerSelection) {
+      validatedProviderSelection = {
+        providers: resumeEval.runtimeOptions.providerSelection.providers.map((provider) => ({
+          ...provider,
+        })),
+      };
+    }
+    if (resumeEval?.runtimeOptions?.promptSelection) {
+      validatedPromptSelection = structuredClone(resumeEval.runtimeOptions.promptSelection);
+    }
+    if (resumeEval?.runtimeOptions?.testCaseSelection) {
+      validatedTestCaseSelection = structuredClone(resumeEval.runtimeOptions.testCaseSelection);
+    }
+    if (!resumeEval && customization.beforeFilterTestSuite) {
+      await customization.beforeFilterTestSuite(testSuite, config, { selectedProviderConfigs });
+    }
+    const initialProviderSelection = customization.evaluateOptionOverrides?.providerSelection;
+    if (!resumeEval && initialProviderSelection) {
+      const selected = applyProviderSelection(
+        resolvedProvidersBeforeCustomization,
+        Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
+        initialProviderSelection,
+      );
+      testSuite.providers = selected.providers;
+      selectedProviderConfigs = selected.providerConfigs;
+      cliState.selectedProviderConfigs = selected.providerConfigs;
+      validatedProviderSelection = {
+        providers: initialProviderSelection.providers.map((provider) => ({ ...provider })),
+      };
+    }
+    const initialTestCaseSelection = customization.evaluateOptionOverrides?.testCaseSelection;
+    if (!resumeEval && initialTestCaseSelection) {
+      validatedTestCaseSelection = structuredClone(initialTestCaseSelection);
+    }
+    if (!resumeEval) {
+      validatedPromptSelection = createPromptSelection(testSuite.prompts);
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
@@ -514,9 +658,26 @@ export async function doEval(
     // to the caller's value — a config file must not be able to flip a library
     // run into CLI semantics (process.exitCode mutation, SIGINT handlers).
     if (config.evaluateOptions) {
+      const {
+        configBasePath: _ignoredConfigBasePath,
+        configEnvPaths: _ignoredConfigEnvPaths,
+        configEnvSource: _ignoredConfigEnvSource,
+        providerSelection: _ignoredConfigProviderSelection,
+        promptSelection: _ignoredConfigPromptSelection,
+        testCaseIndices: _ignoredConfigTestCaseIndices,
+        testCaseSelection: _ignoredConfigTestCaseSelection,
+        ...safeConfigEvaluateOptions
+      } = config.evaluateOptions as InternalEvaluateOptions;
       evaluateOptions = {
         ...evaluateOptions,
-        ...config.evaluateOptions,
+        ...safeConfigEvaluateOptions,
+        eventSource: evaluateOptions.eventSource,
+      };
+    }
+    if (customization.evaluateOptionOverrides) {
+      evaluateOptions = {
+        ...evaluateOptions,
+        ...customization.evaluateOptionOverrides,
         eventSource: evaluateOptions.eventSource,
       };
     }
@@ -526,7 +687,7 @@ export async function doEval(
     let cache: boolean | undefined;
     let maxConcurrency: number;
     let delay: number;
-    if (resumeRaw) {
+    if (resumeEval) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
@@ -554,14 +715,16 @@ export async function doEval(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
+      if (isCliInvocation) {
+        disableCache();
+      }
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
     // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
-    const explicitMaxConcurrency = resumeRaw
+    const explicitMaxConcurrency = resumeEval
       ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
@@ -596,11 +759,27 @@ export async function doEval(
         `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
       );
     }
+    const configuredFilterRange =
+      customization.allowConfigFilterRange === false
+        ? undefined
+        : (commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterRange = resumeEval
       ? resumeFilterRange
-      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
-    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
-    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+      : (cmdObj.filterRange ?? configuredFilterRange);
+    const hasExplicitTestCaseIndices =
+      evaluateOptions.testCaseIndices !== undefined ||
+      resumeRuntimeOptions?.testCaseIndices !== undefined ||
+      validatedTestCaseSelection !== undefined;
+    const configuredFilterSample =
+      customization.allowConfigFilterSample === false || hasExplicitTestCaseIndices
+        ? undefined
+        : commandLineOptions?.filterSample;
+    const configuredFilterSampleSeed =
+      customization.allowConfigFilterSample === false || hasExplicitTestCaseIndices
+        ? undefined
+        : commandLineOptions?.filterSampleSeed;
+    const filterSample = cmdObj.filterSample ?? configuredFilterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? configuredFilterSampleSeed;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -612,6 +791,10 @@ export async function doEval(
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    const hasResultBasedTestFilter =
+      cmdObj.filterFailing !== undefined ||
+      cmdObj.filterFailingOnly !== undefined ||
+      cmdObj.filterErrorsOnly !== undefined;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
@@ -632,6 +815,17 @@ export async function doEval(
         sampleSeed: filterSampleSeed,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
+      if (
+        !hasScenarios &&
+        hasActiveTestFilter &&
+        !hasResultBasedTestFilter &&
+        validatedTestCaseSelection === undefined
+      ) {
+        validatedTestCaseSelection = createTestCaseSelection(
+          testSuite.tests,
+          testSuite.tests.map((_, index) => index),
+        );
+      }
       const shouldSuppressImplicitDefaultTest =
         testSuite.tests.length === 0 &&
         ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
@@ -641,6 +835,7 @@ export async function doEval(
     }
 
     if (
+      !customization.skipRedteamEmailPreflight &&
       !neverGenerateRemote() &&
       config.redteam &&
       config.redteam.plugins &&
@@ -685,16 +880,32 @@ export async function doEval(
       });
     }
 
-    await checkCloudPermissions(config as UnifiedConfig);
+    const cloudPermissionConfig = validatedProviderSelection
+      ? buildProviderPermissionConfig(config, validatedProviderSelection)
+      : config;
+    await checkCloudPermissions(cloudPermissionConfig as UnifiedConfig);
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
     // Strip any providerFilter a config file injected via evaluateOptions — only the
     // normalized CLI/persisted value above may be persisted and replayed.
-    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
-      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
+    const {
+      configBasePath: _ignoredUnvalidatedConfigBasePath,
+      configEnvPaths: _ignoredUnvalidatedConfigEnvPaths,
+      configEnvSource: _ignoredUnvalidatedConfigEnvSource,
+      providerFilter: _ignoredProviderFilter,
+      promptSelection: _ignoredUnvalidatedPromptSelection,
+      providerSelection: _ignoredUnvalidatedProviderSelection,
+      testCaseSelection: _ignoredUnvalidatedTestCaseSelection,
+      ...safeEvaluateOptions
+    } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      ...(resumeRuntimeOptions?.testCaseIndices === undefined
+        ? {}
+        : { testCaseIndices: resumeRuntimeOptions.testCaseIndices }),
+      ...(validatedProviderSelection ? { providerSelection: validatedProviderSelection } : {}),
+      ...(validatedTestCaseSelection ? { testCaseSelection: validatedTestCaseSelection } : {}),
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
@@ -743,19 +954,17 @@ export async function doEval(
       // is the same object reference, and nothing reads testSuite.tags.
       config.tags = { ...(config.tags || {}), ...runtimeTags };
     }
-    if (!resumeEval) {
+    if (!resumeEval && customization.disablePromptSuggestions) {
+      options.generateSuggestions = false;
+      delete options.suggestionsCount;
+    } else if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
+
+    if (!resumeEval && customization.afterFilterTestSuite) {
+      await customization.afterFilterTestSuite(testSuite, config, {
+        deferredFilterRange: hasScenarios ? filterRange : undefined,
+      });
     }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
@@ -770,9 +979,15 @@ export async function doEval(
       );
     }
 
+    const effectiveConfigEnvPaths =
+      cliEnvPaths ?? resolveEnvPathsForPersistence(commandLineOptions?.envPath);
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
+      ...(_basePath ? { configBasePath: path.resolve(_basePath) } : {}),
+      ...(effectiveConfigEnvPaths ? { configEnvPaths: effectiveConfigEnvPaths } : {}),
+      ...(effectiveConfigEnvPaths ? { configEnvSource: cliEnvPaths ? 'cli' : 'config' } : {}),
       ...(providerFilter ? { providerFilter } : {}),
+      ...(validatedPromptSelection ? { promptSelection: validatedPromptSelection } : {}),
     };
 
     // Create or load eval record
@@ -847,18 +1062,25 @@ export async function doEval(
     // Run the evaluation!!!!!!
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
+      const executableTestSuite = testSuite;
+      const effectiveConfig = config;
+      const runEvaluation = () =>
+        evaluate(executableTestSuite, evalRecord, {
+          ...options,
+          filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+          abortSignal: evaluateOptions.abortSignal,
+          isRedteam: Boolean(effectiveConfig.redteam),
+        });
+      ret = isCliInvocation
+        ? await runEvaluation()
+        : await withCacheEnabled(cache === false ? false : undefined, runEvaluation);
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
       // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
+        await assertErrorResultsReplaced(errorResultIds);
         try {
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
@@ -870,19 +1092,18 @@ export async function doEval(
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
             error: cleanupError,
           });
-        } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
         }
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      if (retryErrors) {
+        delete cliState._retryErrorResultIds;
+        cliState.retryMode = false;
+      }
+      if (resumeEval) {
+        cliState.resume = false;
+      }
     }
-
-    // Clear resume flag after run completes
-    cliState.resume = false;
 
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {
@@ -893,9 +1114,9 @@ export async function doEval(
       return ret;
     }
 
-    // Persisted evals can reload results later. No-write evals only have the
-    // in-memory results left for table and output rendering.
-    if (evalRecord.persisted) {
+    // CLI persisted evals can reload results later. Reusable callers may serialize
+    // in-memory rows after doEval returns, so leave those rows intact for them.
+    if (isCliInvocation && evalRecord.persisted) {
       evalRecord.clearResults();
     }
 
@@ -1049,6 +1270,7 @@ export async function doEval(
           shareableUrl = await sharePromise;
           if (shareableUrl) {
             evalRecord.shared = true;
+            evalRecord.shareableUrl = shareableUrl;
             spinner.succeed(shareableUrl);
           } else {
             spinner.fail(chalk.red('Share failed'));
@@ -1063,6 +1285,7 @@ export async function doEval(
           shareableUrl = await sharePromise;
           if (shareableUrl) {
             evalRecord.shared = true;
+            evalRecord.shareableUrl = shareableUrl;
             logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
           }
         } catch (error) {
