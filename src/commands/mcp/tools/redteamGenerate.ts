@@ -83,7 +83,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             
             Additional plugins: ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join(', ')}
             
-            Example: ["harmful", "pii", "indirect-prompt-injection"]
+            Example: ["harmful", "pii", "hijacking"]
           `,
         ),
       strategies: z
