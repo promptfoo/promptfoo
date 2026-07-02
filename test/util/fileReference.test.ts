@@ -1,13 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-import * as yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { isJavascriptFile } from '../../src/util/fileExtensions';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
+import { loadYaml } from '../../src/util/yamlLoad';
 import type { Logger } from 'winston';
 
 vi.mock('fs', async () => {
@@ -26,7 +26,7 @@ vi.mock('fs', async () => {
   };
 });
 vi.mock('path');
-vi.mock('js-yaml');
+vi.mock('../../src/util/yamlLoad');
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
@@ -115,12 +115,12 @@ describe('fileReference utility functions', () => {
       const parsedContent = { name: 'test', value: 42 };
 
       readFileMock.mockResolvedValue(fileContent);
-      vi.mocked(yaml.load).mockReturnValue(parsedContent);
+      vi.mocked(loadYaml).mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef);
 
       expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
-      expect(yaml.load).toHaveBeenCalledWith(fileContent, expect.any(Object));
+      expect(loadYaml).toHaveBeenCalledWith(fileContent);
       expect(result).toEqual(parsedContent);
     });
 
@@ -260,7 +260,7 @@ describe('fileReference utility functions', () => {
         return {};
       });
 
-      vi.mocked(yaml.load).mockImplementation((content) => {
+      vi.mocked(loadYaml).mockImplementation((content) => {
         if (content === 'key: value3') {
           return { key: 'value3' };
         }
@@ -303,7 +303,7 @@ describe('fileReference utility functions', () => {
         return {};
       });
 
-      vi.mocked(yaml.load).mockImplementation((content) => {
+      vi.mocked(loadYaml).mockImplementation((content) => {
         if (content === 'name: item2') {
           return { name: 'item2' };
         }

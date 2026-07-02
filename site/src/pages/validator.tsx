@@ -8,9 +8,9 @@ import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { AggregateAjvError } from '@segment/ajv-human-errors';
+import { loadYaml } from '@site/src/utils/yaml';
 import Layout from '@theme/Layout';
 import Ajv from 'ajv';
-import * as yaml from 'js-yaml';
 
 const DEFAULT_INPUT = `prompts:
   - "Write a tweet about {{topic}}"
@@ -59,14 +59,8 @@ const ConfigValidator = () => {
       let parsedConfig;
       if (value.trim().startsWith('{')) {
         parsedConfig = JSON.parse(value);
-      } else if (value.trim() === '') {
-        // js-yaml v5 throws on empty input; treat it like an empty config.
-        parsedConfig = undefined;
       } else {
-        parsedConfig = yaml.load(value, {
-          // Preserve js-yaml v4's support for YAML merge keys, matching the CLI loader.
-          schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
-        });
+        parsedConfig = loadYaml(value);
       }
 
       const ajv = new Ajv({

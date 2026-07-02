@@ -26,8 +26,8 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { loadYaml } from '@app/utils/yaml';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import {
   Brain,

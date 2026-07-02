@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
-import { loadYaml } from '@app/utils/yaml';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ vi.mock('@promptfoo/csv', () => ({
 }));
 
 // Mock the shared YAML loader
-vi.mock('@app/utils/yaml', () => ({
+vi.mock('@promptfoo/util/yamlLoad', () => ({
   loadYaml: vi.fn(),
 }));
 

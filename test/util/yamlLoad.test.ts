@@ -38,6 +38,10 @@ describe('loadYaml', () => {
     expect(() => loadYaml('a: [unclosed')).toThrow();
   });
 
+  it('still throws on multi-document streams like js-yaml v4 load', () => {
+    expect(() => loadYaml('a: 1\n---\nb: 2')).toThrow(/single document/);
+  });
+
   it('passes through additional load options', () => {
     expect(() => loadYaml('a: [unclosed', { filename: 'my-config.yaml' })).toThrow(
       /my-config\.yaml/,

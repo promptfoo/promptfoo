@@ -45,6 +45,7 @@ vi.mock('node:fs', () => ({
 
 vi.mock('os');
 vi.mock('js-yaml');
+vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),

@@ -330,8 +330,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const configContents = await fsPromises.readFile(configPath, 'utf-8');
-    const rawConfig = loadYaml(configContents) ?? {};
+    const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.

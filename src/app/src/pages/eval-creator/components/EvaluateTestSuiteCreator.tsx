@@ -16,7 +16,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { loadYaml } from '@app/utils/yaml';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';

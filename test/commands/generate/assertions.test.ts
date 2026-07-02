@@ -7,6 +7,7 @@ import { disableCache } from '../../../src/cache';
 import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
+import { loadYaml } from '../../../src/util/yamlLoad';
 
 import type { Assertion, TestSuite } from '../../../src/types/index';
 
@@ -37,6 +38,7 @@ vi.mock('fs/promises', () => ({
   writeFile: fsMocks.writeFileSync,
 }));
 vi.mock('js-yaml');
+vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/assertions/synthesis');
 vi.mock('../../../src/util/config/load', () => ({
   resolveConfigs: vi.fn(),
@@ -116,7 +118,7 @@ describe('assertion generation', () => {
     beforeEach(() => {
       vi.mocked(synthesizeFromTestSuite).mockResolvedValue(mockResults);
       vi.mocked(yaml.dump).mockReturnValue('yaml content');
-      vi.mocked(yaml.load).mockReturnValue(mockTestSuite);
+      vi.mocked(loadYaml).mockReturnValue(mockTestSuite);
       vi.mocked(fs.readFileSync).mockReturnValue('mock config content');
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);

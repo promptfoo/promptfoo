@@ -142,7 +142,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
           } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
             // Handle YAML files
-            const { loadYaml } = await import('@app/utils/yaml');
+            const { loadYaml } = await import('@promptfoo/util/yamlLoad');
             const parsedYaml = loadYaml(text);
 
             if (Array.isArray(parsedYaml)) {
