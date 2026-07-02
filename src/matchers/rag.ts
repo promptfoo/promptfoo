@@ -1,6 +1,7 @@
 import { serializeContext } from '../assertions/contextUtils';
 import {
   ANSWER_RELEVANCY_GENERATE,
+  CITATION_FAITHFULNESS_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -11,6 +12,7 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
+import { extractJsonObjects } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
@@ -430,6 +432,142 @@ export async function matchesContextFaithfulness(
     reason: pass
       ? `Faithfulness ${score.toFixed(2)} is >= ${threshold}`
       : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
+    tokensUsed,
+  };
+}
+
+/**
+ * Numbers retrieved passages so the grader can resolve `[N]` citation markers.
+ *
+ * When context is provided as an array, each entry becomes a numbered passage
+ * (`[1] ...`, `[2] ...`). When it is a single string, it is returned unchanged
+ * so callers that already embed `[N]` markers keep working.
+ */
+function numberCitationPassages(context: string | string[]): string {
+  if (Array.isArray(context)) {
+    return context.map((passage, index) => `[${index + 1}] ${passage}`).join('\n\n');
+  }
+  return context;
+}
+
+/**
+ * Checks citation-attribution faithfulness: whether every `[N]` citation marker
+ * in the answer points to a passage that actually supports the specific claim
+ * the marker is attached to.
+ *
+ * This is distinct from {@link matchesContextFaithfulness}, which checks whether
+ * a claim is supported by the context *somewhere*. This matcher catches
+ * misattribution: a claim cited to passage [A] that does not support it, even
+ * when some other passage [B] in the context would.
+ *
+ * The grader returns a binary verdict. A "faithful" verdict scores 1.0 and a
+ * "unfaithful" verdict scores 0.0. With the default threshold of 1.0, only a
+ * faithful answer passes.
+ */
+export async function matchesCitationFaithfulness(
+  query: string,
+  output: string,
+  context: string | string[],
+  threshold: number,
+  grading?: GradingConfig,
+  vars?: Record<string, VarValue>,
+  providerCallContext?: CallApiContextParams,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  const textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    (await getDefaultProviders()).gradingProvider,
+    'citation-faithfulness check',
+  );
+
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
+
+  // Deterministic precheck: an answer with no [N] citation markers has nothing to
+  // attribute, so it cannot be citation-faithful. Fail it directly rather than
+  // letting the grader pass it vacuously (and save an API call).
+  if (!/\[\d+\]/.test(output)) {
+    return fail('Answer contains no [N] citation markers to evaluate.', tokensUsed);
+  }
+
+  if (grading?.rubricPrompt) {
+    invariant(
+      typeof grading.rubricPrompt === 'string' || Array.isArray(grading.rubricPrompt),
+      'rubricPrompt must be a string or array',
+    );
+  }
+  // Pass the rubricPrompt through as-is (string or ChatMessage[]); loadRubricPrompt
+  // handles both. Selecting element 0 would drop the user message carrying the
+  // {{question}}/{{context}}/{{answer}} placeholders from a custom chat rubric.
+  const citationPrompt = await loadRubricPrompt(
+    grading?.rubricPrompt,
+    CITATION_FAITHFULNESS_PROMPT,
+  );
+
+  const numberedContext = numberCitationPassages(context);
+
+  // Spread caller vars first so the explicit numbered context (and question/answer)
+  // win: a `vars.context` array must not overwrite the numbered [1]..[N] passages.
+  const promptVars = {
+    ...(vars || {}),
+    question: query,
+    answer: tryParse(output),
+    context: numberedContext,
+  };
+  const promptText = await renderLlmRubricPrompt(citationPrompt, promptVars);
+
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'citation-faithfulness',
+    promptVars,
+    providerCallContext,
+  );
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  // Hard grader failures are tagged graderError so callers (e.g. the inverse
+  // not-citation-faithfulness assertion) can avoid treating an outage or parse
+  // failure as a meaningful verdict.
+  if (resp.error || !resp.output) {
+    return { ...fail(resp.error || 'No output', tokensUsed), metadata: { graderError: true } };
+  }
+
+  // Accept either a JSON string (default LLM grader) or an already-parsed object
+  // (a custom JS/Python/HTTP grading provider can return one directly), matching
+  // the other JSON grading paths instead of throwing on non-string output.
+  const parsed = (
+    typeof resp.output === 'string' ? extractJsonObjects(resp.output)[0] : resp.output
+  ) as { verdict?: string; reasoning?: string } | undefined;
+  if (!parsed || typeof parsed.verdict !== 'string') {
+    // Do not echo the raw grader output in the reason: it can contain the
+    // candidate answer and the retrieved passages.
+    return {
+      ...fail('citation-faithfulness grader did not return a valid verdict.', tokensUsed),
+      metadata: { graderError: true },
+    };
+  }
+
+  const verdict = parsed.verdict.trim().toLowerCase();
+  if (verdict !== 'faithful' && verdict !== 'unfaithful') {
+    // An unrecognized verdict is a grader failure, not a real "unfaithful" result;
+    // tag it so the inverse assertion does not invert it into a pass.
+    return {
+      ...fail('citation-faithfulness grader returned an unrecognized verdict.', tokensUsed),
+      metadata: { graderError: true },
+    };
+  }
+  const faithful = verdict === 'faithful';
+  const score = faithful ? 1 : 0;
+  const pass = score >= threshold - Number.EPSILON;
+  const reasoning =
+    typeof parsed.reasoning === 'string' && parsed.reasoning.trim().length > 0
+      ? parsed.reasoning.trim()
+      : faithful
+        ? 'All citations point to passages that support their claims.'
+        : 'At least one citation does not point to a passage that supports its claim.';
+
+  return {
+    pass,
+    score,
+    reason: reasoning,
     tokensUsed,
   };
 }

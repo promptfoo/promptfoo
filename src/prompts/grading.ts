@@ -8,6 +8,45 @@ import dedent from 'dedent';
  */
 export * from '../external/prompts/ragas';
 
+/**
+ * Citation-attribution faithfulness prompt.
+ *
+ * Unlike context-faithfulness (which checks whether a claim is supported by the
+ * context *somewhere*), this prompt checks attribution: whether each `[N]`
+ * citation marker in the answer points to a passage that actually supports the
+ * specific claim the marker is attached to. It is designed to catch
+ * misattribution, where a claim is cited to passage [A] that does not support
+ * it even though some other passage [B] in the context would.
+ *
+ * The grader returns a binary verdict as JSON: {"verdict": "faithful" |
+ * "unfaithful", "reasoning": "..."}.
+ */
+export const CITATION_FAITHFULNESS_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: dedent`You are a faithfulness judge for a retrieval-augmented question answering system.
+    You are given a question, a set of numbered retrieved passages, and a candidate answer that contains [N] citation markers (N is the passage number being cited).
+    Decide whether the candidate answer is FAITHFUL or UNFAITHFUL.
+    Definitions:
+    - FAITHFUL: every factual claim is supported by the passages, AND every citation marker [N] points to a passage that actually supports the specific claim it is attached to.
+    - UNFAITHFUL: at least one claim is unsupported, contradicts a passage, OR carries a citation [N] where passage N does NOT support that claim — even if some other passage would support it (this is citation misattribution).
+    Check each [N] marker: read passage N and confirm it supports the claim the marker is attached to. Judge relative to the passages only, not world knowledge.
+
+    Respond with a single JSON object with this structure: {"verdict": "faithful" | "unfaithful", "reasoning": "one sentence"}`,
+  },
+  {
+    role: 'user',
+    content: dedent`Question:
+    {{ question }}
+
+    Numbered passages:
+    {{ context }}
+
+    Candidate answer:
+    {{ answer }}`,
+  },
+]);
+
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'system',
