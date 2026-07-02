@@ -230,7 +230,11 @@ describe('TestCaseDialog', () => {
     onContinue: vi.fn(),
     currentTurn: 0,
     maxTurns: 1,
-    availablePlugins: ['harmful:hate', 'harmful:violence', 'pii'],
+    availablePlugins: [
+      { id: 'harmful:hate' as const, config: {}, isStatic: true },
+      { id: 'harmful:violent-crime' as const, config: {}, isStatic: true },
+      { id: 'pii' as const, config: {}, isStatic: true },
+    ],
   };
 
   beforeEach(() => {
@@ -275,10 +279,205 @@ describe('TestCaseDialog', () => {
       expect(screen.getByTestId('plugin-dropdown')).toHaveClass('w-full', 'sm:w-[280px]');
     });
 
+    it('should label duplicate plugins distinctly and regenerate by selected index', async () => {
+      const user = userEvent.setup();
+      const onRegenerate = vi.fn();
+      const availablePlugins = [
+        {
+          id: 'policy' as const,
+          config: {
+            policy: {
+              id: 'refund-policy',
+              text: 'Refunds require approval.',
+              name: 'Refund Policy',
+            },
+          },
+          isStatic: true,
+        },
+        {
+          id: 'policy' as const,
+          config: {
+            policy: 'Do not promise refunds without manager approval.',
+          },
+          isStatic: true,
+        },
+        { id: 'pii' as const, config: { name: 'email' }, isStatic: true },
+        { id: 'pii' as const, config: { name: 'phone' }, isStatic: true },
+      ];
+
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          plugin={{
+            id: 'policy',
+            config: {
+              policy: {
+                name: 'Refund Policy',
+                id: 'refund-policy',
+                text: 'Refunds require approval.',
+              },
+            },
+            isStatic: true,
+          }}
+          availablePlugins={availablePlugins}
+          onRegenerate={onRegenerate}
+          allowPluginChange={true}
+        />,
+      );
+
+      expect(screen.getByTestId('plugin-dropdown')).toHaveTextContent('Refund Policy');
+
+      await user.click(screen.getByTestId('plugin-dropdown'));
+
+      expect(screen.getByRole('option', { name: 'Refund Policy' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Custom Policy 2' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'PII Protection Suite (1)' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'PII Protection Suite (2)' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('option', { name: 'Custom Policy 2' }));
+
+      expect(onRegenerate).toHaveBeenCalledWith(availablePlugins[1]);
+    });
+
+    it('should fall back when a policy name contains only whitespace', async () => {
+      const user = userEvent.setup();
+      const whitespacePolicy = {
+        id: 'policy' as const,
+        config: {
+          policy: {
+            id: 'whitespace-policy',
+            text: 'Require approval.',
+            name: '   ',
+          },
+        },
+        isStatic: true,
+      };
+
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          plugin={whitespacePolicy}
+          availablePlugins={[whitespacePolicy]}
+          allowPluginChange={true}
+        />,
+      );
+
+      const dropdown = screen.getByRole('combobox', { name: 'Preview plugin' });
+      expect(dropdown).toHaveTextContent('Custom Policy 1');
+
+      await user.click(dropdown);
+      expect(screen.getByRole('option', { name: 'Custom Policy 1' })).toBeInTheDocument();
+    });
+
+    it('should disambiguate labels that collide across plugin ids', async () => {
+      const user = userEvent.setup();
+      const availablePlugins = [
+        {
+          id: 'policy' as const,
+          config: {
+            policy: {
+              id: 'pii-named-policy',
+              text: 'Follow the policy.',
+              name: 'PII Protection Suite',
+            },
+          },
+          isStatic: true,
+        },
+        { id: 'pii' as const, config: {}, isStatic: true },
+      ];
+
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          plugin={availablePlugins[0]}
+          availablePlugins={availablePlugins}
+          allowPluginChange={true}
+        />,
+      );
+
+      const dropdown = screen.getByRole('combobox', { name: 'Preview plugin' });
+      expect(dropdown).toHaveTextContent('PII Protection Suite (1)');
+
+      await user.click(dropdown);
+      expect(screen.getByRole('option', { name: 'PII Protection Suite (1)' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'PII Protection Suite (2)' })).toBeInTheDocument();
+    });
+
+    it('should keep generated labels unique when a policy name contains a duplicate suffix', async () => {
+      const user = userEvent.setup();
+      const availablePlugins = [
+        {
+          id: 'policy' as const,
+          config: {
+            policy: {
+              id: 'abcdef123456',
+              text: 'Follow the policy.',
+              name: 'PII Protection Suite (1)',
+            },
+          },
+          isStatic: true,
+        },
+        { id: 'pii' as const, config: { name: 'email' }, isStatic: true },
+        { id: 'pii' as const, config: { name: 'phone' }, isStatic: true },
+      ];
+
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          plugin={availablePlugins[0]}
+          availablePlugins={availablePlugins}
+          allowPluginChange={true}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox', { name: 'Preview plugin' }));
+      const optionLabels = screen.getAllByRole('option').map((option) => option.textContent);
+
+      expect(optionLabels).toEqual([
+        'PII Protection Suite (1)',
+        'PII Protection Suite (2)',
+        'PII Protection Suite (3)',
+      ]);
+      expect(new Set(optionLabels).size).toBe(optionLabels.length);
+    });
+
+    it('should keep the plugin selector controlled while the preview closes', () => {
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const view = renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+
+        view.rerender(
+          <TooltipProvider delayDuration={0}>
+            <TestCaseDialog {...defaultProps} plugin={null} allowPluginChange={true} />
+          </TooltipProvider>,
+        );
+
+        expect(warning).not.toHaveBeenCalledWith(
+          expect.stringContaining('controlled to uncontrolled'),
+        );
+      } finally {
+        warning.mockRestore();
+      }
+    });
+
     it('should NOT show plugin dropdown when allowPluginChange is false', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
 
       expect(screen.queryByTestId('plugin-dropdown')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('loading announcements', () => {
+    it.each([
+      { props: { isGenerating: true }, announcement: 'Generating preview' },
+      {
+        props: { isGenerating: false, isRunningTest: true },
+        announcement: 'Running preview against target',
+      },
+    ])('announces $announcement', ({ props, announcement }) => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} {...props} />);
+
+      expect(screen.getByRole('status')).toHaveTextContent(announcement);
     });
   });
 

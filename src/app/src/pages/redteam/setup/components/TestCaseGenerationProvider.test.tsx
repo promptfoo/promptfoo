@@ -157,6 +157,33 @@ const TestConsumer = ({
   );
 };
 
+const FocusTriggerConsumer = () => {
+  const { generateTestCase } = useTestCaseGeneration();
+
+  return (
+    <>
+      <button
+        data-testid="blocked-generation-btn"
+        onClick={() =>
+          generateTestCase(
+            { id: 'harmful:hate', config: {}, isStatic: false },
+            { id: 'goat', config: {}, isStatic: false },
+          )
+        }
+      />
+      <button
+        data-testid="successful-generation-btn"
+        onClick={() =>
+          generateTestCase(
+            { id: 'harmful:hate', config: {}, isStatic: false },
+            { id: 'basic', config: {}, isStatic: false },
+          )
+        }
+      />
+    </>
+  );
+};
+
 // ===================================================================
 // Tests
 // ===================================================================
@@ -262,6 +289,54 @@ describe('TestCaseGenerationProvider', () => {
       const targetResponseComponent =
         within(testCaseDialogComponent).queryByTestId('chat-message-1');
       expect(targetResponseComponent).not.toBeInTheDocument();
+    });
+
+    it('should restore focus to the generation trigger after closing the preview', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      const trigger = screen.getByTestId('test-case-generation-btn');
+      await user.click(trigger);
+      const dialog = await screen.findByTestId('test-case-dialog');
+      const closeButtons = within(dialog).getAllByRole('button', { name: 'Close' });
+      await user.click(closeButtons[closeButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
+      });
+    });
+
+    it('should not restore focus to a trigger whose preview was blocked', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <FocusTriggerConsumer />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      const blockedTrigger = screen.getByTestId('blocked-generation-btn');
+      const successfulTrigger = screen.getByTestId('successful-generation-btn');
+      await user.click(blockedTrigger);
+      expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+
+      await user.click(successfulTrigger);
+      const dialog = await screen.findByTestId('test-case-dialog');
+      const closeButtons = within(dialog).getAllByRole('button', { name: 'Close' });
+      await user.click(closeButtons[closeButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        expect(successfulTrigger).toHaveFocus();
+      });
     });
 
     it('should apply the configured review language to generated example tests', async () => {
@@ -371,6 +446,241 @@ describe('TestCaseGenerationProvider', () => {
           within(testCaseDialogComponent).queryByText(/Learn more about Hate Speech/i),
         ).not.toBeInTheDocument();
       });
+    });
+
+    it('should preserve configured plugin payloads when switching strategy preview plugins', async () => {
+      const user = userEvent.setup();
+      const policyConfig = {
+        policy: {
+          id: 'refund-policy',
+          name: 'Refund Policy',
+          text: 'Do not promise refunds without approval.',
+        },
+      };
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              plugins: [
+                { id: 'pii', config: { name: 'email' } },
+                { id: 'policy', config: policyConfig },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer
+              testPlugin="pii"
+              pluginConfig={{ name: 'email' }}
+              testStrategy="basic"
+              isPluginStatic
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+      await user.click(within(testCaseDialogComponent).getByTestId('plugin-dropdown'));
+      await user.click(screen.getByRole('option', { name: 'Refund Policy' }));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+
+      const generationCalls = callApiMock.mock.calls.filter(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      const lastGenerationCall = generationCalls[generationCalls.length - 1];
+      const requestBody = JSON.parse(lastGenerationCall?.[1]?.body as string);
+
+      expect(requestBody.plugin).toMatchObject({
+        id: 'policy',
+        config: policyConfig,
+        isStatic: false,
+      });
+    });
+
+    it('should discard a pending preview when switching policies', async () => {
+      const user = userEvent.setup();
+      const policyA = {
+        policy: { id: 'policy-a', name: 'Policy A', text: 'Follow policy A.' },
+      };
+      const policyB = {
+        policy: { id: 'policy-b', name: 'Policy B', text: 'Follow policy B.' },
+      };
+      const pendingRequests = new Map<
+        string,
+        { resolve: (response: Response) => void; signal: AbortSignal }
+      >();
+
+      callApiMock.mockImplementation((path: string, options?: RequestInit) => {
+        if (path !== '/redteam/generate-test') {
+          return defaultCallApiImplementation(path, options);
+        }
+
+        const body = JSON.parse(options?.body as string);
+        const policyName = body.plugin.config.policy.name as string;
+        return new Promise<Response>((resolve) => {
+          const signal = options?.signal as AbortSignal;
+          pendingRequests.set(policyName, { resolve, signal });
+        });
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              plugins: [
+                { id: 'policy', config: policyA },
+                { id: 'policy', config: policyB },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer
+              testPlugin="policy"
+              pluginConfig={policyA}
+              testStrategy="basic"
+              isPluginStatic
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(pendingRequests.has('Policy A')).toBe(true));
+
+      const dropdown = screen.getByTestId('plugin-dropdown');
+      await user.click(dropdown);
+      await user.click(screen.getByRole('option', { name: 'Policy B' }));
+
+      await waitFor(() => expect(pendingRequests.has('Policy B')).toBe(true));
+      expect(pendingRequests.get('Policy A')?.signal.aborted).toBe(true);
+
+      pendingRequests.get('Policy B')?.resolve(
+        createJsonResponse({
+          testCases: [{ prompt: 'Preview for Policy B', context: 'Policy B', metadata: {} }],
+        }),
+      );
+
+      expect(await screen.findByText('Preview for Policy B')).toBeInTheDocument();
+      expect(dropdown).toHaveTextContent('Policy B');
+      expect(screen.queryByText('Preview for Policy A')).not.toBeInTheDocument();
+
+      pendingRequests.get('Policy A')?.resolve(
+        createJsonResponse({
+          testCases: [{ prompt: 'Preview for Policy A', context: 'Policy A', metadata: {} }],
+        }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Preview for Policy B')).toBeInTheDocument();
+        expect(screen.queryByText('Preview for Policy A')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should keep the second deeply-identical plugin selected', async () => {
+      const user = userEvent.setup();
+      const pluginConfig = { name: 'email' };
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              plugins: [
+                { id: 'pii', config: pluginConfig },
+                { id: 'pii', config: { ...pluginConfig } },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer
+              testPlugin="pii"
+              pluginConfig={{ ...pluginConfig }}
+              testStrategy="basic"
+              isPluginStatic
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const dropdown = screen.getByTestId('plugin-dropdown');
+      expect(dropdown).toHaveTextContent('PII Protection Suite (1)');
+
+      await user.click(dropdown);
+      await user.click(screen.getByRole('option', { name: 'PII Protection Suite (2)' }));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+      expect(dropdown).toHaveTextContent('PII Protection Suite (2)');
+    });
+
+    it('should ignore malformed configured plugins when choosing the fallback', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              plugins: [
+                '' as Plugin,
+                { config: {} } as never,
+                { id: 'policy', config: { policy: '' } },
+                { id: 'policy', config: { policy: {} } } as never,
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" isPluginStatic />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const dropdown = screen.getByTestId('plugin-dropdown');
+      expect(dropdown).toHaveTextContent('Hate Speech');
+
+      await user.click(dropdown);
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+      expect(screen.getByRole('option', { name: 'Hate Speech' })).toBeInTheDocument();
+    });
+
+    it.each([
+      { strategy: 'basic' as const, label: 'single-turn' },
+      { strategy: 'goat' as const, label: 'multi-turn' },
+    ])('should stop loading when a $label preview returns no test cases', async ({ strategy }) => {
+      const user = userEvent.setup();
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test') {
+          return Promise.resolve(createJsonResponse({ testCases: [], count: 0 }));
+        }
+        return defaultCallApiImplementation(path, options);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="cca" testStrategy={strategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+      });
+      expect(callApiMock.mock.calls.some(([path]) => path === '/providers/test')).toBe(false);
     });
 
     it('should generate images (strategy: image)', async () => {
@@ -533,6 +843,95 @@ describe('TestCaseGenerationProvider', () => {
       await waitFor(() => {
         expect(targetResponseComponent).toHaveTextContent('Simulated target output');
       });
+    });
+
+    it('should discard a late target response when switching policies', async () => {
+      const user = userEvent.setup();
+      const target = {
+        id: 'http',
+        config: { url: 'http://localhost:7979', method: 'POST' },
+      };
+      const policyA = {
+        policy: { id: 'aaaaaa111111', name: 'Policy A', text: 'Follow policy A.' },
+      };
+      const policyB = {
+        policy: { id: 'bbbbbb222222', name: 'Policy B', text: 'Follow policy B.' },
+      };
+      const pendingExecutions = new Map<
+        string,
+        { resolve: (response: Response) => void; signal: AbortSignal }
+      >();
+
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test') {
+          const body = JSON.parse(options?.body as string);
+          const policyName = body.plugin.config.policy.name as string;
+          return Promise.resolve(
+            createJsonResponse({
+              testCases: [{ prompt: `Preview for ${policyName}`, context: policyName }],
+              count: 1,
+            }),
+          );
+        }
+        if (path === '/providers/test') {
+          const body = JSON.parse(options?.body as string);
+          const policyName = String(body.prompt).replace('Preview for ', '');
+          return new Promise<Response>((resolve) => {
+            pendingExecutions.set(policyName, {
+              resolve,
+              signal: options?.signal as AbortSignal,
+            });
+          });
+        }
+        return defaultCallApiImplementation(path, options);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target,
+              plugins: [
+                { id: 'policy', config: policyA },
+                { id: 'policy', config: policyB },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer
+              testPlugin="policy"
+              pluginConfig={policyA}
+              testStrategy="basic"
+              isPluginStatic
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(pendingExecutions.has('Policy A')).toBe(true));
+
+      const dropdown = screen.getByTestId('plugin-dropdown');
+      await user.click(dropdown);
+      await user.click(screen.getByRole('option', { name: 'Policy B' }));
+      await waitFor(() => expect(pendingExecutions.has('Policy B')).toBe(true));
+      expect(pendingExecutions.get('Policy A')?.signal.aborted).toBe(true);
+
+      pendingExecutions
+        .get('Policy A')
+        ?.resolve(
+          createJsonResponse({ providerResponse: { output: 'Target for Policy A', error: null } }),
+        );
+      pendingExecutions
+        .get('Policy B')
+        ?.resolve(
+          createJsonResponse({ providerResponse: { output: 'Target for Policy B', error: null } }),
+        );
+
+      expect(await screen.findByText('Target for Policy B')).toBeInTheDocument();
+      expect(screen.queryByText('Target for Policy A')).not.toBeInTheDocument();
+      expect(dropdown).toHaveTextContent('Policy B');
     });
 
     it('should execute multi-turn test cases', async () => {

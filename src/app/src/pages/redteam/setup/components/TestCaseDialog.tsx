@@ -33,6 +33,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import deepEqual from 'fast-deep-equal';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
 import {
   getPluginDocumentationUrl,
@@ -49,17 +50,18 @@ import type {
 interface TestCaseDialogProps {
   open: boolean;
   onClose: () => void;
+  onCloseAutoFocus?: () => void;
   plugin: TargetPlugin | null;
   strategy: TargetStrategy | null;
   isGenerating: boolean;
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
-  onRegenerate: (newPluginId?: string) => void;
+  onRegenerate: (newPlugin?: TargetPlugin) => void;
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
-  availablePlugins: string[];
+  availablePlugins: TargetPlugin[];
   // Whether to allow changing the plugin (only on strategies page)
   allowPluginChange?: boolean;
 }
@@ -67,6 +69,7 @@ interface TestCaseDialogProps {
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
+  onCloseAutoFocus,
   plugin,
   strategy,
   isGenerating,
@@ -148,16 +151,78 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const renderPluginDocumentationLink =
     pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
 
-  const getDisplayName = (option: string) =>
-    (displayNameOverrides as Record<string, string>)[option] ||
-    (categoryAliases as Record<string, string>)[option] ||
-    option;
+  const selectedPluginValue = useMemo(() => {
+    const exactIndex = availablePlugins.findIndex(
+      (option) =>
+        option === plugin || (option.id === plugin?.id && option.config === plugin.config),
+    );
+    if (exactIndex >= 0) {
+      return String(exactIndex);
+    }
+
+    const index = availablePlugins.findIndex(
+      (option) => option.id === plugin?.id && deepEqual(option.config, plugin?.config ?? {}),
+    );
+    return index >= 0 ? String(index) : '';
+  }, [availablePlugins, plugin]);
+
+  const availablePluginLabels = useMemo(() => {
+    let policyIndex = 0;
+    const baseLabels = availablePlugins.map((option) => {
+      if (option.id === 'policy') {
+        policyIndex += 1;
+        const policy = option.config?.policy as { name?: string } | string | undefined;
+        const policyName =
+          policy && typeof policy === 'object' && typeof policy.name === 'string'
+            ? policy.name.trim()
+            : '';
+        return policyName || `Custom Policy ${policyIndex}`;
+      }
+
+      return (
+        displayNameOverrides[option.id as Plugin] ||
+        categoryAliases[option.id as Plugin] ||
+        option.id
+      );
+    });
+
+    const labelCounts = new Map<string, number>();
+    for (const label of baseLabels) {
+      labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+    }
+
+    const reservedLabels = new Set(baseLabels);
+    const usedLabels = new Set<string>();
+    const nextSuffixes = new Map<string, number>();
+    return baseLabels.map((label) => {
+      if ((labelCounts.get(label) ?? 0) < 2) {
+        usedLabels.add(label);
+        return label;
+      }
+
+      let suffix = nextSuffixes.get(label) ?? 1;
+      let candidate = `${label} (${suffix})`;
+      while (reservedLabels.has(candidate) || usedLabels.has(candidate)) {
+        suffix += 1;
+        candidate = `${label} (${suffix})`;
+      }
+      nextSuffixes.set(label, suffix + 1);
+      usedLabels.add(candidate);
+      return candidate;
+    });
+  }, [availablePlugins]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent
         className="z-[10000] flex max-h-[85vh] flex-col sm:max-w-3xl"
         data-testid="test-case-dialog"
+        onCloseAutoFocus={(event) => {
+          if (onCloseAutoFocus) {
+            event.preventDefault();
+            onCloseAutoFocus();
+          }
+        }}
       >
         <DialogHeader className="flex flex-col items-start gap-4 pr-8 sm:flex-row sm:justify-between">
           <div>
@@ -175,20 +240,25 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           </div>
           {allowPluginChange && (
             <Select
-              value={pluginName}
+              value={selectedPluginValue}
               onValueChange={(newValue) => {
-                if (newValue && newValue !== pluginName) {
-                  onRegenerate(newValue);
+                const selectedPlugin = availablePlugins[Number(newValue)];
+                if (selectedPlugin && newValue !== selectedPluginValue) {
+                  onRegenerate(selectedPlugin);
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-[280px]" data-testid="plugin-dropdown">
+              <SelectTrigger
+                aria-label="Preview plugin"
+                className="w-full sm:w-[280px]"
+                data-testid="plugin-dropdown"
+              >
                 <SelectValue placeholder="Select plugin" />
               </SelectTrigger>
               <SelectContent className="z-[10001]">
-                {availablePlugins.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {getDisplayName(option)}
+                {availablePlugins.map((option, index) => (
+                  <SelectItem key={`${option.id}-${index}`} value={String(index)}>
+                    {availablePluginLabels[index]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -197,6 +267,13 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         </DialogHeader>
 
         <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
+          <div aria-live="polite" className="sr-only" role="status">
+            {isGenerating
+              ? 'Generating preview'
+              : isRunningTest
+                ? 'Running preview against target'
+                : ''}
+          </div>
           <div className="max-h-[50vh] overflow-y-auto">
             <ChatMessages
               messages={turnMessages}
