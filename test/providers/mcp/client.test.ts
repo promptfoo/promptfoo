@@ -809,7 +809,7 @@ describe('MCPClient', () => {
       const result = await mcpClient.callTool('tool1', {});
 
       expect(result).toEqual({
-        content: JSON.stringify(errorContent),
+        content: 'Invalid arguments',
         isError: true,
         raw: {
           content: errorContent,
@@ -926,6 +926,34 @@ describe('MCPClient', () => {
       expect(result).toEqual({
         content: 'Plain text response',
         raw: { content: 'Plain text response' },
+      });
+    });
+
+    it('should normalize array content blocks into joined text', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      const arrayContent = [
+        { type: 'text', text: 'line one' },
+        { type: 'text', text: 'line two' },
+      ];
+      mockClient.callTool.mockResolvedValueOnce({ content: arrayContent });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({
+        content: 'line one\nline two',
+        raw: { content: arrayContent },
       });
     });
   });

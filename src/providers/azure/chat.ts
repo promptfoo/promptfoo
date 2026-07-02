@@ -19,6 +19,7 @@ import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { joinMcpErrors } from '../mcp/util';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -409,6 +410,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let flaggedInput = false;
     let flaggedOutput = false;
     let output = '';
+    let mcpError: string | undefined;
     let logProbs: any;
     let finishReason: string;
 
@@ -474,10 +476,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               allCalls.push(functionCall);
             }
 
-            output = await this.functionCallbackHandler.processCalls(
+            const processed = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
             );
+            output = processed.output;
+            mcpError = joinMcpErrors(processed.mcpErrors);
           } else {
             // No callbacks configured, return raw tool/function calls
             output = toolCalls ?? functionCall;
@@ -500,6 +504,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       return {
         output,
+        ...(mcpError ? { error: mcpError } : {}),
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {

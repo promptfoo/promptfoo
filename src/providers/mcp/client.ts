@@ -10,6 +10,7 @@ import {
   getAuthHeaders,
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
+  normalizeMcpContent,
   renderAuthVars,
 } from './util';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -466,10 +467,9 @@ export class MCPClient {
                 } catch {
                   content = result.content;
                 }
-              } else if (Buffer.isBuffer(result.content)) {
-                content = result.content.toString();
               } else {
-                content = JSON.stringify(result.content);
+                // Arrays of MCP content blocks, Buffers, and objects
+                content = normalizeMcpContent(result.content);
               }
             }
 
