@@ -77,7 +77,7 @@ Most commands support the following common options:
 
 :::note
 
-For `promptfoo eval`, `-v` is the short form of `--vars`, so the `--verbose` flag is not available on that command. Set `LOG_LEVEL=debug` to enable debug logs during eval runs.
+For `promptfoo eval`, `-v` is the short form of `--vars`, not `--verbose`. Use the long form (`--verbose`) or set `LOG_LEVEL=debug` to enable debug logs during eval runs.
 
 :::
 

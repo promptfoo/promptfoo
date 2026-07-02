@@ -101,7 +101,7 @@ if (cachedResponse) {
 
 **Reference implementations:**
 
-- `bedrock/converse.ts:1275` - Sets cached flag correctly
+- `bedrock/converse.ts:1276` - Sets cached flag correctly
 - `pythonCompletion.ts:62` - Sets the flag on the parsed result
 - `google/vertex.ts:371` - Multiple cache points handled correctly
 
