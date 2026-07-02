@@ -1621,12 +1621,9 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
-      return createSnowflakeProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
+      return createSnowflakeProvider(providerPath, providerOptions);
     },
   },
 ];
