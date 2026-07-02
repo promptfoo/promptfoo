@@ -1405,6 +1405,8 @@ METEOR evaluates text by:
    - Unigram recall (coverage of reference words)
    - Word order/fragmentation (how well the word order matches)
 
+Leading, trailing, and repeated whitespace is ignored during tokenization. Empty or whitespace-only output receives a METEOR score of 0.
+
 #### Basic Usage
 
 ```yaml
