@@ -10,7 +10,12 @@ import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import { matchesClassification } from '../matchers/classification';
 import { matchesSelectBest } from '../matchers/comparison';
-import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import {
+  isGraderFailure,
+  matchesClosedQa,
+  matchesFactuality,
+  matchesLlmRubric,
+} from '../matchers/llmGrading';
 import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
@@ -27,6 +32,7 @@ import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
+  type AssertionOrSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -42,7 +48,7 @@ import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
-import { AssertionsResult } from './assertionsResult';
+import { AssertionsResult, DEFAULT_TOKENS_USED } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -98,12 +104,18 @@ import {
   handleTrajectoryToolUsed,
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  hasFallback,
+  isAssertionExecutionFailure,
+  isRedteamGuardrailFailure,
+  isSpecialCompareAssertion,
+  validateFallbackChains,
+} from './validateAssertions';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
-  AssertionOrSet,
   AssertionParams,
   AssertionValueFunctionContext,
   BaseAssertionTypes,
@@ -507,6 +519,7 @@ export async function runAssertion({
             score: 0,
             reason: (error as Error).message,
             assertion,
+            metadata: { assertionError: true },
           };
         }
       } else if (filePath.endsWith('.rb')) {
@@ -525,6 +538,7 @@ export async function runAssertion({
             score: 0,
             reason: (error as Error).message,
             assertion,
+            metadata: { assertionError: true },
           };
         }
       } else {
@@ -673,6 +687,151 @@ export async function runAssertion({
 }
 
 /**
+ * Splits the flattened assertion list into independent assertions and chain
+ * primaries. Independent assertions can run in parallel; chain primaries are
+ * dispatched once and walk their successors sequentially via
+ * `executeFallbackChain`.
+ *
+ * A chain extends from a `fallback`-bearing primary forward through every
+ * adjacent `fallback`-bearing assertion until it hits a terminal (no
+ * `fallback`) or a different `assertResult` parent — the latter is the
+ * defensive guard that keeps a chain from bridging two assert-sets even if a
+ * future validator change loosens the rule.
+ */
+function categorizeAssertions(
+  assertions: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
+): {
+  independent: number[];
+  primaryInChains: number[];
+} {
+  const independent: number[] = [];
+  const primaryInChains: number[] = [];
+  const fallbackTargets = new Set<number>();
+
+  let i = 0;
+  while (i < assertions.length) {
+    const { assertion, assertResult } = assertions[i];
+
+    if (hasFallback(assertion)) {
+      primaryInChains.push(i);
+
+      let chainIndex = i + 1;
+      while (
+        chainIndex < assertions.length &&
+        assertions[chainIndex].assertResult === assertResult
+      ) {
+        fallbackTargets.add(chainIndex);
+        if (!hasFallback(assertions[chainIndex].assertion)) {
+          break;
+        }
+        chainIndex++;
+      }
+
+      i = chainIndex + 1;
+    } else if (fallbackTargets.has(i)) {
+      i++;
+    } else {
+      independent.push(i);
+      i++;
+    }
+  }
+
+  return { independent, primaryInChains };
+}
+
+function sumTokensInto(target: GradingResult, source: GradingResult['tokensUsed']): void {
+  if (!source) {
+    return;
+  }
+  const tokens = target.tokensUsed ?? { ...DEFAULT_TOKENS_USED };
+  tokens.total = (tokens.total ?? 0) + (source.total ?? 0);
+  tokens.prompt = (tokens.prompt ?? 0) + (source.prompt ?? 0);
+  tokens.completion = (tokens.completion ?? 0) + (source.completion ?? 0);
+  tokens.cached = (tokens.cached ?? 0) + (source.cached ?? 0);
+  tokens.numRequests = (tokens.numRequests ?? 0) + (source.numRequests ?? 0);
+  target.tokensUsed = tokens;
+}
+
+/**
+ * Walks a fallback chain sequentially, returning a single GradingResult that
+ * scores the chain plus a trace of every assertion that actually executed.
+ *
+ * Scoring contract: only the terminating assertion (the first to pass, or the
+ * last to fail) contributes weight/score. Intermediate failed primaries are
+ * exposed via `componentResults` and their `tokensUsed` is summed into the
+ * returned result so cost telemetry remains accurate. Thrown assertion errors
+ * and tagged grader failures are not mismatches: they terminate the chain as
+ * errors or failures rather than allowing a fallback to mask them.
+ */
+async function executeFallbackChain(
+  asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
+  startIndex: number,
+  context: {
+    prompt?: string;
+    provider?: ApiProvider;
+    providerResponse: ProviderResponse;
+    test: AtomicTestCase;
+    vars?: Record<string, VarValue>;
+    latencyMs?: number;
+    traceId?: string;
+    traceData?: TraceData | null;
+  },
+): Promise<{
+  result: GradingResult;
+  finalIndex: number;
+}> {
+  const intermediateResults: GradingResult[] = [];
+  let currentIndex = startIndex;
+
+  while (currentIndex < asserts.length) {
+    const { assertion, index } = asserts[currentIndex];
+    const assertionHasFallback = hasFallback(assertion);
+
+    const result = await runAssertion({
+      prompt: context.prompt,
+      provider: context.provider,
+      providerResponse: context.providerResponse,
+      assertion,
+      test: context.test,
+      vars: context.vars,
+      latencyMs: context.latencyMs,
+      assertIndex: index,
+      traceId: context.traceId,
+      traceData: context.traceData,
+    });
+
+    if (
+      result.pass ||
+      !assertionHasFallback ||
+      isGraderFailure(result) ||
+      isAssertionExecutionFailure(result) ||
+      isRedteamGuardrailFailure(result)
+    ) {
+      for (const earlier of intermediateResults) {
+        sumTokensInto(result, earlier.tokensUsed);
+      }
+      if (intermediateResults.length > 0) {
+        result.componentResults = [...intermediateResults, ...(result.componentResults ?? [])];
+      }
+      return { result, finalIndex: currentIndex };
+    }
+
+    intermediateResults.push({
+      ...result,
+      metadata: {
+        ...result.metadata,
+        fallbackIntermediate: true,
+      },
+    });
+    currentIndex++;
+  }
+
+  throw new Error(
+    `Fallback chain at index ${startIndex} (type: ${asserts[startIndex]?.assertion.type}) ran past array end — validateFallbackChains should have rejected this configuration`,
+  );
+}
+
+/**
  * Execute multiple assertions in batch against provider output.
  *
  * This function runs all assertions defined in a test case and returns aggregated results.
@@ -746,6 +905,10 @@ export async function runAssertions({
     threshold: test.threshold,
   });
   const subAssertResults: AssertionsResult[] = [];
+
+  // Validate fallback chain configuration before flattening assertion sets.
+  validateFallbackChains(test.assert);
+
   const asserts: {
     assertion: Assertion;
     assertResult: AssertionsResult;
@@ -776,6 +939,9 @@ export async function runAssertions({
     })
     .flat();
 
+  // Categorize assertions into independent and fallback chains
+  const categorized = categorizeAssertions(asserts);
+
   const shouldPreloadTrace =
     !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
@@ -794,9 +960,48 @@ export async function runAssertions({
     ? 1
     : ASSERTIONS_MAX_CONCURRENCY;
 
-  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
-    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+  const chainStartIndexes = new Set(categorized.primaryInChains);
+  const assertionJobs = [...categorized.independent, ...categorized.primaryInChains].sort(
+    (a, b) => a - b,
+  );
+
+  await async.forEachOfLimit(assertionJobs, concurrency, async (assertionIndex) => {
+    const { assertion, assertResult, index } = asserts[assertionIndex];
+    if (isSpecialCompareAssertion(assertion)) {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
+
+    if (chainStartIndexes.has(assertionIndex)) {
+      const chainResult = await executeFallbackChain(asserts, assertionIndex, {
+        prompt,
+        provider,
+        providerResponse,
+        test,
+        vars,
+        latencyMs,
+        traceId,
+        traceData: preloadedTraceData,
+      });
+
+      const finalAssert = asserts[chainResult.finalIndex];
+      for (const intermediateResult of chainResult.result.componentResults ?? []) {
+        if (intermediateResult.metadata?.fallbackIntermediate !== true) {
+          continue;
+        }
+
+        finalAssert.assertResult.addNamedScores({
+          result: intermediateResult,
+          metric: renderMetricName(intermediateResult.assertion?.metric, vars || test.vars || {}),
+          weight: intermediateResult.assertion?.weight,
+        });
+      }
+      finalAssert.assertResult.addResult({
+        index: finalAssert.index,
+        result: chainResult.result,
+        metric: renderMetricName(finalAssert.assertion.metric, vars || test.vars || {}),
+        weight: finalAssert.assertion.weight,
+      });
       return;
     }
 

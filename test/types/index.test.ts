@@ -96,6 +96,12 @@ describe('AssertionSchema', () => {
     const result = AssertionSchema.safeParse(arrayAssertion);
     expect(result.success).toBe(true);
   });
+
+  it('should only accept enabled fallback values', () => {
+    expect(AssertionSchema.safeParse({ type: 'contains', fallback: 'next' }).success).toBe(true);
+    expect(AssertionSchema.safeParse({ type: 'contains', fallback: true }).success).toBe(true);
+    expect(AssertionSchema.safeParse({ type: 'contains', fallback: false }).success).toBe(false);
+  });
 });
 
 describe('VarsSchema', () => {

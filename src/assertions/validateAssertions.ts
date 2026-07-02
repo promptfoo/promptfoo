@@ -1,10 +1,92 @@
 import { z } from 'zod';
 import {
   type Assertion,
+  type AssertionOrSet,
   AssertionOrSetSchema,
   type AssertionSet,
+  type GradingResult,
   type TestCase,
 } from '../types/index';
+
+export function hasFallback(assertion: Assertion): boolean {
+  return assertion.fallback === 'next' || assertion.fallback === true;
+}
+
+export function isSpecialCompareAssertion(assertion: Assertion): boolean {
+  return assertion.type.startsWith('select-') || assertion.type === 'max-score';
+}
+
+function isAssertionSet(assertion: AssertionOrSet): assertion is AssertionSet {
+  return assertion.type === 'assert-set';
+}
+
+function isRedteamGuardrail(assertion: Assertion): boolean {
+  return assertion.type === 'guardrails' && assertion.config?.purpose === 'redteam';
+}
+
+export function isRedteamGuardrailFailure(result: GradingResult): boolean {
+  return result.assertion !== undefined && isRedteamGuardrail(result.assertion) && !result.pass;
+}
+
+export function isAssertionExecutionFailure(result: GradingResult): boolean {
+  return result.metadata?.assertionError === true;
+}
+
+/**
+ * Validates that fallback-bearing assertions are configured correctly.
+ *
+ * Runs before assertion-set flattening so that fallback chains cannot bridge
+ * across an assert-set boundary. The `path` argument carries dotted-index
+ * breadcrumbs (e.g. `assert[2].assert[0]`) into recursive calls so users with
+ * nested assert-sets can localize a validation failure.
+ */
+export function validateFallbackChains(assertions: AssertionOrSet[], path = 'assert'): void {
+  for (let i = 0; i < assertions.length; i++) {
+    const assertion = assertions[i];
+    const here = `${path}[${i}]`;
+
+    if (isAssertionSet(assertion)) {
+      validateFallbackChains(assertion.assert, `${here}.assert`);
+      continue;
+    }
+
+    if (!hasFallback(assertion)) {
+      continue;
+    }
+
+    if (isSpecialCompareAssertion(assertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): ${assertion.type} assertions cannot be fallback chain sources`,
+      );
+    }
+
+    if (isRedteamGuardrail(assertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): redteam guardrail assertions cannot be fallback chain sources`,
+      );
+    }
+
+    if (i === assertions.length - 1) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): has fallback but no next assertion to fall through to`,
+      );
+    }
+
+    const nextAssertion = assertions[i + 1];
+
+    if (isAssertionSet(nextAssertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): next assertion is assert-set (not supported as fallback target)`,
+      );
+    }
+
+    if (isSpecialCompareAssertion(nextAssertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): next assertion is ${nextAssertion.type} (not supported as fallback target)`,
+      );
+    }
+  }
+}
 
 export class AssertValidationError extends Error {
   constructor(message: string) {
@@ -71,6 +153,14 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
   return result.data;
 }
 
+function validateFallbackChainsForConfig(assertions: AssertionOrSet[], context: string): void {
+  try {
+    validateFallbackChains(assertions, context);
+  } catch (error) {
+    throw new AssertValidationError((error as Error).message);
+  }
+}
+
 // Maximum number of assertions per test case to prevent DoS
 const MAX_ASSERTIONS_PER_TEST = 10000;
 
@@ -84,6 +174,8 @@ const MAX_ASSERTIONS_PER_TEST = 10000;
  */
 
 export function validateAssertions(tests: TestCase[], defaultTest?: Partial<TestCase>): void {
+  const parsedDefaultAssertions: AssertionOrSet[] = [];
+
   // Validate defaultTest assertions
   if (defaultTest?.assert) {
     if (!Array.isArray(defaultTest.assert)) {
@@ -95,7 +187,9 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
       );
     }
     for (let i = 0; i < defaultTest.assert.length; i++) {
-      parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`);
+      parsedDefaultAssertions.push(
+        parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`),
+      );
     }
   }
 
@@ -107,7 +201,8 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
   // Validate test case assertions
   for (let testIdx = 0; testIdx < tests.length; testIdx++) {
     const test = tests[testIdx];
-    if (test.assert) {
+    const parsedAssertions: AssertionOrSet[] = [];
+    if (test.assert !== undefined) {
       if (!Array.isArray(test.assert)) {
         throw new AssertValidationError(`tests[${testIdx}].assert must be an array`);
       }
@@ -117,8 +212,24 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
         );
       }
       for (let i = 0; i < test.assert.length; i++) {
-        parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`);
+        parsedAssertions.push(parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`));
       }
     }
+
+    const includeDefaultAssertions = test.options?.disableDefaultAsserts !== true;
+    const effectiveAssertions = includeDefaultAssertions
+      ? [...parsedDefaultAssertions, ...parsedAssertions]
+      : parsedAssertions;
+    if (effectiveAssertions.length > 0) {
+      const fallbackPath =
+        includeDefaultAssertions && parsedDefaultAssertions.length > 0
+          ? `tests[${testIdx}].mergedAssert`
+          : `tests[${testIdx}].assert`;
+      validateFallbackChainsForConfig(effectiveAssertions, fallbackPath);
+    }
+  }
+
+  if (tests.length === 0 && parsedDefaultAssertions.length > 0) {
+    validateFallbackChainsForConfig(parsedDefaultAssertions, 'defaultTest.assert');
   }
 }
