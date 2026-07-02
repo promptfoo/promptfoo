@@ -129,20 +129,34 @@ export function calculateBleuScore(
 
     const candidateNGramCounts = countNGrams(candidateNGrams);
 
-    // Clipped n-gram count against the best-matching reference
-    let maxClippedCount = 0;
+    // BLEU modified precision caps each candidate n-gram count at the largest count
+    // found in any single reference, allowing different references to supply matches.
+    const maxReferenceNGramCounts = new Map<string, number>();
     for (const referenceWords of referenceWordsList) {
       const referenceNGramCounts = countNGrams(getNGrams(referenceWords, n));
-
-      let clippedCount = 0;
-      for (const [gram, count] of candidateNGramCounts) {
-        clippedCount += Math.min(count, referenceNGramCounts.get(gram) ?? 0);
+      // Only candidate n-grams can affect the score. Scan the smaller key set while
+      // keeping the retained maximum-count map candidate-sized.
+      const nGramCountsToCheck =
+        candidateNGramCounts.size <= referenceNGramCounts.size
+          ? candidateNGramCounts
+          : referenceNGramCounts;
+      for (const gram of nGramCountsToCheck.keys()) {
+        if (!candidateNGramCounts.has(gram)) {
+          continue;
+        }
+        const count = referenceNGramCounts.get(gram) ?? 0;
+        if (count > (maxReferenceNGramCounts.get(gram) ?? 0)) {
+          maxReferenceNGramCounts.set(gram, count);
+        }
       }
-
-      maxClippedCount = Math.max(maxClippedCount, clippedCount);
     }
 
-    usableOrders.push({ precision: maxClippedCount / totalCount, weight: weights[n - 1] });
+    let clippedCount = 0;
+    for (const [gram, count] of candidateNGramCounts) {
+      clippedCount += Math.min(count, maxReferenceNGramCounts.get(gram) ?? 0);
+    }
+
+    usableOrders.push({ precision: clippedCount / totalCount, weight: weights[n - 1] });
   }
 
   const bp = calculateBrevityPenalty(candidateWords.length, closestRefLength);
@@ -201,7 +215,7 @@ export function handleBleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `BLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `BLEU score ${score.toFixed(4)} is ${inverse ? 'greater than or equal to' : 'less than'} threshold ${threshold}`,
     assertion,
   };
 }
