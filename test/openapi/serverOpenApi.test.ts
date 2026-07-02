@@ -148,6 +148,19 @@ describe('server OpenAPI generation', () => {
       getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.url,
     ).toEqual({ type: ['string', 'null'] });
+
+    for (const operation of [getMediaOperation, getMediaInfoOperation]) {
+      const filenameParameter = operation?.parameters?.find(
+        (parameter: any) => parameter.name === 'filename',
+      );
+      const pattern = filenameParameter?.schema?.pattern;
+
+      expect(pattern).toBe('^(?:[a-fA-F0-9]{12}|[a-fA-F0-9]{64})\\.[a-zA-Z0-9]+$');
+      const filenameRegex = new RegExp(pattern);
+      expect(filenameRegex.test('abcdef123456.mp3')).toBe(true);
+      expect(filenameRegex.test(`${'A'.repeat(64)}.MP3`)).toBe(true);
+      expect(filenameRegex.test(`${'a'.repeat(13)}.mp3`)).toBe(false);
+    }
     expect(
       modelAuditScanOperation?.requestBody?.content?.['application/json']?.schema?.properties
         ?.options?.properties?.timeout,

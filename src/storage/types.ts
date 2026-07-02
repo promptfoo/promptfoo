@@ -88,7 +88,8 @@ export interface MediaStorageProvider {
 
   /**
    * Store media data
-   * @param data - Binary data to store
+   * @param data - Binary data to store. Callers must not mutate this borrowed buffer until the
+   * returned promise settles.
    * @param metadata - Associated metadata
    * @returns Storage result with reference
    */

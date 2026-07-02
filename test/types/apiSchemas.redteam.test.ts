@@ -129,11 +129,32 @@ describe('API schema red-team coverage', () => {
         MediaSchemas.Info.Params.safeParse({ type: 'audio', filename: 'abcdef123456.mp3' }).success,
       ).toBe(true);
       expect(
+        MediaSchemas.Info.Params.safeParse({
+          type: 'audio',
+          filename: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890.mp3',
+        }).success,
+      ).toBe(true);
+      expect(
+        MediaSchemas.Info.Params.safeParse({
+          type: 'audio',
+          filename: `${'A'.repeat(64)}.MP3`,
+        }).success,
+      ).toBe(true);
+      expect(
         MediaSchemas.Info.Params.safeParse({ type: 'document', filename: 'abcdef123456.pdf' })
           .success,
       ).toBe(false);
       expect(
         MediaSchemas.Info.Params.safeParse({ type: 'audio', filename: '../../passwd' }).success,
+      ).toBe(false);
+    });
+
+    it.each([11, 13, 63, 65])('rejects %i-character media hashes', (length) => {
+      expect(
+        MediaSchemas.Info.Params.safeParse({
+          type: 'audio',
+          filename: `${'a'.repeat(length)}.mp3`,
+        }).success,
       ).toBe(false);
     });
 
