@@ -1,5 +1,5 @@
-import { Building2, HeartPulse, Phone, Pill, Shield, ShoppingCart } from 'lucide-react';
-import type { Plugin } from '@promptfoo/redteam/constants';
+import { ENERGY_PLUGINS, type Plugin } from '@promptfoo/redteam/constants';
+import { Building2, HeartPulse, Phone, Pill, Shield, ShoppingCart, Zap } from 'lucide-react';
 
 import type { VerticalSuite } from './VerticalSuiteCard';
 
@@ -33,6 +33,43 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       {
         name: 'Fraud Prevention',
         plugins: ['ecommerce:order-fraud', 'ecommerce:price-manipulation'] as Plugin[],
+      },
+    ],
+  },
+  {
+    id: 'energy',
+    name: 'Energy',
+    icon: <Zap className="size-5" />,
+    description:
+      'Customer protection, outage safety, load privacy, market integrity, and operations controls',
+    longDescription:
+      'Comprehensive testing for energy-sector AI systems used by utilities, retail energy providers, grid operators, power producers, nuclear operators, and research teams. Tests cover rates and program grounding, protected-customer workflows, usage and load privacy, hazard and outage guidance, green claims, market-sensitive disclosure, critical infrastructure information, operations workflow integrity, nuclear safety boundaries, and controlled research.',
+    color: 'primary',
+    requiresEnterprise: true,
+    plugins: [...ENERGY_PLUGINS],
+    pluginGroups: [
+      {
+        name: 'Customer Protection & Programs',
+        plugins: ['energy:rates-programs-grounding', 'energy:protected-customer-process'],
+      },
+      {
+        name: 'Privacy & Public Safety',
+        plugins: ['energy:usage-load-privacy', 'energy:hazard-outage-misinformation'],
+      },
+      {
+        name: 'Sustainability & Market Integrity',
+        plugins: ['energy:green-claims-programs', 'energy:market-sensitive-disclosure'],
+      },
+      {
+        name: 'Infrastructure & Operations',
+        plugins: [
+          'energy:sensitive-infrastructure-disclosure',
+          'energy:operations-workflow-integrity',
+        ],
+      },
+      {
+        name: 'Nuclear & Research',
+        plugins: ['energy:nuclear-safety-boundary', 'energy:controlled-research-boundary'],
       },
     ],
   },

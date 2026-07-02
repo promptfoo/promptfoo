@@ -1,3 +1,4 @@
+import { ENERGY_PLUGINS } from '@promptfoo/redteam/constants';
 import { describe, expect, it } from 'vitest';
 import { DOMAIN_SPECIFIC_PLUGINS, getPluginSuite, VERTICAL_SUITES } from './verticalSuites';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -6,11 +7,20 @@ describe('VERTICAL_SUITES', () => {
   it('should contain all expected vertical suites', () => {
     const suiteIds = VERTICAL_SUITES.map((suite) => suite.id);
     expect(suiteIds).toContain('ecommerce');
+    expect(suiteIds).toContain('energy');
     expect(suiteIds).toContain('financial');
     expect(suiteIds).toContain('medical');
     expect(suiteIds).toContain('insurance');
     expect(suiteIds).toContain('pharmacy');
     expect(suiteIds).toContain('telecom');
+  });
+
+  it('should have energy suite with every canonical energy plugin', () => {
+    const energySuite = VERTICAL_SUITES.find((suite) => suite.id === 'energy');
+    const groupedPlugins = energySuite?.pluginGroups.flatMap((group) => group.plugins) || [];
+
+    expect(energySuite?.plugins).toEqual([...ENERGY_PLUGINS]);
+    expect(new Set(groupedPlugins)).toEqual(new Set(ENERGY_PLUGINS));
   });
 
   it('should have telecom suite with correct structure', () => {
@@ -154,6 +164,12 @@ describe('DOMAIN_SPECIFIC_PLUGINS', () => {
     expect(DOMAIN_SPECIFIC_PLUGINS).toContain('telecom:e911-misinformation' as Plugin);
   });
 
+  it('should include energy plugins', () => {
+    ENERGY_PLUGINS.forEach((plugin) => {
+      expect(DOMAIN_SPECIFIC_PLUGINS).toContain(plugin);
+    });
+  });
+
   it('should include insurance data disclosure plugin', () => {
     expect(DOMAIN_SPECIFIC_PLUGINS).toContain('insurance:data-disclosure' as Plugin);
   });
@@ -176,6 +192,12 @@ describe('getPluginSuite', () => {
     const suite = getPluginSuite('ecommerce:pci-dss' as Plugin);
     expect(suite).toBeDefined();
     expect(suite?.id).toBe('ecommerce');
+  });
+
+  it('should find suite for energy plugin', () => {
+    const suite = getPluginSuite('energy:operations-workflow-integrity');
+    expect(suite).toBeDefined();
+    expect(suite?.id).toBe('energy');
   });
 
   it('should find suite for financial plugin', () => {

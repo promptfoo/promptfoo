@@ -1,10 +1,12 @@
 import fs from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 
 import { describe, expect, it } from 'vitest';
 
 const PLUGINS_DIR = path.join(__dirname, '../../../src/redteam/plugins');
 const DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/plugins');
+const require = createRequire(import.meta.url);
 
 function getFiles(dir: string, extension: string, excludes: string[] = []): string[] {
   return fs
@@ -162,6 +164,16 @@ describe('Plugin Documentation', () => {
 
       expect(fs.existsSync(constantsPath)).toBe(true);
       expect(fs.existsSync(docsPath)).toBe(true);
+    });
+  });
+
+  describe('Plugin guide navigation', () => {
+    it('should expose the energy plugin guide in the docs sidebar', () => {
+      const sidebars = require('../../../site/sidebars.js') as {
+        promptfoo: unknown;
+      };
+
+      expect(JSON.stringify(sidebars.promptfoo)).toContain('red-team/plugins/energy');
     });
   });
 });

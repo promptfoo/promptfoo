@@ -135,6 +135,7 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/plugins/ecommerce',
+          'red-team/plugins/energy',
           'red-team/plugins/financial',
           'red-team/plugins/insurance',
           'red-team/plugins/medical',
