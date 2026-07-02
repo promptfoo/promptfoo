@@ -753,6 +753,11 @@ const TlsCertificateSchema = z
     key: z.union([z.string(), z.array(z.string())]).optional(),
     keyPath: z.string().optional(),
 
+    // Java KeyStore bundle for mutual TLS
+    jksPath: z.string().optional().describe('Path to JKS keystore file'),
+    jksContent: z.string().optional().describe('Base64-encoded JKS keystore content'),
+    keyAlias: z.string().optional().describe('Alias of the key to use from a JKS keystore'),
+
     // PFX/PKCS12 certificate bundle
     // Supports inline content as base64-encoded string or Buffer
     pfx: z
@@ -762,7 +767,10 @@ const TlsCertificateSchema = z
         'PFX/PKCS12 certificate bundle. Can be a file path via pfxPath, or inline as a base64-encoded string or Buffer',
       ),
     pfxPath: z.string().optional().describe('Path to PFX/PKCS12 certificate file'),
-    passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
+    passphrase: z
+      .string()
+      .optional()
+      .describe('Passphrase for encrypted private key, PFX, or JKS certificate'),
 
     // Security options
     rejectUnauthorized: z.boolean().prefault(true),
@@ -1690,7 +1698,7 @@ async function createHttpsAgent(
 ): Promise<Dispatcher> {
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
-  const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+  const usingJks = Boolean(tlsConfig.jksPath || tlsConfig.jksContent);
 
   // Kick off all independent file reads in parallel. JKS and cert/key are
   // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
@@ -1735,10 +1743,7 @@ async function createHttpsAgent(
       });
       const jks = jksModule as any;
 
-      const keystorePassword =
-        (tlsConfig as any).keystorePassword ||
-        tlsConfig.passphrase ||
-        getEnvString('PROMPTFOO_JKS_PASSWORD');
+      const keystorePassword = tlsConfig.passphrase || getEnvString('PROMPTFOO_JKS_PASSWORD');
 
       if (!keystorePassword) {
         throw new Error(
@@ -1747,11 +1752,11 @@ async function createHttpsAgent(
       }
 
       let keystoreData: Buffer;
-      if ((tlsConfig as any).jksContent) {
+      if (tlsConfig.jksContent) {
         logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
-        keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
-      } else if ((tlsConfig as any).jksPath) {
-        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
+        keystoreData = Buffer.from(tlsConfig.jksContent, 'base64');
+      } else if (tlsConfig.jksPath) {
+        const resolvedPath = safeResolve(basePath, tlsConfig.jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
         keystoreData = await fs.readFile(resolvedPath);
       } else {
@@ -1765,7 +1770,7 @@ async function createHttpsAgent(
         throw new Error('No certificates found in JKS file');
       }
 
-      const targetAlias = (tlsConfig as any).keyAlias || aliases[0];
+      const targetAlias = tlsConfig.keyAlias || aliases[0];
       const entry = keystore[targetAlias];
 
       if (!entry) {
