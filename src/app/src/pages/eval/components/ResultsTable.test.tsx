@@ -3189,6 +3189,135 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredLatencyElement).toBeInTheDocument();
     expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
   });
+
+  it('displays each prompt column with its filtered named metric denominator', () => {
+    const firstPrompt = {
+      ...mockTable.head.prompts[0],
+      metrics: {
+        ...mockTable.head.prompts[0].metrics,
+        namedScores: { accuracy: 90, f1: 0.7 },
+        namedScoreWeights: { accuracy: 100 },
+      },
+    };
+    const secondPrompt = {
+      ...mockTable.head.prompts[0],
+      provider: 'second-provider',
+      metrics: {
+        ...mockTable.head.prompts[0].metrics,
+        namedScores: { accuracy: 40, f1: 0.8 },
+        namedScoreWeights: { accuracy: 50 },
+      },
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { derivedMetrics: [{ name: 'f1', value: 'accuracy' }] },
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        body: mockTable.body.map((row) => ({
+          ...row,
+          outputs: [...row.outputs, row.outputs[0]],
+        })),
+        head: { ...mockTable.head, prompts: [firstPrompt, secondPrompt] },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'is_defined',
+            value: '',
+            logicOperator: 'or',
+          },
+        },
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: 1.5 },
+          namedScoreWeights: { accuracy: 2 },
+        },
+        {
+          namedScores: { accuracy: 0.5 },
+          namedScoresCount: { accuracy: 2 },
+        },
+      ],
+    } as any);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(
+      screen.getAllByTestId('metric-value-accuracy').map((element) => element.textContent),
+    ).toEqual(['75.00% (1.50/2.00)', '25.00% (0.50/2.00)']);
+    expect(screen.getAllByTestId('metric-value-f1').map((element) => element.textContent)).toEqual([
+      '0.70',
+      '0.80',
+    ]);
+    expect(screen.getAllByTestId('metric-name-f1').map((element) => element.textContent)).toEqual([
+      'f1 (total)',
+      'f1 (total)',
+    ]);
+  });
+
+  it('uses total named metrics when filtered metrics do not cover comparison prompts', () => {
+    const prompts = [
+      {
+        ...mockTable.head.prompts[0],
+        metrics: {
+          ...mockTable.head.prompts[0].metrics,
+          namedScores: { accuracy: 90 },
+          namedScoreWeights: { accuracy: 100 },
+        },
+      },
+      {
+        ...mockTable.head.prompts[0],
+        provider: 'comparison-provider',
+        metrics: {
+          ...mockTable.head.prompts[0].metrics,
+          namedScores: { accuracy: 40 },
+          namedScoreWeights: { accuracy: 50 },
+        },
+      },
+    ];
+    vi.mocked(useTableStore).mockReturnValue({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        body: mockTable.body.map((row) => ({
+          ...row,
+          outputs: [...row.outputs, row.outputs[0]],
+        })),
+        head: { ...mockTable.head, prompts },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: 6 },
+          namedScoreWeights: { accuracy: 8 },
+        },
+      ],
+    } as any);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(
+      screen.getAllByTestId('metric-value-accuracy').map((element) => element.textContent),
+    ).toEqual(['90.00% (90.00/100.00)', '80.00% (40.00/50.00)']);
+  });
 });
 
 describe('ResultsTable - No Filters Applied', () => {

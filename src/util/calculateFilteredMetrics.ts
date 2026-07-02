@@ -1,33 +1,21 @@
 /**
  * Calculate metrics for filtered evaluation results.
  *
- * This module implements optimized SQL aggregation to calculate metrics for
- * filtered evaluation datasets. It uses a single GROUP BY query to aggregate
- * ALL prompts at once, achieving significant performance improvements over
- * the naive approach of querying each prompt separately.
+ * Basic numeric fields stay on a grouped SQL query. Row-level JSON fields are
+ * processed in bounded pages so named metrics use the same accumulator as live
+ * evaluation without loading the full filtered dataset into memory.
  *
- * SECURITY: This module uses Drizzle's sql template strings for parameterized queries
- * to prevent SQL injection. The whereSql parameter is a SQL fragment, not a string,
- * ensuring all user-provided values are properly escaped.
- *
- * Performance targets:
- * - Simple eval (2 prompts, 100 results): <50ms
- * - Complex eval (10 prompts, 1000 results): <150ms
- * - Large eval (10 prompts, 10000 results): <500ms
- *
- * Critical design decisions:
- * 1. Single GROUP BY query for all basic metrics + token usage
- * 2. SQL JSON aggregation for named scores (avoids memory issues)
- * 3. SQL JSON aggregation for assertions (complex nested JSON)
- * 4. OOM protection with MAX_RESULTS_FOR_METRICS limit
+ * SECURITY: whereSql is a Drizzle SQL fragment, not a raw string. Persisted
+ * metric templates are handled by accumulateNamedMetric's data-only renderer.
  */
 
 import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
+import { accumulateNamedMetric } from './namedMetrics';
 
-import type { PromptMetrics } from '../types/index';
+import type { PromptMetrics, Vars } from '../types/index';
 
 export interface FilteredMetricsOptions {
   evalId: string;
@@ -36,97 +24,74 @@ export interface FilteredMetricsOptions {
   whereSql: SQL<unknown>;
 }
 
-/**
- * Maximum number of results to process for metrics calculation.
- * Protects against OOM on extremely large filtered datasets.
- */
+/** Protects the synchronous table request from unbounded result sets. */
 const MAX_RESULTS_FOR_METRICS = 50000;
+const RESULT_DETAILS_BATCH_SIZE = 5000;
+const MAX_RESULT_DETAILS_PAGE_BYTES = 8 * 1024 * 1024;
+const MAX_RESULT_DETAILS_TOTAL_BYTES = 64 * 1024 * 1024;
 
-/**
- * Calculates metrics for filtered results using optimized SQL aggregation.
- * Uses a SINGLE GROUP BY query to aggregate all prompts at once.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- * The whereSql parameter is a SQL fragment, not a raw string, ensuring all
- * user-provided values are properly escaped.
- *
- * This is the core performance optimization - instead of making 2-3 queries
- * per prompt (which would be 30 queries for 10 prompts), we make 3-4 total queries:
- * 1. Count check (OOM protection)
- * 2. Basic metrics + token usage (GROUP BY prompt_idx)
- * 3. Named scores (GROUP BY prompt_idx, metric_name)
- * 4. Assertions (GROUP BY prompt_idx)
- *
- * @param opts - Options including WHERE clause SQL fragment
- * @returns Array of PromptMetrics, one per prompt
- */
-export async function calculateFilteredMetrics(
-  opts: FilteredMetricsOptions,
-): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql } = opts;
+type Database = Awaited<ReturnType<typeof getDb>>;
+type QueryDatabase = Pick<Database, 'all'>;
+
+class FilteredMetricsLimitError extends Error {}
+
+async function withReadSnapshot<T>(callback: (db: QueryDatabase) => Promise<T>): Promise<T> {
+  const db = await getDb();
+  const readTransaction = await db.$client.transaction('read');
+  const { drizzle } = await import('drizzle-orm/libsql/node');
+  const readDb = drizzle(readTransaction as unknown as Database['$client']);
 
   try {
-    // Check result count first (protect against OOM)
-    const countResult = await getResultCount(whereSql);
-    if (countResult > MAX_RESULTS_FOR_METRICS) {
-      logger.warn(`Filtered result count ${countResult} exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
-        evalId: opts.evalId,
-      });
-      throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
-    }
-
-    // Calculate metrics using optimized approach
-    return await calculateWithOptimizedQuery(opts);
+    const result = await callback(readDb);
+    await readTransaction.commit();
+    return result;
   } catch (error) {
-    logger.error('Failed to calculate filtered metrics with optimized query', { error });
-
-    // Fallback: Return empty metrics
-    return createEmptyMetricsArray(numPrompts);
+    if (!readTransaction.closed) {
+      await readTransaction.rollback();
+    }
+    throw error;
+  } finally {
+    readTransaction.close();
   }
 }
 
-/**
- * Get count of filtered results (for OOM protection)
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- */
-async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
-  const db = await getDb();
-  const query = sql`
-    SELECT COUNT(*) as count
-    FROM eval_results
-    WHERE ${whereSql}
-  `;
-
-  const result = (await db.get(query)) as { count: number } | undefined;
-  return result?.count || 0;
+export async function calculateFilteredMetrics(
+  opts: FilteredMetricsOptions,
+): Promise<PromptMetrics[]> {
+  try {
+    return await withReadSnapshot((db) => calculateWithOptimizedQuery(opts, db));
+  } catch (error) {
+    if (error instanceof FilteredMetricsLimitError) {
+      throw error;
+    }
+    logger.error('Failed to calculate filtered metrics with optimized query', { error });
+    return createEmptyMetricsArray(opts.numPrompts);
+  }
 }
 
-/**
- * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
- * This is the key performance improvement from the audit.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- */
-async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
+async function calculateWithOptimizedQuery(
+  opts: FilteredMetricsOptions,
+  db: QueryDatabase,
+): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
-  const db = await getDb();
-
-  // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
+  const resultCount = await getBoundedResultCount(db, whereSql);
+  if (resultCount > MAX_RESULTS_FOR_METRICS) {
+    logger.warn(`Filtered result count exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
+      evalId: opts.evalId,
+    });
+    throw new FilteredMetricsLimitError(`Result count exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
+  }
 
-  // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
   const basicMetricsQuery = sql`
     SELECT
       prompt_idx,
-      COUNT(DISTINCT test_idx) as total_count,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
       SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
-      -- Token usage aggregation (token usage is inside response JSON)
       SUM(CAST(json_extract(response, '$.tokenUsage.total') AS INTEGER)) as total_tokens,
       SUM(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER)) as prompt_tokens,
       SUM(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER)) as completion_tokens,
@@ -138,23 +103,8 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     ORDER BY prompt_idx
   `;
 
-  const basicResults = (await db.all(basicMetricsQuery)) as Array<{
-    prompt_idx: number;
-    total_count: number;
-    pass_count: number;
-    fail_count: number;
-    error_count: number;
-    total_score: number;
-    total_latency: number;
-    total_cost: number;
-    total_tokens: number | null;
-    prompt_tokens: number | null;
-    completion_tokens: number | null;
-    cached_tokens: number | null;
-    num_requests_with_tokens: number;
-  }>;
+  const basicResults = (await db.all(basicMetricsQuery)) as BasicMetricsRow[];
 
-  // Populate basic metrics
   for (const row of basicResults) {
     const idx = row.prompt_idx;
     if (idx < 0 || idx >= numPrompts) {
@@ -163,18 +113,18 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     }
 
     metrics[idx] = {
-      score: row.total_score || 0,
-      testPassCount: row.pass_count || 0,
-      testFailCount: row.fail_count || 0,
-      testErrorCount: row.error_count || 0,
-      totalLatencyMs: row.total_latency || 0,
-      cost: row.total_cost || 0,
+      score: finiteOrZero(row.total_score),
+      testPassCount: finiteOrZero(row.pass_count),
+      testFailCount: finiteOrZero(row.fail_count),
+      testErrorCount: finiteOrZero(row.error_count),
+      totalLatencyMs: finiteOrZero(row.total_latency),
+      cost: finiteOrZero(row.total_cost),
       tokenUsage: {
-        total: row.total_tokens || 0,
-        prompt: row.prompt_tokens || 0,
-        completion: row.completion_tokens || 0,
-        cached: row.cached_tokens || 0,
-        numRequests: row.num_requests_with_tokens || 0,
+        total: finiteOrZero(row.total_tokens),
+        prompt: finiteOrZero(row.prompt_tokens),
+        completion: finiteOrZero(row.completion_tokens),
+        cached: finiteOrZero(row.cached_tokens),
+        numRequests: finiteOrZero(row.num_requests_with_tokens),
       },
       namedScores: {},
       namedScoresCount: {},
@@ -184,169 +134,224 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     };
   }
 
-  // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
-  await aggregateNamedScores(metrics, whereSql);
-
-  // ===== QUERY 3: Assertion counts (SQL JSON aggregation) =====
-  await aggregateAssertions(metrics, whereSql);
+  await aggregateResultDetails(metrics, whereSql, db);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
     metricsCount: basicResults.length,
+    resultCount,
   });
-
   return metrics;
 }
 
-/**
- * Aggregate named scores using SQL json_each().
- * This is MUCH more efficient than fetching all results and parsing in JavaScript.
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- *
- * Uses SQLite's json_each() to parse JSON in the database, avoiding the need
- * to fetch potentially thousands of rows into memory.
- */
-async function aggregateNamedScores(
-  metrics: PromptMetrics[],
-  whereSql: SQL<unknown>,
-): Promise<void> {
-  const db = await getDb();
+async function getBoundedResultCount(db: QueryDatabase, whereSql: SQL<unknown>): Promise<number> {
+  const rows = (await db.all(sql`
+    SELECT COUNT(*) AS count
+    FROM (
+      SELECT 1
+      FROM eval_results
+      WHERE ${whereSql}
+      LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
+    )
+  `)) as Array<{ count: number }>;
+  return finiteOrZero(rows[0]?.count);
+}
 
-  // Use SQLite's json_each to parse JSON in database. When newer results include
-  // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
-  // multiply them back into weighted totals before aggregating prompt metrics.
-  const query = sql`
-    SELECT
-      prompt_idx,
-      score_entries.key as metric_name,
-      SUM(
-        CASE
-          WHEN weight_entries.value IS NOT NULL THEN
-            CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)
-          ELSE CAST(score_entries.value AS REAL)
-        END
-      ) as metric_sum,
-      COUNT(*) as metric_count,
-      SUM(
-        CASE
-          WHEN weight_entries.value IS NOT NULL THEN CAST(weight_entries.value AS REAL)
-          ELSE 1
-        END
-      ) as metric_weight_total
-    FROM eval_results
-    JOIN json_each(eval_results.named_scores) as score_entries
-    LEFT JOIN json_each(
-      CASE
-        WHEN grading_result IS NOT NULL
-          AND json_valid(grading_result)
-          AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
-        THEN json_extract(grading_result, '$.namedScoreWeights')
-        ELSE json('{}')
-      END
-    ) as weight_entries
-      ON weight_entries.key = score_entries.key
-    WHERE ${whereSql}
-      AND named_scores IS NOT NULL
-      AND json_valid(named_scores)
-    GROUP BY prompt_idx, score_entries.key
-  `;
+interface BasicMetricsRow {
+  prompt_idx: number;
+  pass_count: number;
+  fail_count: number;
+  error_count: number;
+  total_score: number | null;
+  total_latency: number | null;
+  total_cost: number | null;
+  total_tokens: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  cached_tokens: number | null;
+  num_requests_with_tokens: number;
+}
 
-  const results = (await db.all(query)) as Array<{
-    prompt_idx: number;
-    metric_name: string;
-    metric_sum: number;
-    metric_count: number;
-    metric_weight_total: number;
-  }>;
+interface ResultDetailsRow {
+  prompt_idx: number;
+  named_scores: unknown;
+  grading_result: unknown;
+  test_case: unknown;
+}
 
-  // Populate named scores
-  for (const row of results) {
-    const idx = row.prompt_idx;
-    if (idx >= 0 && idx < metrics.length && metrics[idx]) {
-      metrics[idx].namedScores[row.metric_name] = row.metric_sum;
-      metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
-      metrics[idx].namedScoreWeights ||= {};
-      metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
+interface ResultDetailsPageRow {
+  row_cursor: number;
+  detail_bytes: number;
+}
+
+function finiteOrZero(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | undefined {
+  if (isRecord(value)) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getTestVars(testCase: Record<string, unknown> | undefined): Vars {
+  return isRecord(testCase?.vars) ? (testCase.vars as Vars) : {};
+}
+
+function accumulateAssertionCounts(
+  metrics: PromptMetrics,
+  gradingResult: Record<string, unknown> | undefined,
+): void {
+  const componentResults = Array.isArray(gradingResult?.componentResults)
+    ? gradingResult.componentResults
+    : [];
+
+  for (const componentResult of componentResults) {
+    if (!isRecord(componentResult)) {
+      continue;
+    }
+    if (componentResult.pass === true) {
+      metrics.assertPassCount++;
+    } else if (componentResult.pass === false) {
+      metrics.assertFailCount++;
     }
   }
 }
 
+function accumulateResultDetails(metrics: PromptMetrics[], row: ResultDetailsRow): void {
+  const idx = row.prompt_idx;
+  if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
+    return;
+  }
+
+  const gradingResult = parseJsonObject(row.grading_result);
+  const namedScores = parseJsonObject(row.named_scores);
+  const testVars = getTestVars(parseJsonObject(row.test_case));
+
+  if (namedScores) {
+    for (const [metricName, metricValue] of Object.entries(namedScores)) {
+      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
+        continue;
+      }
+      accumulateNamedMetric(metrics[idx], {
+        metricName,
+        metricValue,
+        gradingResult,
+        testVars,
+      });
+    }
+  }
+
+  accumulateAssertionCounts(metrics[idx], gradingResult);
+}
+
 /**
- * Aggregate assertion counts using SQL json_each().
- * This requires nested JSON extraction for componentResults.
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- *
- * The grading_result structure is:
- * {
- *   "componentResults": [
- *     {"pass": true, "assertion": {...}},
- *     {"pass": false, "assertion": {...}}
- *   ]
- * }
- *
- * We need to count pass=true vs pass=false across all results.
+ * Process row-level JSON in bounded pages. JSON.parse intentionally supplies
+ * JavaScript's canonical last-key-wins behavior for imported duplicate keys.
  */
-async function aggregateAssertions(
+async function aggregateResultDetails(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
+  db: QueryDatabase,
 ): Promise<void> {
-  const db = await getDb();
-
-  // SQLite query to count assertions from nested JSON
-  // This is complex but avoids fetching all results into memory
-  const query = sql`
-    SELECT
-      prompt_idx,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
-            )
-          ELSE 0
-        END
-      ) as assert_pass_count,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
-            )
-          ELSE 0
-        END
-      ) as assert_fail_count
-    FROM eval_results
-    WHERE ${whereSql}
-      AND grading_result IS NOT NULL
-    GROUP BY prompt_idx
+  const hasNamedScoreEntriesSql = sql`
+    eval_results.named_scores IS NOT NULL
+    AND eval_results.named_scores <> ${'{}'}
   `;
+  let lastRowCursor: number | undefined;
+  let processedRows = 0;
+  let totalDetailBytes = 0;
 
-  const results = (await db.all(query)) as Array<{
-    prompt_idx: number;
-    assert_pass_count: number;
-    assert_fail_count: number;
-  }>;
+  while (true) {
+    const cursorSql =
+      lastRowCursor === undefined ? sql`` : sql`AND eval_results.rowid > ${lastRowCursor}`;
+    const pageRows = (await db.all(sql`
+      SELECT
+        eval_results.rowid AS row_cursor,
+        COALESCE(LENGTH(CAST(named_scores AS BLOB)), 0) +
+          COALESCE(LENGTH(CAST(grading_result AS BLOB)), 0) +
+          CASE
+            WHEN ${hasNamedScoreEntriesSql} THEN LENGTH(CAST(test_case AS BLOB))
+            ELSE 0
+          END AS detail_bytes
+      FROM eval_results
+      WHERE ${whereSql}
+        ${cursorSql}
+        AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
+      ORDER BY eval_results.rowid
+      LIMIT ${RESULT_DETAILS_BATCH_SIZE}
+    `)) as ResultDetailsPageRow[];
+    if (pageRows.length === 0) {
+      break;
+    }
 
-  // Populate assertion counts
-  for (const row of results) {
-    const idx = row.prompt_idx;
-    if (idx >= 0 && idx < metrics.length && metrics[idx]) {
-      metrics[idx].assertPassCount = row.assert_pass_count || 0;
-      metrics[idx].assertFailCount = row.assert_fail_count || 0;
+    const pageBytes = pageRows.reduce((total, row) => {
+      if (!Number.isFinite(row.row_cursor) || !Number.isFinite(row.detail_bytes)) {
+        throw new Error('Invalid result detail page metadata');
+      }
+      return total + row.detail_bytes;
+    }, 0);
+    totalDetailBytes += pageBytes;
+    if (
+      pageBytes > MAX_RESULT_DETAILS_PAGE_BYTES ||
+      totalDetailBytes > MAX_RESULT_DETAILS_TOTAL_BYTES
+    ) {
+      throw new FilteredMetricsLimitError(
+        'Filtered result details exceed the safe processing limit',
+      );
+    }
+
+    const pageLastRowCursor = pageRows[pageRows.length - 1]?.row_cursor;
+    if (pageLastRowCursor === undefined) {
+      break;
+    }
+    const rows = (await db.all(sql`
+      SELECT
+        prompt_idx,
+        named_scores,
+        grading_result,
+        CASE WHEN ${hasNamedScoreEntriesSql} THEN test_case ELSE NULL END AS test_case
+      FROM eval_results
+      WHERE ${whereSql}
+        ${cursorSql}
+        AND eval_results.rowid <= ${pageLastRowCursor}
+        AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
+      ORDER BY eval_results.rowid
+    `)) as ResultDetailsRow[];
+    if (rows.length !== pageRows.length) {
+      throw new Error('Filtered result detail page changed during aggregation');
+    }
+
+    for (const row of rows) {
+      accumulateResultDetails(metrics, row);
+    }
+
+    processedRows += rows.length;
+    if (processedRows > MAX_RESULTS_FOR_METRICS) {
+      throw new FilteredMetricsLimitError(
+        `Result count exceeds maximum ${MAX_RESULTS_FOR_METRICS}`,
+      );
+    }
+    lastRowCursor = pageLastRowCursor;
+    if (pageRows.length < RESULT_DETAILS_BATCH_SIZE) {
+      break;
     }
   }
 }
 
-/**
- * Create empty metrics array initialized with zeros.
- * Used as fallback when calculation fails or no results found.
- */
 function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
   return Array.from({ length: numPrompts }, () => ({
     score: 0,

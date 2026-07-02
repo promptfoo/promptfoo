@@ -66,6 +66,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 });
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
+  createNamedMetricsPreservationGuard: vi.fn(() => vi.fn(() => true)),
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
@@ -199,7 +200,10 @@ describe('evalCommand', () => {
     vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
-    vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
+    vi.mocked(deleteErrorResults).mockResolvedValue({
+      allRequestedDeleted: true,
+      hadNamedScores: false,
+    });
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
@@ -1418,8 +1422,12 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
-      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2'], {
+        reportNamedScores: true,
+      });
+      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval, {
+        preserveNamedMetrics: true,
+      });
     } finally {
       latestSpy.mockRestore();
     }
