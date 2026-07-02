@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
 vi.mock('../../../src/envars', async () => ({
@@ -122,6 +122,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
@@ -155,6 +156,11 @@ describe('MCPClient', () => {
       expiresAt: Date.now() + 3600000, // 1 hour from now
     });
     cliState.basePath = undefined;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('initialize', () => {
@@ -1408,6 +1414,111 @@ describe('MCPClient', () => {
 
       // Should have called getOAuthTokenWithExpiry twice (initial + refresh)
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mockStreamableHTTPTransport.close).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['succeeded', false],
+      ['failed', true],
+    ] as const)('should emit one bounded diagnostic when client close fails and transport fallback %s', async (expectedFallback, shouldTransportFail) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-26T00:00:00.000Z'));
+      const sentinels = [
+        'PROMPT_SENTINEL',
+        'PROVIDER_RESPONSE_SENTINEL',
+        '/home/synthetic-user/private/config.yaml',
+        'synthetic-user@example.invalid',
+        'sk-synthetic-credential-1234567890',
+      ];
+      const cause = new Error(sentinels[1]);
+      const clientError = new Error(`${sentinels[0]} ${sentinels[2]}`, { cause });
+      clientError.name = sentinels[3];
+      const transportErrorToJSON = vi.fn(() => ({ prompt: sentinels[0] }));
+      const transportError = {
+        response: `${sentinels[1]} ${sentinels[4]}`,
+        toJSON: transportErrorToJSON,
+      };
+      const debugSpy = vi.spyOn(logger, 'debug');
+      const infoSpy = vi.spyOn(logger, 'info');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const errorSpy = vi.spyOn(logger, 'error');
+
+      const oldClient = createMockClient();
+      const refreshedClient = createMockClient(vi.fn().mockResolvedValue({ content: 'result' }));
+      oldClient.close.mockRejectedValueOnce(clientError);
+      vi.mocked(Client)
+        .mockImplementationOnce(function () {
+          return oldClient as unknown as Client;
+        })
+        .mockImplementationOnce(function () {
+          return refreshedClient as unknown as Client;
+        });
+
+      mockGetOAuthTokenWithExpiry
+        .mockResolvedValueOnce({
+          accessToken: 'initial-token',
+          expiresAt: Date.now() + 30_000,
+        })
+        .mockResolvedValueOnce({
+          accessToken: 'refreshed-token',
+          expiresAt: Date.now() + 3_600_000,
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+
+      await mcpClient.initialize();
+      if (shouldTransportFail) {
+        mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
+      }
+
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: 'result',
+        raw: { content: 'result' },
+      });
+      expect(Client).toHaveBeenCalledTimes(2);
+      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      expect(oldClient.close).toHaveBeenCalledOnce();
+      expect(oldClient.callTool).not.toHaveBeenCalled();
+      expect(refreshedClient.callTool).toHaveBeenCalledOnce();
+      expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
+
+      const diagnostics = debugSpy.mock.calls.filter(
+        ([message]) => message === '[MCP] Failed to close existing client during OAuth refresh',
+      );
+      expect(diagnostics).toEqual([
+        [
+          '[MCP] Failed to close existing client during OAuth refresh',
+          {
+            operation: 'oauth-refresh',
+            resource: 'client',
+            transportFallback: expectedFallback,
+            nextAction: 'reconnect',
+          },
+        ],
+      ]);
+      expect(transportErrorToJSON).not.toHaveBeenCalled();
+      const serializedLogs = JSON.stringify([
+        ...debugSpy.mock.calls,
+        ...infoSpy.mock.calls,
+        ...warnSpy.mock.calls,
+        ...errorSpy.mock.calls,
+      ]);
+      for (const sentinel of sentinels) {
+        expect(serializedLogs).not.toContain(sentinel);
+      }
     });
 
     it('should call the reconnected client after a proactive token refresh', async () => {
