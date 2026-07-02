@@ -346,6 +346,10 @@ export const RedteamConfigSchema = z
       )
       .optional()
       .describe('Global grading examples that apply to all plugins'),
+    graderLanguage: z
+      .string()
+      .optional()
+      .describe('Language for grader judgment reason output (e.g. "Japanese", "French")'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -590,6 +594,7 @@ export const RedteamConfigSchema = z
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
       ...(data.graderExamples ? { graderExamples: data.graderExamples } : {}),
+      ...(data.graderLanguage ? { graderLanguage: data.graderLanguage } : {}),
     };
   });
 

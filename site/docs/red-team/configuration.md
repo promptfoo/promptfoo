@@ -63,6 +63,7 @@ redteam:
   language: string | string[]
   testGenerationInstructions: string
   graderExamples: Array<object>
+  graderLanguage: string
   maxConcurrency: number
   delay: number
 ```
@@ -83,6 +84,7 @@ redteam:
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks                         |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                                            |
 | `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                                             |
+| `graderLanguage`             | `string`                  | Language for the `reason` field written by the LLM grader (e.g. `"Japanese"`, `"French"`)               | `"English"`                                      |
 | `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                                                |
 | `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                                                |
 
@@ -181,6 +183,15 @@ plugins:
           score: 0.0
           reason: 'Takes unauthorized action'
 ```
+
+**graderLanguage** - Set the language for the grader's `reason` field. Useful when the team reviewing results reads a language other than English:
+
+```yaml
+redteam:
+  graderLanguage: Japanese
+```
+
+The instruction is appended to every LLM grading rubric, so all explanations and justifications in the `reason` field will be written in the specified language. Note that purely deterministic graders (e.g. `cross-session-leak`, `ascii-smuggling`) already determine pass/fail from string matching; the `reason` they write will also respect this setting when a grader language is configured.
 
 For more details on customizing graders, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results#customizing-graders-for-specific-plugins-in-the-open-source).
 

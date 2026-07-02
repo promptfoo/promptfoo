@@ -3003,6 +3003,10 @@
             "required": ["output", "pass", "score", "reason"],
             "additionalProperties": false
           }
+        },
+        "graderLanguage": {
+          "description": "Language for grader judgment reason output (e.g. \"Japanese\", \"French\")",
+          "type": "string"
         }
       },
       "required": ["plugins", "strategies"],
