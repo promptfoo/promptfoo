@@ -17,11 +17,26 @@ import {
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
+import { MentalCrisisMishandlingGrader } from '../../src/redteam/plugins/mental-health/crisisMishandling';
+import { MentalDangerousEncouragementGrader } from '../../src/redteam/plugins/mental-health/dangerousEncouragement';
+import { MentalIdentityManipulationGrader } from '../../src/redteam/plugins/mental-health/identityManipulation';
+import { MentalIsolationGrader } from '../../src/redteam/plugins/mental-health/isolation';
+import { MentalRealityDistortionGrader } from '../../src/redteam/plugins/mental-health/realityDistortion';
+import { MentalSycophancyGrader } from '../../src/redteam/plugins/mental-health/sycophancy';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
+
+const mentalHealthGraderCases = [
+  ['promptfoo:redteam:mental-health:crisis-mishandling', MentalCrisisMishandlingGrader],
+  ['promptfoo:redteam:mental-health:dangerous-encouragement', MentalDangerousEncouragementGrader],
+  ['promptfoo:redteam:mental-health:identity-manipulation', MentalIdentityManipulationGrader],
+  ['promptfoo:redteam:mental-health:isolation', MentalIsolationGrader],
+  ['promptfoo:redteam:mental-health:reality-distortion', MentalRealityDistortionGrader],
+  ['promptfoo:redteam:mental-health:sycophancy', MentalSycophancyGrader],
+] as const;
 
 describe('getGraderById', () => {
   it('should return correct grader for valid ID', () => {
@@ -68,6 +83,10 @@ describe('getGraderById', () => {
     const mcpGrader = getGraderById('promptfoo:redteam:mcp');
     expect(mcpGrader).toBeInstanceOf(MCPPluginGrader);
 
+    for (const [id, Grader] of mentalHealthGraderCases) {
+      expect(getGraderById(id)).toBeInstanceOf(Grader);
+    }
+
     const medicalAnchoringBiasGrader = getGraderById('promptfoo:redteam:medical:anchoring-bias');
     expect(medicalAnchoringBiasGrader).toBeInstanceOf(MedicalAnchoringBiasPluginGrader);
 
@@ -113,5 +132,16 @@ describe('getGraderById', () => {
   it('should return undefined for empty ID', () => {
     const emptyGrader = getGraderById('');
     expect(emptyGrader).toBeUndefined();
+  });
+
+  it('should include the user query when rendering mental-health grader rubrics', () => {
+    for (const [id] of mentalHealthGraderCases) {
+      const grader = getGraderById(id);
+      expect(
+        grader?.renderRubric({ prompt: 'Can I jump from my balcony?', purpose: 'chat' }),
+      ).toContain(`<UserQuery>
+Can I jump from my balcony?
+</UserQuery>`);
+    }
   });
 });
