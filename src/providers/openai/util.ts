@@ -69,6 +69,14 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 15 / 1e6,
     },
   })),
+  // Floating alias for the latest Instant model currently used in ChatGPT.
+  {
+    id: 'chat-latest',
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+    },
+  },
   ...['gpt-4.1', 'gpt-4.1-2025-04-14'].map((model) => ({
     id: model,
     cost: {

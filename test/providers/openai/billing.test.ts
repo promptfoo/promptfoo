@@ -116,6 +116,60 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 0.5 + 500 * 0.05 + 1_000 * 4) / 1e6, 10);
   });
 
+  it('prices cached input for chat-latest', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          prompt_tokens: 2_000,
+          completion_tokens: 1_000,
+          prompt_tokens_details: { cached_tokens: 500 },
+        },
+      ),
+    ).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 10);
+  });
+
+  it('prices chat-latest image input tokens at its published input rates', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          input_tokens: 200,
+          output_tokens: 10,
+          input_tokens_details: {
+            text_tokens: 100,
+            image_tokens: 100,
+            cached_tokens: 40,
+            cached_tokens_details: { image_tokens: 40 },
+          },
+        },
+      ),
+    ).toBeCloseTo((100 * 5 + 60 * 5 + 40 * 0.5 + 10 * 30) / 1e6, 10);
+  });
+
+  it('applies custom input costs to text-priced chat-latest image tokens', () => {
+    const usage = {
+      input_tokens: 200,
+      output_tokens: 10,
+      input_tokens_details: {
+        text_tokens: 100,
+        image_tokens: 100,
+        cached_tokens: 40,
+        cached_tokens_details: { image_tokens: 40 },
+      },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', { inputCost: 10e-6, outputCost: 60e-6 }, usage),
+    ).toBeCloseTo(200 * 10e-6 + 10 * 60e-6, 10);
+    expect(calculateOpenAIUsageCost('chat-latest', { cost: 10e-6 }, usage)).toBeCloseTo(
+      210 * 10e-6,
+      10,
+    );
+  });
+
   it('prices GPT-5.6 preview cached input at the published 90% discount', () => {
     const usage = {
       prompt_tokens: 2_000,
@@ -137,6 +191,20 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
+  it('keeps documented standard rates for chat-latest long prompts', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          input_tokens: 300_000,
+          output_tokens: 1_000,
+          input_tokens_details: { cached_tokens: 100_000 },
+        },
+      ),
+    ).toBeCloseTo((200_000 * 5 + 100_000 * 0.5 + 1_000 * 30) / 1e6, 10);
+  });
+
   it('uses returned service tiers when pricing flex and priority work', () => {
     const usage = {
       input_tokens: 1_000,
@@ -151,6 +219,24 @@ describe('OpenAI billing helpers', () => {
     expect(
       calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'priority' }),
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
+  });
+
+  it('does not invent non-standard service-tier pricing for chat-latest', () => {
+    const usage = {
+      input_tokens: 1_000,
+      output_tokens: 100,
+      input_tokens_details: { cached_tokens: 400 },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'batch' }),
+    ).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' }),
+    ).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'priority' }),
+    ).toBeUndefined();
   });
 
   it('uses current long-context flex rates for supported pro models', () => {
@@ -449,6 +535,23 @@ describe('OpenAI billing helpers', () => {
         { tools: [{ type: 'web_search' }] },
       ),
     ).toBeCloseTo(0.01, 10);
+  });
+
+  it('uses non-reasoning web search preview pricing for chat-latest aliases', () => {
+    const output = {
+      output: [{ type: 'web_search_call', action: { type: 'search' } }],
+    };
+    const config = { tools: [{ type: 'web_search_preview' as const }] };
+
+    expect(calculateObservableOpenAIToolCost(output, 'chat-latest', config)).toBeCloseTo(0.025, 10);
+    expect(calculateObservableOpenAIToolCost(output, 'openai/chat-latest', config)).toBeCloseTo(
+      0.025,
+      10,
+    );
+    expect(calculateObservableOpenAIToolCost(output, 'vendor/chat-latest', config)).toBeCloseTo(
+      0.025,
+      10,
+    );
   });
 
   it('does not charge non-search web actions', () => {
