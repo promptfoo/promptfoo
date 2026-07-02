@@ -5,7 +5,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { isCI } from '../../../src/envars';
+import { getEnvBool, isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
@@ -2128,6 +2128,8 @@ describe('readConfig', () => {
     // Reset mockDereference to pass-through (other tests may have queued mockResolvedValueOnce)
     mockDereference.mockReset();
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvBool).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -2216,6 +2218,28 @@ describe('readConfig', () => {
 
     expect(result).toEqual(mockConfig);
     expect(importModule).toHaveBeenCalledWith('config.js');
+  });
+
+  it.each([
+    ['frozen', (value: object) => Object.freeze(value)],
+    ['non-extensible', (value: object) => Object.preventExtensions(value)],
+  ] as const)('should preserve %s schema assertions when templating is disabled', async (_kind, makeImmutable) => {
+    const assertion = makeImmutable({
+      type: 'is-json',
+      value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.json',
+    });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['test'],
+      tests: [{ assert: [assertion] }],
+    };
+    vi.mocked(getEnvBool).mockImplementation((name) => name === 'PROMPTFOO_DISABLE_TEMPLATING');
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+
+    expect((result.tests as Array<{ assert?: unknown[] }>)[0].assert?.[0]).toBe(assertion);
   });
 
   it('should throw error for unsupported file format', async () => {
@@ -2787,6 +2811,94 @@ describe('readConfig with environment variable substitution', () => {
     expect((result.tests as any)[0].assert[0].value).toEqual(
       'file:///custom/assertions/custom_assert.py',
     );
+  });
+
+  it.each([
+    'is-json',
+    'not-is-json',
+    'contains-json',
+    'not-contains-json',
+  ])('should preserve public schema file templates for %s assertions', async (type) => {
+    mockProcessEnv({ TEST_ASSERTION_PATH: '/private/schema-path' });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          assert: [
+            {
+              type,
+              value: 'file://{{ env.TEST_ASSERTION_PATH }}/schema.json',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.tests as any)[0].assert[0].value).toBe(
+      'file://{{ env.TEST_ASSERTION_PATH }}/schema.json',
+    );
+    expect(
+      (result.tests as any)[0].assert[0][Symbol.for('promptfoo.jsonSchemaRenderedFileRef')],
+    ).toBe('file:///private/schema-path/schema.json');
+  });
+
+  it('should render lookalike objects outside assertion trees normally', async () => {
+    mockProcessEnv({ TEST_ASSERTION_PATH: '/rendered/payload-path' });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['Hello, world!'],
+      metadata: {
+        payload: {
+          type: 'is-json',
+          value: 'file://{{ env.TEST_ASSERTION_PATH }}/payload.json',
+        },
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+    const payload = (result.metadata as any).payload;
+
+    expect(payload.value).toBe('file:///rendered/payload-path/payload.json');
+    expect(payload[Symbol.for('promptfoo.jsonSchemaRenderedFileRef')]).toBeUndefined();
+  });
+
+  it('should preserve schema paths in default, scenario, and template assertion trees', async () => {
+    mockProcessEnv({ TEST_ASSERTION_PATH: '/private/schema-path' });
+    const assertion = {
+      type: 'is-json',
+      value: 'file://{{ env.TEST_ASSERTION_PATH }}/schema.json',
+    };
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['Hello, world!'],
+      assertionTemplates: { schemaCheck: assertion },
+      defaultTest: { assert: [assertion] },
+      scenarios: [{ config: [{ assert: [assertion] }], tests: [{ assert: [assertion] }] }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+    const assertions = [
+      (result as any).assertionTemplates.schemaCheck,
+      (result.defaultTest as any).assert[0],
+      (result.scenarios as any)[0].config[0].assert[0],
+      (result.scenarios as any)[0].tests[0].assert[0],
+    ];
+
+    for (const restored of assertions) {
+      expect(restored.value).toBe('file://{{ env.TEST_ASSERTION_PATH }}/schema.json');
+      expect(restored[Symbol.for('promptfoo.jsonSchemaRenderedFileRef')]).toBe(
+        'file:///private/schema-path/schema.json',
+      );
+    }
   });
 
   it('should preserve runtime templates like {{ vars.x }}', async () => {

@@ -32,9 +32,13 @@ vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),
 }));
 
-vi.mock('../../src/esm', () => ({
-  getWrapperDir: vi.fn(() => '/wrappers'),
-}));
+vi.mock('../../src/esm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
+  return {
+    ...actual,
+    getWrapperDir: vi.fn(() => '/wrappers'),
+  };
+});
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -113,5 +117,43 @@ describe('Ruby utilities', () => {
     expect(logger.error).toHaveBeenCalledWith('RuntimeError: boom');
     expect(logger.error).toHaveBeenCalledWith("\tfrom /path/script.rb:12:in `call_api'");
     expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining('plain progress'));
+  });
+
+  it('redacts schema generator paths from logs and errors when requested', async () => {
+    const privatePath = '/private/PR8237_SCHEMA_PATH/schema.rb';
+    const privateMethod = 'PR8237_SECRET_RUBY_METHOD';
+    mockExecFileAsync
+      .mockReset()
+      .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
+      .mockResolvedValueOnce({
+        stdout: privatePath,
+        stderr: `RuntimeError: ${privateMethod} failed at ${privatePath}`,
+      });
+
+    await rubyUtils.runRuby(privatePath, privateMethod, [], { redactScriptPath: true });
+
+    const logs = JSON.stringify([
+      ...vi.mocked(logger.debug).mock.calls,
+      ...vi.mocked(logger.error).mock.calls,
+      ...vi.mocked(logger.warn).mock.calls,
+    ]);
+    expect(logs).not.toContain(privatePath);
+    expect(logs).not.toContain(privateMethod);
+    expect(logs).toContain('[redacted script path]');
+
+    vi.clearAllMocks();
+    rubyUtils.state.cachedRubyPath = 'ruby';
+    rubyUtils.state.validatingPath = 'ruby';
+    mockExecFileAsync.mockRejectedValue(new Error(`${privateMethod} failed at ${privatePath}`));
+
+    const error = await rubyUtils
+      .runRuby(privatePath, privateMethod, [], { redactScriptPath: true })
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(Error);
+    if (error instanceof Error) {
+      expect(error.message).not.toContain(privatePath);
+      expect(error.message).not.toContain(privateMethod);
+      expect(error.message).toContain('[redacted script path]');
+    }
   });
 });

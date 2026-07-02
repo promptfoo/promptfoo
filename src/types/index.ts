@@ -766,7 +766,7 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = string | string[] | number | object | AssertionValueFunction;
+export type AssertionValue = string | string[] | number | boolean | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
@@ -789,6 +789,7 @@ export interface AssertionParams {
   renderedValue?: AssertionValue;
   test: AtomicTestCase;
   valueFromScript?: string | boolean | number | GradingResult | object;
+  valueFromScriptResolved?: boolean;
 }
 
 // Used when building prompts index from files.

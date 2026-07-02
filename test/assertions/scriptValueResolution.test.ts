@@ -5,7 +5,11 @@ import { runAssertion } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
+import { runPython } from '../../src/python/pythonUtils';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
+import { sha256 } from '../../src/util/createHash';
+import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderResponse } from '../../src/types/index';
 
@@ -43,6 +47,10 @@ vi.mock('../../src/database', () => ({
 
 vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
+}));
+
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
 }));
 
 vi.mock('../../src/matchers/llmGrading', async () => {
@@ -270,6 +278,103 @@ describe('Script value resolution', () => {
     });
   });
 
+  describe('JSON schema assertions with file:// scripts', () => {
+    it.each([
+      ['is-json', 'booleanValue', '{"foo":"bar"}', true],
+      ['not-is-json', 'booleanValue', '{"foo":"bar"}', false],
+      ['contains-json', 'booleanValue', 'prefix {"foo":"bar"} suffix', true],
+      ['not-contains-json', 'booleanValue', 'prefix {"foo":"bar"} suffix', false],
+      ['is-json', 'falseValue', '{"foo":"bar"}', false],
+      ['not-is-json', 'falseValue', '{"foo":"bar"}', true],
+      ['contains-json', 'falseValue', 'prefix {"foo":"bar"} suffix', false],
+      ['not-contains-json', 'falseValue', 'prefix {"foo":"bar"} suffix', true],
+    ] as const)('uses the %s boolean schema returned by %s', async (type, exportName, output, pass) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: `file://rubric-generator.cjs:${exportName}`,
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(pass);
+    });
+
+    it('preserves rendered assertion metadata for string schema generators', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'is-json',
+          value: 'file://rubric-generator.cjs:knownValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: '{}',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBe('SCRIPT_OUTPUT_12345');
+    });
+
+    it.each([
+      ['is-json', 'emptyValue', '{"foo":"bar"}'],
+      ['not-is-json', 'emptyValue', '{"foo":"bar"}'],
+      ['contains-json', 'emptyValue', 'prefix {"foo":"bar"} suffix'],
+      ['not-contains-json', 'emptyValue', 'prefix {"foo":"bar"} suffix'],
+      ['is-json', 'nullValue', '{"foo":"bar"}'],
+      ['not-is-json', 'nullValue', '{"foo":"bar"}'],
+      ['contains-json', 'nullValue', 'prefix {"foo":"bar"} suffix'],
+      ['not-contains-json', 'nullValue', 'prefix {"foo":"bar"} suffix'],
+      ['is-json', 'undefinedValue', '{"foo":"bar"}'],
+      ['not-is-json', 'undefinedValue', '{"foo":"bar"}'],
+      ['contains-json', 'undefinedValue', 'prefix {"foo":"bar"} suffix'],
+      ['not-contains-json', 'undefinedValue', 'prefix {"foo":"bar"} suffix'],
+    ] as const)('rejects the %s schema returned by %s', async (type, exportName, output) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: `file://rubric-generator.cjs:${exportName}`,
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Invalid JSON schema:'),
+      });
+    });
+
+    it.each([
+      ['is-json', false, 'Expected output to be valid JSON'],
+      ['not-is-json', true, 'Assertion passed'],
+      ['contains-json', false, 'Expected output to contain valid JSON'],
+      ['not-contains-json', true, 'Assertion passed'],
+    ] as const)('keeps %s lazy when an invalid generated schema is unused', async (type, pass, reason) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: 'file://rubric-generator.cjs:undefinedValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'not JSON',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result).toMatchObject({ pass, reason });
+    });
+  });
+
   describe('error handling', () => {
     it('should throw error when script returns function for non-script assertion', async () => {
       await expect(
@@ -444,6 +549,307 @@ describe('Script value resolution', () => {
       );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('Ruby execution error');
+    });
+
+    it('should resolve a named Ruby JSON schema generator before and after serialization', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_PATH: '/private/schema/path' });
+
+      try {
+        const assertion = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.rb:build_schema',
+              },
+            ],
+          },
+          'test-config',
+        ).assert[0];
+
+        const result = await runAssertion({
+          assertion,
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+        const persistedResult = await runAssertion({
+          assertion: JSON.parse(JSON.stringify(assertion)),
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+
+        expect(assertion.value).toContain('{{ env.PR8237_SCHEMA_PATH }}');
+        expect(JSON.stringify(assertion)).not.toContain('/private/schema/path');
+        expect(mockRunRuby).toHaveBeenCalledWith(
+          path.resolve('/private/schema/path/schema.rb'),
+          'build_schema',
+          expect.any(Array),
+          { redactScriptPath: true },
+        );
+        expect(mockRunRuby).toHaveBeenCalledTimes(2);
+        expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+        expect(persistedResult).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should resolve a persisted schema generator from config env', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({ PR8237_CONFIG_SCHEMA_PATH: undefined });
+      const originalConfig = cliState.config;
+      cliState.config = {
+        env: { PR8237_CONFIG_SCHEMA_PATH: '/private/config/schema/path' },
+      };
+
+      try {
+        const result = await runAssertion({
+          assertion: {
+            type: 'is-json',
+            value: 'file://{{ env.PR8237_CONFIG_SCHEMA_PATH }}/schema.rb:build_schema',
+          },
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+
+        expect(mockRunRuby).toHaveBeenCalledWith(
+          path.resolve('/private/config/schema/path/schema.rb'),
+          'build_schema',
+          expect.any(Array),
+          { redactScriptPath: true },
+        );
+        expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+      } finally {
+        cliState.config = originalConfig;
+        restoreEnv();
+      }
+    });
+
+    it('should redact a private JavaScript schema generator path from execution errors', async () => {
+      const privatePath = '../private/PR8237_JS_SCHEMA_PATH';
+      const privateMethod = 'PR8237_SECRET_JS_METHOD';
+      vi.mocked(importModule).mockRejectedValue(
+        new Error(`Cannot load ${privatePath}/schema.cjs:${privateMethod}`),
+      );
+      const restoreEnv = mockProcessEnv({
+        PR8237_JS_SCHEMA_REF: `${privatePath}/schema.cjs:${privateMethod}`,
+      });
+
+      try {
+        const assertion = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: 'file://{{ env.PR8237_JS_SCHEMA_REF }}',
+              },
+            ],
+          },
+          'test-config',
+        ).assert[0];
+
+        const error = await runAssertion({
+          assertion,
+          test: { vars: {} },
+          providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+        }).catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(Error);
+        if (error instanceof Error) {
+          expect(error.message).toContain('Cannot load');
+          expect(error.message).toContain('[redacted schema generator path]');
+          expect(error.message).not.toContain(privatePath);
+          expect(error.message).not.toContain(privateMethod);
+        }
+        expect(importModule).toHaveBeenCalledWith(
+          path.resolve(cliState.basePath || '', `${privatePath}/schema.cjs`),
+          privateMethod,
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      ['Python', '.py', runPython],
+      ['Ruby', '.rb', runRuby],
+    ] as const)('should redact a private %s schema generator path from assertion failures', async (_language, extension, runner) => {
+      const privatePath = `/private/PR8237_${extension.slice(1).toUpperCase()}_SCHEMA_PATH`;
+      const privateMethod = `PR8237_SECRET_${extension.slice(1).toUpperCase()}_METHOD`;
+      vi.mocked(runner).mockRejectedValue(
+        new Error(`Generator failed at ${privatePath}/schema${extension}:${privateMethod}`),
+      );
+      const restoreEnv = mockProcessEnv({
+        PR8237_LANGUAGE_SCHEMA_REF: `${privatePath}/schema${extension}:${privateMethod}`,
+      });
+
+      try {
+        const result = await runAssertion({
+          assertion: {
+            type: 'is-json',
+            value: 'file://{{ env.PR8237_LANGUAGE_SCHEMA_REF }}',
+          },
+          test: { vars: {} },
+          providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+        });
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('Generator failed at'),
+        });
+        expect(result.reason).toContain('[redacted schema generator path]');
+        expect(JSON.stringify(result)).not.toContain(privatePath);
+        expect(JSON.stringify(result)).not.toContain(privateMethod);
+        expect(runner).toHaveBeenCalledWith(
+          path.resolve(privatePath, `schema${extension}`),
+          privateMethod,
+          expect.any(Array),
+          { redactScriptPath: true },
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves JavaScript generator diagnostics for public schema paths', async () => {
+      vi.mocked(importModule).mockRejectedValue(new Error('Public JavaScript generator error'));
+
+      await expect(
+        runAssertion({
+          assertion: { type: 'is-json', value: 'file://schema.cjs:build_schema' },
+          test: { vars: {} },
+          providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+        }),
+      ).rejects.toThrow('Public JavaScript generator error');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve(cliState.basePath || '', 'schema.cjs'),
+        'build_schema',
+      );
+    });
+
+    it.each([
+      ['Python', '.py', runPython],
+      ['Ruby', '.rb', runRuby],
+    ] as const)('preserves %s generator diagnostics for public schema paths', async (language, extension, runner) => {
+      const diagnostic = `Public ${language} generator error`;
+      vi.mocked(runner).mockRejectedValue(new Error(diagnostic));
+
+      const result = await runAssertion({
+        assertion: { type: 'is-json', value: `file://schema${extension}:build_schema` },
+        test: { vars: {} },
+        providerResponse: { output: '{}', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+      });
+
+      expect(result.reason).toBe(diagnostic);
+      expect(runner).toHaveBeenCalledWith(
+        path.resolve(cliState.basePath || '', `schema${extension}`),
+        'build_schema',
+        expect.any(Array),
+      );
+    });
+
+    it('should not execute a generator when a persisted schema file error is present', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({
+        PR8237_SWITCHED_SCHEMA_PATH: '/private/switched/schema/path',
+      });
+      const assertion = {
+        type: 'is-json' as const,
+        value: 'file://{{ env.PR8237_SWITCHED_SCHEMA_PATH }}/schema.rb:build_schema',
+        __promptfooJsonSchemaFileError: {
+          error: 'schema file not found',
+          fingerprint: `sha256:${'a'.repeat(64)}`,
+          valueFingerprint: `sha256:${sha256(
+            'file://{{ env.PR8237_SWITCHED_SCHEMA_PATH }}/schema.rb:build_schema',
+          )}`,
+        },
+      };
+
+      try {
+        const result = await runAssertion({
+          assertion,
+          test: { vars: {} },
+          providerResponse: {
+            output: '{}',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+        const lazyResult = await runAssertion({
+          assertion: { ...assertion, type: 'not-contains-json' },
+          test: { vars: {} },
+          providerResponse: {
+            output: 'no JSON here',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        });
+
+        expect(mockRunRuby).not.toHaveBeenCalled();
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Invalid JSON schema: schema file not found',
+        });
+        expect(lazyResult).toMatchObject({ pass: true, reason: 'Assertion passed' });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should render live and serialized schema generator paths exactly once', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue({ type: 'object' });
+      const restoreEnv = mockProcessEnv({
+        PR8237_FIRST_SCHEMA_PATH: '{{ env.PR8237_SECOND_SCHEMA_PATH }}',
+        PR8237_SECOND_SCHEMA_PATH: '/private/second/schema/path',
+      });
+
+      try {
+        const assertion = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: 'file://{{ env.PR8237_FIRST_SCHEMA_PATH }}/schema.rb:build_schema',
+              },
+            ],
+          },
+          'test-config',
+        ).assert[0];
+
+        for (const candidate of [assertion, JSON.parse(JSON.stringify(assertion))]) {
+          const result = await runAssertion({
+            assertion: candidate,
+            test: { vars: {} },
+            providerResponse: {
+              output: '{}',
+              tokenUsage: { total: 0, prompt: 0, completion: 0 },
+            },
+          });
+          expect(result).toMatchObject({ pass: true, reason: 'Assertion passed' });
+        }
+
+        expect(mockRunRuby).toHaveBeenCalledTimes(2);
+        for (const [filePath] of mockRunRuby.mock.calls) {
+          const normalizedFilePath = filePath.replaceAll('\\', '/');
+          expect(normalizedFilePath).toContain('{{ env.PR8237_SECOND_SCHEMA_PATH }}');
+          expect(normalizedFilePath).not.toContain('/private/second/schema/path');
+        }
+      } finally {
+        restoreEnv();
+      }
     });
   });
 });

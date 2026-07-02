@@ -35,7 +35,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadFromExternalFile, setJsonSchemaRenderedFileRef } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -318,8 +318,125 @@ function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(co
     ? Object.fromEntries(Object.entries(renderedConfigEnv).filter(([, v]) => v !== undefined))
     : undefined;
 
-  // Second pass: render full config using pre-rendered config.env as overrides
-  return renderEnvOnlyInObject(config, filteredConfigEnv);
+  // Second pass: render full config using pre-rendered config.env as overrides.
+  // JSON schema file references are rendered privately by the file loader so paths that
+  // contain credentials do not become part of the persisted public assertion value.
+  const renderedConfig = renderEnvOnlyInObject(config, filteredConfigEnv);
+  if (renderedConfig === config) {
+    return renderedConfig;
+  }
+  return restoreJsonSchemaFileReferences(config, renderedConfig);
+}
+
+const JSON_SCHEMA_ASSERTION_TYPES = new Set([
+  'is-json',
+  'not-is-json',
+  'contains-json',
+  'not-contains-json',
+]);
+
+type JsonSchemaReferenceContext =
+  | 'assertion'
+  | 'assertion-templates'
+  | 'assertions'
+  | 'other'
+  | 'root'
+  | 'scenario'
+  | 'scenarios'
+  | 'test'
+  | 'tests';
+
+function getJsonSchemaReferenceChildContext(
+  context: JsonSchemaReferenceContext,
+  key: string,
+  parent: Record<string, unknown>,
+): JsonSchemaReferenceContext {
+  if (context === 'root') {
+    if (key === 'tests') {
+      return 'tests';
+    }
+    if (key === 'defaultTest') {
+      return 'test';
+    }
+    if (key === 'scenarios') {
+      return 'scenarios';
+    }
+    if (key === 'assertionTemplates') {
+      return 'assertion-templates';
+    }
+  } else if (context === 'test' && key === 'assert') {
+    return 'assertions';
+  } else if (context === 'scenario' && (key === 'config' || key === 'tests')) {
+    return 'tests';
+  } else if (context === 'assertion' && parent.type === 'assert-set' && key === 'assert') {
+    return 'assertions';
+  } else if (context === 'assertion-templates') {
+    return 'assertion';
+  }
+  return 'other';
+}
+
+function restoreJsonSchemaFileReferences<T>(
+  original: T,
+  rendered: T,
+  context: JsonSchemaReferenceContext = 'root',
+): T {
+  if (Array.isArray(original) && Array.isArray(rendered)) {
+    const itemContext =
+      context === 'tests'
+        ? 'test'
+        : context === 'scenarios'
+          ? 'scenario'
+          : context === 'assertions'
+            ? 'assertion'
+            : 'other';
+    for (let index = 0; index < original.length; index++) {
+      rendered[index] = restoreJsonSchemaFileReferences(
+        original[index],
+        rendered[index],
+        itemContext,
+      );
+    }
+    return rendered;
+  }
+
+  if (
+    typeof original !== 'object' ||
+    original === null ||
+    typeof rendered !== 'object' ||
+    rendered === null
+  ) {
+    return rendered;
+  }
+
+  const originalRecord = original as Record<string, unknown>;
+  const renderedRecord = rendered as Record<string, unknown>;
+  const preservesSchemaFileReference =
+    context === 'assertion' &&
+    typeof originalRecord.type === 'string' &&
+    JSON_SCHEMA_ASSERTION_TYPES.has(originalRecord.type) &&
+    typeof originalRecord.value === 'string' &&
+    originalRecord.value.startsWith('file://');
+
+  for (const key of Object.keys(originalRecord)) {
+    if (key === 'value' && preservesSchemaFileReference) {
+      if (typeof renderedRecord[key] === 'string') {
+        setJsonSchemaRenderedFileRef(
+          renderedRecord,
+          renderedRecord[key],
+          originalRecord[key] as string,
+        );
+      }
+      renderedRecord[key] = originalRecord[key];
+    } else {
+      renderedRecord[key] = restoreJsonSchemaFileReferences(
+        originalRecord[key],
+        renderedRecord[key],
+        getJsonSchemaReferenceChildContext(context, key, originalRecord),
+      );
+    }
+  }
+  return rendered;
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {

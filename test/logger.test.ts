@@ -171,6 +171,39 @@ describe('logger', () => {
       });
     });
 
+    it('should apply an async-scoped log redactor', async () => {
+      const { withLogRedaction } = await import('../src/cliState');
+      const privateValue = 'PR8237_PRIVATE_LOG_VALUE';
+
+      await withLogRedaction(
+        (message) => message.replaceAll(privateValue, '[redacted]'),
+        async () => logger.default.debug(`Loading ${privateValue}`),
+      );
+
+      expect(mockLogger.debug).toHaveBeenCalledWith({
+        message: 'Loading [redacted]',
+        location: expect.any(String),
+      });
+    });
+
+    it('should compose nested async-scoped log redactors', async () => {
+      const { withLogRedaction } = await import('../src/cliState');
+
+      await withLogRedaction(
+        (message) => message.replaceAll('SECRET_A', '[A]'),
+        async () =>
+          withLogRedaction(
+            (message) => message.replaceAll('SECRET_B', '[B]'),
+            async () => logger.default.debug('Loading SECRET_A and SECRET_B'),
+          ),
+      );
+
+      expect(mockLogger.debug).toHaveBeenCalledWith({
+        message: 'Loading [A] and [B]',
+        location: expect.any(String),
+      });
+    });
+
     it('should include location in debug mode', () => {
       logger.setLogLevel('debug');
 

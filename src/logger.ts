@@ -402,7 +402,7 @@ function createLogMethodWithContext(
     }
 
     if (!context) {
-      internalLogger[level](message);
+      internalLogger[level](cliState.redactLogMessage?.(message) ?? message);
       return;
     }
 
@@ -410,11 +410,16 @@ function createLogMethodWithContext(
 
     if (useStructuredLogging) {
       // Structured mode: pass object with message field for cloud logging systems
-      internalLogger[level]({ message, ...sanitized });
+      internalLogger[level]({
+        message: cliState.redactLogMessage?.(message) ?? message,
+        ...sanitized,
+      });
     } else {
       // Default mode: format as string for CLI/console output
       const contextStr = safeJsonStringify(sanitized, true);
-      internalLogger[level](`${message}\n${contextStr}`);
+      internalLogger[level](
+        cliState.redactLogMessage?.(`${message}\n${contextStr}`) ?? `${message}\n${contextStr}`,
+      );
     }
   };
 }

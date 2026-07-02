@@ -11,16 +11,248 @@ import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { sha256 } from './createHash';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
-import { renderVarsInObject } from './render';
+import { renderEnvOnlyInObject, renderVarsInObject } from './render';
+import { getNunjucksEngine } from './templates';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
+
+type ExternalFileContext =
+  | 'assertion'
+  | 'assertions'
+  | 'general'
+  | 'json-schema-assertion'
+  | 'test-config'
+  | 'vars';
+
+const JSON_SCHEMA_FILE_SNAPSHOT = Symbol.for('promptfoo.jsonSchemaFileSnapshot');
+const JSON_SCHEMA_RENDERED_FILE_REF = Symbol.for('promptfoo.jsonSchemaRenderedFileRef');
+const JSON_SCHEMA_RENDERED_FILE_REF_SOURCE = Symbol.for(
+  'promptfoo.jsonSchemaRenderedFileRefSource',
+);
+const JSON_SCHEMA_FILE_ERROR = '__promptfooJsonSchemaFileError';
+const JSON_SCHEMA_FILE_FORMAT = '__promptfooJsonSchemaFileFormat';
+const JSON_SCHEMA_FILE_ERRORS = new Set([
+  'schema file must contain an object or boolean schema',
+  'schema file not found',
+  'invalid JSON schema file',
+  'invalid YAML schema file',
+  'schema file could not be read',
+]);
+const JSON_SCHEMA_FILE_FINGERPRINT = /^sha256:[a-f0-9]{64}$/;
+const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
+
+type PersistedJsonSchemaFileError = {
+  error: string;
+  fingerprint: string;
+  valueFingerprint: string;
+};
+
+type PersistedJsonSchemaFileFormat = {
+  format: 'text';
+  valueFingerprint: string;
+};
+
+export type JsonSchemaFileSnapshot =
+  | {
+      source: string;
+      format: 'parsed' | 'text';
+      schema: unknown;
+    }
+  | {
+      source: string;
+      error: string;
+      fingerprint: string;
+    };
+
+function isJsonSchemaAssertionRecord(record: Record<PropertyKey, unknown>): boolean {
+  if (typeof record.type !== 'string') {
+    return false;
+  }
+  const baseType = record.type.replace(/^not-/, '');
+  return baseType === 'is-json' || baseType === 'contains-json';
+}
+
+export function getJsonSchemaFileSnapshot(assertion: unknown): JsonSchemaFileSnapshot | undefined {
+  if (typeof assertion !== 'object' || assertion === null) {
+    return undefined;
+  }
+  const record = assertion as Record<PropertyKey, unknown>;
+  const isJsonSchemaAssertion = isJsonSchemaAssertionRecord(record);
+  if (!isJsonSchemaAssertion) {
+    return undefined;
+  }
+  const snapshot = record[JSON_SCHEMA_FILE_SNAPSHOT] as JsonSchemaFileSnapshot | undefined;
+  if (snapshot) {
+    const matchesCurrentValue =
+      'error' in snapshot ? record.value === snapshot.source : record.value === snapshot.schema;
+    if (matchesCurrentValue) {
+      return snapshot;
+    }
+  }
+  const persisted = record[JSON_SCHEMA_FILE_ERROR];
+  if (
+    typeof persisted === 'object' &&
+    persisted !== null &&
+    typeof record.value === 'string' &&
+    record.value.startsWith('file://') &&
+    typeof (persisted as PersistedJsonSchemaFileError).error === 'string' &&
+    JSON_SCHEMA_FILE_ERRORS.has((persisted as PersistedJsonSchemaFileError).error) &&
+    typeof (persisted as PersistedJsonSchemaFileError).fingerprint === 'string' &&
+    JSON_SCHEMA_FILE_FINGERPRINT.test((persisted as PersistedJsonSchemaFileError).fingerprint) &&
+    typeof (persisted as PersistedJsonSchemaFileError).valueFingerprint === 'string' &&
+    JSON_SCHEMA_FILE_FINGERPRINT.test(
+      (persisted as PersistedJsonSchemaFileError).valueFingerprint,
+    ) &&
+    (persisted as PersistedJsonSchemaFileError).valueFingerprint ===
+      `sha256:${sha256(record.value)}`
+  ) {
+    const { error, fingerprint } = persisted as PersistedJsonSchemaFileError;
+    return { source: `persisted:${fingerprint}`, error, fingerprint };
+  }
+  const persistedFormat = record[JSON_SCHEMA_FILE_FORMAT] as
+    | PersistedJsonSchemaFileFormat
+    | undefined;
+  const isCurrentPersistedText =
+    typeof record.value === 'string' &&
+    typeof persistedFormat === 'object' &&
+    persistedFormat !== null &&
+    persistedFormat.format === 'text' &&
+    JSON_SCHEMA_FILE_FINGERPRINT.test(persistedFormat.valueFingerprint) &&
+    persistedFormat.valueFingerprint === `sha256:${sha256(record.value)}`;
+  if (isCurrentPersistedText) {
+    return {
+      source: 'persisted:text',
+      format: 'text',
+      schema: record.value,
+    };
+  }
+  return undefined;
+}
+
+export function getJsonSchemaRenderedFileRef(
+  assertion: unknown,
+  publicFileRef?: string,
+): string | undefined {
+  if (typeof assertion !== 'object' || assertion === null) {
+    return undefined;
+  }
+  const record = assertion as Record<PropertyKey, unknown>;
+  if (
+    !isJsonSchemaAssertionRecord(record) ||
+    typeof record.value !== 'string' ||
+    !record.value.startsWith('file://')
+  ) {
+    return undefined;
+  }
+  const renderedFileRefSource = record[JSON_SCHEMA_RENDERED_FILE_REF_SOURCE];
+  if (
+    typeof renderedFileRefSource === 'string' &&
+    renderedFileRefSource !== (publicFileRef ?? record.value)
+  ) {
+    return undefined;
+  }
+  const renderedFileRef = record[JSON_SCHEMA_RENDERED_FILE_REF];
+  return typeof renderedFileRef === 'string' ? renderedFileRef : undefined;
+}
+
+export function setJsonSchemaRenderedFileRef(
+  assertion: Record<PropertyKey, unknown>,
+  renderedFileRef: string,
+  publicFileRef: string | undefined = typeof assertion.value === 'string'
+    ? assertion.value
+    : undefined,
+): void {
+  Object.defineProperty(assertion, JSON_SCHEMA_RENDERED_FILE_REF, {
+    value: renderedFileRef,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  if (publicFileRef) {
+    Object.defineProperty(assertion, JSON_SCHEMA_RENDERED_FILE_REF_SOURCE, {
+      value: publicFileRef,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
+}
+
+export function getEffectiveJsonSchemaFileRef(assertion: unknown, publicFileRef: string): string {
+  return (
+    getJsonSchemaRenderedFileRef(assertion, publicFileRef) ?? renderEnvOnlyInObject(publicFileRef)
+  );
+}
+
+export function resolveJsonSchemaFileReference(fileRef: string): string {
+  let relativePath = fileRef.slice('file://'.length);
+  if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(relativePath)) {
+    relativePath = relativePath.slice(1);
+  }
+  return path.resolve(cliState.basePath || '', relativePath);
+}
+
+export function loadJsonSchemaFileReference(fileRef: string): JsonSchemaFileSnapshot {
+  const filePath = resolveJsonSchemaFileReference(fileRef);
+  const extension = path.extname(filePath).toLowerCase();
+  if (!['.json', '.yaml', '.yml', '.txt'].includes(extension)) {
+    return {
+      source: filePath,
+      error: 'schema file could not be read',
+      fingerprint: '',
+    };
+  }
+
+  try {
+    const contents = fs.readFileSync(filePath, 'utf8');
+    const isParsedSchema = extension !== '.txt';
+    const schema =
+      extension === '.json'
+        ? JSON.parse(contents)
+        : extension === '.yaml' || extension === '.yml'
+          ? yaml.load(contents)
+          : contents.trim();
+    if (
+      (isParsedSchema &&
+        (schema === null || (typeof schema !== 'boolean' && typeof schema !== 'object'))) ||
+      (!isParsedSchema && /^(?:null|~)?$/i.test(String(schema)))
+    ) {
+      return {
+        source: filePath,
+        error: 'schema file must contain an object or boolean schema',
+        fingerprint: '',
+      };
+    }
+    return {
+      source: filePath,
+      format: isParsedSchema ? 'parsed' : 'text',
+      schema,
+    };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    const safeError =
+      code === 'ENOENT'
+        ? 'schema file not found'
+        : error instanceof SyntaxError && extension === '.json'
+          ? 'invalid JSON schema file'
+          : error instanceof yaml.YAMLException
+            ? 'invalid YAML schema file'
+            : 'schema file could not be read';
+    return { source: filePath, error: safeError, fingerprint: '' };
+  }
+}
+
+export function renderJsonSchemaText(schema: string, vars: Record<string, VarValue>): string {
+  return getNunjucksEngine().renderString(schema, vars);
+}
 
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
@@ -74,7 +306,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: ExternalFileContext,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -87,6 +319,11 @@ export function maybeLoadFromExternalFile(
     return filePath;
   }
   if (!filePath.startsWith('file://')) {
+    return filePath;
+  }
+
+  if (context === 'json-schema-assertion') {
+    logger.debug('Preserving JSON schema file reference');
     return filePath;
   }
 
@@ -230,6 +467,72 @@ export function maybeLoadFromExternalFile(
   return contents;
 }
 
+function captureJsonSchemaFile(
+  renderedFileRef: string,
+  publicFileRef: string,
+  basePath: string | undefined,
+  cache: Map<string, JsonSchemaFileSnapshot>,
+): JsonSchemaFileSnapshot | undefined {
+  const { filePath: cleanPath } = parseFileUrl(renderedFileRef);
+  const isRubyScript = cleanPath.endsWith('.rb') || /\.rb:[^/\\]+$/.test(cleanPath);
+  if (isJavascriptFile(cleanPath) || cleanPath.endsWith('.py') || isRubyScript) {
+    return undefined;
+  }
+
+  const extension = path.extname(cleanPath).toLowerCase();
+  const resolvedPath = path.resolve(basePath ?? cliState.basePath ?? '', cleanPath);
+  const cached = cache.get(resolvedPath);
+  if (cached) {
+    return cached.source === publicFileRef ? cached : { ...cached, source: publicFileRef };
+  }
+
+  let fingerprint = `sha256:${sha256(publicFileRef)}`;
+  try {
+    const contents = fs.readFileSync(resolvedPath, 'utf8');
+    fingerprint = `sha256:${sha256(contents)}`;
+    const isParsedSchema = ['.json', '.yaml', '.yml'].includes(extension);
+    const schema =
+      extension === '.json'
+        ? JSON.parse(contents)
+        : extension === '.yaml' || extension === '.yml'
+          ? yaml.load(contents)
+          : contents;
+    if (
+      (isParsedSchema &&
+        (schema === null || (typeof schema !== 'boolean' && typeof schema !== 'object'))) ||
+      (!isParsedSchema && /^(?:null|~)?$/i.test(contents.trim()))
+    ) {
+      const snapshot = {
+        source: publicFileRef,
+        error: 'schema file must contain an object or boolean schema',
+        fingerprint,
+      } as const;
+      cache.set(resolvedPath, snapshot);
+      return snapshot;
+    }
+    const snapshot = {
+      source: publicFileRef,
+      format: isParsedSchema ? 'parsed' : 'text',
+      schema,
+    } as const;
+    cache.set(resolvedPath, snapshot);
+    return snapshot;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    const safeError =
+      code === 'ENOENT'
+        ? 'schema file not found'
+        : error instanceof SyntaxError && extension === '.json'
+          ? 'invalid JSON schema file'
+          : error instanceof yaml.YAMLException
+            ? 'invalid YAML schema file'
+            : 'schema file could not be read';
+    const snapshot = { source: publicFileRef, error: safeError, fingerprint };
+    cache.set(resolvedPath, snapshot);
+    return snapshot;
+  }
+}
+
 /**
  * Resolves a relative file path with respect to a base path, handling cloud configuration appropriately.
  * When using a cloud configuration, the current working directory is always used instead of the context's base path.
@@ -257,13 +560,29 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: ExternalFileContext,
+  basePath?: string,
+): any {
+  return loadConfigFromExternalFile(config, context, basePath, new Map());
+}
+
+function loadConfigFromExternalFile(
+  config: any,
+  context: ExternalFileContext | undefined,
+  basePath: string | undefined,
+  schemaCache: Map<string, JsonSchemaFileSnapshot>,
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
+    return config.map((item) => loadConfigFromExternalFile(item, context, basePath, schemaCache));
   }
   if (typeof config === 'object' && config !== null) {
+    if (context === 'assertions' && getJsonSchemaFileSnapshot(config)) {
+      return config;
+    }
+    const privatelyRenderedJsonSchemaFileRef = config[JSON_SCHEMA_RENDERED_FILE_REF];
     const result: Record<string, any> = {};
+    const assertionType =
+      typeof config.type === 'string' ? config.type.replace(/^not-/, '') : undefined;
     for (const key of Object.keys(config)) {
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
@@ -272,13 +591,29 @@ export function maybeLoadConfigFromExternalFile(
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
+      const isJsonSchemaAssertionValue =
+        context === 'assertions' &&
+        key === 'value' &&
+        (assertionType === 'is-json' || assertionType === 'contains-json');
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
+      const isAssertionsField =
+        key === 'assert' && (context === 'test-config' || context === 'assertions');
+      const inheritedContext =
+        context === 'assertions' || context === 'test-config' ? undefined : context;
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const childContext = isJsonSchemaAssertionValue
+        ? 'json-schema-assertion'
+        : isAssertionValue
+          ? 'assertion'
+          : isVarsField
+            ? 'vars'
+            : isAssertionsField
+              ? 'assertions'
+              : inheritedContext;
+      const value = loadConfigFromExternalFile(config[key], childContext, basePath, schemaCache);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -289,6 +624,57 @@ export function maybeLoadConfigFromExternalFile(
         });
       } else {
         result[key] = value;
+      }
+    }
+
+    if (
+      context === 'assertions' &&
+      (assertionType === 'is-json' || assertionType === 'contains-json') &&
+      typeof result.value === 'string' &&
+      result.value.startsWith('file://')
+    ) {
+      const rawFileRef = result.value;
+      const renderedFileRef =
+        typeof privatelyRenderedJsonSchemaFileRef === 'string'
+          ? privatelyRenderedJsonSchemaFileRef
+          : renderEnvOnlyInObject(rawFileRef);
+      const snapshot = captureJsonSchemaFile(renderedFileRef, rawFileRef, basePath, schemaCache);
+      if (snapshot) {
+        if ('error' in snapshot) {
+          Object.defineProperty(result, JSON_SCHEMA_FILE_ERROR, {
+            value: {
+              error: snapshot.error,
+              fingerprint: snapshot.fingerprint,
+              valueFingerprint: `sha256:${sha256(rawFileRef)}`,
+            } satisfies PersistedJsonSchemaFileError,
+            enumerable: true,
+            configurable: false,
+            writable: false,
+          });
+        } else {
+          delete result[JSON_SCHEMA_FILE_ERROR];
+          result.value = snapshot.schema;
+          if (snapshot.format === 'text') {
+            Object.defineProperty(result, JSON_SCHEMA_FILE_FORMAT, {
+              value: {
+                format: 'text',
+                valueFingerprint: `sha256:${sha256(String(snapshot.schema))}`,
+              } satisfies PersistedJsonSchemaFileFormat,
+              enumerable: true,
+              configurable: false,
+              writable: false,
+            });
+          }
+        }
+        Object.defineProperty(result, JSON_SCHEMA_FILE_SNAPSHOT, {
+          value: snapshot,
+          enumerable: true,
+          configurable: false,
+          writable: false,
+        });
+      } else {
+        result.value = rawFileRef;
+        setJsonSchemaRenderedFileRef(result, renderedFileRef);
       }
     }
     return result;

@@ -16,10 +16,17 @@ import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 vi.mock('fs');
 vi.mock('path');
-vi.mock('../../src/cliState');
-vi.mock('../../src/esm', () => ({
-  importModule: vi.fn(),
-}));
+vi.mock('../../src/cliState', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+  return actual;
+});
+vi.mock('../../src/esm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
+  return {
+    ...actual,
+    importModule: vi.fn(),
+  };
+});
 
 describe('processFileReference', () => {
   beforeEach(() => {
@@ -254,6 +261,30 @@ describe('loadFromJavaScriptFile', () => {
 
     expect(result).toBe('result');
     expect(mockFn).toHaveBeenCalledWith('arg1');
+  });
+
+  it('should scope private module path and export redaction to the import', async () => {
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.normalize).mockImplementation(actualPath.normalize);
+    vi.mocked(path.dirname).mockImplementation(actualPath.dirname);
+    vi.mocked(path.basename).mockImplementation(actualPath.basename);
+    vi.mocked(path.parse).mockImplementation(actualPath.parse);
+    const privatePath = '/private/PR8237_SCHEMA_PATH/schema.js';
+    const privateMethod = 'PR8237_SECRET_METHOD';
+    const message = `Loading ${privatePath}:${privateMethod}`;
+    const mockFn = vi.fn().mockReturnValue('result');
+    vi.mocked(importModule).mockImplementation(async () => {
+      expect(cliState.redactLogMessage?.(message) ?? message).toBe(
+        'Loading [redacted module path]:[redacted module export]',
+      );
+      return mockFn;
+    });
+
+    await expect(
+      loadFromJavaScriptFile(privatePath, privateMethod, [], { redactPath: true }),
+    ).resolves.toBe('result');
+    expect(cliState.redactLogMessage?.(message) ?? message).toBe(message);
+    expect(importModule).toHaveBeenCalledWith(privatePath, privateMethod);
   });
 
   it('should throw error when module does not export a function', async () => {

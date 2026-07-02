@@ -229,7 +229,11 @@ async function readLocalStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
+    const rows = maybeLoadConfigFromExternalFile(
+      rawContent,
+      'test-config',
+      basePath,
+    ) as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
 
@@ -405,7 +409,11 @@ export async function readTest(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
+    const rawTestCase = maybeLoadConfigFromExternalFile(
+      rawContent,
+      'test-config',
+      basePath,
+    ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -519,7 +527,11 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(
+        rawContent,
+        'test-config',
+        basePath,
+      ) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
@@ -527,11 +539,15 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawCases, 'test-config', basePath) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(
+        rawContent,
+        'test-config',
+        basePath,
+      ) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);

@@ -64,6 +64,18 @@ describe('json utilities', () => {
       expect(firstInstance).not.toBe(secondInstance);
     });
 
+    it('should not reuse identified validators across resets', () => {
+      const schema = { $id: 'https://example.com/promptfoo/reset-schema', type: 'string' };
+      const firstValidator = getAjv().compile(schema);
+
+      resetAjv();
+      const secondAjv = getAjv();
+      const secondValidator = secondAjv.compile(schema);
+
+      expect(secondValidator).not.toBe(firstValidator);
+      expect(secondAjv.getSchema(schema.$id)).toBe(secondValidator);
+    });
+
     it('should only allow resetAjv to be called in test environment', () => {
       const originalNodeEnv = process.env.NODE_ENV;
       try {

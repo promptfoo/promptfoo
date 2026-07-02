@@ -5,7 +5,10 @@ import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import {
+  getJsonSchemaFileSnapshot,
+  getJsonSchemaRenderedFileRef,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -825,6 +828,12 @@ describe('file utilities', () => {
         expect(fs.readFileSync).toHaveBeenCalled();
       });
 
+      it('should preserve files in JSON schema assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://schema.yaml', 'json-schema-assertion');
+        expect(result).toBe('file://schema.yaml');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should handle Windows paths correctly in assertion context', () => {
         const result = maybeLoadFromExternalFile('file://C:/test/assert.py', 'assertion');
         expect(result).toBe('file://C:/test/assert.py');
@@ -868,6 +877,442 @@ describe('file utilities', () => {
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
         expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        'is-json',
+        'not-is-json',
+        'contains-json',
+        'not-contains-json',
+      ])('should embed %s schema file contents in test configs', (type) => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+        const config = {
+          assert: [
+            {
+              type,
+              value: 'file://schema.yaml',
+            },
+          ],
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+
+        expect(result.assert[0].value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.yaml',
+          format: 'parsed',
+          schema: { type: 'object' },
+        });
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should reuse one schema snapshot for repeated references', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              { type: 'is-json', value: 'file://schema.yaml' },
+              { type: 'contains-json', value: 'file://schema.yaml' },
+            ],
+          },
+          'test-config',
+        );
+
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toBe(
+          getJsonSchemaFileSnapshot(result.assert[1]),
+        );
+        expect(result.assert[0].value).toBe(result.assert[1].value);
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should preserve each public reference when failed aliases share a cached file', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: [');
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              { type: 'is-json', value: 'file://schema.yaml' },
+              { type: 'contains-json', value: 'file:///test/schema.yaml' },
+            ],
+          },
+          'test-config',
+        );
+
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toMatchObject({
+          source: 'file://schema.yaml',
+          error: 'invalid YAML schema file',
+        });
+        expect(getJsonSchemaFileSnapshot(result.assert[1])).toMatchObject({
+          source: 'file:///test/schema.yaml',
+          error: 'invalid YAML schema file',
+        });
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should keep embedded schemas after serialization', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+        const result = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.yaml' }] },
+          'test-config',
+        );
+
+        const serialized = JSON.parse(JSON.stringify(result));
+
+        expect(serialized.assert[0].value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(serialized.assert[0])).toBeUndefined();
+      });
+
+      it('should load arbitrary assert properties as ordinary payload data', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('{"type":"object"}');
+
+        const result = maybeLoadConfigFromExternalFile({
+          body: {
+            assert: [{ type: 'is-json', value: 'file://schema.json' }],
+          },
+        });
+
+        expect(result.body.assert[0].value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.body.assert[0])).toBeUndefined();
+      });
+
+      it('should load lookalike objects outside assertion lists normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        const result = maybeLoadConfigFromExternalFile({
+          body: { type: 'is-json', value: 'file://schema.yaml' },
+        });
+
+        expect(result.body.value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.body)).toBeUndefined();
+      });
+
+      it('should load lookalike objects nested inside assertions normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        const result = maybeLoadConfigFromExternalFile({
+          assert: [
+            {
+              type: 'javascript',
+              value: 'return true',
+              config: { body: { type: 'is-json', value: 'file://schema.yaml' } },
+            },
+          ],
+        });
+
+        expect(result.assert[0].config.body.value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.assert[0].config.body)).toBeUndefined();
+      });
+
+      it('should reject YAML content in JSON schema files', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        const result = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.json' }] },
+          'test-config',
+        );
+
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.json',
+          error: 'invalid JSON schema file',
+          fingerprint: expect.any(String),
+        });
+      });
+
+      it('should capture malformed schema files without aborting config loading', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(
+          'type: object\nproperties: [',
+        );
+
+        const result = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.yaml' }] },
+          'test-config',
+        );
+
+        expect(result.assert[0].value).toBe('file://schema.yaml');
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.yaml',
+          error: 'invalid YAML schema file',
+          fingerprint: expect.any(String),
+        });
+
+        const serialized = JSON.parse(JSON.stringify(result));
+        expect(getJsonSchemaFileSnapshot(serialized.assert[0])).toEqual({
+          source: expect.stringMatching(/^persisted:/),
+          error: 'invalid YAML schema file',
+          fingerprint: expect.any(String),
+        });
+      });
+
+      it('should ignore malformed persisted schema error markers', () => {
+        const assertion = {
+          type: 'is-json',
+          value: 'file://schema.json',
+          __promptfooJsonSchemaFileError: {
+            error: 'INJECTED\u001b[2Jreason',
+            fingerprint: 'not-a-sha256',
+          },
+        };
+
+        expect(getJsonSchemaFileSnapshot(assertion)).toBeUndefined();
+      });
+
+      it.each([
+        '.schema',
+        '.jsonschema',
+        '',
+      ])('should preserve legacy text schema loading for %s files', (extension) => {
+        const schema = 'type: object\nrequired: [foo]';
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(schema);
+
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [{ type: 'is-json', value: `file://schema${extension}` }],
+          },
+          'test-config',
+        );
+
+        expect(result.assert[0].value).toBe(schema);
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: `file://schema${extension}`,
+          format: 'text',
+          schema,
+        });
+        expect(getJsonSchemaFileSnapshot(JSON.parse(JSON.stringify(result)).assert[0])).toEqual({
+          source: 'persisted:text',
+          format: 'text',
+          schema,
+        });
+      });
+
+      it.each([
+        '',
+        'null',
+        '~',
+      ])('should capture an invalid empty text schema without aborting config loading', (schema) => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(schema);
+
+        const result = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.txt' }] },
+          'test-config',
+        );
+
+        expect(result.assert[0].value).toBe('file://schema.txt');
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toEqual({
+          source: 'file://schema.txt',
+          error: 'schema file must contain an object or boolean schema',
+          fingerprint: expect.any(String),
+        });
+      });
+
+      it('should preserve distinct invalid schema fingerprints after serialization', () => {
+        vi.mocked(fs.readFileSync)
+          .mockReturnValueOnce('type: object\nproperties: [')
+          .mockReturnValueOnce('type: object\nrequired: [');
+
+        const first = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.yaml' }] },
+          'test-config',
+        );
+        const second = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.yaml' }] },
+          'test-config',
+        );
+
+        expect(JSON.stringify(first)).not.toBe(JSON.stringify(second));
+        expect(
+          getJsonSchemaFileSnapshot(JSON.parse(JSON.stringify(first)).assert[0]),
+        ).toMatchObject({ error: 'invalid YAML schema file' });
+        expect(
+          getJsonSchemaFileSnapshot(JSON.parse(JSON.stringify(second)).assert[0]),
+        ).toMatchObject({ error: 'invalid YAML schema file' });
+      });
+
+      it('should reuse persisted schema errors without reading the file again', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('type: object\nproperties: [');
+        const initial = maybeLoadConfigFromExternalFile(
+          { assert: [{ type: 'is-json', value: 'file://schema.yaml' }] },
+          'test-config',
+        );
+        const persisted = JSON.parse(JSON.stringify(initial));
+        vi.mocked(fs.readFileSync).mockReset();
+
+        const reloaded = maybeLoadConfigFromExternalFile(persisted, 'test-config');
+
+        expect(getJsonSchemaFileSnapshot(reloaded.assert[0])).toMatchObject({
+          error: 'invalid YAML schema file',
+          source: expect.stringMatching(/^persisted:/),
+        });
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should keep rendered schema generator paths private for runtime resolution', () => {
+        const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_PATH: '/private/schema/path' });
+
+        try {
+          const result = maybeLoadConfigFromExternalFile(
+            {
+              assert: [
+                {
+                  type: 'is-json',
+                  value: 'file://{{ env.PR8237_SCHEMA_PATH }}/schema.rb:build_schema',
+                },
+              ],
+            },
+            'test-config',
+          );
+
+          expect(result.assert[0].value).toBe(
+            'file://{{ env.PR8237_SCHEMA_PATH }}/schema.rb:build_schema',
+          );
+          expect(getJsonSchemaRenderedFileRef(result.assert[0])).toBe(
+            'file:///private/schema/path/schema.rb:build_schema',
+          );
+          expect(JSON.stringify(result)).not.toContain('/private/schema/path');
+          expect(getJsonSchemaFileSnapshot(result.assert[0])).toBeUndefined();
+          expect(fs.readFileSync).not.toHaveBeenCalled();
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it('should preserve nested file references inside inline schema objects', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('README contents');
+
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [
+              {
+                type: 'is-json',
+                value: { type: 'string', const: 'file://README.md' },
+              },
+            ],
+          },
+          'test-config',
+        );
+
+        expect(result.assert[0].value.const).toBe('file://README.md');
+        expect(getJsonSchemaFileSnapshot(result.assert[0])).toBeUndefined();
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        'is-json',
+        'not-is-json',
+        'contains-json',
+        'not-contains-json',
+      ])('should not dereference file-like members of an invalid %s schema array', (type) => {
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            assert: [{ type, value: ['file://missing-schema.json'] }],
+          },
+          'test-config',
+        );
+
+        expect(result.assert[0].value).toEqual(['file://missing-schema.json']);
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should not treat nested test payload assert keys as Promptfoo assertions', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('{"type":"object"}');
+
+        const result = maybeLoadConfigFromExternalFile(
+          {
+            metadata: {
+              assert: [{ type: 'is-json', value: 'file://payload.json' }],
+            },
+          },
+          'test-config',
+        );
+
+        expect(result.metadata.assert[0].value).toEqual({ type: 'object' });
+        expect(getJsonSchemaFileSnapshot(result.metadata.assert[0])).toBeUndefined();
+      });
+
+      it('should render schema file paths only once', () => {
+        const restoreEnv = mockProcessEnv({
+          PR8237_FIRST: '{{ env.PR8237_SECOND }}',
+          PR8237_SECOND: 'schema.yaml',
+        });
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('type: object');
+
+        try {
+          const result = maybeLoadConfigFromExternalFile(
+            {
+              assert: [{ type: 'is-json', value: 'file://{{ env.PR8237_FIRST }}' }],
+            },
+            'test-config',
+          );
+
+          expect(getJsonSchemaFileSnapshot(result.assert[0])).toMatchObject({
+            source: 'file://{{ env.PR8237_FIRST }}',
+          });
+          expect(fs.readFileSync).toHaveBeenCalledWith(
+            expect.stringContaining('{{ env.PR8237_SECOND }}'),
+            'utf8',
+          );
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it('should not persist rendered secrets from invalid schema paths', () => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_TEMPLATING: 'true',
+          PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true',
+          PR8237_SCHEMA_SECRET: 'PR8237_SECRET_SENTINEL',
+        });
+        const missingFileError = Object.assign(new Error('missing'), { code: 'ENOENT' });
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation(() => {
+          throw missingFileError;
+        });
+
+        try {
+          const result = maybeLoadConfigFromExternalFile(
+            {
+              assert: [
+                {
+                  type: 'is-json',
+                  value: 'file://{{ env.PR8237_SCHEMA_SECRET }}/schema.yaml',
+                },
+              ],
+            },
+            'test-config',
+          );
+          const serialized = JSON.stringify(result);
+
+          expect(result.assert[0].value).toBe('file://{{ env.PR8237_SCHEMA_SECRET }}/schema.yaml');
+          expect(serialized).not.toContain('PR8237_SECRET_SENTINEL');
+          expect(getJsonSchemaFileSnapshot(JSON.parse(serialized).assert[0])).toMatchObject({
+            error: 'schema file not found',
+          });
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it('should not include rendered schema paths in debug logs', () => {
+        const restoreEnv = mockProcessEnv({ PR8237_SCHEMA_SECRET: 'PR8237_SECRET_SENTINEL' });
+        const debugSpy = vi.spyOn(logger, 'debug');
+
+        try {
+          maybeLoadConfigFromExternalFile(
+            {
+              assert: [
+                {
+                  type: 'is-json',
+                  value: 'file://{{ env.PR8237_SCHEMA_SECRET }}/schema.yaml',
+                },
+              ],
+            },
+            'test-config',
+          );
+
+          expect(debugSpy).toHaveBeenCalledWith('Preserving JSON schema file reference');
+          expect(debugSpy.mock.calls.flat().join(' ')).not.toContain('PR8237_SECRET_SENTINEL');
+          expect(debugSpy.mock.calls.flat().join(' ')).not.toContain('/schema.yaml');
+        } finally {
+          debugSpy.mockRestore();
+          restoreEnv();
+        }
       });
 
       it('should load non-assertion Python files normally', () => {
