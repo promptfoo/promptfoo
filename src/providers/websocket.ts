@@ -35,6 +35,27 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .filter(Boolean);
 }
 
+function getWebSocketConnectionOptions(config: WebSocketProviderConfig): {
+  protocols: string[];
+  options: ClientOptions;
+} {
+  const protocolHeaderKey = Object.keys(config.headers ?? {}).find(
+    (key) => key.toLowerCase() === 'sec-websocket-protocol',
+  );
+  const legacyProtocolHeader = protocolHeaderKey ? config.headers?.[protocolHeaderKey] : undefined;
+  const protocols = normalizeWebSocketProtocols(config.protocols ?? legacyProtocolHeader);
+  const headers = protocolHeaderKey
+    ? Object.fromEntries(
+        Object.entries(config.headers ?? {}).filter(([key]) => key !== protocolHeaderKey),
+      )
+    : config.headers;
+
+  return {
+    protocols,
+    options: headers && Object.keys(headers).length > 0 ? { headers } : {},
+  };
+}
+
 function getWebSocketErrorMessage(err: WebSocket.ErrorEvent | Error | unknown): string {
   const error =
     err && typeof err === 'object' && 'error' in err ? (err as WebSocket.ErrorEvent).error : err;
@@ -246,11 +267,7 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
-      const wsOptions: ClientOptions = {};
-      const protocols = normalizeWebSocketProtocols(this.config.protocols);
-      if (this.config.headers) {
-        wsOptions.headers = this.config.headers;
-      }
+      const { protocols, options: wsOptions } = getWebSocketConnectionOptions(this.config);
       const ws =
         protocols.length > 0
           ? new WebSocket(this.url, protocols, wsOptions)

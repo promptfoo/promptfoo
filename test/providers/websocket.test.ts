@@ -145,10 +145,10 @@ describe('WebSocketProvider', () => {
     expect(WebSocket).toHaveBeenCalledWith('ws://test.com', ['json'], {});
   });
 
-  it('should preserve Sec-WebSocket-Protocol headers unless protocols are configured', async () => {
+  it('should promote legacy Sec-WebSocket-Protocol headers to requested protocols', async () => {
     const headers = {
       Authorization: 'Bearer test-token',
-      'Sec-WebSocket-Protocol': 'Bearer token-with-space',
+      'Sec-WebSocket-Protocol': 'json, v1',
     };
 
     provider = new WebSocketProvider('ws://test.com', {
@@ -165,7 +165,9 @@ describe('WebSocketProvider', () => {
 
     await provider.callApi('test prompt');
 
-    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', ['json', 'v1'], {
+      headers: { Authorization: 'Bearer test-token' },
+    });
   });
 
   it('should work without headers provided', async () => {
