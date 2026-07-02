@@ -90,12 +90,6 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'E2E coverage requires an API key and optional Codex SDK dependency',
   },
   {
-    file: 'providers/openai/codexCliCompatibility.test.ts',
-    kind: 'skipIf',
-    linePattern: /^it\.skipIf\(!fs\.existsSync\(realSdkEntryPoint\)\)\($/,
-    reason: 'the real parser canary requires the optional Codex SDK dependency',
-  },
-  {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
     linePattern:
