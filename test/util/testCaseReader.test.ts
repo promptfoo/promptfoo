@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
