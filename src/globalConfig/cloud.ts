@@ -21,6 +21,20 @@ function isPromptfooCloudHost(url: string): boolean {
   }
 }
 
+let hasWarnedAboutLegacyApiHost = false;
+
+function warnOnceAboutLegacyApiHost(): void {
+  if (hasWarnedAboutLegacyApiHost) {
+    return;
+  }
+  hasWarnedAboutLegacyApiHost = true;
+  logger.warn(
+    'Ignoring the API_HOST environment variable for Promptfoo Cloud routing. ' +
+      'To point at a self-hosted deployment, use PROMPTFOO_CLOUD_API_URL or ' +
+      '`promptfoo auth login --api-host <url>`.',
+  );
+}
+
 interface CloudUser {
   id: string;
   name: string;
@@ -125,15 +139,16 @@ export class CloudConfig {
    * entered via `promptfoo auth login --api-host https://host/` commonly include one.
    */
   private resolveApiHost(): string {
-    // API_HOST is a legacy fallback that may arrive through --env-file. Resolve it at call time
-    // rather than at module load, which happens before argv env loading. Read process.env
-    // directly (not getEnvString): the cloud origin decides where monkeyPatchFetch sends the
-    // saved bearer token, so an eval config's `env` block must never influence it.
-    const host =
-      this.config.apiHost ||
-      process.env.PROMPTFOO_CLOUD_API_URL ||
-      process.env.API_HOST ||
-      CLOUD_API_HOST;
+    // The generic API_HOST env var is intentionally NOT consulted: the cloud
+    // origin decides where monkeyPatchFetch sends the saved bearer token, and
+    // env files routinely define API_HOST for the app under test. Self-hosted
+    // deployments must use `promptfoo auth login --api-host <url>` or
+    // PROMPTFOO_CLOUD_API_URL. process.env is read directly (not
+    // getEnvString) so an eval config's `env` block can never influence it.
+    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || CLOUD_API_HOST;
+    if (!this.config.apiHost && !process.env.PROMPTFOO_CLOUD_API_URL && process.env.API_HOST) {
+      warnOnceAboutLegacyApiHost();
+    }
     return host.replace(/\/+$/, '');
   }
 

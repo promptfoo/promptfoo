@@ -3,6 +3,7 @@ import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
 import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
+import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
 
@@ -56,7 +57,10 @@ describe('CloudConfig', () => {
       expect(cloudConfigInstance.getApiKey()).toBe('test-key');
     });
 
-    it('should resolve legacy API_HOST after deferred initialization', () => {
+    it('should ignore the legacy API_HOST environment variable and warn once', () => {
+      // Env files routinely define API_HOST for the app under test; the cloud
+      // origin decides where monkeyPatchFetch sends the saved bearer token, so
+      // a generic variable must never redirect it.
       vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
       const restoreEnv = mockProcessEnv({
         API_HOST: 'https://env-file.example.com',
@@ -66,7 +70,29 @@ describe('CloudConfig', () => {
       try {
         const config = new CloudConfig(false);
 
-        expect(config.getApiHost()).toBe('https://env-file.example.com');
+        expect(config.getApiHost()).toBe(CLOUD_API_HOST);
+        expect(config.getApiHost()).toBe(CLOUD_API_HOST);
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Ignoring the API_HOST environment variable'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should prefer PROMPTFOO_CLOUD_API_URL without warning about API_HOST', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      const restoreEnv = mockProcessEnv({
+        API_HOST: 'https://env-file.example.com',
+        PROMPTFOO_CLOUD_API_URL: 'https://self-hosted.example.com',
+      });
+
+      try {
+        const config = new CloudConfig(false);
+
+        expect(config.getApiHost()).toBe('https://self-hosted.example.com');
+        expect(logger.warn).not.toHaveBeenCalled();
       } finally {
         restoreEnv();
       }
