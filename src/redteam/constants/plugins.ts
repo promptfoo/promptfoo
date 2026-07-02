@@ -245,6 +245,7 @@ export const MEDICAL_PLUGINS = [
   'medical:incorrect-knowledge',
   'medical:off-label-use',
   'medical:prioritization-error',
+  'medical:reproductive-health',
   'medical:sycophancy',
 ] as const;
 
@@ -366,6 +367,7 @@ export const ADDITIONAL_PLUGINS = [
   'medical:incorrect-knowledge',
   'medical:off-label-use',
   'medical:prioritization-error',
+  'medical:reproductive-health',
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
@@ -545,6 +547,11 @@ export const PLUGIN_CATEGORIES = {
   realestate: REALESTATE_PLUGINS,
 } as const;
 
+// Medical plugins that have local implementations (not remote-only)
+const MEDICAL_PLUGINS_WITH_LOCAL_IMPL: ReadonlySet<(typeof MEDICAL_PLUGINS)[number]> = new Set([
+  'medical:reproductive-health',
+]);
+
 // Plugins registered via createRemotePlugin() in plugins/index.ts
 // These have no local implementation and always call the remote API
 export const REMOTE_ONLY_PLUGIN_IDS = [
@@ -576,7 +583,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'ssrf',
   'system-prompt-override',
   'wordplay',
-  ...MEDICAL_PLUGINS,
+  ...MEDICAL_PLUGINS.filter((plugin) => !MEDICAL_PLUGINS_WITH_LOCAL_IMPL.has(plugin)),
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,

@@ -3,6 +3,7 @@ import {
   AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
+  REMOTE_ONLY_PLUGIN_IDS,
   STRATEGY_EXEMPT_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
 
@@ -15,6 +16,11 @@ describe('plugins constants', () => {
   it('should have unique values in ALL_PLUGINS', () => {
     const uniquePlugins = new Set(ALL_PLUGINS);
     expect(uniquePlugins.size).toBe(ALL_PLUGINS.length);
+  });
+
+  it('should register medical reproductive health as a local plugin', () => {
+    expect(ALL_PLUGINS).toContain('medical:reproductive-health');
+    expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain('medical:reproductive-health');
   });
 
   describe('DATASET_EXEMPT_PLUGINS', () => {
