@@ -27,6 +27,7 @@ import {
   buildRemoteMaterializedInputVariables,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
+import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../remoteTestProvenance';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
@@ -36,7 +37,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import { getGoalRubric } from './prompts';
 import {
   buildGraderResultAssertion,
@@ -473,7 +474,7 @@ export default class GoatProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
-          Object.keys(attackerVars),
+          getRemoteGeneratedRenderSkipVars(context.test?.metadata, Object.keys(attackerVars)),
         );
 
         messages.push({

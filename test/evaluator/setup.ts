@@ -40,6 +40,9 @@ function mockTransformVars(code: string, input: any, context?: any) {
   if (code.includes('{ ...vars') && code.includes('vars.age + 5')) {
     return { ...input, age: (input.age ?? 0) + 5 };
   }
+  if (code.includes('{ ...vars') && code.includes('copiedAttack: vars.prompt')) {
+    return { ...input, copiedAttack: input.prompt };
+  }
   if (code.includes('return {') && code.includes('context.uuid')) {
     return {
       ...input,

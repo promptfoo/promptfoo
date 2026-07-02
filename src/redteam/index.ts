@@ -47,6 +47,11 @@ import {
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
 import {
+  getRemoteGeneratedTestProvenance,
+  type RemoteGeneratedTestProvenance,
+  setRemoteGeneratedTestProvenance,
+} from './remoteTestProvenance';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -54,6 +59,7 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
+import { RemoteRedteamAssertionContractError } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -72,6 +78,62 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
+
+function mergeRemoteGeneratedTestProvenance(
+  left: RemoteGeneratedTestProvenance | undefined,
+  right: RemoteGeneratedTestProvenance,
+): RemoteGeneratedTestProvenance {
+  return {
+    metadata: [...new Set([...(left?.metadata ?? []), ...right.metadata])],
+    vars: [...new Set([...(left?.vars ?? []), ...right.vars])],
+    ...((left?.unsafeRenderVars?.length ?? 0) > 0 || (right.unsafeRenderVars?.length ?? 0) > 0
+      ? {
+          unsafeRenderVars: [
+            ...new Set([...(left?.unsafeRenderVars ?? []), ...(right.unsafeRenderVars ?? [])]),
+          ],
+        }
+      : {}),
+  };
+}
+
+type StrategyRemoteProvenance = {
+  byPlugin: Map<string, RemoteGeneratedTestProvenance>;
+  fallback: RemoteGeneratedTestProvenance | undefined;
+};
+
+function collectStrategyRemoteProvenance(
+  testCases: TestCaseWithPlugin[],
+): StrategyRemoteProvenance {
+  const byPlugin = new Map<string, RemoteGeneratedTestProvenance>();
+  let fallback: RemoteGeneratedTestProvenance | undefined;
+  for (const testCase of testCases) {
+    const provenance = getRemoteGeneratedTestProvenance(testCase.metadata);
+    if (!provenance) {
+      continue;
+    }
+    fallback = mergeRemoteGeneratedTestProvenance(fallback, provenance);
+    const pluginId = testCase.metadata.pluginId;
+    byPlugin.set(pluginId, mergeRemoteGeneratedTestProvenance(byPlugin.get(pluginId), provenance));
+  }
+  return { byPlugin, fallback };
+}
+
+function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
+  metadata: T,
+  vars: TestCase['vars'],
+  source: StrategyRemoteProvenance,
+): T {
+  const pluginId = metadata.pluginId;
+  const provenance =
+    getRemoteGeneratedTestProvenance(metadata) ??
+    (typeof pluginId === 'string' ? source.byPlugin.get(pluginId) : source.fallback);
+  const strategyVarNames = Object.keys(vars ?? {});
+  return setRemoteGeneratedTestProvenance(metadata, {
+    metadata: provenance?.metadata ?? [],
+    unsafeRenderVars: strategyVarNames,
+    vars: provenance?.vars.length ? strategyVarNames : [],
+  });
+}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -669,6 +731,8 @@ async function applyStrategies(
       }
     }
 
+    const remoteProvenance = collectStrategyRemoteProvenance(testCasesToProcess);
+
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       testCasesToProcess,
       injectVar,
@@ -721,28 +785,32 @@ async function applyStrategies(
             ...(t?.metadata?.strategyConfig || {}),
           };
 
+          const pluginId = t.metadata?.pluginId;
+          let metadata = {
+            ...(t?.metadata || {}),
+            // Don't set strategyId for retry strategy (it's not user-facing)
+            ...(strategy.id !== 'retry' && {
+              strategyId: t?.metadata?.strategyId || strategy.id,
+            }),
+            ...(pluginId && { pluginId }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
+            ...(inputMaterialization && {
+              inputMaterialization,
+            }),
+            ...(Object.keys(strategyConfig).length > 0 && {
+              strategyConfig,
+            }),
+            ...getMaterializedMultiInputPromptMetadata(vars),
+          };
+          metadata = propagateStrategyRemoteProvenance(metadata, vars, remoteProvenance);
+
           return {
             ...t,
             vars,
-            metadata: {
-              ...(t?.metadata || {}),
-              // Don't set strategyId for retry strategy (it's not user-facing)
-              ...(strategy.id !== 'retry' && {
-                strategyId: t?.metadata?.strategyId || strategy.id,
-              }),
-              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-              ...(t?.metadata?.pluginConfig && {
-                pluginConfig: t.metadata.pluginConfig,
-              }),
-              ...(inputMaterialization && {
-                inputMaterialization,
-              }),
-              ...(Object.keys(strategyConfig).length > 0 && {
-                strategyConfig,
-              }),
-              ...getMaterializedMultiInputPromptMetadata(vars),
-            },
-          };
+            metadata,
+          } as TestCaseWithPlugin;
         }),
       )),
     );
@@ -946,6 +1014,12 @@ export function calculateTotalTests(
  */
 function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
   return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
+}
+
+function rethrowRemoteRedteamAssertionContractError(reason: unknown): void {
+  if (reason instanceof RemoteRedteamAssertionContractError) {
+    throw reason;
+  }
 }
 
 /**
@@ -1316,6 +1390,13 @@ export async function synthesize({
     // Use totalTests to include both plugin and strategy tests in progress tracking
     progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
+  const stopProgressBar = () => {
+    progressBar?.stop();
+    if (progressBar) {
+      // Newline after progress bar to avoid overlap
+      logger.info('');
+    }
+  };
 
   // Replace progress bar updates with logger calls when in web UI
   if (showProgressBar) {
@@ -1340,7 +1421,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+  const pluginGeneration = async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1442,6 +1523,7 @@ export async function synthesize({
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
+          rethrowRemoteRedteamAssertionContractError(result.reason);
           const lang = languages[index];
           // Handle rejected promise
           logger.warn(
@@ -1631,7 +1713,10 @@ export async function synthesize({
         if (definedLanguages.length > 1) {
           for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
             const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
-            pluginResults[displayId] = { requested: result.requested, generated: result.generated };
+            pluginResults[displayId] = {
+              requested: result.requested,
+              generated: result.generated,
+            };
           }
         } else {
           pluginResults[baseDisplayId] = {
@@ -1653,6 +1738,12 @@ export async function synthesize({
       progressBar?.increment(plugin.numTests);
     }
   });
+  try {
+    await pluginGeneration;
+  } catch (error) {
+    stopProgressBar();
+    throw error;
+  }
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
@@ -1720,11 +1811,7 @@ export async function synthesize({
   checkAbort();
 
   progressBar?.update({ task: 'Done.' });
-  progressBar?.stop();
-  if (progressBar) {
-    // Newline after progress bar to avoid overlap
-    logger.info('');
-  }
+  stopProgressBar();
 
   logger.info(generateReport(pluginResults, strategyResults));
 

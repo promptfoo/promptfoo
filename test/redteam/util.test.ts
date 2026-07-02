@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
+  getRemoteGeneratedTestProvenance,
+  getSessionId,
+  setRemoteGeneratedTestProvenance,
+  trustRemoteGeneratedTestVars,
+} from '../../src/redteam/remoteTestProvenance';
+import {
   extractAllPromptsFromTags,
   extractGoalFromPrompt,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   extractVariablesFromJson,
-  getSessionId,
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
@@ -18,6 +23,46 @@ import { mockProcessEnv } from '../util/utils';
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
 vi.mock('../../src/cache');
+
+describe('remote generated test provenance', () => {
+  it('preserves distinct verifier and render provenance', () => {
+    const metadata = setRemoteGeneratedTestProvenance(
+      { pluginId: 'ssrf' },
+      {
+        metadata: ['remoteEvidence'],
+        unsafeRenderVars: ['prompt'],
+        vars: ['prompt', 'remoteControl'],
+      },
+    );
+
+    expect(getRemoteGeneratedTestProvenance(metadata)).toEqual({
+      metadata: ['remoteEvidence'],
+      unsafeRenderVars: ['prompt'],
+      vars: ['prompt', 'remoteControl'],
+    });
+  });
+
+  it('removes trusted context overrides from both variable provenance lists', () => {
+    const metadata = setRemoteGeneratedTestProvenance(
+      {},
+      {
+        metadata: [],
+        unsafeRenderVars: ['prompt', 'copiedAttack'],
+        vars: ['prompt', 'remoteControl'],
+      },
+    );
+
+    expect(
+      getRemoteGeneratedTestProvenance(
+        trustRemoteGeneratedTestVars(metadata, ['prompt', 'remoteControl']),
+      ),
+    ).toEqual({
+      metadata: [],
+      unsafeRenderVars: ['copiedAttack'],
+      vars: [],
+    });
+  });
+});
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {

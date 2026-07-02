@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -22,6 +22,7 @@ import {
 import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
+import { UnsupportedRemoteRedteamAssertionsError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
@@ -69,7 +70,7 @@ describe('synthesize', () => {
     id: () => 'test-provider',
   };
 
-  afterAll(() => {
+  afterEach(() => {
     vi.restoreAllMocks();
   });
 
@@ -258,6 +259,39 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should stop synthesis when remote generation returns unsupported redteam graders', async () => {
+      const stopProgressBar = vi.fn();
+      vi.mocked(cliProgress.SingleBar).mockImplementationOnce(function () {
+        return {
+          increment: vi.fn(),
+          start: vi.fn(),
+          stop: stopProgressBar,
+          update: vi.fn(),
+        } as any;
+      });
+      const mockPluginAction = vi
+        .fn()
+        .mockRejectedValue(
+          new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+            'promptfoo:redteam:future-remote-plugin',
+          ]),
+        );
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'ssrf' });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'ssrf', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+          showProgressBar: true,
+        }),
+      ).rejects.toThrow(UnsupportedRemoteRedteamAssertionsError);
+      expect(stopProgressBar).toHaveBeenCalledOnce();
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
@@ -1113,6 +1147,123 @@ describe('synthesize', () => {
           }),
         ]),
       );
+    });
+
+    it('should propagate unsafe remote render vars through arbitrary custom strategy outputs', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { query: attack },
+          metadata: {
+            __promptfooRemoteGenerated: {
+              metadata: [],
+              unsafeRenderVars: ['query'],
+              vars: [],
+            },
+            pluginId: 'test-plugin',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockCustomAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase) => ({
+          ...testCase,
+          vars: {
+            query: 'safe transformed payload',
+            copiedAttack: testCase.vars.query,
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return [{ id: 'custom', action: mockCustomAction }].find(predicate);
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{query}}'],
+        strategies: [{ id: 'custom' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'custom',
+      );
+      expect(strategyTestCase?.vars).toEqual({
+        query: 'safe transformed payload',
+        copiedAttack: attack,
+      });
+      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['query', 'copiedAttack'],
+        vars: [],
+      });
+    });
+
+    it('should mark fresh strategy materialization variables as unsafe render data', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const inputs = {
+        document: { description: 'Document text', type: 'text' },
+        question: { description: 'Question text', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            pluginConfig: { inputs },
+            pluginId: 'test-plugin',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ document: 'safe document', question: 'safe' }),
+            document: 'safe document',
+            question: 'safe',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase) => ({
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [MULTI_INPUT_VAR]: JSON.stringify({ document: attack, question: 'safe' }),
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:composite',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Review a document',
+        strategies: [{ id: 'jailbreak:composite' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:composite',
+      );
+      expect(strategyTestCase?.vars?.document).toBe(attack);
+      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
+        metadata: [],
+        unsafeRenderVars: [MULTI_INPUT_VAR, 'document', 'question'],
+        vars: [],
+      });
     });
 
     it('should fall back to base strategy ID for custom variants', async () => {

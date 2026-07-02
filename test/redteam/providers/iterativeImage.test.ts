@@ -404,6 +404,7 @@ describe('RedteamIterativeImageProvider', () => {
     await provider.callApi('test', context);
 
     const renderedVars = vi.mocked(renderPrompt).mock.calls[0][1];
+    const skippedVars = vi.mocked(renderPrompt).mock.calls[0][4];
     expect(renderedVars.document).toMatch(
       /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
     );
@@ -414,6 +415,7 @@ describe('RedteamIterativeImageProvider', () => {
         question: 'Please summarize the uploaded document.',
       }),
     );
+    expect(skippedVars).toEqual(expect.arrayContaining(['goal', 'document', 'question']));
 
     const targetContext = vi.mocked(getTargetResponse).mock.calls[0][2];
     expect(targetContext?.vars?.document).toBe(renderedVars.document);

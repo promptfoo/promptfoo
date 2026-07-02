@@ -88,7 +88,9 @@ export const PluginConfigSchema = z.object({
   // Indirect Prompt Injection
   indirectInjectionVar: z.string().optional(),
   // RAG Poisoning
-  intendedResults: z.array(z.string()).optional(),
+  intendedResults: z
+    .array(z.string().refine((value) => value.trim().length > 0, 'Expected a non-empty string'))
+    .optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),
@@ -487,6 +489,44 @@ export class PartialGenerationError extends Error {
     super(message);
     this.name = 'PartialGenerationError';
     this.failedPlugins = failedPlugins;
+  }
+}
+
+/**
+ * Raised when remote generation returns redteam assertions that this client
+ * cannot grade. Continuing would create tests that cannot be evaluated
+ * correctly, so callers must treat this as a hard compatibility failure.
+ */
+export class RemoteRedteamAssertionContractError extends Error {
+  public readonly isRemoteRedteamAssertionContractError = true;
+}
+
+export class UnsupportedRemoteRedteamAssertionsError extends RemoteRedteamAssertionContractError {
+  public readonly pluginId: string;
+  public readonly assertionTypes: string[];
+
+  constructor(pluginId: string, assertionTypes: string[]) {
+    const sortedAssertionTypes = [...assertionTypes].sort();
+    super(
+      `Remote test generation for ${pluginId} returned unsupported assertion type(s): ${sortedAssertionTypes.join(', ')}. This Promptfoo client cannot safely evaluate these remote-generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+    );
+    this.name = 'UnsupportedRemoteRedteamAssertionsError';
+    this.pluginId = pluginId;
+    this.assertionTypes = sortedAssertionTypes;
+  }
+}
+
+export class InvalidRemoteRedteamAssertionPayloadError extends RemoteRedteamAssertionContractError {
+  public readonly pluginId: string;
+  public readonly assertionType: string;
+
+  constructor(pluginId: string, assertionType: string, detail: string) {
+    super(
+      `Remote test generation for ${pluginId} returned an invalid ${assertionType} assertion payload: ${detail}. This Promptfoo client cannot safely evaluate these generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+    );
+    this.name = 'InvalidRemoteRedteamAssertionPayloadError';
+    this.pluginId = pluginId;
+    this.assertionType = assertionType;
   }
 }
 

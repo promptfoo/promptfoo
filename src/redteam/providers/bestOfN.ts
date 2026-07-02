@@ -15,8 +15,8 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../remoteTestProvenance';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { getSessionId } from '../util';
 
 import type {
   ApiProvider,
@@ -160,7 +160,7 @@ export default class BestOfNProvider implements ApiProvider {
             targetVars,
             context.filters,
             targetProvider,
-            [this.config.injectVar], // Skip special loading and template rendering for the injection variable
+            getRemoteGeneratedRenderSkipVars(context.test?.metadata, [this.config.injectVar]),
           );
 
           try {

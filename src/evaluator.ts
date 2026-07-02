@@ -30,8 +30,13 @@ import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
+import {
+  getChangedVarNames,
+  getRemoteGeneratedRenderSkipVars,
+  getSessionId,
+  propagateRemoteGeneratedVarProvenance,
+} from './redteam/remoteTestProvenance';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
-import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -459,6 +464,60 @@ function shouldSkipRedteamInjectVar(
   return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
 }
 
+// Generated configs created before remote provenance tracking still need the
+// known built-in display variables protected during evaluation.
+const LEGACY_REDTEAM_STRATEGY_DERIVED_INJECT_VARS: Record<string, string[]> = {
+  image: ['image_text'],
+  'indirect-web-pwn': ['embeddedInjection'],
+  video: ['video_text'],
+};
+
+function getLegacyRedteamStrategyDerivedInjectVars(test: AtomicTestCase): string[] {
+  const strategyIds = new Set<string>();
+  const strategyId = test.metadata?.strategyId;
+  if (typeof strategyId === 'string') {
+    for (const segment of strategyId.split('/')) {
+      strategyIds.add(segment);
+    }
+  }
+
+  const strategyConfig = test.metadata?.strategyConfig;
+  if (strategyConfig && typeof strategyConfig === 'object' && !Array.isArray(strategyConfig)) {
+    const steps = (strategyConfig as { steps?: unknown }).steps;
+    if (Array.isArray(steps)) {
+      for (const step of steps) {
+        if (typeof step === 'string') {
+          strategyIds.add(step);
+        } else if (
+          step &&
+          typeof step === 'object' &&
+          'id' in step &&
+          typeof step.id === 'string'
+        ) {
+          strategyIds.add(step.id);
+        }
+      }
+    }
+  }
+
+  return [...strategyIds].flatMap((id) => LEGACY_REDTEAM_STRATEGY_DERIVED_INJECT_VARS[id] ?? []);
+}
+
+function getRedteamSkipRenderVars(
+  test: AtomicTestCase,
+  prompt: Prompt,
+  testSuite: TestSuite | undefined,
+  isRedteam: boolean,
+): string[] | undefined {
+  if (!shouldSkipRedteamInjectVar(test, testSuite, isRedteam)) {
+    return undefined;
+  }
+  return getRemoteGeneratedRenderSkipVars(test.metadata, [
+    getRedteamInjectVar(test, prompt, testSuite),
+    ...getLegacyRedteamStrategyDerivedInjectVars(test),
+  ]);
+}
+
 function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
   if (testSuite?.redteam?.injectVar) {
     return testSuite.redteam.injectVar;
@@ -805,9 +864,7 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+  const skipRenderVars = getRedteamSkipRenderVars(test, promptForRender, testSuite, isRedteam);
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
@@ -2223,6 +2280,7 @@ async function applyInputTransform(
     return;
   }
 
+  const varsBeforeTransform = { ...testCase.vars };
   const transformedVars = await transform(
     inputTransform,
     testCase.vars,
@@ -2238,6 +2296,10 @@ async function applyInputTransform(
     'Transform function did not return a valid object',
   );
   testCase.vars = { ...testCase.vars, ...transformedVars };
+  testCase.metadata = propagateRemoteGeneratedVarProvenance(
+    testCase.metadata ?? {},
+    getChangedVarNames(varsBeforeTransform, testCase.vars ?? {}),
+  );
 }
 
 async function buildRunEvalOptions({

@@ -76,6 +76,10 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
   isBasicRefusal: mockIsBasicRefusal,
+}));
+
+vi.mock('../../../../src/redteam/remoteTestProvenance', async () => ({
+  ...(await vi.importActual('../../../../src/redteam/remoteTestProvenance')),
   getSessionId: mockGetSessionId,
 }));
 
@@ -1660,6 +1664,7 @@ describe('HydraProvider', () => {
         document: docxDataUri,
         question: 'What changed?',
       });
+      expect(renderCalls[0][4]).toEqual(expect.arrayContaining(['input', 'document', 'question']));
     });
 
     it('should preserve the existing DOCX var when remote materialization omits it', async () => {
@@ -1844,7 +1849,7 @@ describe('HydraProvider', () => {
 
   describe('callApi() - metadata output', () => {
     it('should return complete metadata', async () => {
-      const { getSessionId } = await import('../../../../src/redteam/util');
+      const { getSessionId } = await import('../../../../src/redteam/remoteTestProvenance');
       vi.mocked(getSessionId).mockReturnValue('session-123');
 
       mockAgentProvider.callApi.mockResolvedValue({

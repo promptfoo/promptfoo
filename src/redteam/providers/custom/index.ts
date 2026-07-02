@@ -11,6 +11,7 @@ import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
+import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -18,7 +19,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
@@ -813,7 +814,7 @@ export class CustomProvider implements ApiProvider {
       { ...vars, [this.config.injectVar]: attackPrompt },
       filters,
       provider,
-      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      getRemoteGeneratedRenderSkipVars(context?.test?.metadata, [this.config.injectVar]),
     );
 
     try {
