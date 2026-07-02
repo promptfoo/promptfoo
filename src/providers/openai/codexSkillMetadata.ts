@@ -77,8 +77,10 @@ export function extractCodexSkillPathCandidates(
       continue;
     }
 
-    const matchingRoot = skillRootPrefixes.find((prefix) =>
-      normalizedPath.startsWith(`${prefix}/skills/`),
+    const matchingRoot = skillRootPrefixes.find(
+      (prefix) =>
+        normalizedPath.startsWith(`${prefix}/skills/`) ||
+        normalizedPath.startsWith(`${prefix}/plugins/cache/`),
     );
     if (!matchingRoot) {
       continue;
@@ -86,8 +88,12 @@ export function extractCodexSkillPathCandidates(
 
     const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
     const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-    if (customRootMatch && isValidCodexSkillName(customRootMatch[1])) {
-      matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
+    const pluginCacheMatch = relativeSkillPath.match(
+      /^plugins\/cache\/[^/\s]+\/[^/\s]+\/[^/\s]+\/skills\/([^/\s]+)\/SKILL\.md$/,
+    );
+    const skillName = customRootMatch?.[1] ?? pluginCacheMatch?.[1];
+    if (skillName && isValidCodexSkillName(skillName)) {
+      matches.set(normalizedPath, { name: skillName, path: normalizedPath });
     }
   }
 
