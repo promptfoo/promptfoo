@@ -33,10 +33,16 @@ import {
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
+import {
+  addImageSrcComparisonKeys,
+  extractMarkdownImageSources,
+  hasImageSrcComparisonKey,
+  resolveEvalImageOutputSource,
+} from './EvalOutputCell.utils';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import { INLINE_IMAGE_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -115,89 +121,6 @@ export function isVideoProvider(provider: string | undefined): boolean {
   }
   // Check for :video: namespace (OpenAI Sora, Google Veo)
   return provider.includes(':video:');
-}
-
-function getImageDataUriComparisonKey(src: string): string | undefined {
-  const trimmed = src.trim();
-  if (!trimmed.toLowerCase().startsWith('data:')) {
-    return undefined;
-  }
-
-  const commaIndex = trimmed.indexOf(',');
-  if (commaIndex === -1) {
-    return undefined;
-  }
-
-  const metadata = trimmed.slice('data:'.length, commaIndex);
-  const payload = trimmed.slice(commaIndex + 1);
-  const [mimeType = '', ...params] = metadata.split(';').filter(Boolean);
-  const normalizedMimeType = mimeType.toLowerCase();
-  const hasBase64Param = params.some((param) => param.toLowerCase() === 'base64');
-
-  if (
-    hasBase64Param &&
-    (normalizedMimeType.startsWith('image/') || normalizedMimeType === 'application/octet-stream')
-  ) {
-    return `data:image-content;base64,${payload.replace(/\s+/g, '')}`;
-  }
-
-  return undefined;
-}
-
-export function normalizeImageSrcForComparison(src: string): string {
-  const normalized = normalizeMediaText(src.trim());
-  return resolveImageSource(normalized) || normalized;
-}
-
-function getImageSrcComparisonKeys(src: string): string[] {
-  const normalized = normalizeImageSrcForComparison(src);
-  const dataUriKey = getImageDataUriComparisonKey(normalized);
-  return dataUriKey && dataUriKey !== normalized ? [normalized, dataUriKey] : [normalized];
-}
-
-function addImageSrcComparisonKeys(keys: Set<string>, src: string) {
-  for (const key of getImageSrcComparisonKeys(src)) {
-    keys.add(key);
-  }
-}
-
-function hasImageSrcComparisonKey(keys: Set<string>, src: string): boolean {
-  return getImageSrcComparisonKeys(src).some((key) => keys.has(key));
-}
-
-export function extractMarkdownImageSources(markdown: string): string[] {
-  const sources = new Set<string>();
-
-  const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
-  const htmlImageRegex = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
-
-  for (const match of markdown.matchAll(markdownImageRegex)) {
-    const candidate = match[1]?.trim();
-    if (!candidate) {
-      continue;
-    }
-    const unwrapped =
-      candidate.startsWith('<') && candidate.endsWith('>') ? candidate.slice(1, -1) : candidate;
-    sources.add(normalizeImageSrcForComparison(unwrapped));
-  }
-
-  for (const match of markdown.matchAll(htmlImageRegex)) {
-    const candidate = match[1]?.trim();
-    if (!candidate) {
-      continue;
-    }
-    sources.add(normalizeImageSrcForComparison(candidate));
-  }
-
-  return [...sources];
-}
-
-export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
-  if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
-    return image.data;
-  }
-
-  return resolveImageSource(image);
 }
 
 function isImageLikeDataUri(text: string): boolean {
@@ -415,16 +338,19 @@ function renderMarkdownOrJsonNode({
   text,
   normalizedText,
   renderMarkdown,
+  forceRenderMarkdown = false,
   prettifyJson,
   markdownComponents,
 }: {
   text: string;
   normalizedText: string;
   renderMarkdown: boolean;
+  forceRenderMarkdown?: boolean;
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
 }): { node?: React.ReactNode; renderedMarkdownOutput: boolean } {
-  if (!prettifyJson && !renderMarkdown) {
+  const shouldRenderMarkdown = renderMarkdown || forceRenderMarkdown;
+  if (!prettifyJson && !shouldRenderMarkdown) {
     return { node: undefined, renderedMarkdownOutput: false };
   }
 
@@ -442,7 +368,7 @@ function renderMarkdownOrJsonNode({
     }
   }
 
-  if (!renderMarkdown) {
+  if (!shouldRenderMarkdown) {
     return { node: undefined, renderedMarkdownOutput: false };
   }
 
@@ -450,7 +376,7 @@ function renderMarkdownOrJsonNode({
     node: (
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
-        urlTransform={IDENTITY_URL_TRANSFORM}
+        urlTransform={INLINE_IMAGE_URL_TRANSFORM}
         components={markdownComponents}
       >
         {normalizedText}
@@ -463,15 +389,15 @@ function renderMarkdownOrJsonNode({
 function renderStructuredImages({
   node,
   output,
-  normalizedText,
   primaryRenderedImageSrc,
+  markdownImageSources,
   renderedMarkdownOutput,
   toggleLightbox,
 }: {
   node?: React.ReactNode;
   output: EvaluateTableOutput;
-  normalizedText: string;
   primaryRenderedImageSrc?: string;
+  markdownImageSources: string[];
   renderedMarkdownOutput: boolean;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode | undefined {
@@ -484,7 +410,7 @@ function renderStructuredImages({
     addImageSrcComparisonKeys(renderedImageSrcs, primaryRenderedImageSrc);
   }
   if (renderedMarkdownOutput) {
-    for (const source of extractMarkdownImageSources(normalizedText)) {
+    for (const source of markdownImageSources) {
       addImageSrcComparisonKeys(renderedImageSrcs, source);
     }
   }
@@ -554,6 +480,8 @@ function renderOutputNode({
 }): React.ReactNode | undefined {
   let node: React.ReactNode | undefined;
   let renderedMarkdownOutput = false;
+  const markdownImageSources = extractMarkdownImageSources(normalizedText);
+  const shouldPreserveFormattedRendering = markdownImageSources.length > 0;
 
   if (showDiffs && firstOutput) {
     const firstOutputText = stringifyOutputText(firstOutput.text);
@@ -571,7 +499,6 @@ function renderOutputNode({
   }
 
   if (!node) {
-    const shouldPreserveFormattedRendering = extractMarkdownImageSources(normalizedText).length > 0;
     if (searchText && shouldHighlightSearchText && !shouldPreserveFormattedRendering) {
       node = renderHighlightedTextNode(text, searchText) ?? node;
     }
@@ -582,6 +509,7 @@ function renderOutputNode({
       text,
       normalizedText,
       renderMarkdown,
+      forceRenderMarkdown: shouldPreserveFormattedRendering,
       prettifyJson,
       markdownComponents,
     });
@@ -592,8 +520,8 @@ function renderOutputNode({
   return renderStructuredImages({
     node,
     output,
-    normalizedText,
     primaryRenderedImageSrc,
+    markdownImageSources,
     renderedMarkdownOutput,
     toggleLightbox,
   });
@@ -1346,7 +1274,7 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const toggleLightbox = useCallback((url?: string) => {
     setLightboxImage(url ?? null);
-    setLightboxOpen((prev) => !prev);
+    setLightboxOpen(Boolean(url));
   }, []);
 
   // Memoized components object for ReactMarkdown to prevent re-renders.
