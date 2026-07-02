@@ -18,6 +18,7 @@ const mockRun = vi.fn();
 const mockRunStreamed = vi.fn();
 const mockStartThread = vi.fn();
 const mockResumeThread = vi.fn();
+const mockCompatibilityPreflight = vi.hoisted(() => vi.fn());
 
 // Mock thread instance
 const mockThread = {
@@ -52,6 +53,10 @@ vi.mock('../../src/esm', async (importOriginal) => {
 
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
+
+vi.mock('../../src/providers/openai/codexCliCompatibility', () => ({
+  checkCodexCliCompatibility: mockCompatibilityPreflight,
+}));
 
 vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
@@ -123,6 +128,8 @@ describe('OpenAICodexSDKProvider', () => {
     mockResolvePackageEntryPoint.mockReset();
     mockResolvePackageEntryPoint.mockReturnValue('@openai/codex-sdk');
     mockGetTraceparent.mockReturnValue(undefined);
+    mockCompatibilityPreflight.mockReset();
+    mockCompatibilityPreflight.mockResolvedValue(undefined);
 
     // Default mocks
     statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
@@ -2419,12 +2426,44 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
+        expect(mockCompatibilityPreflight).toHaveBeenCalledWith({
+          sdkEntryPoint: '@openai/codex-sdk',
+          codexPathOverride: '/custom/path/to/codex',
+          env: expect.any(Object),
+        });
+        const preflightEnv = mockCompatibilityPreflight.mock.calls[0][0].env;
+        expect(preflightEnv).not.toHaveProperty('CODEX_API_KEY');
+        expect(preflightEnv).not.toHaveProperty('OPENAI_API_KEY');
         expect(MockCodex).toHaveBeenCalledWith(
           expect.objectContaining({
             env: expect.any(Object),
             codexPathOverride: '/custom/path/to/codex',
           }),
         );
+      });
+
+      it('should reject an incompatible SDK and CLI before starting a Codex turn', async () => {
+        mockCompatibilityPreflight.mockRejectedValue(
+          new Error(
+            '@openai/codex-sdk 0.130.0 supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain(
+          '@openai/codex-sdk 0.130.0 supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+        );
+        expect(MockCodex).not.toHaveBeenCalled();
+        expect(mockStartThread).not.toHaveBeenCalled();
+        expect(mockResumeThread).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(mockRunStreamed).not.toHaveBeenCalled();
       });
     });
 
