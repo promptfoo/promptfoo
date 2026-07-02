@@ -8,6 +8,22 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
+const FILE_URL_FUNCTION_EXTENSIONS = [
+  ...JAVASCRIPT_EXTENSIONS.map((extension) => `.${extension}`),
+  '.py',
+  '.rb',
+];
+const FUNCTION_REFERENCE_PATTERN =
+  /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|::)[A-Za-z_$][A-Za-z0-9_$]*)*$/;
+const RUBY_FUNCTION_REFERENCE_PATTERN =
+  /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|::)[A-Za-z_$][A-Za-z0-9_$]*)*[!?]?$/;
+
+function isFunctionReference(candidate: string, extension: string): boolean {
+  return (extension === '.rb' ? RUBY_FUNCTION_REFERENCE_PATTERN : FUNCTION_REFERENCE_PATTERN).test(
+    candidate,
+  );
+}
+
 interface LoadFunctionOptions {
   filePath: string;
   functionName?: string;
@@ -99,7 +115,17 @@ function normalizeFilePath(filePath: string): string {
 }
 
 /**
- * Extracts the file path and function name from a file:// URL
+ * Extracts the file path and function name from a file:// URL.
+ * Convention: file://path/to/file.ext:functionName
+ *
+ * The function name suffix is only recognized when:
+ * - The colon is not at index 1 (to skip Windows drive letters like C:)
+ * - The part after the colon is a valid function reference (identifier or dotted path)
+ * - Ruby references may additionally end with `?` or `!`
+ *
+ * This means paths containing colons (e.g., file:///tmp/assert:one.js) are
+ * treated as literal filenames when the suffix doesn't look like an identifier.
+ *
  * @param fileUrl The file:// URL (e.g., "file://path/to/file.js:functionName")
  * @returns The file path and optional function name
  */
@@ -109,23 +135,24 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  const colonIndexes = [...urlWithoutProtocol.matchAll(/:/g)]
+    .map((match) => match.index)
+    .filter((index): index is number => index !== undefined && index > 1);
 
-  if (lastColonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+  for (const colonIndex of colonIndexes.reverse()) {
+    const filePath = urlWithoutProtocol.slice(0, colonIndex);
+    const candidateFn = urlWithoutProtocol.slice(colonIndex + 1);
+    const extension = path.extname(filePath).toLowerCase();
 
-    // Only executable function files support a :functionName suffix. This preserves
-    // colons that are part of a valid file or directory name on POSIX systems.
-    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
+    if (
+      FILE_URL_FUNCTION_EXTENSIONS.includes(extension) &&
+      isFunctionReference(candidateFn, extension)
+    ) {
       return {
-        filePath: normalizeFilePath(urlWithoutProtocol),
+        filePath: normalizeFilePath(filePath),
+        functionName: candidateFn,
       };
     }
-
-    return {
-      filePath: normalizeFilePath(candidateFilePath),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
   }
 
   return {
