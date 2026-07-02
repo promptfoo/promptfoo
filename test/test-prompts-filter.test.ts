@@ -232,6 +232,41 @@ describe('validateTestPromptReferences', () => {
       );
     });
 
+    it('should point at the prompts entry when the ref string also appears in vars', () => {
+      const tests: TestCase[] = [
+        {
+          description: 'Missing prompt',
+          vars: { question: 'Missing Prompt' },
+          prompts: ['Missing Prompt'],
+        },
+      ];
+      expect(() =>
+        validateTestPromptReferences(tests, prompts, undefined, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: [
+                'prompts:',
+                '  - id: prompt-a',
+                '    label: Factual Assistant',
+                'tests:',
+                '  - description: Missing prompt',
+                '    vars:',
+                '      question: Missing Prompt',
+                '    assert:',
+                '      - type: contains',
+                '        value: Missing Prompt',
+                '    prompts:',
+                '      - Missing Prompt',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:12:9: Test #1 \("Missing prompt"\) references prompt "Missing Prompt" which does not exist/,
+      );
+    });
+
     it('should include YAML location when source is provided for defaultTest prompt references', () => {
       const defaultTest: Partial<TestCase> = { prompts: ['Missing Default'] };
       expect(() =>

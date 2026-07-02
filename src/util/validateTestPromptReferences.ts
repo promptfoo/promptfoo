@@ -37,11 +37,21 @@ function unquote(value: string): string {
 
 type SectionItem = { description?: string; location?: string };
 
+function refLocation(
+  source: PromptReferenceSource,
+  line: string,
+  lineNumber: number,
+  ref: string,
+): string | undefined {
+  const column = line.indexOf(ref);
+  return column === -1 ? undefined : `${source.path}:${lineNumber}:${column + 1}`;
+}
+
 /**
  * Split a source's target section into list items, recording each item's
- * description and the first line containing `ref`. Nested prompt refs always
- * indent deeper than item markers, so item boundaries are list markers at the
- * section's first list indent.
+ * description and the first line within its `prompts:` block containing
+ * `ref`. Nested prompt refs always indent deeper than item markers, so item
+ * boundaries are list markers at the section's first list indent.
  */
 function collectSectionItems(
   source: PromptReferenceSource,
@@ -51,6 +61,7 @@ function collectSectionItems(
   const lines = source.content.split(/\r?\n/);
   let inSection = false;
   let itemIndent: number | undefined;
+  let promptsIndent: number | undefined;
   const items: SectionItem[] = [{}];
 
   for (let i = 0; i < lines.length; i++) {
@@ -65,10 +76,7 @@ function collectSectionItems(
     if (!inSection) {
       if (indent === 0 && isYamlKey(trimmed, section)) {
         inSection = true;
-        const column = line.indexOf(ref);
-        if (column !== -1) {
-          items[0].location = `${source.path}:${i + 1}:${column + 1}`;
-        }
+        items[0].location = refLocation(source, line, i + 1, ref);
       }
       continue;
     }
@@ -89,10 +97,15 @@ function collectSectionItems(
       item.description ??= unquote(stripped.slice('description:'.length).trim());
       continue;
     }
-    const column = line.indexOf(ref);
-    if (column !== -1) {
-      item.location ??= `${source.path}:${i + 1}:${column + 1}`;
+    // Only search inside the item's `prompts:` block so the same string in
+    // vars or assertions doesn't steal the location.
+    if (isYamlKey(stripped, 'prompts')) {
+      promptsIndent = indent + (trimmed.length - stripped.length);
+    } else if (promptsIndent === undefined || indent <= promptsIndent) {
+      promptsIndent = undefined;
+      continue;
     }
+    item.location ??= refLocation(source, line, i + 1, ref);
   }
 
   return items;
