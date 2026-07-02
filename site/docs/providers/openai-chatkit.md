@@ -365,7 +365,9 @@ Use [red team plugins](/docs/red-team/) to test whether your workflow is vulnera
 ```yaml
 redteam:
   plugins:
+    - ascii-smuggling
     - hijacking
+    - prompt-extraction
   strategies:
     - jailbreak
     - jailbreak-templates

@@ -173,6 +173,8 @@ redteam:
   plugins:
     - debug-access
     - harmful:cybercrime
+    - indirect-prompt-injection
+    - mcp
     - shell-injection
     - sql-injection
     - ssrf

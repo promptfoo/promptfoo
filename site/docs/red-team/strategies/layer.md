@@ -278,9 +278,9 @@ redteam:
           - base64 # Finally base64 encode
 ```
 
-### Injection Chain
+### Jailbreak Template Chain
 
-Combine prompt injection with encoding:
+Combine jailbreak templates with encoding:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:

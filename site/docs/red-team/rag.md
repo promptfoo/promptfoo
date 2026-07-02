@@ -46,13 +46,18 @@ redteam:
     - 'harmful'
     - 'pii:direct'
     - 'rbac'
+  strategies:
+    - 'jailbreak-templates'
+    - 'jailbreak'
 ```
 
-The `indirect-prompt-injection` plugin injects adversarial instructions into the variable named by `indirectInjectionVar` (your retrieved-context field) to test whether the RAG pipeline executes them. The configuration also includes supporting plugins:
+The `indirect-prompt-injection` plugin injects adversarial instructions into the variable named by `indirectInjectionVar` (your retrieved-context field) to test whether the RAG pipeline executes them. The value of `indirectInjectionVar` must match a variable in your prompt template (e.g. a `{{context}}` variable that holds retrieved documents) — see the [plugin documentation](/docs/red-team/plugins/indirect-prompt-injection/) for a complete example. The configuration also includes supporting plugins:
 
 - `harmful`: Tests for harmful outputs such as child exploitation, racism, etc.
 - `pii:direct`: Checks if the model directly discloses personally identifiable information.
 - `rbac`: Verifies that the model adheres to role-based access control for tool use.
+
+The `jailbreak-templates` and `jailbreak` strategies wrap the supporting plugins' probes in adversarial user input, covering direct injections like the example above. For attacks planted in the knowledge base itself, see [Context Injection](#context-injection) below.
 
 See [setup](/docs/red-team/quickstart/) for more details on how to run red teams.
 
