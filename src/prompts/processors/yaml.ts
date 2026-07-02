@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 
-import * as yaml from 'js-yaml';
 import logger from '../../logger';
 import { maybeLoadConfigFromExternalFile } from '../../util/file';
+import { loadYaml } from '../../util/yamlLoad';
 
 import type { Prompt } from '../../types/index';
 
@@ -22,7 +22,7 @@ export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prom
   let maybeParsed: string | undefined = fileContents;
   try {
     // Parse the YAML content
-    const parsed = fileContents.trim() === '' ? undefined : yaml.load(fileContents);
+    const parsed = loadYaml(fileContents);
 
     // Recursively resolve any file:// references in the parsed structure
     const resolved = maybeLoadConfigFromExternalFile(parsed);

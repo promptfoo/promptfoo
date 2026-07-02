@@ -1,7 +1,6 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import * as yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
@@ -9,6 +8,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { loadYaml } from '../../util/yamlLoad';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -438,7 +438,7 @@ async function translateBatchCore(
     }
 
     try {
-      const yamlResult = yaml.load(result.output) as any;
+      const yamlResult = loadYaml(result.output) as any;
       if (yamlResult && typeof yamlResult === 'object') {
         const translations: Record<string, string> = {};
         for (const lang of languages) {

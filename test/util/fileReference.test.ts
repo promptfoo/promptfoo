@@ -120,7 +120,7 @@ describe('fileReference utility functions', () => {
       const result = await loadFileReference(fileRef);
 
       expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
-      expect(yaml.load).toHaveBeenCalledWith(fileContent);
+      expect(yaml.load).toHaveBeenCalledWith(fileContent, expect.any(Object));
       expect(result).toEqual(parsedContent);
     });
 

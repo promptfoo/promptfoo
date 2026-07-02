@@ -1,6 +1,6 @@
-import * as yaml from 'js-yaml';
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
+import { loadYaml } from '../util/yamlLoad';
 import type { ValidateFunction } from 'ajv';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -30,7 +30,7 @@ export function handleIsJson({
         invariant(schema, 'is-json references a file that does not export a JSON schema');
         validate = getAjv().compile(schema as object);
       } else {
-        const scheme = yaml.load(renderedValue) as object;
+        const scheme = loadYaml(renderedValue) as object;
         validate = getAjv().compile(scheme);
       }
     } else if (typeof renderedValue === 'object') {
@@ -82,7 +82,7 @@ export function handleContainsJson({
           invariant(schema, 'contains-json references a file that does not export a JSON schema');
           validate = getAjv().compile(schema as object);
         } else {
-          const scheme = yaml.load(renderedValue) as object;
+          const scheme = loadYaml(renderedValue) as object;
           validate = getAjv().compile(scheme);
         }
       } else if (typeof renderedValue === 'object') {

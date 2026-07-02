@@ -9,6 +9,7 @@ import { useToast } from '@app/hooks/useToast';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
+import { loadYaml } from '@app/utils/yaml';
 import * as yaml from 'js-yaml';
 import type { UnifiedConfig } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
@@ -53,7 +54,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     try {
       // Remove the schema comment for parsing if it exists
       const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
-      const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
+      const parsedConfig = loadYaml(contentForParsing) as Record<string, unknown>;
 
       if (parsedConfig && typeof parsedConfig === 'object') {
         // Simply update the config with the parsed YAML

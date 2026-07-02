@@ -2021,7 +2021,7 @@ describe('resolvePluginConfig', () => {
     expect(result).toEqual({ key: yamlContent });
     expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
     expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content', expect.any(Object));
   });
 
   it('should resolve JSON file references', () => {

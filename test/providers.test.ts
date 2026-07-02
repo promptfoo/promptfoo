@@ -93,7 +93,7 @@ describe('loadApiProvider', () => {
     });
 
     expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.yaml'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content', expect.any(Object));
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
@@ -113,7 +113,7 @@ describe('loadApiProvider', () => {
     });
 
     expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.json'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent));
+    expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent), expect.any(Object));
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
@@ -979,7 +979,7 @@ describe('loadApiProvider', () => {
     expect(providers[0]).toBeDefined();
     expect(providers[1]).toBeDefined();
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.yaml'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content', expect.any(Object));
   });
 
   it('should handle absolute file paths', async () => {
@@ -1177,7 +1177,7 @@ describe('loadApiProviders', () => {
 
     expect(providers).toHaveLength(1);
     expect(fs.readFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content', expect.any(Object));
   });
 
   it('should load multiple providers from a file specified in a providers array', async () => {
@@ -1213,7 +1213,7 @@ describe('loadApiProviders', () => {
 
     // Verify file was read correctly
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('providers.yaml'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content', expect.any(Object));
   });
 
   it('should handle nested arrays of providers from multiple file references', async () => {

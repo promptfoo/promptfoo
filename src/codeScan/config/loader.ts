@@ -7,8 +7,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import * as yaml from 'js-yaml';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
+import { loadYaml } from '../../util/yamlLoad';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
 /**
@@ -36,7 +36,7 @@ export function loadConfig(configPath: string): Config {
   // Parse YAML
   let rawConfig: unknown;
   try {
-    rawConfig = yaml.load(fileContents);
+    rawConfig = loadYaml(fileContents);
   } catch (error) {
     throw new ConfigLoadError(
       `Failed to parse YAML: ${error instanceof Error ? error.message : String(error)}`,

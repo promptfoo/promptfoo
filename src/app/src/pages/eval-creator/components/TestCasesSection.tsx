@@ -142,8 +142,8 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
           } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
             // Handle YAML files
-            const yaml = await import('js-yaml');
-            const parsedYaml = yaml.load(text);
+            const { loadYaml } = await import('@app/utils/yaml');
+            const parsedYaml = loadYaml(text);
 
             if (Array.isArray(parsedYaml)) {
               // Validate array of test cases

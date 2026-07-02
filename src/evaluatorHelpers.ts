@@ -1,7 +1,6 @@
 import fs from 'fs/promises';
 import * as path from 'path';
 
-import * as yaml from 'js-yaml';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -29,6 +28,7 @@ import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+import { loadYaml } from './util/yamlLoad';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
@@ -296,7 +296,7 @@ export async function renderPrompt(
         vars[varName] = pythonScriptOutput.output.trim();
       } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
         vars[varName] = JSON.stringify(
-          yaml.load(await fs.readFile(filePath, 'utf8')) as string | object,
+          loadYaml(await fs.readFile(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
         telemetry.record('feature_used', {

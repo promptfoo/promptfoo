@@ -6,7 +6,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import * as yaml from 'js-yaml';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -47,6 +46,7 @@ import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
@@ -331,13 +331,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const configContents = await fsPromises.readFile(configPath, 'utf-8');
-    const rawConfig =
-      configContents.trim() === ''
-        ? {}
-        : (yaml.load(configContents, {
-            // Preserve js-yaml v4's support for YAML merge keys in user configs.
-            schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
-          }) ?? {});
+    const rawConfig = loadYaml(configContents) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.

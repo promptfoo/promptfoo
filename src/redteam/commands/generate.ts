@@ -43,6 +43,7 @@ import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
 import { isUuid } from '../../util/uuid';
+import { loadYaml } from '../../util/yamlLoad';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
   ADDITIONAL_STRATEGIES,
@@ -327,7 +328,7 @@ async function doGenerateRedteamInternal(
     configPath &&
     (await pathExists(configPath))
   ) {
-    const redteamContent = yaml.load(
+    const redteamContent = loadYaml(
       await fs.readFile(outputPath, 'utf8'),
     ) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
@@ -848,7 +849,7 @@ async function doGenerateRedteamInternal(
       return {};
     } else if (options.output) {
       const existingYaml = configPath
-        ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
+        ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
@@ -905,7 +906,7 @@ async function doGenerateRedteamInternal(
       }
       printBorder();
     } else if (options.write && configPath) {
-      const existingConfig = yaml.load(
+      const existingConfig = loadYaml(
         await fs.readFile(configPath, 'utf8'),
       ) as Partial<UnifiedConfig>;
       const existingTests = existingConfig.tests;

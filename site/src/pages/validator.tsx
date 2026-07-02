@@ -59,8 +59,14 @@ const ConfigValidator = () => {
       let parsedConfig;
       if (value.trim().startsWith('{')) {
         parsedConfig = JSON.parse(value);
+      } else if (value.trim() === '') {
+        // js-yaml v5 throws on empty input; treat it like an empty config.
+        parsedConfig = undefined;
       } else {
-        parsedConfig = yaml.load(value);
+        parsedConfig = yaml.load(value, {
+          // Preserve js-yaml v4's support for YAML merge keys, matching the CLI loader.
+          schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
+        });
       }
 
       const ajv = new Ajv({

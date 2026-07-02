@@ -13,6 +13,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
@@ -266,8 +267,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
       try {
-        const yaml = await import('js-yaml');
-        const parsed = yaml.load(prompt);
+        const parsed = loadYaml(prompt);
         normalizedPrompt = JSON.stringify(parsed);
       } catch (err) {
         return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };

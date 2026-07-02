@@ -1,8 +1,8 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import * as yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
+import { loadYaml } from './yamlLoad';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
@@ -234,7 +234,7 @@ export function extractJsonObjects(str: string): object[] {
             }
 
             const processedJson = convertSlashCommentsToHash(potentialJson);
-            const parsedObj = yaml.load(processedJson, { json: true });
+            const parsedObj = loadYaml(processedJson, { json: true });
 
             if (typeof parsedObj === 'object' && parsedObj !== null) {
               jsonObjects.push(parsedObj);

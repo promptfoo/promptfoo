@@ -5,6 +5,7 @@ import { join } from 'path';
 import * as yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { loadYaml } from '../../util/yamlLoad';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -62,7 +63,7 @@ export function loadServerConfig(): ServerConfig {
 
   try {
     const content = readFileSync(configPath, 'utf8');
-    const config = yaml.load(content) as ServerConfig;
+    const config = loadYaml(content) as ServerConfig;
 
     // Validate basic structure
     if (config && typeof config !== 'object') {
