@@ -177,7 +177,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   },
   'owasp:llm:10': {
     // Unbounded Consumption
-    plugins: ['divergent-repetition', 'reasoning-dos'],
+    plugins: ['divergent-repetition', 'reasoning-dos', 'resource-exhaustion'],
     strategies: [],
   },
 };
@@ -609,6 +609,7 @@ export const MITRE_ATLAS_MAPPING: Record<string, FrameworkMapping> = {
       'hijacking',
       'imitation',
       'reasoning-dos',
+      'resource-exhaustion',
     ],
     strategies: ['crescendo'],
   },
