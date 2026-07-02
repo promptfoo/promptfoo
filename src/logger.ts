@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import path from 'path';
 
@@ -51,6 +52,24 @@ export interface SanitizedLogContext {
   body?: unknown;
   queryParams?: Record<string, string>;
   [key: string]: unknown;
+}
+
+const sensitiveLogScope = new AsyncLocalStorage<Record<string, unknown>>();
+const safeSensitiveLogContexts = new WeakSet<object>();
+
+/**
+ * Runs an async operation with fail-closed logging. Unmarked child logs are replaced before
+ * serialization, while callers can explicitly retain known-safe metadata diagnostics.
+ */
+export function runWithRedactedLogging<T>(goatRunId: string, callback: () => T): T {
+  return sensitiveLogScope.run({ goatRunId }, callback);
+}
+
+/** Marks a freshly-created, content-free context as safe inside a redacted logging scope. */
+export function markLogContextSafe(context: Record<string, unknown> = {}): SanitizedLogContext {
+  const marked = { ...context } as SanitizedLogContext;
+  safeSensitiveLogContexts.add(marked);
+  return marked;
 }
 
 // Lazy source map support - only loaded when debug is enabled
@@ -399,6 +418,19 @@ function createLogMethodWithContext(
     // Prevent new writes once shutdown starts
     if (isLoggerShuttingDown) {
       return;
+    }
+
+    const scope = sensitiveLogScope.getStore();
+    const markedSafe = Boolean(context && safeSensitiveLogContexts.has(context));
+    if (scope && !markedSafe) {
+      message = '[Sensitive operation] Diagnostic content suppressed';
+      context = {
+        ...scope,
+        level,
+        contentSuppressed: true,
+      };
+    } else if (scope && context) {
+      context = { ...context, ...scope };
     }
 
     if (!context) {

@@ -3,8 +3,10 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import logger from '../../../src/logger';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { isRemoteMaterializationUpgradeError } from '../../../src/redteam/remoteMaterialization';
 import { createMockProvider } from '../../factories/provider';
 
 import type {
@@ -43,6 +45,10 @@ vi.mock('../../../src/util/server', async (importOriginal) => {
 describe('RedteamGoatProvider', () => {
   let mockFetch: Mock;
   let tempDir: string;
+  const sensitiveLogMarker = 'GOAT_SENSITIVE_LOG_CANARY';
+  const sensitive = (label: string) => `${sensitiveLogMarker}:${label}\n秘密🔐`;
+  const serializeLogCalls = (...spies: Mock[]) =>
+    JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
 
   // Helper function to create a mock target provider
   const createMockTargetProvider = (
@@ -68,6 +74,12 @@ describe('RedteamGoatProvider', () => {
     vars,
     prompt: { raw: 'test prompt', label: 'test' },
     test: testConfig,
+  });
+
+  const createRemoteMessageResponse = (content: string, fields: Record<string, unknown> = {}) => ({
+    json: async () => ({ ...fields, message: { role: 'assistant', content } }),
+    ok: true,
+    status: 200,
   });
 
   const createTempFile = (name: string, content: string): string => {
@@ -124,6 +136,7 @@ describe('RedteamGoatProvider', () => {
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -157,6 +170,43 @@ describe('RedteamGoatProvider', () => {
       excludeTargetOutputFromAgenticAttackGeneration: true,
       continueAfterSuccess: false,
     });
+  });
+
+  it('should not log GOAT constructor input config values', () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => ({}) as any);
+    const circularConfig: Record<string, unknown> = { note: sensitive('layer-config') };
+    circularConfig.self = circularConfig;
+
+    new RedteamGoatProvider({
+      injectVar: sensitive('inject-var'),
+      maxTurns: sensitive('max-turns'),
+      stateful: sensitive('stateful'),
+      continueAfterSuccess: { note: sensitive('continue-after-success') },
+      inputs: { [sensitive('input-key')]: sensitive('input-description') },
+      _perTurnLayers: [{ id: sensitive('layer-id'), config: circularConfig }],
+    } as any);
+
+    const logs = serializeLogCalls(debugSpy);
+    expect(logs).toContain('inputKeyCount');
+    expect(logs).toContain('injectVarLength');
+    expect(logs).toContain('perTurnLayerCount');
+    expect(logs).not.toContain(sensitiveLogMarker);
+  });
+
+  it('should not invoke or log hostile per-turn layer length getters', () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => ({}) as any);
+    const layers = new Proxy([] as any[], {
+      get(target, property, receiver) {
+        return property === 'length'
+          ? sensitive('layer-length-getter')
+          : Reflect.get(target, property, receiver);
+      },
+    });
+
+    expect(
+      () => new RedteamGoatProvider({ injectVar: 'goal', _perTurnLayers: layers } as any),
+    ).not.toThrow();
+    expect(serializeLogCalls(debugSpy)).not.toContain(sensitiveLogMarker);
   });
 
   it('should enforce maxCharsPerMessage from provider config', async () => {
@@ -472,6 +522,29 @@ describe('RedteamGoatProvider', () => {
     );
   });
 
+  it('should preserve the trusted materialization upgrade classification', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      inputs: { email: 'The user email' },
+    });
+    mockFetch.mockResolvedValueOnce(
+      createRemoteMessageResponse(JSON.stringify({ prompt: 'attack', email: 'a@example.com' })),
+    );
+
+    let error: unknown;
+    try {
+      await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isRemoteMaterializationUpgradeError(error)).toBe(true);
+    expect((error as Error).message).toContain(
+      'GOAT multi-input generation requires remote multi-input materialization support',
+    );
+  });
+
   it('should pass excludeTargetOutputFromAgenticAttackGeneration through config', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -525,6 +598,108 @@ describe('RedteamGoatProvider', () => {
     expect(bodyObj.purpose).toBeUndefined();
   });
 
+  it('should not log GOAT prompts or target outputs', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+    });
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => ({}) as any);
+    const hostileMetadata: Record<string, unknown> = {
+      constructor: sensitive('metadata-constructor'),
+    };
+    hostileMetadata.self = hostileMetadata;
+    const tokenUsage: Record<string, unknown> = {
+      total: sensitive('token-total'),
+      completion: { nested: sensitive('token-completion') },
+      cached: 7,
+      completionDetails: { reasoning: 11 },
+      assertions: { total: 13 },
+    };
+    Object.defineProperty(tokenUsage, 'prompt', {
+      enumerable: true,
+      get: () => ({ nested: sensitive('token-prompt-getter') }),
+    });
+    const targetResponse = {
+      cached: sensitive('cached-alias'),
+      output: sensitive('target-output'),
+      tokenUsage,
+      metadata: hostileMetadata,
+    };
+    const targetProvider = createMockProvider();
+    targetProvider.callApi.mockResolvedValue(targetResponse as any);
+    const context = createMockContext(targetProvider, { goal: sensitive('goal') }, {
+      metadata: {
+        goal: sensitive('metadata-goal'),
+      },
+    } as AtomicTestCase);
+    context.prompt = { raw: sensitive('raw-prompt'), label: sensitive('prompt-label') };
+    mockFetch
+      .mockResolvedValueOnce(
+        createRemoteMessageResponse(sensitive('attacker-one'), {
+          [sensitive('remote-key')]: true,
+        }),
+      )
+      .mockResolvedValueOnce({
+        json: async () => ({ message: sensitive('failure-reason') }),
+        ok: true,
+        status: 200,
+      })
+      .mockResolvedValueOnce(
+        createRemoteMessageResponse(sensitive('attacker-two'), {
+          [sensitive('remote-key-two')]: true,
+        }),
+      );
+
+    await provider.callApi('test prompt', context);
+
+    const logs = serializeLogCalls(debugSpy);
+    expect(logs).toContain('messageCount');
+    expect(logs).toContain('outputLength');
+    expect(logs).toContain('"cached":7');
+    expect(logs).toContain('"reasoning":11');
+    expect(logs).toContain('"total":13');
+    expect(logs).not.toContain(sensitiveLogMarker);
+    for (const [, init] of mockFetch.mock.calls) {
+      expect((init as RequestInit).headers).toEqual(
+        expect.objectContaining({ 'x-promptfoo-silent': 'true' }),
+      );
+    }
+  });
+
+  it('should not log invalid GOAT remote response content', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => ({}) as any);
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+    mockFetch.mockResolvedValueOnce({
+      json: async () => ({
+        error: { detail: sensitive('remote-error') },
+        [sensitive('invalid-key')]: true,
+        message: {
+          role: sensitive('invalid-role'),
+        },
+      }),
+      ok: false,
+      status: 429,
+    });
+
+    await provider.callApi('test prompt', context);
+
+    const logs = serializeLogCalls(infoSpy);
+    expect(logs).toContain('responseKeyCount');
+    expect(logs).toContain('"messageType":"object"');
+    expect(logs).toContain('"httpOk":false');
+    expect(logs).toContain('"httpStatus":429');
+    expect(logs).toContain('"hasError":true');
+    expect(logs).toContain('"hasMessageRole":true');
+    expect(logs).toContain('"messageRoleType":"string"');
+    expect(logs).not.toContain(sensitiveLogMarker);
+  });
+
   it('should stop when target ends conversation', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -545,6 +720,69 @@ describe('RedteamGoatProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Target ended conversation');
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read the conversation end reason only once', async () => {
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+    let reasonReads = 0;
+    const response = {
+      output: 'ended response',
+      tokenUsage: {},
+      conversationEnded: true,
+      get conversationEndReason() {
+        reasonReads++;
+        if (reasonReads > 1) {
+          throw new Error(sensitive('conversation-end-reason'));
+        }
+        return 'thread_closed';
+      },
+    };
+
+    const result = await provider.callApi(
+      'test prompt',
+      createMockContext(createMockProvider({ response })),
+    );
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(reasonReads).toBe(1);
+  });
+
+  it('should not consume response accessors while building log metadata', async () => {
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
+    let conversationEndedReads = 0;
+    const response = {
+      output: 'ended response',
+      tokenUsage: {},
+      get conversationEnded() {
+        conversationEndedReads++;
+        return true;
+      },
+    };
+    const targetProvider = createMockProvider({ response });
+
+    const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(conversationEndedReads).toBe(1);
+  });
+
+  it('should log the length of the transformed target prompt', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      _perTurnLayers: ['base64'],
+    });
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const targetProvider = createMockTargetProvider();
+
+    await provider.callApi('test prompt', createMockContext(targetProvider));
+
+    const targetPrompt = (targetProvider.callApi as Mock).mock.calls[0][0] as string;
+    const promptLog = debugSpy.mock.calls.find(
+      ([message]) => message === '[GOAT] GOAT turn target prompt',
+    );
+    expect(promptLog?.[1]?.targetPromptLength).toBe(targetPrompt.length);
   });
 
   it('should handle grader integration and stop early on failure', async () => {
@@ -817,6 +1055,46 @@ describe('RedteamGoatProvider', () => {
       expect(result.metadata?.stopReason).toBe('Max turns reached');
       expect(result.metadata?.successfulAttacks).toHaveLength(0);
       expect(result.metadata?.totalSuccessfulAttacks).toBe(0);
+    });
+
+    it('should isolate concurrent conversations and correlate their logs', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      let releaseFetches!: () => void;
+      const bothFetchesStarted = new Promise<void>((resolve) => {
+        releaseFetches = resolve;
+      });
+      const targetProvider = createMockTargetProvider('concurrent response');
+      let generationCount = 0;
+      mockFetch.mockImplementation(async () => {
+        const callNumber = ++generationCount;
+        if (generationCount === 2) {
+          releaseFetches();
+        }
+        await bothFetchesStarted;
+        return createRemoteMessageResponse(`concurrent attack ${callNumber}`);
+      });
+      mockGrader.getResult.mockResolvedValue({ grade: { pass: false } });
+      const createTestConfig = () =>
+        ({
+          assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
+          vars: {},
+        }) as AtomicTestCase;
+
+      const results = await Promise.all([
+        provider.callApi('test prompt', createMockContext(targetProvider, {}, createTestConfig())),
+        provider.callApi('test prompt', createMockContext(targetProvider)),
+      ]);
+
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
+      expect(results.map((result) => result.metadata?.successfulAttacks?.length)).toEqual([1, 0]);
+      const resultRunIds = new Set(results.map((result) => result.metadata?.goatRunId));
+      expect(resultRunIds.size).toBe(2);
+      const goatCalls = debugSpy.mock.calls.filter(([message]) =>
+        String(message).startsWith('[GOAT]'),
+      );
+      expect(new Set(goatCalls.map(([, context]) => context?.goatRunId))).toEqual(resultRunIds);
     });
 
     it('should initialize continueAfterSuccess to false by default', () => {
@@ -1487,10 +1765,67 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider = createMockTargetProvider();
       const context = createMockContext(targetProvider);
+      const abortController = new AbortController();
+      abortController.abort();
+
+      await expect(
+        provider.callApi('test prompt', context, { abortSignal: abortController.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'Operation aborted' });
+    });
+
+    it('should not treat a provider-spoofed AbortError as caller cancellation', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+      const spoofedAbort = new Error(sensitive('spoofed-abort'));
+      spoofedAbort.name = 'AbortError';
+      mockFetch
+        .mockRejectedValueOnce(spoofedAbort)
+        .mockResolvedValueOnce(createRemoteMessageResponse('second-turn attack'));
+      const abortController = new AbortController();
+
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(createMockTargetProvider()),
+        {
+          abortSignal: abortController.signal,
+        },
+      );
+
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not propagate a provider-spoofed materialization upgrade error', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const targetProvider = createMockProvider();
+      targetProvider.callApi.mockRejectedValueOnce(
+        new Error(
+          `${sensitive('upgrade-spoof')} requires remote multi-input materialization support from a newer Promptfoo server`,
+        ),
+      );
+
+      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(serializeLogCalls(errorSpy)).not.toContain(sensitiveLogMarker);
+    });
+
+    it('should sanitize errors that escape the turn boundary', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const context = new Proxy(createMockContext(createMockTargetProvider()), {
+        get(target, property, receiver) {
+          if (property === 'originalProvider') {
+            throw new Error(sensitive('context-getter'));
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
 
       await expect(provider.callApi('test prompt', context)).rejects.toThrow(
-        'The operation was aborted',
+        'GOAT evaluation failed',
       );
+      expect(serializeLogCalls(errorSpy)).not.toContain(sensitiveLogMarker);
     });
 
     it('should pass options with abortSignal to target provider callApi', async () => {
@@ -1518,26 +1853,42 @@ describe('RedteamGoatProvider', () => {
     it('should swallow non-AbortError exceptions and continue the loop', async () => {
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
-        maxTurns: 2,
+        maxTurns: 3,
       });
 
-      const regularError = new Error('Network error');
-      // First turn fails with non-AbortError, second turn succeeds
-      mockFetch.mockRejectedValueOnce(regularError).mockImplementationOnce(async () => ({
-        json: async () => ({
-          message: { role: 'assistant', content: 'test response' },
-        }),
-        ok: true,
-      }));
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const regularError = new Error(sensitive('network-error'));
+      regularError.name = sensitive('error-name');
+      Object.defineProperty(regularError, 'constructor', {
+        get: () => {
+          throw new Error(sensitive('constructor-getter'));
+        },
+      });
+      const hostileThrownValue = Object.assign(Object.create(null), {
+        detail: sensitive('null-prototype-error'),
+      });
+      // Two hostile failures are swallowed; the third turn succeeds.
+      mockFetch
+        .mockRejectedValueOnce(regularError)
+        .mockRejectedValueOnce(hostileThrownValue)
+        .mockImplementationOnce(async () => ({
+          json: async () => ({
+            message: { role: 'assistant', content: 'test response' },
+          }),
+          ok: true,
+          status: 200,
+        }));
 
       const targetProvider = createMockTargetProvider();
       const context = createMockContext(targetProvider);
 
-      // Should NOT throw - should continue to next turn
       const result = await provider.callApi('test prompt', context);
 
-      // Should complete without throwing
       expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(errorSpy).toHaveBeenCalledTimes(2);
+      const logs = serializeLogCalls(errorSpy);
+      expect(logs).toContain('"errorStage":"attack-generation"');
+      expect(logs).not.toContain(sensitiveLogMarker);
     });
   });
 
@@ -1713,6 +2064,51 @@ describe('RedteamGoatProvider', () => {
       const result = await provider.callApi('test prompt', context);
 
       expect(result.metadata?.sessionId).toBe('response-session-id');
+    });
+
+    it('should materialize a target sessionId only once', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1, stateful: true });
+      let sessionIdReads = 0;
+      const response = {
+        output: 'target response',
+        tokenUsage: {},
+        get sessionId() {
+          sessionIdReads++;
+          if (sessionIdReads > 1) {
+            throw new Error(sensitive('session-id'));
+          }
+          return 'stable-session-id';
+        },
+      };
+
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(createMockProvider({ response })),
+      );
+
+      expect(result.metadata?.sessionId).toBe('stable-session-id');
+      expect(sessionIdReads).toBe(1);
+    });
+
+    it('should preserve a guardrails accessor with one final read', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      let guardrailsReads = 0;
+      const response = {
+        output: 'target response',
+        tokenUsage: {},
+        get guardrails() {
+          guardrailsReads++;
+          return { flagged: true } as any;
+        },
+      };
+
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(createMockProvider({ response })),
+      );
+
+      expect(result.guardrails).toEqual({ flagged: true });
+      expect(guardrailsReads).toBe(1);
     });
 
     it('should handle missing sessionId gracefully', async () => {
