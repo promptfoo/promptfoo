@@ -7,15 +7,18 @@ import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import {
+  checkCloudShareAuthentication,
   createShareableModelAuditUrl,
   createShareableUrl,
   determineShareDomain,
+  getSharingDisabledReason,
   hasEvalBeenShared,
   hasModelAuditBeenShared,
+  isSelfHostedShareViewConfigured,
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
@@ -95,6 +98,7 @@ vi.mock('../src/globalConfig/accounts', () => ({
 }));
 
 vi.mock('../src/util/cloud', () => ({
+  ConfigPermissionError: class ConfigPermissionError extends Error {},
   makeRequest: vi.fn(),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   getOrgContext: vi.fn().mockResolvedValue(null),
@@ -164,6 +168,7 @@ describe('isSharingEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
     // Reset the mock to default value for each test
     vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
   });
@@ -178,6 +183,13 @@ describe('isSharingEnabled', () => {
     };
 
     expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns false when sharing is explicitly disabled', () => {
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    expect(isSharingEnabled({ config: {} } as Eval)).toBe(false);
   });
 
   it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
@@ -225,6 +237,81 @@ describe('isSharingEnabled', () => {
     };
 
     expect(isSharingEnabled(mockEval as Eval)).toBe(false);
+  });
+});
+
+describe('share availability helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(envars.getEnvString).mockReturnValue('');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
+  });
+
+  it('describes whether sharing is unconfigured or globally disabled', () => {
+    expect(getSharingDisabledReason()).toBe(
+      'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.',
+    );
+
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+
+    expect(getSharingDisabledReason()).toBe('Sharing is disabled by PROMPTFOO_DISABLE_SHARING.');
+  });
+
+  it('requires an explicit app URL for a self-hosted API', () => {
+    const evalRecord = {
+      config: { sharing: { apiBaseUrl: 'https://api.self-hosted.example' } },
+    } as Eval;
+
+    expect(isSelfHostedShareViewConfigured(evalRecord)).toBe(false);
+    expect(getSharingDisabledReason(evalRecord)).toBe(
+      'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl, PROMPTFOO_REMOTE_APP_BASE_URL, or PROMPTFOO_SHARING_APP_BASE_URL.',
+    );
+
+    evalRecord.config.sharing = {
+      apiBaseUrl: 'https://api.self-hosted.example',
+      appBaseUrl: 'https://self-hosted.example',
+    };
+    expect(isSelfHostedShareViewConfigured(evalRecord)).toBe(true);
+  });
+
+  it.each([
+    'PROMPTFOO_REMOTE_APP_BASE_URL',
+    'PROMPTFOO_SHARING_APP_BASE_URL',
+  ])('accepts the %s environment viewer for a self-hosted API', (viewerVariable) => {
+    vi.mocked(envars.getEnvString).mockImplementation((key) =>
+      key === viewerVariable ? 'https://self-hosted.example' : '',
+    );
+
+    expect(
+      isSelfHostedShareViewConfigured({
+        config: { sharing: { apiBaseUrl: 'https://api.self-hosted.example' } },
+      } as Eval),
+    ).toBe(true);
+  });
+
+  it('rejects an environment API without an environment viewer', () => {
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.self-hosted.example');
+    const evalRecord = { config: {} } as Eval;
+
+    expect(isSharingEnabled(evalRecord)).toBe(true);
+    expect(isSelfHostedShareViewConfigured(evalRecord)).toBe(false);
+    expect(getSharingDisabledReason(evalRecord)).toContain(
+      'Self-hosted sharing requires an app URL',
+    );
+  });
+
+  it('validates Cloud authentication without logging the response body', async () => {
+    const response = Response.json({ team: 'sensitive' });
+    const controller = new AbortController();
+    vi.mocked(makeRequest).mockResolvedValue(response);
+
+    await expect(checkCloudShareAuthentication(controller.signal)).resolves.toBe(response);
+    expect(makeRequest).toHaveBeenCalledWith('/users/me/teams', 'GET', undefined, {
+      signal: controller.signal,
+      silent: true,
+    });
   });
 });
 
@@ -410,6 +497,32 @@ describe('createShareableUrl', () => {
 
     expect(createRemoteBlobUploadCache).not.toHaveBeenCalled();
     expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('cancels the Cloud permission preflight before starting an upload', async () => {
+    const controller = new AbortController();
+    let permissionSignal: AbortSignal | undefined;
+    vi.mocked(checkCloudPermissions).mockImplementation((_config, signal) => {
+      if (!signal) {
+        throw new Error('Expected the share signal during permission validation');
+      }
+      permissionSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const sharePromise = createShareableUrl(buildMockEval() as Eval, {
+      signal: controller.signal,
+      throwOnError: true,
+    });
+    const rejection = expect(sharePromise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(permissionSignal).toBe(controller.signal));
+
+    controller.abort();
+
+    await rejection;
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -631,6 +744,30 @@ describe('createShareableUrl', () => {
     expect(mockEval.save).toHaveBeenCalled();
   });
 
+  it('never prompts for email during a silent background share', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(getUserEmail).mockReturnValue('stored@example.com');
+
+    const mockEval = buildMockEval();
+    mockEval.author = null as any;
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: mockEval.id }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval, { silent: true });
+
+    expect(getUserEmail).not.toHaveBeenCalled();
+    expect(mockEval.author).toBeNull();
+    expect(mockEval.save).not.toHaveBeenCalled();
+  });
+
   describe('chunked sending', () => {
     let mockEval: Partial<Eval>;
 
@@ -747,13 +884,74 @@ describe('createShareableUrl', () => {
       releaseUpload?.();
 
       await expect(sharePromise).resolves.toBe('https://app.example.com/eval/manual-share-id');
-      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(result, expect.any(Map), {
-        localEvalId: mockEval.id,
-        promptIdx: 2,
-        remoteEvalId: 'manual-share-id',
-        testIdx: 1,
-      });
+      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(
+        result,
+        expect.any(Map),
+        {
+          localEvalId: mockEval.id,
+          promptIdx: 2,
+          remoteEvalId: 'manual-share-id',
+          testIdx: 1,
+        },
+        undefined,
+      );
       expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('forwards cancellation to blob uploads and rolls back the remote eval', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      const controller = new AbortController();
+      const result = {
+        id: 'result-1',
+        promptIdx: 2,
+        response: { output: `promptfoo://blob/${'a'.repeat(64)}` },
+        testIdx: 1,
+      } as EvalResult;
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [result];
+      });
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      vi.mocked(uploadBlobRefsForShare).mockImplementation(
+        async (_result, _cache, _context, signal) => {
+          expect(signal).toBe(controller.signal);
+          controller.abort();
+          signal?.throwIfAborted();
+        },
+      );
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'manual-share-id' }),
+        })
+        .mockResolvedValueOnce({ ok: true });
+
+      await expect(
+        createShareableUrl(mockEval as Eval, {
+          throwOnError: true,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(
+        result,
+        expect.any(Map),
+        {
+          localEvalId: mockEval.id,
+          promptIdx: 2,
+          remoteEvalId: 'manual-share-id',
+          testIdx: 1,
+        },
+        controller.signal,
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][0]).toBe(
+        'https://api.example.com/api/v1/results/manual-share-id',
+      );
+      expect(mockFetch.mock.calls[1][1]).toMatchObject({ method: 'DELETE' });
     });
 
     it('sends chunked eval when open source self hosted', async () => {
@@ -989,10 +1187,10 @@ describe('createShareableUrl', () => {
         .fn()
         .mockRejectedValue(new Error('Failed to fetch traces'));
 
-      const result = await createShareableUrl(mockEvalTracesError as Eval);
-
-      // Should return null when an error occurs
-      expect(result).toBeNull();
+      await expect(createShareableUrl(mockEvalTracesError as Eval)).resolves.toBeNull();
+      await expect(
+        createShareableUrl(mockEvalTracesError as Eval, { throwOnError: true }),
+      ).rejects.toThrow('Failed to fetch traces');
     });
   });
 
@@ -1046,7 +1244,7 @@ describe('adaptive chunk retry', () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('splits chunk on 413 Payload Too Large and retries', async () => {
@@ -1193,9 +1391,10 @@ describe('adaptive chunk retry', () => {
         ok: true, // rollback succeeds
       });
 
-    // Should return null (rollback is attempted)
-    const result = await createShareableUrl(mockEval as Eval);
-    expect(result).toBeNull();
+    // Callers that opt into structured HTTP errors receive the upload failure.
+    await expect(createShareableUrl(mockEval as Eval, { throwOnError: true })).rejects.toThrow(
+      'Failed to send even a single result',
+    );
   });
 
   it('throws on unknown errors without retry', async () => {
@@ -1237,12 +1436,84 @@ describe('adaptive chunk retry', () => {
         ok: true, // rollback succeeds
       });
 
-    const result = await createShareableUrl(mockEval as Eval);
-
-    // Should fail without retrying (unknown error type)
-    expect(result).toBeNull();
+    // Opt-in error propagation does not retry unknown server failures.
+    await expect(createShareableUrl(mockEval as Eval, { throwOnError: true })).rejects.toThrow(
+      '500 Internal Server Error: Server error',
+    );
     // 3 calls: initial + one failed chunk + rollback (no retry for 500)
     expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('cancels chunk upload and rolls back a remote eval', async () => {
+    const controller = new AbortController();
+    let rejectChunk!: (error: unknown) => void;
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockImplementationOnce(
+        (_url: string, options: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            rejectChunk = reject;
+            options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+              once: true,
+            });
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    const sharePromise = createShareableUrl(buildMockEval() as Eval, {
+      throwOnError: true,
+      signal: controller.signal,
+    });
+    const rejection = expect(sharePromise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(rejectChunk).toBeTypeOf('function'));
+
+    controller.abort();
+
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch.mock.calls[0][1].signal).toBeUndefined();
+    expect(mockFetch.mock.calls[1][1].signal).toBe(controller.signal);
+    expect(mockFetch.mock.calls[2][0]).toBe('https://api.example.com/api/v1/results/mock-eval-id');
+    expect(mockFetch.mock.calls[2][1]).toMatchObject({ method: 'DELETE' });
+    expect(mockFetch.mock.calls[2][1].signal).toBeUndefined();
+  });
+
+  it('waits for the initial create ID before rolling back cancellation', async () => {
+    const controller = new AbortController();
+    let finishInitialCreate!: (response: unknown) => void;
+    mockFetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishInitialCreate = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    const sharePromise = createShareableUrl(buildMockEval() as Eval, {
+      throwOnError: true,
+      signal: controller.signal,
+    });
+    const rejection = expect(sharePromise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(finishInitialCreate).toBeTypeOf('function'));
+
+    controller.abort();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(mockFetch.mock.calls[0][1].signal).toBeUndefined();
+
+    finishInitialCreate({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[1][0]).toBe('https://api.example.com/api/v1/results/mock-eval-id');
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({ method: 'DELETE' });
   });
 });
 
