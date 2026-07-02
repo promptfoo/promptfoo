@@ -548,7 +548,9 @@ describe('OpenAICodexSDKProvider', () => {
           },
         ]);
         expect(result.metadata?.executionHealth?.sandboxFailures).toEqual([]);
-        expect(result.error).toBe('Error calling OpenAI Codex SDK: unclassified provider failure');
+        expect(result.error).toBe(
+          'Error calling OpenAI Codex SDK: Fixture mentions HTTP 429, Could not resolve host, and ECONNREFUSED',
+        );
         expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
       });
 
