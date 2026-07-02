@@ -3,7 +3,10 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  raceWithAbortSignal,
+} from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
 
@@ -65,21 +68,28 @@ export function callProviderWithContext(
   const callApiOptions = executionContext?.abortSignal
     ? { abortSignal: executionContext.abortSignal }
     : undefined;
-  const callApi = () =>
-    callApiOptions
+  const callApi = () => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
+    return callApiOptions
       ? provider.callApi(prompt, callApiContext, callApiOptions)
       : provider.callApi(prompt, callApiContext);
+  };
 
   const executeCall = () => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
+
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callApi,
-        createProviderRateLimitOptions(),
+      return raceWithAbortSignal(
+        executionContext.rateLimitRegistry.execute(
+          provider,
+          callApi,
+          createProviderRateLimitOptions(executionContext.queuedCallAbortSignal),
+        ),
+        executionContext.queuedCallAbortSignal,
       );
     }
 
-    return callApi();
+    return raceWithAbortSignal(callApi(), executionContext?.queuedCallAbortSignal);
   };
 
   if (executionContext?.providerCallQueue) {

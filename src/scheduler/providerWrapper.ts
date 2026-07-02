@@ -6,6 +6,7 @@
  */
 
 import { parseRetryAfter } from './headerParser';
+import { getProviderCallExecutionContext } from './providerCallExecutionContext';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
@@ -43,8 +44,11 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    abortSignal,
     getHeaders: getProviderResponseHeaders,
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
@@ -111,10 +115,14 @@ export function wrapProviderWithRateLimiting(
       context?: CallApiContextParams,
       options?: CallApiOptionsParams,
     ): Promise<ProviderResponse> => {
+      const queuedCallAbortSignal = getProviderCallExecutionContext()?.queuedCallAbortSignal;
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        () => {
+          queuedCallAbortSignal?.throwIfAborted();
+          return originalCallApi(prompt, context, options);
+        },
+        createProviderRateLimitOptions(queuedCallAbortSignal),
       );
     },
   };

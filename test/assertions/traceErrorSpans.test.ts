@@ -342,6 +342,25 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 
+  it('should reject a whitespace-only pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-error-spans',
+        value: { pattern: '   ', max_count: 0 },
+      },
+      renderedValue: { pattern: '   ', max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    expect(() => handleTraceErrorSpans(params)).toThrow(
+      'trace-error-spans assertion pattern must be a non-empty string',
+    );
+  });
+
   it('should handle simple number value for backwards compatibility', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -460,6 +479,70 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 
+  it('should fail when no spans match and requirePresence is true', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-error-spans',
+        value: { pattern: 'missing_*', max_count: 0, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_*', max_count: 0, requirePresence: true },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('No spans found matching pattern "missing_*"');
+    expect(result.reason).toContain('requirePresence: true');
+  });
+
+  it('should fail inverse assertions when no spans match and requirePresence is false', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { pattern: 'missing_*', max_count: 0 },
+      },
+      renderedValue: { pattern: 'missing_*', max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-error-spans');
+    expect(result.reason).toContain('error budget was satisfied');
+  });
+
+  it('should fail inverse assertions when required spans are absent', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { pattern: 'missing_*', max_count: 0, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_*', max_count: 0, requirePresence: true },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('requirePresence is true');
+  });
+
   it('should default to max_count 0 when no value specified', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -511,5 +594,85 @@ describe('handleTraceErrorSpans', () => {
       reason: 'Error rate 66.7% exceeds threshold 50% (4 errors out of 6 spans)',
       assertion: params.assertion,
     });
+  });
+
+  it('should invert the result for not-trace-error-spans (errors expected)', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { max_count: 0 },
+      },
+      renderedValue: { max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    // Base assertion fails (errors are present), inverse passes.
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('not-trace-error-spans');
+    expect(result.reason).toContain('error budget was not satisfied');
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    1.5,
+  ])('should reject invalid max_count values (%s)', (max_count) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-error-spans', value: { max_count } },
+      renderedValue: { max_count },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    expect(() => handleTraceErrorSpans(params)).toThrow(
+      'trace-error-spans assertion max_count must be a finite non-negative integer',
+    );
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+  ])('should reject invalid max_percentage values (%s)', (max_percentage) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-error-spans', value: { max_percentage } },
+      renderedValue: { max_percentage },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    expect(() => handleTraceErrorSpans(params)).toThrow(
+      'trace-error-spans assertion max_percentage must be a finite non-negative number',
+    );
+  });
+
+  it('should reject percentages above 100', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-error-spans', value: { max_percentage: 101 } },
+      renderedValue: { max_percentage: 101 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    expect(() => handleTraceErrorSpans(params)).toThrow(
+      'trace-error-spans assertion max_percentage must be between 0 and 100',
+    );
   });
 });

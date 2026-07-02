@@ -725,7 +725,9 @@ tests:
 
 - A string, such as `search_orders`
 - An array of strings, such as `['search_orders', 'compose_reply']`
-- An object with `pattern`, `min`, and optional `max`
+- An object with `name` or `pattern`, plus optional `min` and `max` count bounds. A max-only object defaults to `min: 0`.
+
+For `not-trajectory:tool-used`, object values are forbidden-use checks. Omit count bounds or set `max: 0`; other count ranges are rejected to avoid ambiguous double-negative semantics.
 
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 
@@ -760,6 +762,7 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
+- optional `redactArgsInFailures` (boolean), which replaces the **observed** (traced) argument payloads in this assertion's reasons with `[redacted]` (both passing and failing) so traced args don't leak into reports or logs. The `expected` args you configure still appear in the result's assertion config, as they do for any assertion
 - optional `defaults`, a map of argument names to their default values
 - optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
@@ -1076,6 +1079,8 @@ Common patterns:
 - `api.*` - Matches spans starting with "api."
 - `*.error` - Matches spans ending with ".error"
 
+Provide at least one of `min` or `max`. Count bounds must be finite non-negative integers, and `max` must be greater than or equal to `min`.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
@@ -1110,8 +1115,10 @@ assert:
 Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
-- `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+- `max`: Maximum allowed duration in milliseconds (a finite non-negative number)
+- `percentile` (optional): Check a percentile across matching spans instead of every span (e.g., 95 for the 95th percentile)
+- `method` (optional): Percentile method, either `nearest` (default, nearest-rank) or `linear` (interpolated). The default `nearest` returns an actual observed duration; use `linear` for an interpolated value — e.g. the true median when `percentile: 50` on an even number of spans
+- `requirePresence` (optional): Fail when no matching spans with complete timing data are present
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1157,9 +1164,10 @@ Error detection methods:
 
 Configuration options:
 
-- `max_count`: Maximum number of error spans allowed
+- `max_count`: Maximum number of error spans allowed (a finite non-negative integer)
 - `max_percentage`: Maximum error rate as a percentage (0-100)
 - `pattern`: Filter spans by name pattern
+- `requirePresence`: Fail when no matching spans are present
 
 The assertion provides detailed error information including span names and error messages to help with debugging.
 

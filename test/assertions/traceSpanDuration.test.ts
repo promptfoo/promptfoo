@@ -168,13 +168,13 @@ describe('handleTraceSpanDuration', () => {
 
     const result = handleTraceSpanDuration(params);
     // 90th percentile of [5, 50, 500, 1200, 3000] = 3000ms
-    expect(result).toEqual({
-      pass: false,
-      score: 0,
-      reason:
-        '90th percentile duration (3000ms) exceeds threshold 2000ms. Slowest spans: api.external (3000ms)',
-      assertion: params.assertion,
-    });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('90th percentile duration (3000.00ms, method=nearest)');
+    expect(result.reason).toContain('exceeds threshold 2000ms');
+    expect(result.reason).toContain('warning: small sample N=5');
+    expect(result.reason).toContain('Slowest spans: api.external (3000ms)');
+    expect(result.assertion).toBe(params.assertion);
   });
 
   it('should pass when percentile duration is within limit', () => {
@@ -193,12 +193,48 @@ describe('handleTraceSpanDuration', () => {
 
     const result = handleTraceSpanDuration(params);
     // 50th percentile (median) of [5, 50, 500, 1200, 3000] = 500ms
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: '50th percentile duration (500ms) is within threshold 1500ms',
-      assertion: params.assertion,
-    });
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('50th percentile duration (500.00ms, method=nearest)');
+    expect(result.reason).toContain('within threshold 1500ms');
+    expect(result.reason).toContain('warning: small sample N=5');
+    expect(result.assertion).toBe(params.assertion);
+  });
+
+  it('should compute linear-interpolation percentile when method=linear', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 5000, percentile: 50, method: 'linear' as const },
+      },
+      renderedValue: { max: 5000, percentile: 50, method: 'linear' as const },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    // sorted durations [5, 50, 500, 1200, 3000]; rank = 0.5*(5-1)=2 -> sorted[2] = 500
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('50th percentile duration (500.00ms, method=linear)');
+  });
+
+  it('should reject method values other than nearest or linear', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000, percentile: 95, method: 'tdigest' as unknown as 'nearest' },
+      },
+      renderedValue: { max: 1000, percentile: 95, method: 'tdigest' as unknown as 'nearest' },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion method must be "nearest" or "linear"',
+    );
   });
 
   it('should handle spans without endTime', () => {
@@ -260,6 +296,77 @@ describe('handleTraceSpanDuration', () => {
       reason: 'No spans found matching pattern "*" with complete timing data',
       assertion: params.assertion,
     });
+  });
+
+  it('should fail when no spans match and requirePresence is true', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('No spans found matching pattern "missing_span_*"');
+    expect(result.reason).toContain('requirePresence: true');
+  });
+
+  it('should still pass on empty match when requirePresence is false (default)', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000 },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('should fail inverse assertions when no spans match and requirePresence is false', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000 },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-span-duration');
+    expect(result.reason).toContain('latency budget was satisfied');
+  });
+
+  it('should fail inverse assertions when required spans are absent', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('requirePresence is true');
   });
 
   it('should fail when no trace data is available', () => {
@@ -354,11 +461,160 @@ describe('handleTraceSpanDuration', () => {
     };
 
     const result = handleTraceSpanDuration(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: '95th percentile duration (750ms) is within threshold 1000ms',
-      assertion: params.assertion,
-    });
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('95th percentile duration (750.00ms, method=nearest)');
+    expect(result.reason).toContain('within threshold 1000ms');
+    expect(result.reason).toContain('warning: small sample N=1');
+    expect(result.assertion).toBe(params.assertion);
+  });
+
+  it('should reject percentile values outside the 0-100 range', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000, percentile: 101 },
+      },
+      renderedValue: { max: 1000, percentile: 101 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+  ])('should reject invalid max values (%s)', (max) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max } },
+      renderedValue: { max },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion max must be a finite non-negative number',
+    );
+  });
+
+  it('should invert the result for not-trace-span-duration when latency budget is met', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'cache.*', max: 1000 },
+      },
+      renderedValue: { pattern: 'cache.*', max: 1000 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    // Base assertion passes (cache is fast), inverse fails.
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-span-duration');
+    expect(result.reason).toContain('latency budget for pattern "cache.*" was satisfied');
+  });
+
+  it('rejects clock-skewed spans instead of treating them as successful zero-duration evidence', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 100, percentile: 0 } },
+      renderedValue: { max: 100, percentile: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'skewed-trace',
+          evaluationId: 'e',
+          testCaseId: 'tc',
+          metadata: {},
+          spans: [
+            { spanId: '1', name: 'skewed', startTime: 500, endTime: 100 }, // raw duration -400ms
+            { spanId: '2', name: 'ok', startTime: 0, endTime: 50 },
+          ],
+        },
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion encountered a span with invalid timing data',
+    );
+  });
+
+  it('handles percentile boundary values 0 (min) and 100 (max)', () => {
+    const trace = {
+      traceId: 'pct-bounds',
+      evaluationId: 'e',
+      testCaseId: 'tc',
+      metadata: {},
+      spans: [
+        { spanId: '1', name: 'op', startTime: 0, endTime: 10 },
+        { spanId: '2', name: 'op', startTime: 0, endTime: 20 },
+        { spanId: '3', name: 'op', startTime: 0, endTime: 30 },
+      ],
+    };
+    const run = (value: any) =>
+      handleTraceSpanDuration({
+        ...defaultParams,
+        assertion: { type: 'trace-span-duration', value },
+        renderedValue: value,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+      } as AssertionParams);
+
+    const p0 = run({ max: 15, percentile: 0 }); // p0 = min = 10ms <= 15
+    expect(p0.pass).toBe(true);
+    expect(p0.reason).toContain('10.00ms');
+
+    const p100 = run({ max: 25, percentile: 100 }); // p100 = max = 30ms > 25
+    expect(p100.pass).toBe(false);
+    expect(p100.reason).toContain('30.00ms');
+  });
+
+  it('throws for a non-string pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 100, pattern: 123 as any } },
+      renderedValue: { max: 100, pattern: 123 as any },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion pattern must be a non-empty string',
+    );
+  });
+
+  it('throws for a whitespace-only pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 0, pattern: '   ' } },
+      renderedValue: { max: 0, pattern: '   ' },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion pattern must be a non-empty string',
+    );
+  });
+
+  it('throws for a non-boolean requirePresence', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 100, requirePresence: 'yes' as any },
+      },
+      renderedValue: { max: 100, requirePresence: 'yes' as any },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion requirePresence must be a boolean',
+    );
   });
 });

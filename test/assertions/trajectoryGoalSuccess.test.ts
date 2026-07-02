@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
 import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
+import { getProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
@@ -160,6 +161,45 @@ describe('handleTrajectoryGoalSuccess', () => {
     );
   });
 
+  it('renders templated goals from object values', async () => {
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Goal achieved',
+    });
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trajectory:goal-success',
+        value: {
+          goal: 'Find order {{ order_id }} before replying',
+          timeoutMs: 10000,
+        },
+      },
+      renderedValue: {
+        goal: 'Find order {{ order_id }} before replying',
+        timeoutMs: 10000,
+      },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        vars: { order_id: '123' },
+      },
+    };
+
+    await handleTrajectoryGoalSuccess(params);
+
+    expect(matchesTrajectoryGoalSuccess).toHaveBeenCalledWith(
+      'Find order 123 before replying',
+      expect.any(String),
+      'test output',
+      undefined,
+      { order_id: '123' },
+      params.assertion,
+      undefined,
+    );
+  });
+
   it('passes resolved assertion vars instead of the raw test vars', async () => {
     vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
       pass: true,
@@ -245,6 +285,141 @@ describe('handleTrajectoryGoalSuccess', () => {
     expect(result.metadata?.graderError).toBe(true);
     expect(result.assertion).toBe(params.assertion);
     expect(result.reason).toBe(graderFailure.reason);
+  });
+
+  it('fails the assertion when the judge exceeds timeoutMs', async () => {
+    vi.useFakeTimers();
+    try {
+      let judgeAbortSignal: AbortSignal | undefined;
+      let queuedCallAbortSignal: AbortSignal | undefined;
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(() => {
+        const executionContext = getProviderCallExecutionContext();
+        judgeAbortSignal = executionContext?.abortSignal;
+        queuedCallAbortSignal = executionContext?.queuedCallAbortSignal;
+        return new Promise(() => {
+          /* never resolves; simulate a stuck judge call */
+        });
+      });
+
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          type: 'trajectory:goal-success',
+          value: { goal: 'Resolve the order lookup task', timeoutMs: 250 },
+        },
+        renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 250 },
+      };
+
+      const promise = handleTrajectoryGoalSuccess(params);
+      await vi.advanceTimersByTimeAsync(300);
+      const result = await promise;
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('trajectory:goal-success judge timed out after 250ms');
+      expect(result.assertion).toBe(params.assertion);
+      expect(result.metadata?.graderError).toBe(true);
+      expect(judgeAbortSignal?.aborted).toBe(true);
+      expect(queuedCallAbortSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns the timeout fallback when an abort-aware judge rejects on abort', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            getProviderCallExecutionContext()?.abortSignal?.addEventListener('abort', () =>
+              reject(new Error('judge aborted')),
+            );
+          }),
+      );
+
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          type: 'trajectory:goal-success',
+          value: { goal: 'Resolve the order lookup task', timeoutMs: 100 },
+        },
+        renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 100 },
+      };
+
+      const promise = handleTrajectoryGoalSuccess(params);
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await promise;
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('trajectory:goal-success judge timed out after 100ms');
+      expect(result.assertion).toBe(params.assertion);
+      expect(result.metadata?.graderError).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves timeout grader failures for not-trajectory:goal-success', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(() => new Promise(() => {}));
+
+      const params: AssertionParams = {
+        ...defaultParams,
+        inverse: true,
+        assertion: {
+          type: 'not-trajectory:goal-success',
+          value: { goal: 'Send a refund', timeoutMs: 100 },
+        },
+        renderedValue: { goal: 'Send a refund', timeoutMs: 100 },
+      };
+
+      const promise = handleTrajectoryGoalSuccess(params);
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await promise;
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('trajectory:goal-success judge timed out after 100ms');
+      expect(result.metadata?.graderError).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws when timeoutMs is non-positive', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trajectory:goal-success',
+        value: { goal: 'Resolve the order lookup task', timeoutMs: 0 },
+      },
+      renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 0 },
+    };
+
+    await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
+      'trajectory:goal-success timeoutMs must be a finite positive number',
+    );
+  });
+
+  it.each([
+    Number.POSITIVE_INFINITY,
+    '1000',
+  ])('throws when timeoutMs is not a finite number (%s)', async (timeoutMs) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trajectory:goal-success',
+        value: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
+      },
+      renderedValue: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
+    };
+
+    await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
+      'trajectory:goal-success timeoutMs must be a finite positive number',
+    );
   });
 
   it('throws when the assertion value does not include a goal', async () => {

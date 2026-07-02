@@ -1,3 +1,13 @@
+import {
+  notTrajectoryToolUsedBoundsError,
+  traceErrorSpansConfigError,
+  traceSpanCountBoundsError,
+  traceSpanDurationConfigError,
+  trajectoryCountBoundsError,
+  trajectoryGoalSuccessTimeoutError,
+  trajectoryRedactArgsError,
+  trajectoryToolSequenceModeError,
+} from '@promptfoo/contracts/validators/traceAssertionConfig';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -267,6 +277,46 @@ function hasMatcherName(value: Record<string, unknown>): boolean {
   return hasNonBlankString(value.name) || hasNonBlankString(value.pattern);
 }
 
+const TRAJECTORY_STEP_TYPES = new Set([
+  'command',
+  'message',
+  'reasoning',
+  'search',
+  'span',
+  'tool',
+]);
+const TOOL_STEP_TYPES = new Set(['tool']);
+
+function getTrajectoryMatcherValueError(
+  value: Record<string, unknown>,
+  allowedTypes: ReadonlySet<string>,
+  requireName = true,
+): string | undefined {
+  const hasName = Object.prototype.hasOwnProperty.call(value, 'name');
+  const hasPattern = Object.prototype.hasOwnProperty.call(value, 'pattern');
+  if (
+    (hasName && !hasNonBlankString(value.name)) ||
+    (hasPattern && !hasNonBlankString(value.pattern))
+  ) {
+    return 'Enter non-empty strings for every trajectory matcher name and pattern.';
+  }
+  if (requireName && !hasName && !hasPattern) {
+    return 'Enter a trajectory matcher name or pattern.';
+  }
+
+  if (value.type !== undefined) {
+    const types = Array.isArray(value.type) ? value.type : [value.type];
+    if (
+      types.length === 0 ||
+      types.some((type) => typeof type !== 'string' || !allowedTypes.has(type))
+    ) {
+      return 'Select a valid trajectory matcher type.';
+    }
+  }
+
+  return undefined;
+}
+
 function isNonNegativeInteger(value: unknown): value is number {
   return (
     typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
@@ -286,7 +336,9 @@ function getTrajectoryToolSequenceSteps(value: unknown): unknown[] | undefined {
 }
 
 function isUsableTrajectorySequenceStep(step: unknown): boolean {
-  return typeof step === 'string' ? step.trim() !== '' : isRecord(step) && hasMatcherName(step);
+  return typeof step === 'string'
+    ? step.trim() !== ''
+    : isRecord(step) && getTrajectoryMatcherValueError(step, TOOL_STEP_TYPES) === undefined;
 }
 
 function getThresholdError(assertion: Assertion): string | undefined {
@@ -395,34 +447,27 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  if (
-    (value.min !== undefined && (typeof value.min !== 'number' || !Number.isFinite(value.min))) ||
-    (value.max !== undefined && (typeof value.max !== 'number' || !Number.isFinite(value.max)))
-  ) {
-    return 'Enter numeric trace span count limits.';
-  }
-  return undefined;
+  // Delegate the bound rules (at-least-one, finite non-negative integers, max >= min) to the
+  // shared validator the runtime uses, so save-time and run-time validation cannot drift.
+  return traceSpanCountBoundsError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
-  if (
-    value.percentile !== undefined &&
-    (typeof value.percentile !== 'number' ||
-      !Number.isFinite(value.percentile) ||
-      value.percentile < 0 ||
-      value.percentile > 100)
-  ) {
-    return 'Enter a trace span percentile from 0 to 100.';
-  }
-  return undefined;
+  // Shared validator enforces non-negative max, pattern, requirePresence, and the
+  // percentile/method rules exactly as the runtime does.
+  return traceSpanDurationConfigError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
-  if (!isRecord(value) || !hasMatcherName(value)) {
+  if (!isRecord(value)) {
     return 'Enter JSON with a tool name or pattern and expected args.';
+  }
+  const matcherError = getTrajectoryMatcherValueError(value, TOOL_STEP_TYPES);
+  if (matcherError) {
+    return matcherError;
   }
   if (!('args' in value) && !('arguments' in value)) {
     return 'Enter JSON with a tool name or pattern and expected args.';
@@ -430,17 +475,36 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
   if (value.mode !== undefined && value.mode !== 'partial' && value.mode !== 'exact') {
     return 'Set trajectory tool args mode to "partial" or "exact".';
   }
-  return undefined;
+  // A non-boolean redactArgsInFailures must fail loud here too, not fail open at eval time.
+  return trajectoryRedactArgsError(value);
 }
 
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || (typeof value.min !== 'number' && typeof value.max !== 'number')) {
     return 'Enter JSON with a minimum or maximum trajectory step count.';
   }
-  return undefined;
+  const matcherError = getTrajectoryMatcherValueError(value, TRAJECTORY_STEP_TYPES, false);
+  if (matcherError) {
+    return matcherError;
+  }
+  return trajectoryCountBoundsError(value, 'trajectory:step-count');
+}
+
+function getTraceErrorSpansValueError(value: unknown): string | undefined {
+  // A number (max error-span count) or an object with max_count/max_percentage/pattern/
+  // requirePresence; any other value resolves to defaults at runtime and is accepted.
+  return traceErrorSpansConfigError(value);
 }
 
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
+  // The object form carries an optional mode; mirror the runtime "in_order"/"exact" check
+  // (validated before steps, as the runtime resolves mode before the empty-steps guard).
+  if (isRecord(value)) {
+    const modeError = trajectoryToolSequenceModeError(value);
+    if (modeError) {
+      return modeError;
+    }
+  }
   const steps = getTrajectoryToolSequenceSteps(value);
   if (!steps || steps.length === 0) {
     return 'Enter a non-empty JSON tool sequence.';
@@ -483,6 +547,23 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:tool-sequence'
   ) {
     return getTrajectoryToolSequenceValueError(assertion.value);
+  }
+  if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
+    return getTraceErrorSpansValueError(assertion.value);
+  }
+  if (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') {
+    // tool-used can be a string/array (no count bounds) or an object carrying min/max counts.
+    // Presence is validated by getNamedMatcherValueError; only the count bounds live here, and
+    // they are checked first to match the runtime (bounds resolve before the name/pattern check).
+    if (isRecord(assertion.value)) {
+      const boundsError = trajectoryCountBoundsError(assertion.value, 'trajectory:tool-used');
+      if (boundsError) {
+        return boundsError;
+      }
+      if (assertion.type === 'not-trajectory:tool-used') {
+        return notTrajectoryToolUsedBoundsError(assertion.value);
+      }
+    }
   }
 
   return undefined;
@@ -580,18 +661,30 @@ function getBasicExpectedValueError(assertion: Assertion): string | undefined {
 }
 
 function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
+  if (!TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)) {
+    return undefined;
+  }
   if (
-    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
     !(isRecord(assertion.value) && hasNonBlankString(assertion.value.goal))
   ) {
     return 'Enter the goal that the agent should achieve.';
+  }
+  // Goal is present; mirror the runtime check that an optional timeoutMs is a positive number.
+  if (isRecord(assertion.value)) {
+    return trajectoryGoalSuccessTimeoutError(assertion.value);
   }
 
   return undefined;
 }
 
 function getNamedMatcherValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') &&
+    isRecord(assertion.value)
+  ) {
+    return getTrajectoryMatcherValueError(assertion.value, TOOL_STEP_TYPES);
+  }
   if (
     NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
