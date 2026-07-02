@@ -10,6 +10,7 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { importModule } from '../../src/esm';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
+import { fetchLangfuseTraces } from '../../src/integrations/langfuseTraces';
 import logger from '../../src/logger';
 import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
@@ -150,6 +151,12 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: vi.fn(),
 }));
 
+vi.mock('../../src/integrations/langfuseTraces', () => ({
+  fetchLangfuseTraces: vi.fn(),
+  isLangfuseTracesUrl: (url: string) =>
+    url === 'langfuse://traces' || url.startsWith('langfuse://traces?'),
+}));
+
 vi.mock('../../src/util/azureBlob', async () => ({
   ...(await vi.importActual<typeof import('../../src/util/azureBlob')>('../../src/util/azureBlob')),
   readAzureBlobText: vi.fn(),
@@ -189,6 +196,7 @@ const clearAllMocks = () => {
   vi.mocked(loadApiProvider).mockReset();
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
+  vi.mocked(fetchLangfuseTraces).mockReset();
   vi.mocked(readAzureBlobText).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(importModule).mockReset();
@@ -208,6 +216,29 @@ describe('readStandaloneTestsFile', () => {
 
   afterEach(() => {
     clearAllMocks();
+  });
+
+  it('should handle Langfuse trace URLs', async () => {
+    const mockTraces: TestCase[] = [
+      {
+        description: 'Trace 1',
+        vars: { input: 'hello' },
+        providerOutput: { output: 'world' },
+      },
+    ];
+    vi.mocked(fetchLangfuseTraces).mockResolvedValue(mockTraces);
+
+    const result = await readStandaloneTestsFile('langfuse://traces?tags=production&limit=1');
+
+    expect(fetchLangfuseTraces).toHaveBeenCalledWith('langfuse://traces?tags=production&limit=1');
+    expect(result).toEqual(mockTraces);
+  });
+
+  it('should not route lookalike Langfuse paths as trace sources', async () => {
+    const result = await readStandaloneTestsFile('langfuse://traces-archive');
+
+    expect(result).toEqual([]);
+    expect(fetchLangfuseTraces).not.toHaveBeenCalled();
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -828,6 +859,12 @@ describe('readTest', () => {
     await expect(readTest(input)).rejects.toThrow(
       'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n{}',
     );
+  });
+
+  it('should accept an empty stored provider output as a valid test field', async () => {
+    const input: TestCase = { providerOutput: '' };
+
+    await expect(readTest(input)).resolves.toEqual(input);
   });
 
   it('readTest with TestCase that contains a vars glob input', async () => {
@@ -1763,6 +1800,31 @@ describe('loadTestsFromGlob', () => {
 
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
     expect(result).toEqual(mockDataset);
+  });
+
+  it('should handle Langfuse trace URLs', async () => {
+    const mockTraces: TestCase[] = [
+      {
+        description: 'Trace 1',
+        vars: { input: 'hello' },
+        providerOutput: { output: 'world' },
+      },
+    ];
+    vi.mocked(fetchLangfuseTraces).mockResolvedValue(mockTraces);
+
+    const result = await loadTestsFromGlob('langfuse://traces?tags=production&limit=1');
+
+    expect(fetchLangfuseTraces).toHaveBeenCalledWith('langfuse://traces?tags=production&limit=1');
+    expect(result).toEqual(mockTraces);
+  });
+
+  it('should not route lookalike Langfuse globs as trace sources', async () => {
+    vi.mocked(globSync).mockReturnValue([]);
+
+    const result = await loadTestsFromGlob('langfuse://traces-archive');
+
+    expect(result).toEqual([]);
+    expect(fetchLangfuseTraces).not.toHaveBeenCalled();
   });
 
   it('should recursively resolve file:// references in YAML test files', async () => {

@@ -1,0 +1,802 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock the envars module
+vi.mock('../../src/envars', () => ({
+  getEnvString: vi.fn(),
+  isCI: vi.fn().mockReturnValue(true),
+}));
+
+// Mock the langfuse package with hoisted mocks
+const mockTraceList = vi.hoisted(() => vi.fn());
+const mockShutdownAsync = vi.hoisted(() => vi.fn());
+const mockLangfuseConstructorError = vi.hoisted(() => ({
+  error: undefined as Error | undefined,
+}));
+
+vi.mock('langfuse', () => ({
+  Langfuse: class MockLangfuse {
+    constructor() {
+      if (mockLangfuseConstructorError.error) {
+        throw mockLangfuseConstructorError.error;
+      }
+    }
+
+    api = {
+      traceList: mockTraceList,
+    };
+    shutdownAsync = mockShutdownAsync;
+  },
+}));
+
+// Import after mocks are set up
+import { getEnvString } from '../../src/envars';
+import {
+  fetchLangfuseTraces,
+  isLangfuseTracesUrl,
+  parseTracesUrl,
+  shutdownLangfuse,
+} from '../../src/integrations/langfuseTraces';
+
+describe('langfuseTraces', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset mocks to ensure test isolation
+    mockTraceList.mockReset();
+    mockShutdownAsync.mockReset();
+    mockLangfuseConstructorError.error = undefined;
+    vi.mocked(getEnvString).mockReset();
+    // Shutdown any existing langfuse instance to reset singleton state
+    await shutdownLangfuse();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('parseTracesUrl', () => {
+    it('should only accept the traces source URL and its query parameters', () => {
+      expect(isLangfuseTracesUrl('langfuse://traces')).toBe(true);
+      expect(isLangfuseTracesUrl('langfuse://traces?limit=1')).toBe(true);
+      expect(isLangfuseTracesUrl('langfuse://traces-archive')).toBe(false);
+      expect(() => parseTracesUrl('langfuse://traces-archive')).toThrow(
+        'Invalid Langfuse traces URL',
+      );
+    });
+
+    it('should redact query parameters when rejecting lookalike trace URLs', () => {
+      expect(() =>
+        parseTracesUrl('langfuse://traces-archive?userId=secret-user&sessionId=secret-session'),
+      ).toThrow('Invalid Langfuse traces URL: langfuse://traces-archive?<redacted>');
+
+      try {
+        parseTracesUrl('langfuse://traces-archive?userId=secret-user&sessionId=secret-session');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).not.toContain('secret-user');
+        expect((error as Error).message).not.toContain('secret-session');
+      }
+    });
+
+    it('should parse URL with no parameters', () => {
+      const result = parseTracesUrl('langfuse://traces');
+      expect(result).toEqual({});
+    });
+
+    it('should parse URL with empty query string', () => {
+      const result = parseTracesUrl('langfuse://traces?');
+      expect(result).toEqual({});
+    });
+
+    it('should parse limit parameter', () => {
+      const result = parseTracesUrl('langfuse://traces?limit=50');
+      expect(result.limit).toBe(50);
+    });
+
+    it('should cap limit at maximum', () => {
+      const result = parseTracesUrl('langfuse://traces?limit=5000');
+      expect(result.limit).toBe(1000);
+    });
+
+    it('should throw on invalid limit', () => {
+      expect(() => parseTracesUrl('langfuse://traces?limit=abc')).toThrow('Invalid limit');
+      expect(() => parseTracesUrl('langfuse://traces?limit=10traces')).toThrow('Invalid limit');
+      expect(() => parseTracesUrl('langfuse://traces?limit=1.5')).toThrow('Invalid limit');
+      expect(() => parseTracesUrl('langfuse://traces?limit=-1')).toThrow('Invalid limit');
+      expect(() => parseTracesUrl('langfuse://traces?limit=0')).toThrow('Invalid limit');
+    });
+
+    it('should parse userId parameter', () => {
+      const result = parseTracesUrl('langfuse://traces?userId=user_123');
+      expect(result.userId).toBe('user_123');
+    });
+
+    it('should parse sessionId parameter', () => {
+      const result = parseTracesUrl('langfuse://traces?sessionId=session_456');
+      expect(result.sessionId).toBe('session_456');
+    });
+
+    it('should parse tags parameter', () => {
+      const result = parseTracesUrl('langfuse://traces?tags=production,gpt-4');
+      expect(result.tags).toEqual(['production', 'gpt-4']);
+    });
+
+    it('should parse repeated tags parameters', () => {
+      const result = parseTracesUrl('langfuse://traces?tags=production&tags=gpt-4,critical');
+      expect(result.tags).toEqual(['production', 'gpt-4', 'critical']);
+    });
+
+    it('should parse name parameter', () => {
+      const result = parseTracesUrl('langfuse://traces?name=chat-completion');
+      expect(result.name).toBe('chat-completion');
+    });
+
+    it('should parse timestamp parameters', () => {
+      const result = parseTracesUrl(
+        'langfuse://traces?fromTimestamp=2024-01-01T00:00:00Z&toTimestamp=2024-01-31T23:59:59Z',
+      );
+      expect(result.fromTimestamp).toBe('2024-01-01T00:00:00Z');
+      expect(result.toTimestamp).toBe('2024-01-31T23:59:59Z');
+    });
+
+    it('should parse version and release parameters', () => {
+      const result = parseTracesUrl('langfuse://traces?version=1.0&release=v2.0.0');
+      expect(result.version).toBe('1.0');
+      expect(result.release).toBe('v2.0.0');
+    });
+
+    it('should parse multiple parameters', () => {
+      const result = parseTracesUrl(
+        'langfuse://traces?limit=100&userId=user_123&tags=production&name=test',
+      );
+      expect(result).toEqual({
+        limit: 100,
+        userId: 'user_123',
+        tags: ['production'],
+        name: 'test',
+      });
+    });
+  });
+
+  describe('fetchLangfuseTraces', () => {
+    beforeEach(() => {
+      // Set up default env mocks for authentication
+      vi.mocked(getEnvString).mockImplementation((key: string) => {
+        if (key === 'LANGFUSE_PUBLIC_KEY') {
+          return 'pk-test';
+        }
+        if (key === 'LANGFUSE_SECRET_KEY') {
+          return 'sk-test';
+        }
+        if (key === 'LANGFUSE_BASE_URL' || key === 'LANGFUSE_HOST') {
+          return 'https://cloud.langfuse.com';
+        }
+        return '';
+      });
+    });
+
+    it('should throw error when credentials are missing', async () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse credentials not configured',
+      );
+    });
+
+    it('should preserve Langfuse client construction errors', async () => {
+      mockLangfuseConstructorError.error = new Error('Invalid baseUrl');
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow('Invalid baseUrl');
+    });
+
+    it('should fetch traces and convert to test cases', async () => {
+      const mockTraces = [
+        {
+          id: 'trace-1',
+          timestamp: '2024-01-15T10:00:00Z',
+          name: 'chat-completion',
+          input: { query: 'What is the capital of France?' },
+          output: { response: 'Paris is the capital of France.' },
+          userId: 'user_123',
+          sessionId: 'session_456',
+          tags: ['production', 'geography'],
+          metadata: { category: 'geography' },
+          htmlPath: '/project/123/traces/trace-1',
+          latency: 0.5,
+          totalCost: 0.001,
+        },
+      ];
+
+      mockTraceList.mockResolvedValueOnce({
+        data: mockTraces,
+        meta: { page: 1, limit: 100, totalItems: 1, totalPages: 1 },
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces?limit=10');
+
+      expect(mockTraceList).toHaveBeenCalledWith({
+        fields: 'core,io,metrics',
+        limit: 10,
+        page: 1,
+      });
+
+      expect(tests).toHaveLength(1);
+      expect(tests[0]).toMatchObject({
+        description: expect.stringContaining('chat-completion'),
+        vars: {
+          __langfuse_trace_id: 'trace-1',
+          __langfuse_input: { query: 'What is the capital of France?' },
+          __langfuse_output: { response: 'Paris is the capital of France.' },
+          __langfuse_user_id: 'user_123',
+          __langfuse_session_id: 'session_456',
+          __langfuse_tags: ['production', 'geography'],
+          __langfuse_latency: 0.5,
+          __langfuse_cost: 0.001,
+          input: 'What is the capital of France?',
+          output: 'Paris is the capital of France.',
+        },
+        metadata: {
+          langfuseTraceId: 'trace-1',
+          langfuseTraceUrl: 'https://cloud.langfuse.com/project/123/traces/trace-1',
+        },
+        options: {
+          disableVarExpansion: true,
+        },
+        providerOutput: 'Paris is the capital of France.',
+      });
+    });
+
+    it('should handle traces with string input/output directly', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-2',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Simple string input',
+            output: 'Simple string output',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars).toMatchObject({
+        input: 'Simple string input',
+        output: 'Simple string output',
+      });
+    });
+
+    it('should handle traces with various input object formats', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-prompt',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: { prompt: 'Using prompt key' },
+            output: { result: 'Using result key' },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Using prompt key');
+      expect(tests[0].vars?.output).toBe('Using result key');
+    });
+
+    it('should pass filter parameters to traceList', async () => {
+      mockTraceList.mockResolvedValueOnce({ data: [] });
+
+      await fetchLangfuseTraces(
+        'langfuse://traces?userId=user_123&sessionId=sess_456&tags=prod&name=test',
+      );
+
+      expect(mockTraceList).toHaveBeenCalledWith({
+        fields: 'core,io,metrics',
+        limit: 100,
+        page: 1,
+        userId: 'user_123',
+        sessionId: 'sess_456',
+        tags: ['prod'],
+        name: 'test',
+      });
+    });
+
+    it('should handle empty response', async () => {
+      mockTraceList.mockResolvedValueOnce({ data: [] });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests).toHaveLength(0);
+    });
+
+    it('should paginate through multiple pages', async () => {
+      // First page
+      mockTraceList.mockResolvedValueOnce({
+        data: Array(100)
+          .fill(null)
+          .map((_, i) => ({
+            id: `trace-${i}`,
+            timestamp: '2024-01-15T10:00:00Z',
+            input: `Input ${i}`,
+            output: `Output ${i}`,
+          })),
+        meta: { page: 1, limit: 100, totalItems: 150, totalPages: 2 },
+      });
+
+      // Second page
+      mockTraceList.mockResolvedValueOnce({
+        data: Array(50)
+          .fill(null)
+          .map((_, i) => ({
+            id: `trace-${100 + i}`,
+            timestamp: '2024-01-15T10:00:00Z',
+            input: `Input ${100 + i}`,
+            output: `Output ${100 + i}`,
+          })),
+        meta: { page: 2, limit: 100, totalItems: 150, totalPages: 2 },
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces?limit=150');
+
+      expect(mockTraceList).toHaveBeenCalledTimes(2);
+      expect(mockTraceList).toHaveBeenNthCalledWith(1, {
+        fields: 'core,io,metrics',
+        limit: 100,
+        page: 1,
+      });
+      expect(mockTraceList).toHaveBeenNthCalledWith(2, {
+        fields: 'core,io,metrics',
+        limit: 100,
+        page: 2,
+      });
+      expect(tests).toHaveLength(150);
+    });
+
+    it('should respect limit when paginating', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: Array(100)
+          .fill(null)
+          .map((_, i) => ({
+            id: `trace-${i}`,
+            timestamp: '2024-01-15T10:00:00Z',
+            input: `Input ${i}`,
+            output: `Output ${i}`,
+          })),
+        meta: { page: 1, limit: 100, totalItems: 500, totalPages: 5 },
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces?limit=50');
+
+      expect(mockTraceList).toHaveBeenCalledTimes(1);
+      expect(mockTraceList).toHaveBeenCalledWith({
+        fields: 'core,io,metrics',
+        limit: 50,
+        page: 1,
+      });
+      expect(tests).toHaveLength(50);
+    });
+
+    it('should keep traces without output in assertion-only mode', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-no-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Some input',
+            output: null,
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars).not.toHaveProperty('__langfuse_output');
+      expect(tests[0].vars).not.toHaveProperty('output');
+      expect(tests[0].providerOutput).toBe('');
+    });
+
+    it('should skip null inputs and preserve non-string primitive outputs', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-primitive-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: null,
+            output: false,
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars).not.toHaveProperty('__langfuse_input');
+      expect(tests[0].vars).not.toHaveProperty('input');
+      expect(tests[0].vars?.__langfuse_output).toBe(false);
+      expect(tests[0].vars?.output).toBe(false);
+      expect(tests[0].providerOutput).toBe('false');
+    });
+
+    it('should preserve empty string outputs for assertion-only mode', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-empty-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Some input',
+            output: '',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toBe('');
+      expect(tests[0].providerOutput).toBe('');
+    });
+
+    it('should handle traces with OpenAI chat format', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-openai',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: { messages: [{ role: 'user', content: 'Hello' }] },
+            output: { choices: [{ message: { content: 'Hi there!' } }] },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      // Should extract content from OpenAI format
+      expect(tests[0].vars?.input).toBe('Hello');
+      expect(tests[0].vars?.output).toBe('Hi there!');
+      // Raw data should still be available
+      expect(tests[0].vars?.__langfuse_input).toEqual({
+        messages: [{ role: 'user', content: 'Hello' }],
+      });
+      expect(tests[0].vars?.__langfuse_output).toEqual({
+        choices: [{ message: { content: 'Hi there!' } }],
+      });
+      // providerOutput should be the exact extracted output string for assertion-only grading
+      expect(tests[0].providerOutput).toBe('Hi there!');
+    });
+
+    it('should extract content from top-level chat message arrays', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-top-level-messages',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: [
+              { role: 'system', content: 'You are concise.' },
+              { role: 'user', content: 'Summarize the release notes' },
+            ],
+            output: 'Done',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Summarize the release notes');
+      expect(tests[0].vars?.__langfuse_input).toEqual([
+        { role: 'system', content: 'You are concise.' },
+        { role: 'user', content: 'Summarize the release notes' },
+      ]);
+    });
+
+    it('should extract OpenAI input_text blocks from message content', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-openai-input-blocks',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: {
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'input_text', text: 'Describe this dashboard' },
+                    { type: 'input_image', image_url: 'https://example.com/dashboard.png' },
+                  ],
+                },
+              ],
+            },
+            output: 'Dashboard summary',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Describe this dashboard');
+    });
+
+    it('should extract Responses API message arrays nested under input', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-responses-input',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: {
+              input: [
+                {
+                  role: 'user',
+                  content: [{ type: 'input_text', text: 'Classify this request' }],
+                },
+              ],
+            },
+            output: 'Classified',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Classify this request');
+    });
+
+    it('should extract Responses API output_text blocks from output arrays', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-responses-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Summarize this',
+            output: {
+              output: [
+                { type: 'reasoning', summary: [] },
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [
+                    { type: 'output_text', text: 'Final answer' },
+                    { type: 'output_text', text: 'Additional detail' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toBe('Final answer\nAdditional detail');
+      expect(tests[0].providerOutput).toBe('Final answer\nAdditional detail');
+    });
+
+    it('should preserve OpenAI chat tool calls when assistant content is null', async () => {
+      const toolCalls = [
+        {
+          id: 'call_123',
+          type: 'function',
+          function: { name: 'lookup_weather', arguments: '{"city":"Paris"}' },
+        },
+      ];
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-tool-call-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Get weather',
+            output: {
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: toolCalls,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toEqual(toolCalls);
+      expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
+    });
+
+    it('should preserve tool calls from top-level assistant message arrays', async () => {
+      const toolCalls = [
+        {
+          id: 'call_456',
+          type: 'function',
+          function: { name: 'lookup_account', arguments: '{"accountId":"123"}' },
+        },
+      ];
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-top-level-tool-call-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Look up account',
+            output: [{ role: 'assistant', content: null, tool_calls: toolCalls }],
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toEqual(toolCalls);
+      expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
+    });
+
+    it('should preserve tool calls from a top-level assistant message object', async () => {
+      const functionCall = { name: 'lookup_account', arguments: '{"accountId":"456"}' };
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-top-level-function-call-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Look up account',
+            output: { role: 'assistant', content: null, function_call: functionCall },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toEqual(functionCall);
+      expect(tests[0].providerOutput).toBe(JSON.stringify(functionCall));
+    });
+
+    it('should handle traces with Anthropic format', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-anthropic',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: {
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: 'Hello Claude' },
+                    { type: 'text', text: 'Second question' },
+                  ],
+                },
+              ],
+            },
+            output: {
+              content: [
+                { type: 'text', text: 'Hello!' },
+                { type: 'text', text: 'How can I help?' },
+              ],
+            },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      // Should extract text from Anthropic format
+      expect(tests[0].vars?.input).toBe('Hello Claude\nSecond question');
+      expect(tests[0].vars?.output).toBe('Hello!\nHow can I help?');
+      expect(tests[0].providerOutput).toBe('Hello!\nHow can I help?');
+    });
+
+    it('should handle traces with unrecognized complex format', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-unknown',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: { custom_field: 'custom input' },
+            output: { custom_response: 'custom output' },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      // Should fall back to the full object when format is unknown
+      expect(tests[0].vars?.input).toEqual({ custom_field: 'custom input' });
+      expect(tests[0].vars?.output).toEqual({ custom_response: 'custom output' });
+      // providerOutput should stringify unknown objects
+      expect(tests[0].providerOutput).toBe(JSON.stringify({ custom_response: 'custom output' }));
+    });
+
+    it('should use LANGFUSE_HOST as fallback for base URL', async () => {
+      vi.mocked(getEnvString).mockImplementation((key: string) => {
+        if (key === 'LANGFUSE_PUBLIC_KEY') {
+          return 'pk-test';
+        }
+        if (key === 'LANGFUSE_SECRET_KEY') {
+          return 'sk-test';
+        }
+        if (key === 'LANGFUSE_HOST') {
+          return 'https://custom.langfuse.com';
+        }
+        return '';
+      });
+
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-1',
+            timestamp: '2024-01-15T10:00:00Z',
+            htmlPath: '/project/123/traces/trace-1',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].metadata?.langfuseTraceUrl).toBe(
+        'https://custom.langfuse.com/project/123/traces/trace-1',
+      );
+    });
+
+    it('should prefer LANGFUSE_BASE_URL and normalize trace URLs', async () => {
+      vi.mocked(getEnvString).mockImplementation((key: string) => {
+        if (key === 'LANGFUSE_PUBLIC_KEY') {
+          return 'pk-test';
+        }
+        if (key === 'LANGFUSE_SECRET_KEY') {
+          return 'sk-test';
+        }
+        if (key === 'LANGFUSE_BASE_URL') {
+          return 'https://eu.cloud.langfuse.com/';
+        }
+        if (key === 'LANGFUSE_HOST') {
+          return 'https://custom.langfuse.com';
+        }
+        return '';
+      });
+
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-1',
+            timestamp: '2024-01-15T10:00:00Z',
+            htmlPath: 'project/123/traces/trace-1',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].metadata?.langfuseTraceUrl).toBe(
+        'https://eu.cloud.langfuse.com/project/123/traces/trace-1',
+      );
+    });
+
+    it('should throw helpful error on 401 authentication failure', async () => {
+      mockTraceList.mockRejectedValueOnce(new Error('401 Unauthorized'));
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL or LANGFUSE_HOST environment variables.',
+      );
+    });
+
+    it('should throw helpful error on 403 forbidden', async () => {
+      mockTraceList.mockRejectedValueOnce(new Error('403 Forbidden'));
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse access denied',
+      );
+    });
+
+    it('should throw error when response is null', async () => {
+      mockTraceList.mockResolvedValueOnce(null);
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse returned an empty response',
+      );
+    });
+
+    it('should wrap generic API errors', async () => {
+      mockTraceList.mockRejectedValueOnce(new Error('Network timeout'));
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Failed to fetch traces from Langfuse: Network timeout',
+      );
+    });
+  });
+});

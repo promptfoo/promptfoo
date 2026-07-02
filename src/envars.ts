@@ -328,6 +328,7 @@ type EnvVars = {
   HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;

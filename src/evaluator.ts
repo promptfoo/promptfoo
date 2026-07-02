@@ -459,6 +459,12 @@ function shouldSkipRedteamInjectVar(
   return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
 }
 
+function shouldPreserveStoredOutputVars(test: AtomicTestCase): boolean {
+  // Imported replay rows can contain arbitrary trace/dataset text. Keep those
+  // values literal when the provider output is already captured.
+  return test.providerOutput !== undefined && test.options?.disableVarExpansion === true;
+}
+
 function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
   if (testSuite?.redteam?.injectVar) {
     return testSuite.redteam.injectVar;
@@ -805,9 +811,16 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+  const skipRenderVarSet = new Set<string>();
+  if (shouldSkipRedteamInjectVar(test, testSuite, isRedteam)) {
+    skipRenderVarSet.add(getRedteamInjectVar(test, promptForRender, testSuite));
+  }
+  if (shouldPreserveStoredOutputVars(test)) {
+    for (const key of Object.keys(vars)) {
+      skipRenderVarSet.add(key);
+    }
+  }
+  const skipRenderVars = skipRenderVarSet.size > 0 ? [...skipRenderVarSet] : undefined;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
@@ -865,12 +878,13 @@ async function callProviderForRunEval({
   vars: Vars;
 }): Promise<ProviderCallResult> {
   const startTime = Date.now();
-  const response = test.providerOutput
+  const hasProviderOutput = test.providerOutput !== undefined;
+  const response = hasProviderOutput
     ? {
         output: test.providerOutput,
         tokenUsage: createEmptyTokenUsage(),
         cost: 0,
-        cached: false,
+        cached: true,
       }
     : await callActiveProvider({
         abortSignal,
@@ -1469,15 +1483,16 @@ async function runEvalInternal({
     });
     setup = rendered.setup;
 
-    traceContext = test.providerOutput
-      ? null
-      : await generateTraceContextIfNeeded(
-          test,
-          evaluateOptions,
-          testIndex,
-          promptIndex,
-          testSuite,
-        );
+    traceContext =
+      test.providerOutput === undefined
+        ? await generateTraceContextIfNeeded(
+            test,
+            evaluateOptions,
+            testIndex,
+            promptIndex,
+            testSuite,
+          )
+        : null;
     const providerCall = await callProviderForRunEval({
       abortSignal,
       evalId,
