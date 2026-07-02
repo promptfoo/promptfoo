@@ -64,7 +64,7 @@ const results = await db.select().from(evalsTable).where(eq(evalsTable.id, id));
 ## Development
 
 ```bash
-npm run dev:server   # Runs on localhost:15500
+npm run dev:server   # Runs on localhost:18601
 npm run dev          # Both server + frontend
 ```
 

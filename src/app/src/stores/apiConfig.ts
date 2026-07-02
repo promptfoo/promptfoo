@@ -1,13 +1,76 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface ApiConfig {
+export interface ApiConfig {
   apiBaseUrl: string | undefined;
   setApiBaseUrl: (apiBaseUrl: string) => void;
   fetchingPromise: Promise<Response> | null;
   setFetchingPromise: (fetchingPromise: Promise<Response> | null) => void;
   persistApiBaseUrl: boolean;
   enablePersistApiBaseUrl: () => void;
+}
+
+const LEGACY_LOCAL_API_PORT = '15500';
+
+type PersistedApiConfig = Pick<Partial<ApiConfig>, 'apiBaseUrl'>;
+
+function getPersistedApiConfig(persistedState: unknown): PersistedApiConfig {
+  if (
+    typeof persistedState !== 'object' ||
+    persistedState === null ||
+    Array.isArray(persistedState)
+  ) {
+    return {};
+  }
+
+  const apiBaseUrl = (persistedState as { apiBaseUrl?: unknown }).apiBaseUrl;
+  return typeof apiBaseUrl === 'string' ? { apiBaseUrl } : {};
+}
+
+function isLegacyLocalApiBaseUrl(apiBaseUrl: unknown) {
+  if (typeof apiBaseUrl !== 'string') {
+    return false;
+  }
+
+  try {
+    const url = new URL(apiBaseUrl);
+    return (
+      url.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname) &&
+      url.port === LEGACY_LOCAL_API_PORT &&
+      ['', '/'].includes(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function mergeApiConfigPersistedState(
+  persistedState: unknown,
+  currentState: ApiConfig,
+): ApiConfig {
+  const persistedConfig = getPersistedApiConfig(persistedState);
+  const currentApiBaseUrl = currentState.apiBaseUrl;
+  const hasPersistedApiBaseUrl = persistedConfig.apiBaseUrl !== undefined;
+
+  if (
+    currentApiBaseUrl &&
+    currentApiBaseUrl !== persistedConfig.apiBaseUrl &&
+    isLegacyLocalApiBaseUrl(persistedConfig.apiBaseUrl)
+  ) {
+    return {
+      ...currentState,
+      ...persistedConfig,
+      apiBaseUrl: currentApiBaseUrl,
+      persistApiBaseUrl: true,
+    };
+  }
+
+  return {
+    ...currentState,
+    ...persistedConfig,
+    persistApiBaseUrl: hasPersistedApiBaseUrl || currentState.persistApiBaseUrl,
+  };
 }
 
 const useApiConfig = create<ApiConfig>()(
@@ -22,6 +85,7 @@ const useApiConfig = create<ApiConfig>()(
     }),
     {
       name: 'api-config-storage',
+      merge: mergeApiConfigPersistedState,
       partialize: (state) => {
         return state.persistApiBaseUrl ? { apiBaseUrl: state.apiBaseUrl } : {};
       },

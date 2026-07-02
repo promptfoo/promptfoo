@@ -22,7 +22,7 @@ const maxForks = process.env.CI
   ? Math.min(cpuCount, 4) // Use up to 4 cores in CI
   : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
-const API_PORT = process.env.API_PORT || '15500';
+const API_PORT = process.env.API_PORT || '18601';
 
 const ignoredTestConsolePatterns = [
   /^Warning: .*not wrapped in act/,
@@ -71,7 +71,8 @@ Object.assign(process.env, { VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL: remoteAp
 // Export a plain object here to avoid CI-only type conflicts from multiple Vite installs in the monorepo.
 export default {
   server: {
-    port: 3000,
+    port: 15500,
+    strictPort: true,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react()],
