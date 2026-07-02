@@ -8,6 +8,7 @@ import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -547,6 +548,8 @@ describe('OpenAICodexSDKProvider', () => {
           },
         ]);
         expect(result.metadata?.executionHealth?.sandboxFailures).toEqual([]);
+        expect(result.error).toBe('Error calling OpenAI Codex SDK: unclassified provider failure');
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
       });
 
       it('sanitizes provider error messages before storing execution health metadata', async () => {
@@ -588,6 +591,29 @@ describe('OpenAICodexSDKProvider', () => {
             status: 429,
             statusText: 'Too Many Requests',
             headers: { 'retry-after-ms': '1250' },
+          },
+        });
+      });
+
+      it('should preserve top-level retry timing when structured details are nested', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('Codex request throttled'), {
+            retryAfterMs: 750,
+            cause: { status: 429, code: 'rate_limit_exceeded' },
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toMatchObject({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            headers: { 'retry-after-ms': '750' },
           },
         });
       });

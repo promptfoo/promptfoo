@@ -508,6 +508,7 @@ const CODEX_RATE_LIMIT_CODES = [
 
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
+const CODEX_UNSTRUCTURED_RATE_LIMIT_PROSE = /\b429\b|rate[\s_-]*limit|too many requests/i;
 
 function getRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
@@ -524,7 +525,7 @@ function getStructuredCodexError(error: unknown): Record<string, unknown> | unde
   if (!errorRecord) {
     return undefined;
   }
-  return getRecord(errorRecord.cause) ?? getRecord(errorRecord.data) ?? errorRecord;
+  return errorRecord;
 }
 
 function getStructuredRetryAfterMs(errorRecord: Record<string, unknown>): number | undefined {
@@ -2426,7 +2427,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const streamingError = error instanceof CodexStreamingError ? error : undefined;
     const structuredError = streamingError?.structuredCause ?? error;
     const response = buildCodexRateLimitResponse(structuredError, errorMessage) ?? {
-      error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
+      error: CODEX_UNSTRUCTURED_RATE_LIMIT_PROSE.test(errorMessage)
+        ? 'Error calling OpenAI Codex SDK: unclassified provider failure'
+        : `Error calling OpenAI Codex SDK: ${errorMessage}`,
     };
     const providerErrors = streamingError?.state.providerErrors ?? [
       buildCodexProviderError(structuredError, { source: 'provider', fatal: true }),
