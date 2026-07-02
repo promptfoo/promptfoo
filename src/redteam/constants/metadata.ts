@@ -225,6 +225,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'telecom:account-takeover': 'Tests for SIM swap and account hijacking vulnerabilities',
   'telecom:e911-misinformation': 'Tests for incorrect emergency calling information',
   'telecom:tcpa-violation': 'Tests for TCPA consent and Do Not Call compliance',
+  'telecom:tcpa-consent-revocation':
+    'Tests whether consumer-facing contact flows recognize and honor TCPA consent revocation requests',
   'telecom:unauthorized-changes': 'Tests for slamming and cramming vulnerabilities',
   'telecom:fraud-enablement': 'Tests for telecom-specific fraud facilitation',
   'telecom:porting-misinformation': 'Tests for incorrect number portability information',
@@ -384,6 +386,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'telecom:account-takeover': 'Account Takeover',
   'telecom:e911-misinformation': 'E911 Misinformation',
   'telecom:tcpa-violation': 'TCPA Violation',
+  'telecom:tcpa-consent-revocation': 'TCPA Consent Revocation',
   'telecom:unauthorized-changes': 'Unauthorized Changes (Slamming/Cramming)',
   'telecom:fraud-enablement': 'Fraud Enablement',
   'telecom:porting-misinformation': 'Porting Misinformation',
@@ -606,6 +609,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'telecom:account-takeover': Severity.Critical,
   'telecom:e911-misinformation': Severity.Critical,
   'telecom:tcpa-violation': Severity.High,
+  'telecom:tcpa-consent-revocation': Severity.High,
   'telecom:unauthorized-changes': Severity.High,
   'telecom:fraud-enablement': Severity.High,
   'telecom:porting-misinformation': Severity.High,
@@ -799,6 +803,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'telecom:account-takeover',
     'telecom:e911-misinformation',
     'telecom:tcpa-violation',
+    'telecom:tcpa-consent-revocation',
     'telecom:unauthorized-changes',
     'telecom:fraud-enablement',
     'telecom:porting-misinformation',
@@ -932,6 +937,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'telecom:account-takeover': 'TelecomAccountTakeover',
   'telecom:e911-misinformation': 'TelecomE911Misinformation',
   'telecom:tcpa-violation': 'TelecomTcpaViolation',
+  'telecom:tcpa-consent-revocation': 'TelecomTcpaConsentRevocation',
   'telecom:unauthorized-changes': 'TelecomUnauthorizedChanges',
   'telecom:fraud-enablement': 'TelecomFraudEnablement',
   'telecom:porting-misinformation': 'TelecomPortingMisinformation',
@@ -1088,6 +1094,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     "Tests for incorrect or unsafe information about emergency calling, location accuracy, VoIP limitations, and E911 regulations (Kari's Law, RAY BAUM's Act)",
   'telecom:tcpa-violation':
     'Tests for TCPA violations including improper consent handling, Do Not Call list compliance, and illegal robocall/text facilitation',
+  'telecom:tcpa-consent-revocation':
+    'Tests whether consumer-facing voice, text, or contact-flow assistants recognize and honor plain-language TCPA consent revocation requests without opt-out friction or discouragement',
   'telecom:unauthorized-changes':
     'Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges) vulnerabilities that violate FCC Section 258',
   'telecom:fraud-enablement':

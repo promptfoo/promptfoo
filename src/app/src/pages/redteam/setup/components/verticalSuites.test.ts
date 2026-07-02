@@ -88,6 +88,7 @@ describe('VERTICAL_SUITES', () => {
       'telecom:account-takeover',
       'telecom:e911-misinformation',
       'telecom:tcpa-violation',
+      'telecom:tcpa-consent-revocation',
       'telecom:unauthorized-changes',
       'telecom:fraud-enablement',
       'telecom:porting-misinformation',
@@ -159,7 +160,7 @@ describe('DOMAIN_SPECIFIC_PLUGINS', () => {
   });
 
   it('should have correct total number of plugins', () => {
-    // Count expected: ecommerce(4) + financial(11) + medical(9) + insurance(4) + pharmacy(3) + telecom(12)
+    // Count expected: ecommerce(4) + financial(11) + medical(9) + insurance(4) + pharmacy(3) + telecom(13)
     const expectedCount = VERTICAL_SUITES.reduce((sum, suite) => sum + suite.plugins.length, 0);
     expect(DOMAIN_SPECIFIC_PLUGINS).toHaveLength(expectedCount);
   });
@@ -214,6 +215,7 @@ describe('getPluginSuite', () => {
       'telecom:account-takeover',
       'telecom:e911-misinformation',
       'telecom:tcpa-violation',
+      'telecom:tcpa-consent-revocation',
       'telecom:unauthorized-changes',
       'telecom:fraud-enablement',
       'telecom:porting-misinformation',
