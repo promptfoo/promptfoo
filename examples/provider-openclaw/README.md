@@ -50,7 +50,7 @@ You can override auto-detection with explicit config:
 
 ```yaml
 providers:
-  - id: openclaw:main
+  - id: openclaw
     config:
       gateway_url: http://127.0.0.1:18789
       auth_token: your-token-here
@@ -71,10 +71,14 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 # export OPENCLAW_GATEWAY_PASSWORD=your-password-here
 ```
 
+Bare `openclaw` targets OpenClaw's configured default agent through the stable upstream
+`openclaw/default` alias. Use `openclaw:main` or `openclaw:<agent-id>` when you want an explicit
+agent.
+
 For `openclaw:agent:*`, promptfoo generates an isolated session key per call by default so evals do
-not reuse your persistent OpenClaw `main` session. Set `session_key` explicitly if you want session
-continuity. The WS provider signs OpenClaw's `connect.challenge`, persists issued device tokens,
-and retries once with a cached device token when the gateway recommends it.
+not reuse your persistent OpenClaw session. Set `session_key` explicitly if you want continuity. The
+WS provider signs OpenClaw's `connect.challenge`, persists issued device tokens, and retries once
+with a cached device token when the gateway recommends it.
 
 Use `openclaw:embedding:main` or `openclaw:embeddings:<agent-id>` for `/v1/embeddings`. Set
 `backend_model` when you want a specific embedding model such as `openai/text-embedding-3-small`.

@@ -11,7 +11,12 @@ import {
   loadOrCreateOpenClawDeviceIdentity,
   storeOpenClawDeviceAuthToken,
 } from './device-auth';
-import { resolveAuthSecret, resolveGatewayWsUrl } from './shared';
+import {
+  buildOpenClawSessionKey,
+  normalizeOpenClawAgentId,
+  resolveAuthSecret,
+  resolveGatewayWsUrl,
+} from './shared';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types/providers';
 import type { OpenClawDeviceIdentity } from './device-auth';
@@ -104,20 +109,6 @@ function stripRetryMarker(result: OpenClawAgentCallResult): ProviderResponse {
   return providerResponse;
 }
 
-function buildOpenClawAgentSessionKey(agentId: string, sessionKey: string): string {
-  const trimmedSessionKey = sessionKey.trim();
-  if (!trimmedSessionKey || trimmedSessionKey.toLowerCase().startsWith('agent:')) {
-    return trimmedSessionKey;
-  }
-
-  const trimmedAgentId = agentId.trim();
-  if (!trimmedAgentId || trimmedAgentId.toLowerCase() === 'main') {
-    return trimmedSessionKey;
-  }
-
-  return `agent:${trimmedAgentId}:${trimmedSessionKey}`;
-}
-
 /**
  * OpenClaw WebSocket Agent Provider
  *
@@ -133,12 +124,12 @@ function buildOpenClawAgentSessionKey(agentId: string, sessionKey: string): stri
  *   6. Resolve on agent.wait response
  *
  * Usage:
- *   openclaw:agent           - default agent (main)
+ *   openclaw:agent           - configured default agent
  *   openclaw:agent:main      - explicit agent ID
  *   openclaw:agent:my-agent  - custom agent ID
  */
 export class OpenClawAgentProvider implements ApiProvider {
-  private agentId: string;
+  private agentId: string | undefined;
   private gatewayUrl: string;
   private authKind: 'password' | 'token' | undefined;
   private authSecret: string | undefined;
@@ -148,8 +139,8 @@ export class OpenClawAgentProvider implements ApiProvider {
   private hasExplicitScopes: boolean;
   private activeConnections = new Set<WebSocket>();
 
-  constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    this.agentId = agentId;
+  constructor(agentId: string | undefined, providerOptions: ProviderOptions = {}) {
+    this.agentId = normalizeOpenClawAgentId(agentId);
     this.openclawConfig = (providerOptions.config || {}) as OpenClawConfig;
     const env = providerOptions.env as Record<string, string | undefined> | undefined;
     this.gatewayUrl = resolveGatewayWsUrl(this.openclawConfig, env);
@@ -165,11 +156,11 @@ export class OpenClawAgentProvider implements ApiProvider {
   }
 
   id(): string {
-    return `openclaw:agent:${this.agentId}`;
+    return this.agentId ? `openclaw:agent:${this.agentId}` : 'openclaw:agent';
   }
 
   toString(): string {
-    return `[OpenClaw Agent Provider ${this.agentId}]`;
+    return `[OpenClaw Agent Provider ${this.agentId ?? 'default'}]`;
   }
 
   toJSON() {
@@ -185,9 +176,9 @@ export class OpenClawAgentProvider implements ApiProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     // Keep eval runs isolated from the user's persistent main session unless explicitly pinned.
-    const sessionKey = buildOpenClawAgentSessionKey(
+    const sessionKey = buildOpenClawSessionKey(
       this.agentId,
-      this.openclawConfig.session_key || `promptfoo-${crypto.randomUUID()}`,
+      this.openclawConfig.session_key?.trim() || `promptfoo-${crypto.randomUUID()}`,
     );
 
     const firstResult = await this.callApiOnce(prompt, sessionKey);
@@ -353,7 +344,7 @@ export class OpenClawAgentProvider implements ApiProvider {
   private buildAgentRequestParams(state: AgentConnectionState): Record<string, unknown> {
     return {
       message: state.prompt,
-      agentId: this.agentId,
+      ...(this.agentId && { agentId: this.agentId }),
       idempotencyKey: state.idempotencyKey,
       sessionKey: state.sessionKey,
       ...(this.openclawConfig.message_channel && {
