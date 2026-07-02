@@ -241,4 +241,313 @@ describe('matchesContextFaithfulness', () => {
       expect(result.reason).toBeDefined();
     });
   });
+
+  describe('verdict format robustness', () => {
+    const mockTwoCalls = (statementCount: number, verdicts: string) => {
+      const mockCallApi = vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            output: Array.from(
+              { length: statementCount },
+              (_, index) => `Statement ${index + 1}`,
+            ).join('\n'),
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          }),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            output: verdicts,
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          }),
+        );
+      const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+      callApiSpy.mockReset();
+      callApiSpy.mockImplementation(mockCallApi);
+    };
+
+    type VerdictCase = [
+      name: string,
+      statementCount: number,
+      verdicts: string,
+      expectedScore: number,
+      threshold: number,
+    ];
+    const marker = 'Final verdict for each statement in order:';
+    const cases: VerdictCase[] = [
+      [
+        'enumerated period list',
+        5,
+        `${marker}\n1. Yes.\n2. Yes.\n3. Yes.\n4. Yes.\n5. Yes.`,
+        1,
+        0.5,
+      ],
+      ['inline numbered list', 3, `${marker} 1) Yes 2) No 3) Yes`, 2 / 3, 0.5],
+      ['comma-separated list', 3, `${marker} Yes, No, Yes`, 2 / 3, 0.5],
+      ['Oxford-comma conjunction list', 3, `${marker} Yes, No, and Yes`, 2 / 3, 0.5],
+      ['comma conjunction list', 3, `${marker} Yes, No and Yes`, 2 / 3, 0.5],
+      ['two-item conjunction list', 2, `${marker} No and Yes`, 0.5, 0.5],
+      ['all-supported two-item conjunction list', 2, `${marker} Yes and Yes`, 1, 0.5],
+      [
+        'conjunction words in comma prose',
+        3,
+        `${marker} Yes, no and yes are both acceptable`,
+        0,
+        0.5,
+      ],
+      [
+        'conjunction before comma explanation',
+        2,
+        `${marker} Yes, and no explanation was provided`,
+        0,
+        0.5,
+      ],
+      ['conjunction words in prose', 2, `${marker} No and yes are both acceptable`, 0, 0.5],
+      ['stuffed conjunction list', 2, `${marker} Yes and Yes and Yes`, 0, 0.5],
+      ['incomplete conjunction list', 3, `${marker} Yes, and No`, 0, 0.5],
+      ['excess conjunction list', 3, `${marker} Yes, No, and Yes, No`, 0, 0.5],
+      [
+        'No explanation containing yes',
+        2,
+        `${marker} No, the context never mentions yes. No.`,
+        0,
+        0.5,
+      ],
+      [
+        'Yes explanation containing no',
+        2,
+        `${marker} Yes, there is no contradiction. Yes.`,
+        1,
+        0.75,
+      ],
+      ['Yes explanation beginning with no', 2, `${marker} Yes, no contradiction. Yes.`, 1, 0.75],
+      ['single-word comma explanation', 1, `${marker} Yes, indeed.`, 1, 0.5],
+      ['unknown verdict slot', 2, `${marker} Yes. Maybe.`, 0.5, 0.75],
+      ['compact unknown verdict slot', 2, `${marker} N/A. Yes.`, 0.5, 0.75],
+      ['unknown verdict in comma list', 3, `${marker} Yes, Maybe, Yes`, 2 / 3, 0.5],
+      ['multiword unknown verdict in comma list', 3, `${marker} Yes, Not sure, Yes`, 2 / 3, 0.5],
+      [
+        'unknown-prefixed prose in comma list',
+        3,
+        `${marker} Yes, not sure this is grounded, Yes`,
+        1 / 3,
+        0.5,
+      ],
+      ['unknown near-match in comma list', 3, `${marker} Yes, Not surely, Yes`, 1 / 3, 0.5],
+      ['wrapped unknown verdict in comma list', 3, `${marker} “Yes”, **N/A**, “Yes”`, 2 / 3, 0.5],
+      [
+        'annotated unknown verdict in comma list',
+        3,
+        `${marker} Yes: supported, Unknown: insufficient evidence, Yes: supported`,
+        2 / 3,
+        0.5,
+      ],
+      ['missing verdict slots', 3, `${marker} Yes.`, 1 / 3, 0.5],
+      [
+        'yes/no substrings in larger words',
+        1,
+        `${marker} Yesterday the report cannot be verified.`,
+        0,
+        0.5,
+      ],
+      ['more verdicts than statements', 2, `${marker} No. No. No.`, 0, 0.5],
+      [
+        'bullets, labels, wrappers, and alternate delimiters',
+        3,
+        `${marker} - **Yes**\n2) Verdict: No.\n• _Yes_`,
+        2 / 3,
+        0.5,
+      ],
+      [
+        'comma-isolated verdict word in explanation',
+        2,
+        `${marker} No, the source says, yes, but only in a quote. No.`,
+        0,
+        0.5,
+      ],
+      ['unknown slot before extra verdict', 2, `${marker} Maybe. Yes. Yes.`, 0, 0.75],
+      ['compact unknown before extra verdict', 2, `${marker} N/A. Yes. Yes.`, 0, 0.75],
+      [
+        'numbered multiword unknown before extra verdict',
+        2,
+        `${marker}\n1. Not sure.\n2. Yes.\n3. Yes.`,
+        0,
+        0.75,
+      ],
+      [
+        'bulleted multiword unknown before extra verdict',
+        2,
+        `${marker}\n- Not sure.\n- Yes.\n- Yes.`,
+        0,
+        0.75,
+      ],
+      [
+        'Unicode-dash bullet unknown before extra verdict',
+        2,
+        `${marker}\n— Not sure.\n– Yes.\n— Yes.`,
+        0,
+        0.75,
+      ],
+      ['repeated final-answer marker', 2, `${marker} No. No. ${marker} Yes. Yes.`, 0, 0.75],
+      [
+        'final-answer marker with spacing variation',
+        2,
+        'Final verdict for each statement in order : Yes. No.',
+        0.5,
+        0.5,
+      ],
+      [
+        'repeated final-answer marker with spacing variation',
+        1,
+        `${marker} Yes. Final verdict for each statement in order : No.`,
+        0,
+        0.5,
+      ],
+      [
+        'spaced final-answer marker before repeated marker',
+        1,
+        `Final verdict for each statement in order : Yes. ${marker} No.`,
+        0,
+        0.5,
+      ],
+      [
+        'final-answer marker words in explanation prose',
+        1,
+        `${marker} Yes. The final verdict for each statement in order was clear.`,
+        1,
+        0.5,
+      ],
+      [
+        'explanation marker words before repeated marker',
+        1,
+        `${marker} Yes. The final verdict for each statement in order was clear. ${marker} No.`,
+        0,
+        0.5,
+      ],
+      [
+        'multiple explanation marker words before repeated marker',
+        1,
+        `${marker} Yes. The final verdict for each statement in order was clear. The final verdict for each statement in order remained clear. ${marker} No.`,
+        0,
+        0.5,
+      ],
+      ['extra positive verdicts', 2, `${marker} Yes. Yes. No. No.`, 0, 0.75],
+      [
+        'malformed suffix after excess comma verdicts',
+        2,
+        `${marker} Yes, Yes, Yes, indeed.`,
+        0,
+        0.5,
+      ],
+      ['bold final-answer marker', 1, `**${marker}** Yes.`, 1, 0.5],
+      ['smart-quoted verdicts', 2, `${marker} “Yes”. “No”.`, 0.5, 0.5],
+      ['statement-labelled verdicts', 2, `${marker} Statement 1: Yes. Statement 2: Yes.`, 1, 0.75],
+      [
+        'period-delimited statement labels',
+        2,
+        `${marker} Statement 1. Yes. Statement 2. Yes.`,
+        1,
+        0.75,
+      ],
+      ['hyphen-labelled statements', 2, `${marker} Statement 1 - Yes. Statement 2 - Yes.`, 1, 0.75],
+      [
+        'Unicode-dash statement labels',
+        2,
+        `${marker} Statement 1 — Yes. Statement 2 — No.`,
+        0.5,
+        0.5,
+      ],
+      ['verdict followed by because', 1, `${marker} Yes because the context supports it.`, 1, 0.5],
+      [
+        'explanation containing dotted abbreviation',
+        2,
+        `${marker} Yes because the U.S. source supports it. No.`,
+        0.5,
+        0.5,
+      ],
+      [
+        'explanation containing dotted domain',
+        2,
+        `${marker} Yes because docs.example.com supports it. Yes.`,
+        1,
+        0.5,
+      ],
+      [
+        'explanation containing verdict-like domain component',
+        2,
+        `${marker} Yes because docs.example.no supports it. Yes.`,
+        1,
+        0.5,
+      ],
+      [
+        'explanation containing numeric version',
+        2,
+        `${marker} Yes because version 1.2.3 supports it. No.`,
+        0.5,
+        0.5,
+      ],
+      [
+        'explanation containing decimal',
+        2,
+        `${marker} Yes because confidence is 3.14. No.`,
+        0.5,
+        0.5,
+      ],
+      ['no-space verdict list', 2, `${marker} Yes.No.`, 0.5, 0.5],
+      ['no-space numbered verdict list', 2, `${marker} 1.Yes.2.No.`, 0.5, 0.5],
+      ['no-space compact stuffing', 2, `${marker} Yes.bogus.Yes.`, 0, 0.5],
+      ['parenthesized explanation', 1, `${marker} Yes (supported).`, 1, 0.5],
+      ['trailing comma', 3, `${marker} Yes, No, Yes,`, 2 / 3, 0.5],
+      [
+        'annotated comma list',
+        3,
+        `${marker} Yes: supported, No: unsupported, Yes: supported`,
+        2 / 3,
+        0.5,
+      ],
+      [
+        'semicolon inside explanation',
+        2,
+        `${marker}\n1) Yes; No, that wording does not contradict the context.\n2) Yes.`,
+        1,
+        0.75,
+      ],
+      ['unparseable final list', 2, `${marker} Maybe. Perhaps.`, 0, 0.5],
+      ['duplicate statement label', 2, `${marker} Statement 1: Yes. Statement 1: Yes.`, 0, 0.5],
+      ['out-of-range statement label', 2, `${marker} Statement 1: Yes. Statement 3: Yes.`, 0, 0.5],
+      ['signed ordinal labels', 2, `${marker} -1) Yes. +2) Yes.`, 0, 0.5],
+      ['Unicode-minus ordinal labels', 2, `${marker} −1) Yes. −2) Yes.`, 0, 0.5],
+      ['spaced dash-bullet ordinal labels', 2, `${marker} - 1) Yes. - 2) Yes.`, 1, 0.5],
+      [
+        'duplicate statement label in comma list',
+        2,
+        `${marker} Statement 1: Yes,Statement 1: Yes`,
+        0,
+        0.5,
+      ],
+      [
+        'out-of-range statement label in comma list',
+        2,
+        `${marker} Statement 1: Yes,Statement 3: Yes`,
+        0,
+        0.5,
+      ],
+      [
+        'unique reordered statement labels',
+        2,
+        `${marker} Statement 2: No. Statement 1: Yes.`,
+        0.5,
+        0.5,
+      ],
+      ['excess inline numbered entries', 2, `${marker} 1) Yes 2) Yes 3) Yes`, 0, 0.5],
+    ];
+
+    it.each(cases)('%s', async (_name, statementCount, verdicts, expectedScore, threshold) => {
+      mockTwoCalls(statementCount, verdicts);
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', threshold);
+      expect(result.score).toBeCloseTo(expectedScore, 5);
+      expect(result.pass).toBe(expectedScore >= threshold - Number.EPSILON);
+    });
+  });
 });
