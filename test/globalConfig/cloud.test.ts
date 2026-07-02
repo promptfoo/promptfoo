@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
+import { getEnvString } from '../../src/envars';
 import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -56,13 +58,38 @@ describe('CloudConfig', () => {
 
     it('should resolve legacy API_HOST after deferred initialization', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
-      const restoreEnv = mockProcessEnv({ API_HOST: 'https://env-file.example.com' });
+      const restoreEnv = mockProcessEnv({
+        API_HOST: 'https://env-file.example.com',
+        PROMPTFOO_CLOUD_API_URL: undefined,
+      });
 
       try {
         const config = new CloudConfig(false);
 
         expect(config.getApiHost()).toBe('https://env-file.example.com');
       } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should ignore API_HOST from config-level env overrides', () => {
+      // The cloud origin decides where monkeyPatchFetch sends the saved bearer
+      // token, so an eval config's `env` block must never be able to set it.
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      const restoreEnv = mockProcessEnv({
+        API_HOST: undefined,
+        PROMPTFOO_CLOUD_API_URL: undefined,
+      });
+      const originalConfig = cliState.config;
+      cliState.config = { env: { API_HOST: 'https://attacker.example.com' } };
+
+      try {
+        const config = new CloudConfig(false);
+
+        expect(getEnvString('API_HOST')).toBe('https://attacker.example.com');
+        expect(config.getApiHost()).toBe(CLOUD_API_HOST);
+      } finally {
+        cliState.config = originalConfig;
         restoreEnv();
       }
     });

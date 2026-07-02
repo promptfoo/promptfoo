@@ -1,4 +1,3 @@
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
@@ -127,11 +126,14 @@ export class CloudConfig {
    */
   private resolveApiHost(): string {
     // API_HOST is a legacy fallback that may arrive through --env-file. Resolve it at call time
-    // rather than at module load, which happens before argv env loading.
+    // rather than at module load, which happens before argv env loading. Read process.env
+    // directly (not getEnvString): the cloud origin decides where monkeyPatchFetch sends the
+    // saved bearer token, so an eval config's `env` block must never influence it.
     const host =
       this.config.apiHost ||
       process.env.PROMPTFOO_CLOUD_API_URL ||
-      getEnvString('API_HOST', CLOUD_API_HOST);
+      process.env.API_HOST ||
+      CLOUD_API_HOST;
     return host.replace(/\/+$/, '');
   }
 
