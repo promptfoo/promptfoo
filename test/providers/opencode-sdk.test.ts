@@ -414,6 +414,20 @@ describe('OpenCodeSDKProvider', () => {
             },
           }),
         );
+        expect(mockCreateOpencode).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              tools: {
+                '*': false,
+                glob: true,
+                grep: true,
+                list: true,
+                read: true,
+              },
+              permission: { bash: 'allow' },
+            }),
+          }),
+        );
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
             path: {
@@ -425,12 +439,12 @@ describe('OpenCodeSDKProvider', () => {
             },
             body: expect.objectContaining({
               parts: [{ type: 'text', text: 'Test prompt' }],
-              permission: {
-                bash: 'allow',
-              },
             }),
           }),
         );
+        const promptBody = mockSessionPrompt.mock.calls[0][0].body;
+        expect(promptBody).not.toHaveProperty('tools');
+        expect(promptBody).not.toHaveProperty('permission');
         expect(mockSessionDelete).toHaveBeenCalledWith(
           expect.objectContaining({
             path: {
@@ -442,6 +456,235 @@ describe('OpenCodeSDKProvider', () => {
             },
           }),
         );
+      });
+
+      it('applies static v1 permission policy through the locally started server', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            working_dir: '/test/dir',
+            tools: { write: true, bash: true },
+            permission: { edit: 'deny', bash: 'deny' },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCreateOpencode).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              tools: {
+                '*': false,
+                glob: true,
+                grep: true,
+                list: true,
+                read: true,
+                bash: true,
+                edit: true,
+              },
+              permission: { edit: 'deny', bash: 'deny' },
+            }),
+          }),
+        );
+        expect(mockSessionPrompt.mock.calls[0][0].body).toEqual({
+          parts: [{ type: 'text', text: 'Test prompt' }],
+        });
+      });
+
+      it('atomically reapplies a complete v1 tools policy on persisted sessions', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { persist_sessions: true, tools: { bash: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First prompt');
+        await provider.callApi('Second prompt');
+
+        expect(mockSessionCreate).toHaveBeenCalledTimes(1);
+        expect(mockSessionPrompt.mock.calls.map(([parameters]) => parameters.body.tools)).toEqual([
+          { '*': false, bash: true },
+          { '*': false, bash: true },
+        ]);
+      });
+
+      it('applies v1 explicit-session tools atomically on each prompt', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        mockSessionPrompt
+          .mockImplementationOnce(() => firstPrompt.promise)
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Second' }]));
+        const provider = new OpenCodeSDKProvider({
+          config: { session_id: 'shared-v1', tools: { bash: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First');
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(1));
+        const secondCall = provider.callApi('Second');
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        firstPrompt.resolve(createMockPromptResponse([{ type: 'text', text: 'First' }]));
+        await firstCall;
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(2));
+        await secondCall;
+
+        expect(mockSessionPrompt.mock.calls.map(([parameters]) => parameters.body.tools)).toEqual([
+          { '*': false, bash: true },
+          { '*': false, bash: true },
+        ]);
+      });
+
+      it('normalizes apply_patch in custom-agent tools on v1', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            custom_agent: {
+              description: 'patch reviewer',
+              tools: { apply_patch: true },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCreateOpencode).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              agent: {
+                custom: expect.objectContaining({ tools: { edit: true } }),
+              },
+            }),
+          }),
+        );
+        expect(mockSessionPrompt.mock.calls[0][0].body.tools).toEqual({
+          '*': false,
+          edit: true,
+        });
+      });
+
+      it('rejects v1 explicit-session pattern permissions before prompting', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { session_id: 'shared-v1', permission: { bash: 'deny' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toMatch(
+          /supports permission rules only.*sessions started by Promptfoo/,
+        );
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
+      it('rejects a v1 prompt-level policy before starting or poisoning the server', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { permission: { bash: 'deny' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const rejected = await provider.callApi('Override', {
+          prompt: {
+            raw: 'Override',
+            label: 'override',
+            config: { permission: { bash: 'allow' } },
+          },
+          vars: {},
+        });
+
+        expect(rejected.error).toMatch(/provider-level configuration/);
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+
+        const accepted = await provider.callApi('Base policy');
+        expect(accepted.output).toBe('Test response');
+        expect(mockCreateOpencode).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({ permission: { bash: 'deny' } }),
+          }),
+        );
+      });
+
+      it('allows static v1 permissions on provider-owned persisted sessions', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { persist_sessions: true, permission: { bash: 'deny' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First');
+        await provider.callApi('Second');
+
+        expect(mockSessionCreate).toHaveBeenCalledTimes(1);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+        expect(mockSessionPrompt.mock.calls[0][0].body).not.toHaveProperty('tools');
       });
 
       it('should handle multiple text parts in response', async () => {
@@ -717,6 +960,38 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionCreate).toHaveBeenCalledTimes(2);
       });
 
+      it('should share one client initialization across concurrent first calls', async () => {
+        const initialization = createDeferred<{
+          client: Record<string, unknown>;
+          server: { url: string; close: typeof mockServerClose };
+        }>();
+        mockCreateOpencode.mockReturnValue(initialization.promise);
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First');
+        const secondCall = provider.callApi('Second');
+        await vi.waitFor(() => expect(mockCreateOpencode).toHaveBeenCalledTimes(1));
+
+        initialization.resolve({
+          client: {
+            session: {
+              create: mockSessionCreate,
+              prompt: mockSessionPrompt,
+              messages: mockSessionMessages,
+              delete: mockSessionDelete,
+              list: mockSessionList,
+              abort: mockSessionAbort,
+            },
+          },
+          server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+        });
+
+        await expect(Promise.all([firstCall, secondCall])).resolves.toHaveLength(2);
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+      });
+
       it('should resume session when session_id provided', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { session_id: 'existing-session' },
@@ -730,8 +1005,271 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
             sessionID: 'existing-session',
+            tools: { '*': false },
           }),
         );
+      });
+
+      it('should reject v2 session resumes that try to rebind permissions', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            permission: { bash: 'deny' },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await expect(provider.callApi('Test prompt')).resolves.toEqual({
+          error:
+            'Error calling OpenCode SDK: OpenCode SDK v2 explicit session_id resumes cannot safely rebind permission rules; create a new session to change permission.',
+        });
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        false,
+        true,
+      ])('should reapply v2 tool policy when resuming a session with bash=%s', async (bash) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            tools: { bash },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test response');
+        expect(mockSessionCreate).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false, bash },
+          }),
+        );
+      });
+
+      it('should reapply custom-agent tool policy when resuming a v2 session', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            custom_agent: { description: 'restricted agent', tools: { bash: true } },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test response');
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false, bash: true },
+          }),
+        );
+      });
+
+      it.each([
+        {
+          tools: { bash: true },
+          customTools: { '*': false },
+          expected: [
+            ['bash', true],
+            ['*', false],
+          ],
+        },
+        {
+          tools: { bash: false },
+          customTools: { '*': true },
+          expected: [
+            ['bash', false],
+            ['*', true],
+          ],
+        },
+      ])('should preserve custom-agent-last tool ordering when resuming %#', async ({
+        tools,
+        customTools,
+        expected,
+      }) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            tools,
+            custom_agent: { description: 'ordered policy', tools: customTools },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(Object.entries(mockSessionPrompt.mock.calls[0][0].tools)).toEqual(expected);
+      });
+
+      it.each([
+        {
+          tools: { '*': false },
+          expected: [
+            ['*', false],
+            ['glob', true],
+            ['grep', true],
+            ['list', true],
+            ['read', true],
+          ],
+        },
+        {
+          tools: { read: false, '*': true },
+          expected: [
+            ['*', true],
+            ['glob', true],
+            ['grep', true],
+            ['list', true],
+            ['read', false],
+          ],
+        },
+      ])('should preserve new-session default and top-level ordering when resuming %#', async ({
+        tools,
+        expected,
+      }) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            working_dir: '/test/dir',
+            tools,
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(Object.entries(mockSessionPrompt.mock.calls[0][0].tools)).toEqual(expected);
+      });
+
+      it('should reject v2 session resumes with custom-agent permission policy', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            custom_agent: {
+              description: 'restricted agent',
+              permission: { bash: 'deny' },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toMatch(/cannot safely rebind/);
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        { permission: {} },
+        { tools: {} },
+      ])('should apply defaults to v2 session resumes with empty policy %#', async (emptyPolicy) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            ...emptyPolicy,
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false },
+          }),
+        );
+      });
+
+      it('should reapply read-only defaults when resuming a v2 session', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            working_dir: '/test/dir',
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: {
+              '*': false,
+              glob: true,
+              grep: true,
+              list: true,
+              read: true,
+            },
+          }),
+        );
+      });
+
+      it('should reapply defaults when resuming through a remote v2 client', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'https://opencode.example.test',
+            session_id: 'existing-session',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCreateOpencodeClient).toHaveBeenCalledWith({
+          baseUrl: 'https://opencode.example.test',
+        });
+        expect(mockSessionCreate).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false },
+          }),
+        );
+      });
+
+      it.each([
+        [] as any,
+        null as any,
+        false as any,
+        { bash: 42 } as any,
+        { bash: [] } as any,
+        { bash: { '*': 'permit' } } as any,
+      ])('should reject malformed permission config before resuming %#', async (permission) => {
+        const provider = new OpenCodeSDKProvider({
+          config: { session_id: 'existing-session', permission },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toMatch(/OpenCode permission/);
+        expect(mockSessionCreate).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        { tools: { bash: 'yes' } } as any,
+        { permission: { bash: { '*': 'permit' } } } as any,
+      ])('should reject malformed custom-agent policy before loading a client %#', async (policy) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            custom_agent: { description: 'bad policy', ...policy },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toMatch(/OpenCode (tools|permission)/);
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+        expect(mockCreateOpencodeClient).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
       });
 
       it('should reuse session when persist_sessions is true without cache', async () => {
@@ -744,6 +1282,64 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Same prompt');
 
         expect(mockSessionCreate).toHaveBeenCalledTimes(1);
+      });
+
+      it('should create one persisted session for concurrent calls and serialize prompts', async () => {
+        const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        mockSessionPrompt
+          .mockImplementationOnce(() => firstPrompt.promise)
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Second' }]));
+        const provider = new OpenCodeSDKProvider({
+          config: { persist_sessions: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First');
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(1));
+        const secondCall = provider.callApi('Second');
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+        expect(mockSessionCreate).toHaveBeenCalledTimes(1);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        firstPrompt.resolve(createMockPromptResponse([{ type: 'text', text: 'First' }]));
+        await expect(firstCall).resolves.toMatchObject({ output: 'First' });
+        await expect(secondCall).resolves.toMatchObject({ output: 'Second' });
+        expect(mockSessionCreate).toHaveBeenCalledTimes(1);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should abort while waiting for a serialized persisted session', async () => {
+        const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        mockSessionPrompt.mockImplementationOnce(() => firstPrompt.promise);
+        const provider = new OpenCodeSDKProvider({
+          config: { persist_sessions: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First');
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(1));
+        const firstQueue = Array.from((provider as any).sessionQueues.values())[0];
+        const abortController = new AbortController();
+        const secondCall = provider.callApi('Second', undefined, {
+          abortSignal: abortController.signal,
+        });
+        await vi.waitFor(() => {
+          expect(Array.from((provider as any).sessionQueues.values())[0]).not.toBe(firstQueue);
+        });
+        abortController.abort();
+
+        await expect(secondCall).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        const thirdCall = provider.callApi('Third');
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        firstPrompt.resolve(createMockPromptResponse([{ type: 'text', text: 'First' }]));
+        await expect(firstCall).resolves.toMatchObject({ output: 'First' });
+        await expect(thirdCall).resolves.toMatchObject({ output: 'Test response' });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
       it('should delete non-persistent sessions after each call', async () => {
@@ -847,6 +1443,110 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
       });
 
+      it('should not share cached responses across credential identities', async () => {
+        mockSessionPrompt
+          .mockResolvedValueOnce(
+            createMockPromptResponse([{ type: 'text', text: 'Credential A response' }]),
+          )
+          .mockResolvedValueOnce(
+            createMockPromptResponse([{ type: 'text', text: 'Credential B response' }]),
+          );
+        const providerA = new OpenCodeSDKProvider({
+          config: { provider_id: 'anthropic' },
+          env: { ANTHROPIC_API_KEY: 'credential-a' },
+        });
+        const providerB = new OpenCodeSDKProvider({
+          config: { provider_id: 'anthropic' },
+          env: { ANTHROPIC_API_KEY: 'credential-b' },
+        });
+
+        expect((await providerA.callApi('Same prompt')).output).toBe('Credential A response');
+        expect((await providerB.callApi('Same prompt')).output).toBe('Credential B response');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should not share cached responses across ambient AWS account identities', async () => {
+        try {
+          mockSessionPrompt
+            .mockResolvedValueOnce(
+              createMockPromptResponse([{ type: 'text', text: 'AWS account A' }]),
+            )
+            .mockResolvedValueOnce(
+              createMockPromptResponse([{ type: 'text', text: 'AWS account B' }]),
+            );
+          vi.stubEnv('AWS_ACCESS_KEY_ID', 'account-a');
+          vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'secret-a');
+          const providerA = new OpenCodeSDKProvider({
+            config: { provider_id: 'amazon-bedrock' },
+          });
+          expect((await providerA.callApi('Same Bedrock prompt')).output).toBe('AWS account A');
+
+          vi.stubEnv('AWS_ACCESS_KEY_ID', 'account-b');
+          vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'secret-b');
+          const providerB = new OpenCodeSDKProvider({
+            config: { provider_id: 'amazon-bedrock' },
+          });
+          expect((await providerB.callApi('Same Bedrock prompt')).output).toBe('AWS account B');
+          expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it('should isolate cached responses across provider instances with the same credential', async () => {
+        mockSessionPrompt
+          .mockResolvedValueOnce(
+            createMockPromptResponse([{ type: 'text', text: 'First provider response' }]),
+          )
+          .mockResolvedValueOnce(
+            createMockPromptResponse([{ type: 'text', text: 'Second provider response' }]),
+          );
+        const options = {
+          config: { provider_id: 'anthropic' },
+          env: { ANTHROPIC_API_KEY: 'shared-credential' },
+        };
+        const providerA = new OpenCodeSDKProvider(options);
+        const providerB = new OpenCodeSDKProvider(options);
+
+        expect((await providerA.callApi('Shared credential prompt')).output).toBe(
+          'First provider response',
+        );
+        expect((await providerB.callApi('Shared credential prompt')).output).toBe(
+          'Second provider response',
+        );
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should partition cached responses by remote OpenCode server', async () => {
+        mockSessionPrompt
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Server A' }]))
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Server B' }]));
+        const providerA = new OpenCodeSDKProvider({
+          config: { baseUrl: 'https://opencode-a.example.test' },
+        });
+        const providerB = new OpenCodeSDKProvider({
+          config: { baseUrl: 'https://opencode-b.example.test' },
+        });
+
+        expect((await providerA.callApi('Same prompt')).output).toBe('Server A');
+        expect((await providerB.callApi('Same prompt')).output).toBe('Server B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it.each([
+        'https://user:password@opencode.example.test',
+        'https://opencode.example.test?access_token=secret',
+      ])('should bypass caching for credential-bearing baseUrl %s', async (baseUrl) => {
+        mockSessionPrompt
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'First' }]))
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Second' }]));
+        const provider = new OpenCodeSDKProvider({ config: { baseUrl } });
+
+        expect((await provider.callApi('Same prompt')).output).toBe('First');
+        expect((await provider.callApi('Same prompt')).output).toBe('Second');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
       it('should disable caching when MCP is configured', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse([{ type: 'text', text: 'Response' }]),
@@ -857,7 +1557,7 @@ describe('OpenCodeSDKProvider', () => {
             mcp: {
               weather: {
                 type: 'local',
-                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+                command: ['deterministic-weather-mcp'],
               },
             },
           },
@@ -867,6 +1567,29 @@ describe('OpenCodeSDKProvider', () => {
         // Both calls should hit the API since caching is disabled with MCP
         await provider.callApi('Test prompt');
         await provider.callApi('Test prompt');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should not cache MCP configurations with positional command arguments', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Sensitive MCP response' }]),
+        );
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              database: {
+                type: 'local',
+                command: ['database-mcp', 'postgres://user:password@db.example.test/app'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
@@ -881,7 +1604,7 @@ describe('OpenCodeSDKProvider', () => {
             mcp: {
               weather: {
                 type: 'local',
-                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+                command: ['deterministic-weather-mcp'],
               },
             },
           },
@@ -900,53 +1623,46 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('should produce different cache keys for different MCP configs when cache_mcp is true', async () => {
-        mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponse([{ type: 'text', text: 'Response A' }]),
-        );
-
-        const providerA = new OpenCodeSDKProvider({
-          config: {
-            cache_mcp: true,
-            mcp: {
-              weather: {
-                type: 'local',
-                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+        mockSessionPrompt
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Response A' }]))
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Response B' }]));
+        const provider = new OpenCodeSDKProvider({
+          config: { cache_mcp: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const contextFor = (name: string): CallApiContextParams => ({
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+            config: {
+              mcp: {
+                [name]: {
+                  type: 'local',
+                  command: [`deterministic-${name}-mcp`],
+                },
               },
             },
           },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          vars: {},
         });
 
-        // First provider call
-        await providerA.callApi('Test prompt');
-        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+        const firstA = await provider.callApi('Test prompt', contextFor('weather'));
+        const firstB = await provider.callApi('Test prompt', contextFor('search'));
+        const secondA = await provider.callApi('Test prompt', contextFor('weather'));
 
-        mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponse([{ type: 'text', text: 'Response B' }]),
-        );
-
-        const providerB = new OpenCodeSDKProvider({
-          config: {
-            cache_mcp: true,
-            mcp: {
-              search: {
-                type: 'local',
-                command: ['npx', '-y', '@other/mcp-server-search'],
-              },
-            },
-          },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        // Second provider with different MCP config - should NOT use cache from first
-        const result = await providerB.callApi('Test prompt');
-        expect(result.output).toBe('Response B');
+        expect(firstA.output).toBe('Response A');
+        expect(firstB.output).toBe('Response B');
+        expect(secondA.output).toBe('Response A');
+        expect(secondA.cached).toBe(true);
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
-      it('should produce different cache keys for different session_id values', async () => {
+      it('should bypass response caching for mutable session_id history', async () => {
         mockSessionPrompt.mockResolvedValueOnce(
           createMockPromptResponse([{ type: 'text', text: 'Response from session A' }]),
+        );
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Second response from session A' }]),
         );
 
         const providerForSessionA = new OpenCodeSDKProvider({
@@ -957,9 +1673,9 @@ describe('OpenCodeSDKProvider', () => {
         const resultFromSessionA = await providerForSessionA.callApi('Test prompt');
         expect(resultFromSessionA.output).toBe('Response from session A');
 
-        const cachedResultFromSessionA = await providerForSessionA.callApi('Test prompt');
-        expect(cachedResultFromSessionA.output).toBe('Response from session A');
-        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+        const secondResultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(secondResultFromSessionA.output).toBe('Second response from session A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
 
         mockSessionPrompt.mockResolvedValueOnce(
           createMockPromptResponse([{ type: 'text', text: 'Response from session B' }]),
@@ -972,7 +1688,7 @@ describe('OpenCodeSDKProvider', () => {
 
         const resultFromSessionB = await providerForSessionB.callApi('Test prompt');
         expect(resultFromSessionB.output).toBe('Response from session B');
-        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(3);
       });
 
       it('should produce different cache keys for different parent_session_id values', async () => {
@@ -1058,6 +1774,44 @@ describe('OpenCodeSDKProvider', () => {
             }),
           }),
         );
+      });
+
+      it('should reject per-prompt apiKey overrides before loading a client', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { apiKey: 'provider-key', provider_id: 'openai' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              raw: 'Test prompt',
+              label: 'test',
+              config: { apiKey: 'different-key' },
+            },
+            vars: {},
+          }),
+        ).rejects.toThrow(/apiKey is provider-level configuration/);
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
+      it('should reject per-prompt baseUrl overrides before loading a client', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'https://opencode.example.test' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              raw: 'Test prompt',
+              label: 'test',
+              config: { baseUrl: 'https://other.example.test' },
+            },
+            vars: {},
+          }),
+        ).rejects.toThrow(/baseUrl is provider-level configuration/);
+        expect(mockCreateOpencodeClient).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
       });
     });
 
@@ -1145,6 +1899,10 @@ describe('OpenCodeSDKProvider', () => {
       // Temp dir should be created and cleaned up
       expect(tempDirSpy).toHaveBeenCalled();
       expect(rmSpy).toHaveBeenCalled();
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+      ]);
+      expect(mockSessionPrompt.mock.calls[0][0]).not.toHaveProperty('tools');
     });
 
     it('should enable read-only tools with working_dir', async () => {
@@ -1158,23 +1916,17 @@ describe('OpenCodeSDKProvider', () => {
       // No temp dir should be created
       expect(tempDirSpy).not.toHaveBeenCalled();
 
-      // Verify tools config includes read-only tools
-      expect(mockSessionPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools: expect.objectContaining({
-            read: true,
-            grep: true,
-            glob: true,
-            list: true,
-            bash: false,
-            write: false,
-            edit: false,
-          }),
-        }),
-      );
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+      ]);
+      expect(mockSessionPrompt.mock.calls[0][0]).not.toHaveProperty('tools');
     });
 
-    it('should use explicit tools config when provided', async () => {
+    it('should merge explicit tools with safe defaults and normalize edit aliases', async () => {
       const provider = new OpenCodeSDKProvider({
         config: {
           working_dir: '/test/dir',
@@ -1189,15 +1941,69 @@ describe('OpenCodeSDKProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      expect(mockSessionPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools: {
-            read: true,
-            write: true,
-            bash: true,
-          },
-        }),
-      );
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'allow' },
+        { permission: 'edit', pattern: '*', action: 'allow' },
+      ]);
+      expect(mockSessionPrompt.mock.calls[0][0]).not.toHaveProperty('tools');
+    });
+
+    it('should keep read-only defaults when a partial tools config is provided', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/dir', tools: { bash: false } },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'deny' },
+      ]);
+    });
+
+    it.each([
+      null,
+      [],
+      { bash: 'false' },
+      { bash: 0 },
+      { '': true },
+    ])('should reject malformed tools config and clean up its temp directory %#', async (tools) => {
+      const provider = new OpenCodeSDKProvider({
+        config: { tools: tools as any },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toMatch(/OpenCode tool/);
+      expect(mockSessionCreate).not.toHaveBeenCalled();
+      expect(mockSessionPrompt).not.toHaveBeenCalled();
+      expect(rmSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
+        recursive: true,
+        force: true,
+      });
+    });
+
+    it('should reject conflicting edit tool aliases', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { tools: { edit: false, write: true } },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toMatch(/share one permission and cannot conflict/);
+      expect(mockSessionCreate).not.toHaveBeenCalled();
     });
   });
 
@@ -1259,11 +2065,11 @@ describe('OpenCodeSDKProvider', () => {
     it('expands pattern objects into one rule per pattern', () => {
       expect(
         convertPermissionConfigToRuleset({
-          bash: { 'git *': 'allow', '*': 'ask' },
+          bash: { '*': 'ask', 'git *': 'allow' },
         }),
       ).toEqual([
-        { permission: 'bash', pattern: 'git *', action: 'allow' },
         { permission: 'bash', pattern: '*', action: 'ask' },
+        { permission: 'bash', pattern: 'git *', action: 'allow' },
       ]);
     });
 
@@ -1278,6 +2084,22 @@ describe('OpenCodeSDKProvider', () => {
         { permission: 'edit', pattern: 'src/**', action: 'deny' },
       ]);
     });
+
+    it('preserves an explicitly undefined config as a no-op', () => {
+      expect(convertPermissionConfigToRuleset({ bash: undefined })).toBeUndefined();
+    });
+
+    it.each([
+      [] as any,
+      null as any,
+      false as any,
+      { bash: 42 } as any,
+      { bash: null } as any,
+      { bash: [] } as any,
+      { bash: { '*': 'permit' } } as any,
+    ])('rejects malformed permission config %#', (permission) => {
+      expect(() => convertPermissionConfigToRuleset(permission)).toThrow(/OpenCode permission/);
+    });
   });
 
   describe('new tools configuration', () => {
@@ -1288,16 +2110,9 @@ describe('OpenCodeSDKProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      // Verify tools config includes new tools (disabled)
-      expect(mockSessionPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools: expect.objectContaining({
-            question: false,
-            skill: false,
-            lsp: false,
-          }),
-        }),
-      );
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+      ]);
     });
 
     it('should allow enabling new tools explicitly', async () => {
@@ -1316,16 +2131,16 @@ describe('OpenCodeSDKProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      expect(mockSessionPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools: {
-            read: true,
-            question: true,
-            skill: true,
-            lsp: true,
-          },
-        }),
-      );
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+        { permission: 'question', pattern: '*', action: 'allow' },
+        { permission: 'skill', pattern: '*', action: 'allow' },
+        { permission: 'lsp', pattern: '*', action: 'allow' },
+      ]);
     });
   });
 
@@ -1345,17 +2160,17 @@ describe('OpenCodeSDKProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      expect(mockSessionCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          permission: expect.arrayContaining([
-            { permission: 'bash', pattern: '*', action: 'allow' },
-            { permission: 'doom_loop', pattern: '*', action: 'deny' },
-            { permission: 'external_directory', pattern: '*', action: 'deny' },
-          ]),
-        }),
-      );
       const createCall = mockSessionCreate.mock.calls[0][0];
-      expect(createCall.permission).toHaveLength(3);
+      expect(createCall.permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'allow' },
+        { permission: 'doom_loop', pattern: '*', action: 'deny' },
+        { permission: 'external_directory', pattern: '*', action: 'deny' },
+      ]);
     });
 
     it('should expand pattern-based permissions into one rule per pattern', async () => {
@@ -1364,9 +2179,9 @@ describe('OpenCodeSDKProvider', () => {
           working_dir: '/test/dir',
           permission: {
             bash: {
+              '*': 'ask',
               'git *': 'allow',
               'rm *': 'deny',
-              '*': 'ask',
             },
             edit: {
               '*.md': 'allow',
@@ -1379,22 +2194,22 @@ describe('OpenCodeSDKProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      expect(mockSessionCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          permission: expect.arrayContaining([
-            { permission: 'bash', pattern: 'git *', action: 'allow' },
-            { permission: 'bash', pattern: 'rm *', action: 'deny' },
-            { permission: 'bash', pattern: '*', action: 'ask' },
-            { permission: 'edit', pattern: '*.md', action: 'allow' },
-            { permission: 'edit', pattern: 'src/**', action: 'ask' },
-          ]),
-        }),
-      );
       const createCall = mockSessionCreate.mock.calls[0][0];
-      expect(createCall.permission).toHaveLength(5);
+      expect(createCall.permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'ask' },
+        { permission: 'bash', pattern: 'git *', action: 'allow' },
+        { permission: 'bash', pattern: 'rm *', action: 'deny' },
+        { permission: 'edit', pattern: '*.md', action: 'allow' },
+        { permission: 'edit', pattern: 'src/**', action: 'ask' },
+      ]);
     });
 
-    it('should omit permission from session.create when no rules are provided', async () => {
+    it('should still apply the safe tools policy when explicit permissions are empty', async () => {
       const provider = new OpenCodeSDKProvider({
         config: {
           working_dir: '/test/dir',
@@ -1406,7 +2221,13 @@ describe('OpenCodeSDKProvider', () => {
       await provider.callApi('Test prompt');
 
       const createCall = mockSessionCreate.mock.calls[0][0];
-      expect(createCall).not.toHaveProperty('permission');
+      expect(createCall.permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'glob', pattern: '*', action: 'allow' },
+        { permission: 'grep', pattern: '*', action: 'allow' },
+        { permission: 'list', pattern: '*', action: 'allow' },
+        { permission: 'read', pattern: '*', action: 'allow' },
+      ]);
     });
   });
 
@@ -1535,6 +2356,33 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('custom agent new properties', () => {
+    it('composes custom-agent and top-level policies in override order', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          custom_agent: {
+            description: 'restricted agent',
+            tools: { bash: true, write: true },
+            permission: { bash: 'ask', edit: 'deny' },
+          },
+          tools: { bash: false },
+          permission: { edit: 'allow' },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockSessionCreate.mock.calls[0][0].permission).toEqual([
+        { permission: '*', pattern: '*', action: 'deny' },
+        { permission: 'bash', pattern: '*', action: 'deny' },
+        { permission: 'edit', pattern: '*', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'allow' },
+        { permission: 'edit', pattern: '*', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'ask' },
+        { permission: 'edit', pattern: '*', action: 'deny' },
+      ]);
+    });
+
     it('should pass top_p, steps, color, disable, hidden to server config', async () => {
       const provider = new OpenCodeSDKProvider({
         config: {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  transformMCPConfigToClaudeCode,
   transformMCPToolsToAnthropic,
   transformMCPToolsToGoogle,
   transformMCPToolsToOpenAi,
@@ -243,6 +244,115 @@ describe('transformMCPToolsToOpenAi', () => {
       type: 'object',
       properties: {},
     });
+  });
+});
+
+describe('transformMCPConfigToClaudeCode', () => {
+  it('returns no servers when MCP is disabled', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: false,
+        server: {
+          name: 'disabled',
+          command: 'npx',
+          args: ['disabled-server'],
+        },
+      }),
+    ).resolves.toEqual({});
+  });
+
+  it('rejects unsupported tool filters instead of silently dropping them', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        tools: ['safe_tool'],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or/);
+
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        exclude_tools: ['dangerous_tool'],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or/);
+
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        tools: [],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or/);
+
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        exclude_tools: [],
+      }),
+    ).resolves.toEqual({
+      filtered: { type: 'stdio', command: 'npx', args: ['filtered-server'] },
+    });
+  });
+
+  it('combines singular and plural server config without mutating the input', async () => {
+    const servers = [{ name: 'plural', command: 'plural-server' }];
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'single', command: 'single-server' },
+        servers,
+      }),
+    ).resolves.toEqual({
+      plural: { type: 'stdio', command: 'plural-server', args: [] },
+      single: { type: 'stdio', command: 'single-server', args: [] },
+    });
+    expect(servers).toEqual([{ name: 'plural', command: 'plural-server' }]);
+  });
+
+  it('accepts a zero-argument stdio server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'no-args', command: 'mcp-server' },
+      }),
+    ).resolves.toEqual({
+      'no-args': { type: 'stdio', command: 'mcp-server', args: [] },
+    });
+  });
+
+  it('preserves prototype-shaped server names as own entries', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      server: { name: '__proto__', command: 'mcp-server' },
+    });
+
+    expect(Object.hasOwn(servers, '__proto__')).toBe(true);
+    expect(servers.__proto__).toEqual({ type: 'stdio', command: 'mcp-server', args: [] });
+    expect(JSON.stringify(servers)).toBe(
+      '{"__proto__":{"type":"stdio","command":"mcp-server","args":[]}}',
+    );
+  });
+
+  it.each([
+    null,
+    [],
+    { enabled: 'false' },
+    { enabled: true, server: [] },
+    { enabled: true, servers: 'not-an-array' },
+    { enabled: true, servers: [null] },
+    { enabled: true, servers: [[]] },
+    { enabled: true, server: { url: 123 } },
+    { enabled: true, server: { path: 42 } },
+    { enabled: true, server: { command: 'mcp-server', args: 'not-an-array' } },
+    { enabled: true, server: { url: 'https://example.test', headers: 'not-an-object' } },
+    { enabled: true, server: { url: 'https://example.test', auth: [] } },
+  ])('rejects malformed MCP config %#', async (config) => {
+    await expect(transformMCPConfigToClaudeCode(config as any)).rejects.toThrow(
+      /MCP.*(object|boolean|malformed)/,
+    );
   });
 });
 

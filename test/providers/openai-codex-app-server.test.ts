@@ -1441,6 +1441,251 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it.each([
+    {
+      outcome: 'acknowledged',
+      unsubscribeResponse: { result: { status: 'unsubscribed' } },
+    },
+    {
+      outcome: 'rejected',
+      unsubscribeResponse: {
+        error: { code: -32000, message: 'stale subscription already closed' },
+      },
+    },
+  ])('re-resumes a persistent explicit thread when stale unsubscribe is $outcome', async ({
+    unsubscribeResponse,
+  }) => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_id: 'thr_authority',
+        persist_threads: true,
+        thread_cleanup: 'none',
+      },
+    });
+    const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
+      provider.callApi('Check authority', {
+        prompt: {
+          raw: 'Check authority',
+          label: 'authority',
+          config: { sandbox_mode },
+        },
+        vars: {},
+      });
+
+    const firstResult = callWithSandbox('danger-full-access');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const firstResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+    expect(firstResume.params).toMatchObject({
+      threadId: 'thr_authority',
+      sandbox: 'danger-full-access',
+    });
+    server.send({ id: firstResume.id, result: { thread: { id: 'thr_authority' } } });
+    const firstTurn = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: firstTurn.id,
+      result: { turn: { id: 'turn_authority_1', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_authority',
+        turn: { id: 'turn_authority_1', status: 'completed', items: [], error: null },
+      },
+    });
+    expect(await firstResult).not.toHaveProperty('error');
+
+    const secondResult = callWithSandbox('read-only');
+    const unsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_authority',
+    );
+    server.send({ id: unsubscribe.id, ...unsubscribeResponse });
+    const secondResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
+    );
+    expect(secondResume.params).toMatchObject({
+      threadId: 'thr_authority',
+      sandbox: 'read-only',
+    });
+    server.send({ id: secondResume.id, result: { thread: { id: 'thr_authority' } } });
+    const secondTurn = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start' && message.id !== firstTurn.id,
+    );
+    server.send({
+      id: secondTurn.id,
+      result: { turn: { id: 'turn_authority_2', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_authority',
+        turn: { id: 'turn_authority_2', status: 'completed', items: [], error: null },
+      },
+    });
+    expect(await secondResult).not.toHaveProperty('error');
+
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      2,
+    );
+    expect((provider as any).threads.size).toBe(1);
+  });
+
+  it('reconnects before re-resuming when stale unsubscribe times out', async () => {
+    vi.useFakeTimers();
+    const firstServer = createMockAppServer();
+    const secondServer = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        request_timeout_ms: 1,
+        thread_id: 'thr_stale_timeout',
+        persist_threads: true,
+        thread_cleanup: 'none',
+      },
+    });
+    const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
+      provider.callApi('Check stale cleanup', {
+        prompt: {
+          raw: 'Check stale cleanup',
+          label: 'stale cleanup',
+          config: { sandbox_mode },
+        },
+        vars: {},
+      });
+
+    try {
+      const firstResult = callWithSandbox('danger-full-access');
+      const firstInitialize = await waitForMessageWithoutTimers(
+        firstServer,
+        (message) => message.method === 'initialize',
+      );
+      firstServer.send({ id: firstInitialize.id, result: {} });
+      const firstResume = await waitForMessageWithoutTimers(
+        firstServer,
+        (message) => message.method === 'thread/resume',
+      );
+      firstServer.send({
+        id: firstResume.id,
+        result: { thread: { id: 'thr_stale_timeout' } },
+      });
+      const firstTurn = await waitForMessageWithoutTimers(
+        firstServer,
+        (message) => message.method === 'turn/start',
+      );
+      firstServer.send({
+        id: firstTurn.id,
+        result: { turn: { id: 'turn_stale_timeout_1', status: 'inProgress' } },
+      });
+      firstServer.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_stale_timeout',
+          turn: { id: 'turn_stale_timeout_1', status: 'completed', items: [], error: null },
+        },
+      });
+      await firstResult;
+
+      const secondResult = callWithSandbox('read-only');
+      const queuedResult = callWithSandbox('read-only');
+      await waitForMessageWithoutTimers(
+        firstServer,
+        (message) =>
+          message.method === 'thread/unsubscribe' &&
+          message.params?.threadId === 'thr_stale_timeout',
+      );
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(firstServer.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      const secondInitialize = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'initialize',
+      );
+      secondServer.send({ id: secondInitialize.id, result: {} });
+      const secondResume = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'thread/resume',
+      );
+      expect(secondResume.params).toMatchObject({
+        threadId: 'thr_stale_timeout',
+        sandbox: 'read-only',
+      });
+      secondServer.send({
+        id: secondResume.id,
+        result: { thread: { id: 'thr_stale_timeout' } },
+      });
+      const secondTurn = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'turn/start',
+      );
+      secondServer.send({
+        id: secondTurn.id,
+        result: { turn: { id: 'turn_stale_timeout_2', status: 'inProgress' } },
+      });
+      secondServer.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_stale_timeout',
+          turnId: 'turn_stale_timeout_2',
+          itemId: 'msg_stale_timeout_2',
+          delta: 'Recovered on a fresh connection',
+        },
+      });
+      secondServer.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_stale_timeout',
+          turn: { id: 'turn_stale_timeout_2', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(secondResult).resolves.toMatchObject({
+        output: 'Recovered on a fresh connection',
+      });
+
+      const queuedTurn = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'turn/start' && message.id !== secondTurn.id,
+      );
+      secondServer.send({
+        id: queuedTurn.id,
+        result: { turn: { id: 'turn_stale_timeout_3', status: 'inProgress' } },
+      });
+      secondServer.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_stale_timeout',
+          turnId: 'turn_stale_timeout_3',
+          itemId: 'msg_stale_timeout_3',
+          delta: 'Queued turn reused the fresh connection',
+        },
+      });
+      secondServer.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_stale_timeout',
+          turn: { id: 'turn_stale_timeout_3', status: 'completed', items: [], error: null },
+        },
+      });
+      await expect(queuedResult).resolves.toMatchObject({
+        output: 'Queued turn reused the fresh connection',
+      });
+      expect(mocks.spawn).toHaveBeenCalledTimes(2);
+      expect(secondServer.proc.kill).not.toHaveBeenCalled();
+      expect((provider as any).threads.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('unsubscribes a non-persistent resumed thread by default', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -1494,7 +1739,7 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'Released' });
   });
 
-  it('defers resumed thread unsubscribe while another turn is queued for the same thread id', async () => {
+  it('serializes resume, turn, and cleanup for concurrent calls to the same thread id', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
@@ -1513,12 +1758,7 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.method === 'thread/resume',
     );
-    const secondThreadResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
-    );
     server.send({ id: firstThreadResume.id, result: { thread: { id: 'thr_existing_queue' } } });
-    server.send({ id: secondThreadResume.id, result: { thread: { id: 'thr_existing_queue' } } });
 
     const firstTurnStart = await waitForMessage(
       server,
@@ -1544,19 +1784,22 @@ describe('OpenAICodexAppServerProvider', () => {
         turn: { id: 'turn_existing_queue_1', status: 'completed', items: [], error: null },
       },
     });
+    const firstUnsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_existing_queue',
+    );
+    server.send({ id: firstUnsubscribe.id, result: { status: 'unsubscribed' } });
+    const secondThreadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
+    );
+    server.send({ id: secondThreadResume.id, result: { thread: { id: 'thr_existing_queue' } } });
     const secondTurnStart = await waitForMessage(
       server,
       (message) => message.method === 'turn/start' && message.id !== firstTurnStart.id,
     );
-    const secondTurnStartIndex = server
-      .messages()
-      .findIndex((message) => message.method === 'turn/start' && message.id === secondTurnStart.id);
-    expect(
-      server
-        .messages()
-        .slice(0, secondTurnStartIndex)
-        .some((message) => message.method === 'thread/unsubscribe'),
-    ).toBe(false);
     server.send({
       id: secondTurnStart.id,
       result: { turn: { id: 'turn_existing_queue_2', status: 'inProgress' } },
@@ -1577,13 +1820,14 @@ describe('OpenAICodexAppServerProvider', () => {
         turn: { id: 'turn_existing_queue_2', status: 'completed', items: [], error: null },
       },
     });
-    const unsubscribe = await waitForMessage(
+    const secondUnsubscribe = await waitForMessage(
       server,
       (message) =>
         message.method === 'thread/unsubscribe' &&
-        message.params?.threadId === 'thr_existing_queue',
+        message.params?.threadId === 'thr_existing_queue' &&
+        message.id !== firstUnsubscribe.id,
     );
-    server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
+    server.send({ id: secondUnsubscribe.id, result: { status: 'unsubscribed' } });
 
     await expect(firstResultPromise).resolves.toMatchObject({ output: 'Queued first' });
     await expect(secondResultPromise).resolves.toMatchObject({ output: 'Queued second' });
@@ -1623,16 +1867,8 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.method === 'thread/resume',
     );
-    const secondThreadResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
-    );
     server.send({
       id: firstThreadResume.id,
-      result: { thread: { id: 'thr_existing_abort_queue' } },
-    });
-    server.send({
-      id: secondThreadResume.id,
       result: { thread: { id: 'thr_existing_abort_queue' } },
     });
 
@@ -1728,16 +1964,10 @@ describe('OpenAICodexAppServerProvider', () => {
       result: { turn: { id: 'turn_existing_deep_1', status: 'inProgress' } },
     });
 
-    const secondThreadResume = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'thread/resume',
-    );
-    secondServer.send({
-      id: secondThreadResume.id,
-      result: { thread: { id: 'thr_existing_deep' } },
-    });
     await new Promise<void>((resolve) => queueMicrotask(resolve));
-    expect(secondServer.messages().some((message) => message.method === 'turn/start')).toBe(false);
+    expect(secondServer.messages().some((message) => message.method === 'thread/resume')).toBe(
+      false,
+    );
 
     firstServer.send({
       method: 'item/agentMessage/delta',
@@ -1756,6 +1986,14 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
+    const secondThreadResume = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'thread/resume',
+    );
+    secondServer.send({
+      id: secondThreadResume.id,
+      result: { thread: { id: 'thr_existing_deep' } },
+    });
     const secondTurnStart = await waitForMessage(
       secondServer,
       (message) => message.method === 'turn/start',
@@ -2829,6 +3067,14 @@ describe('OpenAICodexAppServerProvider', () => {
             isSecret: false,
             options: [{ label: 'high', description: 'High impact' }],
           },
+          {
+            id: '__proto__',
+            header: 'Boundary',
+            question: 'Choose a boundary answer',
+            isOther: false,
+            isSecret: false,
+            options: [{ label: 'safe', description: 'Safe answer' }],
+          },
         ],
       },
     });
@@ -2836,11 +3082,9 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.id === 100 && message.result,
     );
-    expect(userInputResponse.result).toEqual({
-      answers: {
-        severity: { answers: ['high'] },
-      },
-    });
+    expect(userInputResponse.result.answers.severity).toEqual({ answers: ['high'] });
+    expect(Object.hasOwn(userInputResponse.result.answers, '__proto__')).toBe(true);
+    expect(userInputResponse.result.answers.__proto__).toEqual({ answers: ['safe'] });
 
     server.send({
       id: 101,
@@ -3216,6 +3460,89 @@ describe('OpenAICodexAppServerProvider', () => {
 
     expect(server.messages().some((message) => message.method === 'turn/start')).toBe(false);
     expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('finishes aborted explicit-resume cleanup before re-resuming the thread', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        request_timeout_ms: 1_000,
+        thread_id: 'thr_abort_cleanup_order',
+      },
+    });
+
+    const firstResult = provider.callApi('First', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const firstResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+
+    abortController.abort();
+    await expect(firstResult).resolves.toEqual({ error: 'OpenAI Codex app-server call aborted' });
+
+    const secondResult = provider.callApi('Second');
+    await flushMicrotasks();
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      1,
+    );
+
+    server.send({
+      id: firstResume.id,
+      result: { thread: { id: 'thr_abort_cleanup_order' } },
+    });
+    const firstUnsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_abort_cleanup_order',
+    );
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      1,
+    );
+
+    server.send({ id: firstUnsubscribe.id, result: { status: 'unsubscribed' } });
+    const secondResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
+    );
+    server.send({
+      id: secondResume.id,
+      result: { thread: { id: 'thr_abort_cleanup_order' } },
+    });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_abort_cleanup_order', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_abort_cleanup_order',
+        turnId: 'turn_abort_cleanup_order',
+        itemId: 'msg_abort_cleanup_order',
+        delta: 'Second completed safely',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_abort_cleanup_order',
+        turn: { id: 'turn_abort_cleanup_order', status: 'completed', items: [], error: null },
+      },
+    });
+    const secondUnsubscribe = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/unsubscribe' && message.id !== firstUnsubscribe.id,
+    );
+    server.send({ id: secondUnsubscribe.id, result: { status: 'unsubscribed' } });
+
+    await expect(secondResult).resolves.toMatchObject({ output: 'Second completed safely' });
   });
 
   it('keeps a reused app-server process after a JSON-RPC request abort', async () => {
@@ -5305,6 +5632,7 @@ describe('OpenAICodexAppServerProvider', () => {
           { id: 'q1', label: 'Single answer' },
           { id: 'q2', label: 'Multi answer' },
           { id: 'q3', label: 'Unconfigured' },
+          { id: '__proto__', label: 'Prototype-shaped ID' },
         ],
       },
     });
@@ -5313,10 +5641,80 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(userInputResponse.result.answers.q1).toEqual({ answers: ['Option A'] });
     expect(userInputResponse.result.answers.q2).toEqual({ answers: ['X', 'Y'] });
     expect(userInputResponse.result.answers.q3).toEqual({ answers: [] });
+    expect(Object.hasOwn(userInputResponse.result.answers, '__proto__')).toBe(true);
+    expect(userInputResponse.result.answers.__proto__).toEqual({ answers: [] });
 
     server.send({
       method: 'turn/completed',
       params: { threadId: 'thr_map', turnId: 'turn_map', turn: { id: 'turn_map' } },
+    });
+    await resultPromise;
+  });
+
+  it('does not read inherited user input or dynamic tool policy entries', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+        server_request_policy: {
+          user_input: {},
+          dynamic_tools: {},
+        },
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_inherited' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_inherited', status: 'inProgress' } },
+    });
+
+    server.send({
+      id: 301,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_inherited',
+        turnId: 'turn_inherited',
+        questions: [{ id: 'toString', label: 'Inherited answer' }],
+      },
+    });
+    const userInputResponse = await waitForMessage(server, (message) => message.id === 301);
+    expect(userInputResponse.result.answers.toString).toEqual({ answers: [] });
+
+    server.send({
+      id: 302,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_inherited',
+        turnId: 'turn_inherited',
+        callId: 'tool_inherited',
+        tool: 'toString',
+        arguments: {},
+      },
+    });
+    const dynamicToolResponse = await waitForMessage(server, (message) => message.id === 302);
+    expect(dynamicToolResponse.result).toEqual({
+      contentItems: [{ type: 'inputText', text: 'No dynamic tool response configured.' }],
+      success: false,
+    });
+
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_inherited',
+        turnId: 'turn_inherited',
+        turn: { id: 'turn_inherited' },
+      },
     });
     await resultPromise;
   });

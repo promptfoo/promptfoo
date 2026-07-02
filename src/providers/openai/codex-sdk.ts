@@ -1047,7 +1047,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const threadIdCacheKey = this.getExplicitThreadCacheKey(config, instanceKey);
       const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
@@ -1055,6 +1055,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
+        const explicitThreadCachePrefix = this.getExplicitThreadCachePrefix(config);
+        for (const cacheKey of this.threads.keys()) {
+          if (cacheKey !== threadIdCacheKey && cacheKey.startsWith(explicitThreadCachePrefix)) {
+            this.threads.delete(cacheKey);
+          }
+        }
         this.threads.set(threadIdCacheKey, thread);
       }
       return thread;
@@ -1910,14 +1916,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private getThreadRunQueueKey(
     config: OpenAICodexSDKConfig,
     cacheKey: string | undefined,
-    instanceKey: string,
   ): string | undefined {
     if (config.deep_tracing) {
       return undefined;
     }
 
     if (config.thread_id) {
-      return `${instanceKey}:${config.thread_id}`;
+      return `explicit:${this.getExplicitThreadIdentity(config)}`;
     }
 
     if (config.persist_threads && cacheKey) {
@@ -1925,6 +1930,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return undefined;
+  }
+
+  private getExplicitThreadCacheKey(config: OpenAICodexSDKConfig, instanceKey: string): string {
+    const variant = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ instanceKey, threadOptions: this.buildThreadOptions(config) }))
+      .digest('hex');
+    return `${this.getExplicitThreadCachePrefix(config)}${variant}`;
+  }
+
+  private getExplicitThreadCachePrefix(config: OpenAICodexSDKConfig): string {
+    return `explicit:${this.getExplicitThreadIdentity(config)}:`;
+  }
+
+  private getExplicitThreadIdentity(config: OpenAICodexSDKConfig): string {
+    return crypto
+      .createHash('sha256')
+      .update(config.thread_id ?? '')
+      .digest('hex');
   }
 
   private async runSerializedThreadTurn<T>(
@@ -2311,7 +2335,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
   ): Promise<{ turn: any; sessionId: string }> {
-    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey, instanceKey);
+    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {

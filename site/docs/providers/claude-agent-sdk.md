@@ -160,9 +160,9 @@ prompts:
 | `append_system_prompt`               | string           | Append to default system prompt                                                                              | None                     |
 | `exclude_dynamic_sections`           | boolean          | Strip per-user dynamic sections from the preset prompt so it stays cacheable across runs                     | false                    |
 | `tools`                              | array/object     | Base set of built-in tools (array of names or `{type: 'preset', preset: 'claude_code'}`)                     | None                     |
-| `custom_allowed_tools`               | string[]         | Replace default allowed tools                                                                                | None                     |
-| `append_allowed_tools`               | string[]         | Add to default allowed tools                                                                                 | None                     |
-| `allow_all_tools`                    | boolean          | Allow all available tools                                                                                    | false                    |
+| `custom_allowed_tools`               | string[]         | Replace the default auto-approved tools and, when `tools` is omitted, the available tools                    | None                     |
+| `append_allowed_tools`               | string[]         | Add to the default auto-approved tools and, when `tools` is omitted, the available tools                     | None                     |
+| `allow_all_tools`                    | boolean          | Use the Claude Code tool preset; normal SDK permission rules still apply                                     | false                    |
 | `disallowed_tools`                   | string[]         | Tools to explicitly block (overrides allowed)                                                                | None                     |
 | `additional_directories`             | string[]         | Additional directories the agent can access (beyond working_dir)                                             | None                     |
 | `ask_user_question`                  | object           | Automated handling for AskUserQuestion tool (see [Handling AskUserQuestion](#handling-askuserquestion-tool)) | None                     |
@@ -339,7 +339,15 @@ providers:
       allow_all_tools: true
 ```
 
-The `tools` option specifies the base set of available built-in tools, while `custom_allowed_tools`/`append_allowed_tools` and `disallowed_tools` filter from that base.
+The `tools` option specifies the available built-in tools. The Agent SDK's `allowedTools` setting
+auto-approves matching tools; it does not remove other tools. When `tools` is omitted, Promptfoo also
+uses its default, custom, or appended allowed list as the availability set so the documented no-tool
+and read-only defaults are enforced. When `tools` is supplied explicitly, custom/appended allowed
+lists only control auto-approval within that base. `disallowed_tools` always denies matching tools.
+`allow_all_tools` selects the Claude Code tool preset but does not by itself bypass the configured
+permission mode. For derived availability, Promptfoo also includes the tools required by configured
+features: `AskUserQuestion` for `ask_user_question`, `Skill` for `skills`, `Task` for programmatic
+`agents`, and `ExitPlanMode` for plan mode. An explicit `tools` list remains authoritative.
 
 ⚠️ **Security Note**: Some tools allow Claude Agent SDK to modify files, run system commands, search the web, and more. Think carefully about security implications before using these tools.
 
@@ -368,6 +376,10 @@ providers:
 
       strict_mcp_config: true # Only use configured servers (true by default)
 ```
+
+This direct SDK integration cannot enforce the shared MCP `tools` allowlist or non-empty
+`exclude_tools` filters, so those configurations fail closed instead of silently exposing a broader
+tool set. An empty `exclude_tools` list is a no-op.
 
 For detailed MCP configuration, see [Claude Code MCP documentation](https://docs.claude.com/en/docs/claude-code/mcp).
 
@@ -847,8 +859,11 @@ providers:
     config:
       extra_args:
         verbose: null # boolean flag (adds --verbose)
-        timeout: '30' # adds --timeout 30
+        name: 'promptfoo-eval' # adds --name promptfoo-eval
 ```
+
+Policy-changing Claude CLI flags are rejected in `extra_args`. Use supported structured provider
+options for those controls so Promptfoo can validate their combined behavior.
 
 ### Custom Executable Path
 
@@ -914,7 +929,6 @@ The simplest approach is to use the `ask_user_question` configuration:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      append_allowed_tools: ['AskUserQuestion']
       ask_user_question:
         behavior: first_option
 ```
@@ -926,6 +940,14 @@ Available behaviors:
 | `first_option` | Always select the first option         |
 | `random`       | Randomly select from available options |
 | `deny`         | Deny the tool use                      |
+
+The convenience callback fails closed for unrelated permission requests that are not already
+approved by SDK permission rules. Provide `can_use_tool` for explicit custom handling. Enabling
+`allow_all_tools` changes tool availability but does not make this callback approve unrelated tools.
+With `permission_mode: dontAsk`, Promptfoo answers enabled question automation through a narrow
+pre-tool hook while preserving the SDK's fail-closed mode for every other unmatched request. An
+explicit `tools` exclusion, `disallowed_tools` rule, or matching user-hook denial remains
+authoritative.
 
 ### Programmatic Usage
 
@@ -1159,10 +1181,24 @@ providers:
       cache_mcp: true
       mcp:
         servers:
-          - command: npx
-            args: ['-y', '@my/deterministic-mcp-server']
+          - command: my-deterministic-mcp-server
             name: my-server
 ```
+
+Authenticated MCP configurations, custom headers, URLs containing credentials, signed/query URLs,
+and stdio servers with arguments remain uncached even when `cache_mcp` is true. Stdio arguments can
+contain positional credentials such as database URLs, so Promptfoo does not put them into persistent
+cache keys.
+
+The subprocess environment is excluded from persistent cache keys and replaced with a non-secret,
+provider-instance scope. Repeated calls through one provider can reuse cache entries without
+storing, hashing, or correlating environment credentials across provider instances. Prompt-level
+environment overrides remain uncached. Runtime callbacks (`can_use_tool`,
+elicitation handlers, hooks, and custom process spawners) disable response caching because their
+behavior cannot be represented safely in a persistent key. Caching is also disabled for SDK
+settings, any `extra_args`, and mutable `continue`, `resume`, or `session_id` history. Local Claude
+login (`apiKeyRequired: false`) and Bedrock/Vertex credential-provider modes remain uncached because
+their external account identity can rotate without a stable secret in the request environment.
 
 To disable caching globally:
 
