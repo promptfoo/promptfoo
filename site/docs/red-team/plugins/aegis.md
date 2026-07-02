@@ -1,11 +1,13 @@
 ---
+title: Aegis
 sidebar_label: Aegis
+sidebar_position: 10
 description: Red team LLM content safety using NVIDIA's Aegis dataset to detect harmful outputs across 13 risk categories including hate speech, violence, and exploitation
 ---
 
 # Aegis: NVIDIA AI Content Safety Dataset
 
-The Aegis plugin uses NVIDIA's [Aegis AI Content Safety Dataset](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), a collection of over 26,000 manually annotated human-LLM interactions designed for content safety evaluation.
+The Aegis plugin uses NVIDIA's [Aegis AI Content Safety Dataset](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), which contains 11,997 manually annotated examples designed for content safety evaluation.
 
 The dataset covers 13 critical safety categories:
 
@@ -30,9 +32,9 @@ The dataset also includes **Safe** content and **Needs Caution** examples for am
 The plugin:
 
 - Fetches test cases from NVIDIA's professionally annotated dataset
-- Samples from multiple interaction formats (user prompts, multi-turn conversations)
-- Tests model responses against the comprehensive 13-category safety taxonomy
-- Evaluates both clear violations and edge cases marked as "Needs Caution"
+- Samples user-message records from the dataset
+- Tests model responses against a safety rubric aligned with the 13-category Aegis taxonomy
+- Includes both safe and unsafe records when safe controls are enabled
 
 ## Quick Start
 
@@ -61,20 +63,40 @@ redteam:
       numTests: 25 # Default is 5
 ```
 
+### Testing for Over-Blocking
+
+By default, Aegis tests unsafe and "needs caution" prompts to ensure your model handles harmful content appropriately. You can also test for over-blocking (false positives) by including safe prompts:
+
+```yaml
+redteam:
+  plugins:
+    - id: aegis
+      config:
+        includeSafe: true
+      numTests: 20
+```
+
+When `includeSafe: true` is set:
+
+- Test cases use a balanced mix of safe and unsafe/needs-caution prompts
+- If the fetched dataset slice cannot supply both labels, available cases are used and a warning is logged
+- Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
+- This helps identify if your guardrails are too strict and block legitimate requests
+- Metadata includes `isSafe` and `safetyLabel` fields for filtering and analysis
+
 ## Grading
 
-The plugin evaluates model responses using the same methodology as NVIDIA's research, checking if outputs appropriately handle unsafe content across all 13 safety categories. The grader looks for:
+The plugin evaluates whether model responses appropriately handle unsafe content across the Aegis safety categories. The grader looks for:
 
 - Proper identification of safety violations
 - Appropriate refusal of harmful requests
 - Nuanced handling of ambiguous "Needs Caution" cases
-- Consistent safety responses across conversation turns
 
 ## Dataset Information
 
-- **Size**: 26,000+ annotated examples (ongoing expansion)
+- **Size**: 11,997 annotated examples (10,798 train and 1,199 test)
 - **Annotation**: Professional team of 12 annotators with quality assurance
-- **Formats**: User prompts, system prompts, single-turn and multi-turn conversations
+- **Formats**: The dataset includes several interaction formats; the plugin samples user-message records
 - **License**: CC-BY-4.0 (open source)
 
 ## References

@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
+import type { Plugin } from '@promptfoo/redteam/constants';
 
 // Mock the useRedTeamConfig hook
 const mockUpdatePlugins = vi.fn();
@@ -21,11 +22,21 @@ describe('PluginConfigDialog - OSS', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockOnClose.mockReset();
+    mockOnSave.mockReset();
+    mockUpdatePlugins.mockReset();
+    mockUseRedTeamConfig.mockReset();
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultRedTeamConfig,
       updatePlugins: mockUpdatePlugins,
     });
+  });
+
+  afterEach(() => {
+    mockOnClose.mockReset();
+    mockOnSave.mockReset();
+    mockUpdatePlugins.mockReset();
+    mockUseRedTeamConfig.mockReset();
   });
 
   describe('Grading Guidance', () => {
@@ -302,6 +313,265 @@ describe('PluginConfigDialog - OSS', () => {
       const closeButtons = screen.getAllByRole('button', { name: 'Close' });
       expect(closeButtons.length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Guardrail Plugins (beavertails, unsafebench, aegis)', () => {
+    it.each([
+      'beavertails',
+      'unsafebench',
+      'aegis',
+    ])("should update localConfig.includeSafe when the 'Include safe controls' checkbox is toggled for the %s plugin", async (plugin) => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin={plugin as Plugin}
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeInTheDocument();
+
+      expect(checkbox).not.toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it.each([
+      'beavertails',
+      'unsafebench',
+      'aegis',
+    ])("should render the 'Include safe controls to test for over-blocking' checkbox as checked if localConfig.includeSafe is true, and unchecked if false or undefined, for the %s plugin", (plugin) => {
+      const renderDialog = (includeSafe: boolean | undefined) => {
+        cleanup();
+        render(
+          <PluginConfigDialog
+            open={true}
+            plugin={plugin as Plugin}
+            config={includeSafe === undefined ? {} : { includeSafe }}
+            onClose={mockOnClose}
+            onSave={mockOnSave}
+          />,
+        );
+      };
+
+      renderDialog(true);
+      let checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeChecked();
+
+      renderDialog(false);
+      checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).not.toBeChecked();
+
+      renderDialog(undefined);
+      checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it.each([
+      'beavertails',
+      'unsafebench',
+      'aegis',
+    ])("should call onSave with the updated config including the correct value of includeSafe when the 'Save' button is clicked for the %s plugin", async (plugin) => {
+      const user = userEvent.setup();
+      const initialConfig = { includeSafe: false };
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin={plugin as Plugin}
+          config={initialConfig}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      await user.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledTimes(1);
+      expect(mockOnSave).toHaveBeenCalledWith(plugin, { includeSafe: true });
+    });
+
+    it.each([
+      'beavertails',
+      'unsafebench',
+      'aegis',
+    ])('should display the guardrail plugin description and explanatory text for the includeSafe option for the %s plugin', (plugin) => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin={plugin as Plugin}
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      let descriptionText = '';
+      if (plugin === 'beavertails') {
+        descriptionText = 'BeaverTails tests your model against 330,000+ harmful prompts';
+      } else if (plugin === 'unsafebench') {
+        descriptionText = 'UnsafeBench tests your multimodal model with unsafe images';
+      } else if (plugin === 'aegis') {
+        descriptionText = "Aegis tests your model using NVIDIA's professionally annotated dataset";
+      }
+      const description = screen.getByText((content) => content.includes(descriptionText));
+      expect(description).toBeInTheDocument();
+
+      const explanatoryText = screen.getByText(
+        /When enabled, tests include a balanced mix of safe and unsafe controls/,
+      );
+      expect(explanatoryText).toBeInTheDocument();
+    });
+
+    it.each([
+      'beavertails',
+      'unsafebench',
+      'aegis',
+    ])("should render the 'Include safe controls' checkbox and default to unchecked when config doesn't have includeSafe property for %s", (plugin) => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin={plugin as Plugin}
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it("should discard changes when 'Cancel' is clicked after toggling the 'includeSafe' checkbox", async () => {
+      const user = userEvent.setup();
+      const initialConfig = { includeSafe: false };
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin={'beavertails' as Plugin}
+          config={initialConfig}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
+      const cancelButton = screen.getByRole('button', { name: 'Cancel' });
+      await user.click(cancelButton);
+
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'beavertails',
+      'unsafebench',
+      'aegis',
+    ])('should preserve unsaved edits across parent rerenders for %s plugin', async (plugin) => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <PluginConfigDialog
+          open={true}
+          plugin={plugin as Plugin}
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      let checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
+      rerender(
+        <PluginConfigDialog
+          open={true}
+          plugin={plugin as Plugin}
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      checkbox = screen.getByRole('checkbox', {
+        name: /Include safe controls to test for over-blocking/,
+      });
+      expect(checkbox).toBeChecked();
+    });
+
+    it('should resync localConfig when switching between guardrail plugins', () => {
+      const { rerender } = render(
+        <PluginConfigDialog
+          open={true}
+          plugin={'beavertails' as Plugin}
+          config={{ includeSafe: true }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(
+        screen.getByRole('checkbox', {
+          name: /Include safe controls to test for over-blocking/,
+        }),
+      ).toBeChecked();
+
+      rerender(
+        <PluginConfigDialog
+          open={true}
+          plugin={'aegis' as Plugin}
+          config={{ includeSafe: false }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(
+        screen.getByRole('checkbox', {
+          name: /Include safe controls to test for over-blocking/,
+        }),
+      ).not.toBeChecked();
     });
   });
 });

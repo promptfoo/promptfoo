@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -38,13 +39,14 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Update localConfig when config prop changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // Sync when the dialog opens or switches plugins. Parent rerenders may pass a fresh
+  // `{}` config object, so config identity cannot drive this without wiping edits.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: preserve in-progress dialog edits across parent rerenders
   useEffect(() => {
-    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+    if (open && plugin) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -289,6 +291,32 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'beavertails':
+      case 'unsafebench':
+      case 'aegis':
+        specificConfig = (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">{getGuardrailPluginDescription(plugin)}</p>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="include-safe"
+                checked={localConfig.includeSafe || false}
+                onCheckedChange={(checked) =>
+                  setLocalConfig({ ...localConfig, includeSafe: checked === true })
+                }
+              />
+              <Label htmlFor="include-safe" inline>
+                Include safe controls to test for over-blocking
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When enabled, tests include a balanced mix of safe and unsafe controls. Safe controls
+              test whether your guardrails are too strict and incorrectly block legitimate requests
+              (over-blocking/false positives).
+            </p>
+          </div>
+        );
+        break;
       default:
         specificConfig = null;
     }
@@ -382,5 +410,18 @@ const arrayKeyToLabel = (key: string) => {
       return 'Target System';
     case 'targetUrls':
       return 'Target URL';
+  }
+};
+
+const getGuardrailPluginDescription = (plugin: string) => {
+  switch (plugin) {
+    case 'beavertails':
+      return 'BeaverTails tests your model against 330,000+ harmful prompts from the PKU-Alignment dataset, covering categories like abuse, criminal activity, hate speech, and violence.';
+    case 'unsafebench':
+      return 'UnsafeBench tests your multimodal model with unsafe images across categories like violence, sexual content, hate speech, and illegal activities.';
+    case 'aegis':
+      return "Aegis tests your model using NVIDIA's professionally annotated dataset of 11,997 interactions, covering 13 critical safety categories including harassment, threats, and privacy violations.";
+    default:
+      return '';
   }
 };

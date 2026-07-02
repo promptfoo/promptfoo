@@ -1,7 +1,12 @@
 import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
+import {
+  appendSafeControlGradingInstructions,
+  applySafeControlContext,
+} from '../redteam/shared/safeControls';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { SafeControlContext } from '../redteam/shared/safeControls';
+import type { AssertionParams, GradingResult, PluginConfig } from '../types/index';
 
 export const handleLlmRubric = async ({
   assertion,
@@ -25,8 +30,22 @@ export const handleLlmRubric = async ({
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
+  const safeControlConfig = assertion.config?.redteamSafeControl as
+    | { context?: SafeControlContext; pluginConfig?: PluginConfig }
+    | undefined;
+  let rubric = renderedValue || '';
+  if (safeControlConfig) {
+    invariant(typeof rubric === 'string', 'Safe control rubric must have a string value');
+    rubric = applySafeControlContext(rubric, safeControlConfig.context);
+    rubric = appendSafeControlGradingInstructions(
+      rubric,
+      safeControlConfig.pluginConfig,
+      test.options?.redteamGraderExamples as PluginConfig['graderExamples'] | undefined,
+    );
+  }
+
   const resp = await matchesLlmRubric(
-    renderedValue || '',
+    rubric,
     outputString,
     test.options,
     test.vars,
@@ -34,9 +53,12 @@ export const handleLlmRubric = async ({
     !assertion.transform && providerResponse?.images?.length ? { providerResponse } : undefined,
     providerCallContext,
   );
+  const metadata = safeControlConfig?.context
+    ? { ...resp.metadata, renderedAssertionValue: rubric as string }
+    : resp.metadata;
 
   if (isGraderFailure(resp)) {
-    return { ...resp, assertion };
+    return { ...resp, assertion, ...(metadata ? { metadata } : {}) };
   }
 
   // Clamp only on inversion so a NaN or out-of-range grader score cannot turn
@@ -46,6 +68,7 @@ export const handleLlmRubric = async ({
     : resp.score;
   return {
     ...resp,
+    ...(metadata ? { metadata } : {}),
     pass: resp.pass !== inverse,
     score,
   };
