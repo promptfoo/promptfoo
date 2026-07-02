@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.16.0-alpine AS base
+FROM node:24.17.0-alpine AS base
 
 # Update Alpine packages to get latest security patches
 RUN apk upgrade --no-cache
@@ -64,6 +64,9 @@ RUN ln -s /app /app/node_modules/promptfoo && \
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
+ENV PROMPTFOO_RUNNING_IN_DOCKER=1
+ARG PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${PROMPTFOO_OFFICIAL_DOCKER_IMAGE}
 
 USER promptfoo
 
