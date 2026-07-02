@@ -206,6 +206,142 @@ describe('validateTestPromptReferences', () => {
       expect(() => validateTestPromptReferences(tests, prompts)).toThrow(/Available prompts:/);
     });
 
+    it('should include YAML location when source is provided for test prompt references', () => {
+      const tests: TestCase[] = [{ description: 'Missing prompt', prompts: ['Missing Prompt'] }];
+      expect(() =>
+        validateTestPromptReferences(tests, prompts, undefined, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: [
+                'providers:',
+                '  - openai:gpt-4.1-mini',
+                'prompts:',
+                '  - id: prompt-a',
+                '    label: Factual Assistant',
+                'tests:',
+                '  - description: Missing prompt',
+                '    prompts:',
+                '      - Missing Prompt',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:9:9: Test #1 \("Missing prompt"\) references prompt "Missing Prompt" which does not exist/,
+      );
+    });
+
+    it('should point at the prompts entry when the ref string also appears in vars', () => {
+      const tests: TestCase[] = [
+        {
+          description: 'Missing prompt',
+          vars: { question: 'Missing Prompt' },
+          prompts: ['Missing Prompt'],
+        },
+      ];
+      expect(() =>
+        validateTestPromptReferences(tests, prompts, undefined, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: [
+                'prompts:',
+                '  - id: prompt-a',
+                '    label: Factual Assistant',
+                'tests:',
+                '  - description: Missing prompt',
+                '    vars:',
+                '      question: Missing Prompt',
+                '    assert:',
+                '      - type: contains',
+                '        value: Missing Prompt',
+                '    prompts:',
+                '      - Missing Prompt',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:12:9: Test #1 \("Missing prompt"\) references prompt "Missing Prompt" which does not exist/,
+      );
+    });
+
+    it('should include YAML location when source is provided for defaultTest prompt references', () => {
+      const defaultTest: Partial<TestCase> = { prompts: ['Missing Default'] };
+      expect(() =>
+        validateTestPromptReferences([], prompts, defaultTest, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: ['defaultTest:', '  prompts:', '    - Missing Default'].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:3:7: defaultTest references prompt "Missing Default" which does not exist/,
+      );
+    });
+
+    it('should point at the target duplicate when prompts appear before description', () => {
+      // Simulates filtered tests: only the second YAML item is validated, but the
+      // first item references the same missing prompt with `prompts` before `description`.
+      const tests: TestCase[] = [{ description: 'Target duplicate', prompts: ['Missing Prompt'] }];
+      expect(() =>
+        validateTestPromptReferences(tests, prompts, undefined, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: [
+                'prompts:',
+                '  - id: prompt-a',
+                '    label: Factual Assistant',
+                'tests:',
+                '  - prompts:',
+                '      - Missing Prompt',
+                '    description: First duplicate',
+                '  - prompts:',
+                '      - Missing Prompt',
+                '    description: Target duplicate',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:9:9: Test #1 \("Target duplicate"\) references prompt "Missing Prompt" which does not exist/,
+      );
+    });
+
+    it('should point at the defaultTest prompt line when tests reference the same missing prompt', () => {
+      const defaultTest: Partial<TestCase> = { prompts: ['Missing Prompt'] };
+      const tests: TestCase[] = [
+        { description: 'Uses missing prompt', prompts: ['Missing Prompt'] },
+      ];
+      expect(() =>
+        validateTestPromptReferences(tests, prompts, defaultTest, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: [
+                'prompts:',
+                '  - id: prompt-a',
+                '    label: Factual Assistant',
+                'tests:',
+                '  - description: Uses missing prompt',
+                '    prompts:',
+                '      - Missing Prompt',
+                'defaultTest:',
+                '  prompts:',
+                '    - Missing Prompt',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:10:7: defaultTest references prompt "Missing Prompt" which does not exist/,
+      );
+    });
+
     it('should throw error when wildcard matches nothing', () => {
       const tests: TestCase[] = [{ prompts: ['Science:*'] }];
       expect(() => validateTestPromptReferences(tests, prompts)).toThrow(
