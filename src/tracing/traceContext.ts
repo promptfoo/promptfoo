@@ -130,7 +130,10 @@ function createTraceSpans(spans: SpanData[]): TraceSpan[] {
         message: span.statusMessage,
       },
       depth: depthMap.get(span.spanId) ?? 0,
-      events: [],
+      events: (span.events ?? []).map((event) => ({
+        ...event,
+        attributes: event.attributes ?? {},
+      })),
     };
   });
 }

@@ -176,6 +176,13 @@
       "when": 1779816393227,
       "tag": "0024_repair_eval_redteam_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1780400163323,
+      "tag": "0025_magenta_revanche",
+      "breakpoints": true
     }
   ]
 }

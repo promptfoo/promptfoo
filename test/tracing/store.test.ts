@@ -162,6 +162,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
         },
         {
           spanId: 'span-2',
@@ -191,6 +198,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
           statusCode: undefined,
           statusMessage: undefined,
         },
@@ -557,6 +571,16 @@ describe('TraceStore', () => {
               safe: 'ok',
             },
           },
+          events: [
+            {
+              name: 'tool error',
+              timestamp: 2250,
+              attributes: {
+                authorization: 'Bearer event-secret',
+                safe: 'ok',
+              },
+            },
+          ],
           statusCode: 1,
           statusMessage: 'ok',
         },
@@ -618,6 +642,16 @@ describe('TraceStore', () => {
                 safe: 'ok',
               },
             },
+            events: [
+              {
+                name: 'tool error',
+                timestamp: 2250,
+                attributes: {
+                  authorization: '<redacted>',
+                  safe: 'ok',
+                },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'ok',
           },
