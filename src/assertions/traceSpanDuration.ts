@@ -1,4 +1,4 @@
-import { traceSpanDurationConfigError } from '../util/traceAssertionConfig';
+import { traceSpanDurationConfigError } from '../contracts/validators/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';

@@ -1,13 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import {
   notTrajectoryToolUsedBoundsError,
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
-} from '../util/traceAssertionConfig';
+} from '../contracts/validators/traceAssertionConfig';
+import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,

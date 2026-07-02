@@ -8,7 +8,7 @@ import {
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
-} from '../../src/util/traceAssertionConfig';
+} from '../../../src/contracts/validators/traceAssertionConfig';
 
 describe('traceAssertionConfig shared validators', () => {
   describe('traceSpanCountBoundsError', () => {
@@ -136,6 +136,15 @@ describe('traceAssertionConfig shared validators', () => {
         'trajectory:goal-success timeoutMs must be a finite positive number',
       );
       expect(trajectoryGoalSuccessTimeoutError({ timeoutMs: 5000 })).toBeUndefined();
+    });
+
+    it("rejects values above Node's timer ceiling and accepts the ceiling itself", () => {
+      // Node clamps setTimeout delays above 2^31 - 1 ms to 1 ms, so larger values
+      // would time out almost immediately while claiming the full duration.
+      expect(trajectoryGoalSuccessTimeoutError({ timeoutMs: 2_147_483_647 })).toBeUndefined();
+      expect(trajectoryGoalSuccessTimeoutError({ timeoutMs: 2_147_483_648 })).toBe(
+        "trajectory:goal-success timeoutMs must be at most 2147483647 (Node's timer ceiling)",
+      );
     });
   });
 

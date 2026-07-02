@@ -486,6 +486,25 @@ describe('shared trace/trajectory hardening parity', () => {
       ),
     ).toBeUndefined();
   });
+
+  it("rejects trajectory:goal-success timeoutMs above Node's timer ceiling", () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'finish', timeoutMs: 2_147_483_647 } as any,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'finish', timeoutMs: 2_147_483_648 } as any,
+        }),
+      ),
+    ).toMatch(/timeoutMs must be at most 2147483647/);
+  });
 });
 
 describe('required string assertions', () => {

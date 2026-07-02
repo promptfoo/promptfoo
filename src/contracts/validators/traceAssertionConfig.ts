@@ -7,9 +7,10 @@
  * (which throw on the returned message) and the Eval Creator UI validators (which surface
  * it inline at save time) call these, so save-time and run-time validation cannot drift.
  *
- * This module lives in the shared `util` layer (not `src/assertions`, which is `core`) and
- * is intentionally dependency-light so the browser bundle can import it via
- * `@promptfoo/util/traceAssertionConfig` without crossing the app/core boundary.
+ * This module lives in the dependency-free `contracts` leaf (not `src/assertions`, which
+ * is `core`) so both the browser bundle (via
+ * `@promptfoo/contracts/validators/traceAssertionConfig`) and the runtime can import it
+ * without adding reverse-layer dependencies.
  *
  * Validators only enforce the hardening rules; structural/presence requirements that
  * differ between the two surfaces (e.g. the UI requiring a span pattern, or the runtime
@@ -196,7 +197,17 @@ export function notTrajectoryToolUsedBoundsError(value: {
   return undefined;
 }
 
-/** trajectory:goal-success: an optional `timeoutMs` must be a finite positive number. */
+/**
+ * Node clamps `setTimeout` delays above 2^31 - 1 ms to 1 ms (with a
+ * TimeoutOverflowWarning), so larger values would fail almost immediately while
+ * claiming to have waited the full duration.
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * trajectory:goal-success: an optional `timeoutMs` must be a finite positive number no
+ * greater than Node's timer ceiling.
+ */
 export function trajectoryGoalSuccessTimeoutError(value: {
   timeoutMs?: unknown;
 }): string | undefined {
@@ -206,6 +217,9 @@ export function trajectoryGoalSuccessTimeoutError(value: {
   const { timeoutMs } = value;
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return 'trajectory:goal-success timeoutMs must be a finite positive number';
+  }
+  if (timeoutMs > MAX_TIMEOUT_MS) {
+    return `trajectory:goal-success timeoutMs must be at most ${MAX_TIMEOUT_MS} (Node's timer ceiling)`;
   }
   return undefined;
 }

@@ -39,6 +39,7 @@
       ],
       "allowedImportPaths": [
         "src/contracts.ts",
+        "src/contracts/validators/traceAssertionConfig.ts",
         "src/csv.ts",
         "src/logger.ts",
         "src/providers/constants.ts",
@@ -65,7 +66,6 @@
         "src/util/objectUtils.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",
-        "src/util/traceAssertionConfig.ts",
         "src/validators/providers.ts"
       ]
     },
