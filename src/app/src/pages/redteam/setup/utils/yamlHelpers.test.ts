@@ -17,9 +17,7 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
 }));
 
 vi.mock('js-yaml', () => ({
-  default: {
-    dump: vi.fn(),
-  },
+  dump: vi.fn(),
 }));
 
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
