@@ -17,6 +17,7 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: 'abliteration',
       config: {
         ...providerOptions.config,
         apiBaseUrl:

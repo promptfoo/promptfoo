@@ -1114,6 +1114,10 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      serviceName: z.string().optional(),
+      endpoint: z.string().optional(),
+      localExport: z.boolean().optional(),
+      debug: z.boolean().optional(),
       failOnReceiverStartFailure: z.boolean().optional(),
       commandToolNames: z.array(z.string()).optional(),
       otlp: z
@@ -1145,6 +1149,7 @@ export const TestSuiteSchema = z.object({
           retentionDays: z.number(),
         })
         .optional(),
+      // Accepted for configuration compatibility only; the built-in receiver does not relay spans.
       forwarding: z
         .object({
           enabled: z.boolean(),
@@ -1259,6 +1264,10 @@ export const TestSuiteConfigSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean().prefault(false),
+      serviceName: z.string().optional(),
+      endpoint: z.string().optional(),
+      localExport: z.boolean().optional(),
+      debug: z.boolean().optional(),
 
       // When the OTLP receiver fails to start (e.g. port already in use),
       // throw and fail the eval instead of silently continuing without traces.
@@ -1301,13 +1310,16 @@ export const TestSuiteConfigSchema = z.object({
         })
         .optional(),
 
-      // Optional: Forward traces to another collector
+      // Deprecated compatibility shape; the built-in receiver does not relay spans.
       forwarding: z
         .object({
           enabled: z.boolean().prefault(false),
           endpoint: z.string(),
           headers: z.record(z.string(), z.string()).optional(),
         })
+        .describe(
+          'Accepted for configuration compatibility only; the built-in receiver does not relay spans.',
+        )
         .optional(),
     })
     .optional(),

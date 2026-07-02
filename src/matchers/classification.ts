@@ -1,7 +1,12 @@
 import { getAndCheckProvider } from './providers';
 import { fail } from './shared';
 
-import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
+import type {
+  ApiClassificationProvider,
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+} from '../types/index';
 
 /**
  *
@@ -16,6 +21,7 @@ export async function matchesClassification(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const finalProvider = (await getAndCheckProvider(
     'classification',
@@ -24,7 +30,10 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
-  const resp = await finalProvider.callClassificationApi(output);
+  const resp =
+    providerCallContext === undefined
+      ? await finalProvider.callClassificationApi(output)
+      : await finalProvider.callClassificationApi(output, providerCallContext);
 
   if (!resp.classification) {
     return fail(resp.error || 'Unknown error fetching classification');

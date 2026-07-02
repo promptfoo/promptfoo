@@ -914,6 +914,28 @@ describe('TestSuiteConfigSchema', () => {
 
       expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
     });
+
+    it('preserves built-in span exporter settings', () => {
+      const result = TestSuiteConfigSchema.parse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tracing: {
+          enabled: true,
+          serviceName: 'my-eval',
+          endpoint: 'http://collector:4318/v1/traces',
+          localExport: false,
+          debug: true,
+        },
+      });
+
+      expect(result.tracing).toMatchObject({
+        enabled: true,
+        serviceName: 'my-eval',
+        endpoint: 'http://collector:4318/v1/traces',
+        localExport: false,
+        debug: true,
+      });
+    });
   });
 
   describe('extensions field', () => {

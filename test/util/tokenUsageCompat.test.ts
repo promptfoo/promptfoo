@@ -41,6 +41,68 @@ describe('tokenUsageCompat', () => {
     getTotalUsage: vi.fn<TokenUsageTrackerInstance['getTotalUsage']>(),
   };
 
+  const createCrossGroupTurnSpans = (): SpanData[] => [
+    {
+      spanId: 'provider-a',
+      name: 'invoke_agent parent',
+      startTime: 0,
+      attributes: {
+        'promptfoo.provider.id': 'provider:a',
+        'promptfoo.test.index': 0,
+        'gen_ai.usage.input_tokens': 100,
+        'gen_ai.usage.output_tokens': 50,
+      },
+    },
+    {
+      spanId: 'provider-b-wrapper',
+      parentSpanId: 'provider-a',
+      name: 'provider B wrapper',
+      startTime: 1,
+      attributes: {
+        'promptfoo.provider.id': 'provider:b',
+        'promptfoo.test.index': 1,
+      },
+    },
+    {
+      spanId: 'provider-b-turn',
+      parentSpanId: 'provider-b-wrapper',
+      name: 'gen_ai.turn 1',
+      startTime: 2,
+      attributes: {
+        'gen_ai.turn.index': 1,
+        'gen_ai.usage.input_tokens': 100,
+        'gen_ai.usage.output_tokens': 50,
+      },
+    },
+  ];
+
+  const createInvalidGroupMarkerSpans = (): SpanData[] => [
+    {
+      spanId: 'valid-parent',
+      name: 'invoke_agent parent',
+      startTime: 0,
+      attributes: {
+        'promptfoo.provider.id': 'provider:a',
+        'promptfoo.test.index': 0,
+        'gen_ai.usage.input_tokens': 100,
+        'gen_ai.usage.output_tokens': 50,
+      },
+    },
+    {
+      spanId: 'invalid-marker-turn',
+      parentSpanId: 'valid-parent',
+      name: 'gen_ai.turn 1',
+      startTime: 1,
+      attributes: {
+        'promptfoo.provider.id': '',
+        'promptfoo.test.index': Number.POSITIVE_INFINITY,
+        'gen_ai.turn.index': 1,
+        'gen_ai.usage.input_tokens': 100,
+        'gen_ai.usage.output_tokens': 50,
+      },
+    },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getTraceStore).mockReturnValue(mockTraceStore as unknown as TraceStoreType);
@@ -109,6 +171,22 @@ describe('tokenUsageCompat', () => {
       expect(usage).toEqual({
         numRequests: 1,
         completion: 50,
+      });
+    });
+
+    it('should extract cached-only usage', () => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: {
+          'gen_ai.usage.cached_tokens': 25,
+        },
+      };
+
+      expect(extractUsageFromSpan(span)).toEqual({
+        numRequests: 1,
+        cached: 25,
       });
     });
 
@@ -188,6 +266,50 @@ describe('tokenUsageCompat', () => {
           cacheReadInputTokens: 200,
           cacheCreationInputTokens: 30,
         },
+      });
+    });
+
+    it('should extract current dotted usage detail attributes', () => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: {
+          'gen_ai.usage.reasoning.output_tokens': 20,
+          'gen_ai.usage.cache_read.input_tokens': 200,
+          'gen_ai.usage.cache_creation.input_tokens': 30,
+        },
+      };
+
+      expect(extractUsageFromSpan(span)).toEqual({
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 20,
+          cacheReadInputTokens: 200,
+          cacheCreationInputTokens: 30,
+        },
+      });
+    });
+
+    it('should prefer current dotted usage details when both spellings are present', () => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: {
+          'gen_ai.usage.reasoning.output_tokens': 20,
+          'gen_ai.usage.reasoning_tokens': 99,
+          'gen_ai.usage.cache_read.input_tokens': 30,
+          'gen_ai.usage.cache_read_input_tokens': 88,
+          'gen_ai.usage.cache_creation.input_tokens': 40,
+          'gen_ai.usage.cache_creation_input_tokens': 77,
+        },
+      };
+
+      expect(extractUsageFromSpan(span)?.completionDetails).toEqual({
+        reasoning: 20,
+        cacheReadInputTokens: 30,
+        cacheCreationInputTokens: 40,
       });
     });
 
@@ -331,6 +453,229 @@ describe('tokenUsageCompat', () => {
 
       const result = aggregateUsageFromSpans(spans);
       expect(result.completionDetails?.reasoning).toBe(50);
+    });
+
+    it('should not double-count usage copied onto turn marker spans', () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'request-span',
+          name: 'invoke_agent codex',
+          startTime: 0,
+          attributes: {
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'request-span',
+          name: 'codex.turn',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result.prompt).toBe(100);
+      expect(result.completion).toBe(50);
+      expect(result.numRequests).toBe(1);
+    });
+
+    it('should fill missing parent details from turn spans without double-counting totals', () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'request-span',
+          name: 'invoke_agent codex',
+          startTime: 0,
+          attributes: {
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 40,
+            'gen_ai.usage.total_tokens': 140,
+            'gen_ai.usage.cached_tokens': 25,
+            'gen_ai.usage.reasoning.output_tokens': 5,
+          },
+        },
+        {
+          spanId: 'turn-1',
+          parentSpanId: 'request-span',
+          name: 'gen_ai.turn 1',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 60,
+            'gen_ai.usage.output_tokens': 20,
+            'gen_ai.usage.cached_tokens': 10,
+            'gen_ai.usage.reasoning.output_tokens': 7,
+            'gen_ai.usage.cache_creation.input_tokens': 3,
+          },
+        },
+        {
+          spanId: 'turn-2',
+          parentSpanId: 'request-span',
+          name: 'gen_ai.turn 2',
+          startTime: 2,
+          attributes: {
+            'gen_ai.turn.index': 2,
+            'gen_ai.usage.input_tokens': 40,
+            'gen_ai.usage.output_tokens': 20,
+            'gen_ai.usage.cached_tokens': 15,
+            'gen_ai.usage.reasoning.output_tokens': 8,
+            'gen_ai.usage.cache_creation.input_tokens': 4,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result).toMatchObject({
+        prompt: 100,
+        completion: 40,
+        total: 140,
+        cached: 25,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 5,
+          cacheCreationInputTokens: 7,
+        },
+      });
+    });
+
+    it('should merge complementary partial parent and turn fields', () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'request-span',
+          name: 'invoke_agent imported',
+          startTime: 0,
+          attributes: {
+            'gen_ai.usage.total_tokens': 150,
+            'gen_ai.usage.reasoning_tokens': 20,
+          },
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'request-span',
+          name: 'gen_ai.turn 1',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        total: 150,
+        numRequests: 1,
+        completionDetails: { reasoning: 20 },
+      });
+    });
+
+    it('should not deduplicate turns across explicit provider or test boundaries', () => {
+      expect(aggregateUsageFromSpans(createCrossGroupTurnSpans())).toMatchObject({
+        prompt: 200,
+        completion: 100,
+        numRequests: 2,
+      });
+    });
+
+    it('should ignore malformed group markers when deduplicating turns', async () => {
+      const spans = createInvalidGroupMarkerSpans();
+      expect(aggregateUsageFromSpans(spans)).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        numRequests: 1,
+      });
+
+      mockTraceStore.getSpans.mockResolvedValue(spans);
+      const byProvider = await getTokenUsageByProvider('trace-123');
+      const byTest = await getTokenUsageByTestIndex('trace-123');
+      expect(byProvider.get('provider:a')).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        numRequests: 1,
+      });
+      expect(byTest.get(0)).toMatchObject({ prompt: 100, completion: 50, numRequests: 1 });
+    });
+
+    it('should retain turn usage when an imported trace has no billable parent usage', () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'parent-span',
+          name: 'invoke_agent',
+          startTime: 0,
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'parent-span',
+          name: 'codex.turn',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result.prompt).toBe(100);
+      expect(result.completion).toBe(50);
+      expect(result.numRequests).toBe(1);
+    });
+
+    it.each([
+      {
+        name: 'detail-only',
+        parentAttributes: { 'gen_ai.usage.reasoning.output_tokens': 7 },
+      },
+      {
+        name: 'input-only',
+        parentAttributes: { 'gen_ai.usage.input_tokens': 100 },
+      },
+      {
+        name: 'total-only',
+        parentAttributes: { 'gen_ai.usage.total_tokens': 150 },
+      },
+      {
+        name: 'non-finite',
+        parentAttributes: { 'gen_ai.usage.input_tokens': Number.NaN },
+      },
+    ])('should prefer complete turn usage over a $name parent', ({ parentAttributes }) => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'request-span',
+          name: 'invoke_agent',
+          startTime: 0,
+          attributes: parentAttributes,
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'request-span',
+          name: 'codex.turn',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+            'gen_ai.usage.total_tokens': 150,
+            'gen_ai.usage.reasoning.output_tokens': 20,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result.prompt).toBe(100);
+      expect(result.completion).toBe(50);
+      expect(result.total).toBe(150);
+      expect(result.completionDetails?.reasoning).toBe(20);
+      expect(result.numRequests).toBe(1);
     });
   });
 
@@ -586,6 +931,85 @@ describe('tokenUsageCompat', () => {
       expect(result.size).toBe(1);
       expect(result.get('openai:gpt-4')?.total).toBe(300);
     });
+
+    it('should inherit provider identity and deduplicate agent turn usage', async () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'partial-parent',
+          name: 'invoke_agent codex',
+          startTime: 0,
+          attributes: {
+            'promptfoo.provider.id': 'openai:codex',
+            'gen_ai.usage.total_tokens': 150,
+          },
+        },
+        {
+          spanId: 'partial-turn',
+          parentSpanId: 'partial-parent',
+          name: 'gen_ai.turn 1',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+        {
+          spanId: 'complete-parent',
+          name: 'invoke_agent claude',
+          startTime: 2,
+          attributes: {
+            'promptfoo.provider.id': 'anthropic:claude-agent',
+            'gen_ai.usage.input_tokens': 40,
+            'gen_ai.usage.output_tokens': 20,
+          },
+        },
+        {
+          spanId: 'complete-turn',
+          parentSpanId: 'complete-parent',
+          name: 'gen_ai.turn 1',
+          startTime: 3,
+          attributes: {
+            'promptfoo.provider.id': 'anthropic:claude-agent',
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 40,
+            'gen_ai.usage.output_tokens': 20,
+          },
+        },
+      ];
+      mockTraceStore.getSpans.mockResolvedValue(spans);
+
+      const result = await getTokenUsageByProvider('trace-123');
+
+      expect(result.get('openai:codex')).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        total: 150,
+        numRequests: 1,
+      });
+      expect(result.get('anthropic:claude-agent')).toMatchObject({
+        prompt: 40,
+        completion: 20,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve explicit cross-provider turn usage', async () => {
+      mockTraceStore.getSpans.mockResolvedValue(createCrossGroupTurnSpans());
+
+      const result = await getTokenUsageByProvider('trace-123');
+
+      expect(result.get('provider:a')).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        numRequests: 1,
+      });
+      expect(result.get('provider:b')).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        numRequests: 1,
+      });
+    });
   });
 
   describe('getTokenUsageByTestIndex', () => {
@@ -668,6 +1092,77 @@ describe('tokenUsageCompat', () => {
 
       expect(result.size).toBe(1);
       expect(result.get(0)?.total).toBe(300);
+    });
+
+    it('should inherit test identity and deduplicate agent turn usage', async () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'partial-parent',
+          name: 'invoke_agent codex',
+          startTime: 0,
+          attributes: {
+            'promptfoo.test.index': 0,
+            'gen_ai.usage.total_tokens': 150,
+          },
+        },
+        {
+          spanId: 'partial-turn',
+          parentSpanId: 'partial-parent',
+          name: 'gen_ai.turn 1',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+        {
+          spanId: 'complete-parent',
+          name: 'invoke_agent claude',
+          startTime: 2,
+          attributes: {
+            'promptfoo.test.index': 1,
+            'gen_ai.usage.input_tokens': 40,
+            'gen_ai.usage.output_tokens': 20,
+          },
+        },
+        {
+          spanId: 'complete-turn',
+          parentSpanId: 'complete-parent',
+          name: 'gen_ai.turn 1',
+          startTime: 3,
+          attributes: {
+            'promptfoo.test.index': 1,
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 40,
+            'gen_ai.usage.output_tokens': 20,
+          },
+        },
+      ];
+      mockTraceStore.getSpans.mockResolvedValue(spans);
+
+      const result = await getTokenUsageByTestIndex('trace-123');
+
+      expect(result.get(0)).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        total: 150,
+        numRequests: 1,
+      });
+      expect(result.get(1)).toMatchObject({
+        prompt: 40,
+        completion: 20,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve explicit cross-test turn usage', async () => {
+      mockTraceStore.getSpans.mockResolvedValue(createCrossGroupTurnSpans());
+
+      const result = await getTokenUsageByTestIndex('trace-123');
+
+      expect(result.get(0)).toMatchObject({ prompt: 100, completion: 50, numRequests: 1 });
+      expect(result.get(1)).toMatchObject({ prompt: 100, completion: 50, numRequests: 1 });
     });
   });
 });

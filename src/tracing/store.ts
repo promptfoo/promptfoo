@@ -71,11 +71,18 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.rejected_prediction_tokens',
   'gen_ai.usage.cache_read_input_tokens',
   'gen_ai.usage.cache_creation_input_tokens',
+  'gen_ai.usage.reasoning.output_tokens',
+  'gen_ai.usage.cache_read.input_tokens',
+  'gen_ai.usage.cache_creation.input_tokens',
 ]);
 
-function isSensitiveAttributeKey(key: string): boolean {
+function isSensitiveAttributeKey(key: string, value: unknown): boolean {
   const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
+  if (
+    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
+    typeof value === 'number' &&
+    Number.isFinite(value)
+  ) {
     return false;
   }
 
@@ -111,7 +118,7 @@ function sanitizeAttributes(
 
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
-    if (isSensitiveAttributeKey(key)) {
+    if (isSensitiveAttributeKey(key, value)) {
       sanitized[key] = '<redacted>';
       continue;
     }

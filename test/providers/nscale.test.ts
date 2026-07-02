@@ -86,6 +86,7 @@ describe('createNscaleProvider', () => {
 
     // Verify that the OpenAI provider was called with the correct parameters
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-oss-120b', {
+      genAIProviderName: 'nscale',
       config: {
         apiBaseUrl: 'https://inference.api.nscale.com/v1',
         apiKey: undefined, // No API key or service token set

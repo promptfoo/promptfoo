@@ -6,8 +6,9 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  type GenAISpanContext,
-  type GenAISpanResult,
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -53,7 +54,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: OpenAiCompletionOptions;
+      id?: string;
+      env?: EnvOverrides;
+      genAIProviderName?: string;
+    } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown chat model: ${modelName}`);
@@ -186,6 +192,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   protected getGenAISystem(): string {
     return 'openai';
+  }
+
+  /** Latest-convention provider identity; subclasses override for known backends. */
+  protected getGenAIProviderName(): string {
+    return this.configuredGenAIProviderName;
   }
 
   async getOpenAiBody(
@@ -349,69 +360,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
+    const spanContext = buildChatSpanContext({
       system: this.getGenAISystem(),
-      operationName: 'chat',
+      providerName: this.getGenAIProviderName(),
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
-      // Promptfoo context from test case if available
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
-    };
-
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-          completionDetails: {
-            reasoning: response.tokenUsage.completionDetails?.reasoning,
-            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
-            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
-          },
-        };
-      }
-
-      // Extract finish reason if available
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-
-      // Cache hit status
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-
-      // Response body for debugging/observability
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-
-      return result;
-    };
+      prompt,
+      context,
+    });
 
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
-      resultExtractor,
+      (span) => this.callApiInternal(prompt, context, callApiOptions, span),
+      extractProviderResponseAttributes,
     );
   }
 
@@ -423,8 +385,30 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
+    span?: Parameters<typeof setGenAIRequestAttributes>[0],
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+
+    if (span) {
+      const asNumber = (value: unknown): number | undefined =>
+        typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+      const stopSequences = Array.isArray(body.stop)
+        ? body.stop.filter((value: unknown): value is string => typeof value === 'string')
+        : typeof body.stop === 'string'
+          ? [body.stop]
+          : undefined;
+      setGenAIRequestAttributes(span, {
+        model: typeof body.model === 'string' ? body.model : undefined,
+        operationName: 'chat',
+        maxTokens: asNumber(body.max_completion_tokens ?? body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        presencePenalty: asNumber(body.presence_penalty),
+        stream: body.stream === true,
+      });
+    }
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
@@ -553,6 +537,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
+    const responseMetadata = {
+      ...(typeof data.id === 'string' && data.id ? { responseId: data.id } : {}),
+      ...(typeof data.model === 'string' && data.model ? { model: data.model } : {}),
+    };
+
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
@@ -570,6 +559,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
           metadata: {
+            ...responseMetadata,
             http: {
               status,
               statusText,
@@ -592,6 +582,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             flagged: true,
           },
           metadata: {
+            ...responseMetadata,
             http: {
               status,
               statusText,
@@ -744,6 +735,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             }),
             guardrails: { flagged: contentFiltered },
             metadata: {
+              ...responseMetadata,
               http: {
                 status,
                 statusText,
@@ -784,6 +776,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }),
           guardrails: { flagged: contentFiltered },
           metadata: {
+            ...responseMetadata,
             http: {
               status,
               statusText,
@@ -806,6 +799,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }),
         guardrails: { flagged: contentFiltered },
         metadata: {
+          ...responseMetadata,
           http: {
             status,
             statusText,

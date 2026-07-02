@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -1173,25 +1173,29 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       context?.prompt?.config as CodexAppServerConfig | undefined,
     );
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
+    const model = typeof config.model === 'string' && config.model ? config.model : undefined;
+    const cliModel = config.cli_config?.model;
     const requestedModel =
-      typeof config.model === 'string' && config.model ? config.model : undefined;
+      model ?? (typeof cliModel === 'string' && cliModel ? cliModel : undefined);
 
     return withGenAISpan(
-      this.buildSpanContext(prompt, context, requestedModel),
+      this.buildSpanContext(prompt, context, model, requestedModel),
       () => this.callApiInternal(prompt, context, callOptions, config),
-      (response) => this.extractSpanResult(response, requestedModel),
+      (response) => this.extractSpanResult(response),
     );
   }
 
   private buildSpanContext(
     prompt: string,
     context: CallApiContextParams | undefined,
+    model: string | undefined,
     requestedModel: string | undefined,
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex-app-server',
+      operationName: 'invoke_agent',
+      model: model ?? 'codex-app-server',
+      requestModel: requestedModel,
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -1204,19 +1208,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     };
   }
 
-  private extractSpanResult(
-    response: ProviderResponse,
-    requestedModel: string | undefined,
-  ): GenAISpanResult {
+  private extractSpanResult(response: ProviderResponse): GenAISpanResult {
     const result: GenAISpanResult = {};
     if (response.tokenUsage) {
       result.tokenUsage = response.tokenUsage;
     }
     if (response.sessionId) {
       result.responseId = response.sessionId;
-    }
-    if (requestedModel) {
-      result.responseModel = requestedModel;
+      result.conversationId = response.sessionId;
     }
     if (response.cached !== undefined) {
       result.cacheHit = response.cached;
@@ -3193,18 +3192,19 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     // Codex app-server typically delivers usage under `last`/`total`; reuse
     // the shared resolver so we honor both nested and flat shapes.
     const usage = this.resolveRawUsage(state.rawTokenUsage);
-    const attributes: Attributes = {};
-    if (usage) {
-      attributes['gen_ai.usage.input_tokens'] = usage.input;
-      attributes['gen_ai.usage.output_tokens'] = usage.output;
-      if (usage.cached) {
-        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
-      }
-      if (usage.reasoning) {
-        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
-      }
-    }
-    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });
+    closeTurnSpan(state, {
+      eventTime,
+      tokenUsage: usage
+        ? {
+            prompt: usage.input,
+            completion: usage.output,
+            cached: usage.cached,
+            completionDetails: { reasoning: usage.reasoning },
+          }
+        : undefined,
+      errorMessage,
+      logLabel: 'CodexAppServer',
+    });
   }
 
   private applyItemCompletionAttributes(

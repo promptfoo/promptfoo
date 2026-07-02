@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getDefaultOtelConfig,
   getOtelConfigFromEnv,
   getOtelConfigFromYaml,
   mergeOtelConfigs,
@@ -70,6 +71,18 @@ describe('otelConfig', () => {
       expect(config.serviceName).toBe('my-service');
     });
 
+    it('should fall back to the standard OTEL_SERVICE_NAME', () => {
+      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
+      mockedGetEnvString.mockImplementation((key, defaultVal) => {
+        if (key === 'OTEL_SERVICE_NAME') {
+          return 'standard-service';
+        }
+        return defaultVal;
+      });
+
+      expect(getOtelConfigFromEnv().serviceName).toBe('standard-service');
+    });
+
     it('should prefer PROMPTFOO_OTEL_ENDPOINT over OTEL_EXPORTER_OTLP_ENDPOINT', () => {
       mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
       mockedGetEnvString.mockImplementation((key, defaultVal) => {
@@ -101,7 +114,34 @@ describe('otelConfig', () => {
 
       const config = getOtelConfigFromEnv();
 
-      expect(config.endpoint).toBe('http://standard:4318');
+      expect(config.endpoint).toBe('http://standard:4318/v1/traces');
+    });
+
+    it('should prefer the signal-specific traces endpoint over the base endpoint', () => {
+      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
+      mockedGetEnvString.mockImplementation((key, defaultVal) => {
+        if (key === 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT') {
+          return 'http://traces:4318/custom/traces';
+        }
+        if (key === 'OTEL_EXPORTER_OTLP_ENDPOINT') {
+          return 'http://base:4318';
+        }
+        return defaultVal;
+      });
+
+      expect(getOtelConfigFromEnv().endpoint).toBe('http://traces:4318/custom/traces');
+    });
+
+    it('should not duplicate the traces path on a compatibility endpoint', () => {
+      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
+      mockedGetEnvString.mockImplementation((key, defaultVal) => {
+        if (key === 'OTEL_EXPORTER_OTLP_ENDPOINT') {
+          return 'http://standard:4318/v1/traces';
+        }
+        return defaultVal;
+      });
+
+      expect(getOtelConfigFromEnv().endpoint).toBe('http://standard:4318/v1/traces');
     });
 
     it('should read PROMPTFOO_OTEL_LOCAL_EXPORT', () => {
@@ -240,6 +280,31 @@ describe('otelConfig', () => {
       expect(merged.serviceName).toBe('yaml-service');
       expect(merged.enabled).toBe(true); // from env
       expect(merged.endpoint).toBe('http://env:4318'); // from env
+    });
+  });
+
+  describe('getDefaultOtelConfig', () => {
+    it('merges the active test suite tracing config and forces tracing on', () => {
+      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
+      mockedGetEnvString.mockImplementation((_key, defaultVal) => defaultVal);
+
+      expect(
+        getDefaultOtelConfig({
+          tracing: {
+            enabled: false,
+            serviceName: 'yaml-service',
+            endpoint: 'http://collector:4318/v1/traces',
+            localExport: false,
+            debug: true,
+          },
+        }),
+      ).toEqual({
+        enabled: true,
+        serviceName: 'yaml-service',
+        endpoint: 'http://collector:4318/v1/traces',
+        localExport: false,
+        debug: true,
+      });
     });
   });
 });

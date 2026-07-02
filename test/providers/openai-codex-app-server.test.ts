@@ -515,6 +515,162 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(messageSpan?.attributes['gen_ai.turn.index']).toBe(1);
   });
 
+  it('reports the model supplied through cli_config in current telemetry', async () => {
+    const restoreEnv = mockProcessEnv({
+      OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+    });
+    const spans = installSpanRecorder();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { cli_config: { model: 'gpt-5.5' }, thread_cleanup: 'none' },
+    });
+
+    try {
+      const resultPromise = provider.callApi('Trace configured model');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_model' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({ id: turnStart.id, result: { turn: { id: 'turn_model' } } });
+      server.send({
+        method: 'item/completed',
+        params: {
+          threadId: 'thr_model',
+          turnId: 'turn_model',
+          item: { type: 'agentMessage', id: 'msg_model', text: 'Done' },
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_model',
+          turn: { id: 'turn_model', status: 'completed', items: [], error: null },
+        },
+      });
+      await resultPromise;
+
+      expect(spans.find((span) => span.name === 'invoke_agent')?.attributes).toMatchObject({
+        'gen_ai.request.model': 'gpt-5.5',
+      });
+      expect(spans.find((span) => span.name === 'invoke_agent')?.attributes).not.toHaveProperty(
+        'gen_ai.response.model',
+      );
+      expect(mocks.spawn.mock.calls[0][1]).toContain('model="gpt-5.5"');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('prefers a top-level model over cli_config in current telemetry and requests', async () => {
+    const restoreEnv = mockProcessEnv({
+      OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+    });
+    const spans = installSpanRecorder();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        model: 'gpt-top',
+        cli_config: { model: 'gpt-cli' },
+        thread_cleanup: 'none',
+      },
+    });
+
+    try {
+      const resultPromise = provider.callApi('Trace top-level model');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      expect(threadStart.params.model).toBe('gpt-top');
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_top_model' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      expect(turnStart.params.model).toBe('gpt-top');
+      server.send({ id: turnStart.id, result: { turn: { id: 'turn_top_model' } } });
+      server.send({
+        method: 'item/completed',
+        params: {
+          threadId: 'thr_top_model',
+          turnId: 'turn_top_model',
+          item: { type: 'agentMessage', id: 'msg_top_model', text: 'Done' },
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_top_model',
+          turn: { id: 'turn_top_model', status: 'completed', items: [], error: null },
+        },
+      });
+      await resultPromise;
+
+      expect(spans.find((span) => span.name === 'invoke_agent')?.attributes).toMatchObject({
+        'gen_ai.request.model': 'gpt-top',
+      });
+      expect(mocks.spawn.mock.calls[0][1]).toContain('model="gpt-cli"');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves the legacy model placeholder for cli_config-only models', async () => {
+    const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+    const spans = installSpanRecorder();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { cli_config: { model: 'gpt-cli' }, thread_cleanup: 'none' },
+    });
+
+    try {
+      const resultPromise = provider.callApi('Trace legacy model');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_legacy_model' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({ id: turnStart.id, result: { turn: { id: 'turn_legacy_model' } } });
+      server.send({
+        method: 'item/completed',
+        params: {
+          threadId: 'thr_legacy_model',
+          turnId: 'turn_legacy_model',
+          item: { type: 'agentMessage', id: 'msg_legacy_model', text: 'Done' },
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_legacy_model',
+          turn: { id: 'turn_legacy_model', status: 'completed', items: [], error: null },
+        },
+      });
+      await resultPromise;
+
+      expect(spans.find((span) => span.name === 'chat codex-app-server')?.attributes).toMatchObject(
+        {
+          'gen_ai.request.model': 'codex-app-server',
+        },
+      );
+      expect(
+        spans.find((span) => span.name === 'chat codex-app-server')?.attributes,
+      ).not.toHaveProperty('gen_ai.response.model');
+      expect(mocks.spawn.mock.calls[0][1]).toContain('model="gpt-cli"');
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('does not reuse usage from an earlier protocol turn marker', () => {
     const spans = installSpanRecorder();
     const provider = new OpenAICodexAppServerProvider({

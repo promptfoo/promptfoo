@@ -16,6 +16,15 @@ const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
 // Hoisted mock for importModule
 const mockImportModule = vi.hoisted(() => vi.fn());
 
+const tracingMocks = vi.hoisted(() => ({
+  setGenAIRequestAttributes: vi.fn(),
+}));
+
+vi.mock('../../../src/tracing/genaiTracer', async (importOriginal) => ({
+  ...(await importOriginal()),
+  setGenAIRequestAttributes: tracingMocks.setGenAIRequestAttributes,
+}));
+
 // Mock database
 vi.mock('libsql', () => {
   return vi.fn().mockReturnValue({
@@ -247,6 +256,49 @@ describe('VertexChatProvider.callGeminiApi', () => {
         contents: [{ parts: [{ text: 'test prompt' }], role: 'user' }],
       }),
       timeout: expect.any(Number),
+    });
+  });
+
+  it('records request metadata from the finalized Gemini generation config', async () => {
+    mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        usageMetadata: {
+          totalTokenCount: 10,
+          promptTokenCount: 5,
+          candidatesTokenCount: 5,
+        },
+      },
+    ]);
+
+    await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          temperature: 0.4,
+          maxOutputTokens: 200,
+          streaming: true,
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 321,
+            topP: 0.95,
+            topK: 12,
+          },
+        },
+      },
+      vars: {},
+    });
+
+    expect(tracingMocks.setGenAIRequestAttributes).toHaveBeenCalledWith(expect.anything(), {
+      model: 'gemini-pro',
+      operationName: 'generate_content',
+      maxTokens: 321,
+      temperature: 0.5,
+      topP: 0.95,
+      topK: 12,
+      stopSequences: ['\n'],
+      stream: true,
     });
   });
 

@@ -65,6 +65,7 @@ export function createAimlApiProvider(
 
   const openaiOptions = {
     ...options,
+    genAIProviderName: 'aimlapi',
     config: {
       ...(options.config || {}),
       apiBaseUrl: 'https://api.aimlapi.com/v1',

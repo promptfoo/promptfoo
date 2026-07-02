@@ -209,6 +209,7 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
 
     super(modelName, {
       ...options,
+      genAIProviderName: 'alibaba',
       config: {
         ...options.config,
         apiBaseUrl: options.config?.apiBaseUrl ?? API_BASE_URL,

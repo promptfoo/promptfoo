@@ -745,9 +745,10 @@ describe('ClaudeCodeSDKProvider', () => {
         // the OTEL span ERROR so this isn't graded silently.
         const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
         const setStatusSpy = vi.fn();
+        const setAttributeSpy = vi.fn();
         vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
           setStatus: setStatusSpy,
-          setAttribute: vi.fn(),
+          setAttribute: setAttributeSpy,
           setAttributes: vi.fn(),
           addEvent: vi.fn(),
           recordException: vi.fn(),
@@ -806,6 +807,7 @@ describe('ClaudeCodeSDKProvider', () => {
             code: SpanStatusCode.ERROR,
             message: expect.stringContaining('terminal_reason'),
           });
+          expect(setAttributeSpy).toHaveBeenCalledWith('error.type', '_OTHER');
         } finally {
           warnSpy.mockRestore();
         }
@@ -4806,6 +4808,16 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('propagates response.model from modelUsage and finish_reasons from terminal_reason', async () => {
+        let extractedResponseModel: string | undefined;
+        const withSpanSpy = vi.spyOn(genaiTracer, 'withGenAISpan').mockImplementation((async (
+          _context: unknown,
+          fn: (span: unknown) => Promise<any>,
+          extractor?: (value: any) => any,
+        ) => {
+          const response = await fn({});
+          extractedResponseModel = extractor?.(response)?.responseModel;
+          return response;
+        }) as any);
         mockQuery.mockReturnValue(
           createMockQuery([
             {
@@ -4848,12 +4860,16 @@ describe('ClaudeCodeSDKProvider', () => {
         // surfaced metadata the extractor depends on.
         expect(result.metadata?.modelUsage).toHaveProperty('claude-haiku-4-5-20251001');
         expect(result.metadata?.terminalReason).toBe('max_turns');
+        expect(withSpanSpy).toHaveBeenCalledOnce();
+        expect(extractedResponseModel).toBe('claude-haiku-4-5-20251001');
       });
 
       it('marks the active provider span as ERROR when the SDK stops via hook_stopped', async () => {
         const setStatus = vi.fn();
+        const setAttribute = vi.fn();
         vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
           setStatus,
+          setAttribute,
           spanContext: () => ({
             traceId: '0af7651916cd43dd8448eb211c80319c',
             spanId: 'b7ad6b7169203331',
@@ -4893,6 +4909,7 @@ describe('ClaudeCodeSDKProvider', () => {
           code: SpanStatusCode.ERROR,
           message: 'aborted: hook_stopped',
         });
+        expect(setAttribute).toHaveBeenCalledWith('error.type', 'hook_stopped');
       });
 
       it('propagates tool.parent_id for sub-agent tool calls', async () => {
@@ -5081,7 +5098,17 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan!.attrs['tool.input']).toBe('<unserializable>');
       });
 
-      it('picks gen_ai.response.model by largest usage, not iteration order', async () => {
+      it('omits gen_ai.response.model when aggregate usage contains multiple models', async () => {
+        let extractedResponseModel: string | undefined;
+        const withSpanSpy = vi.spyOn(genaiTracer, 'withGenAISpan').mockImplementation((async (
+          _context: unknown,
+          fn: (span: unknown) => Promise<any>,
+          extractor?: (value: any) => any,
+        ) => {
+          const response = await fn({});
+          extractedResponseModel = extractor?.(response)?.responseModel;
+          return response;
+        }) as any);
         mockQuery.mockReturnValue(
           createMockQuery([
             {
@@ -5129,9 +5156,8 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         const result = await provider.callApi('prompt');
         expect(result.metadata?.modelUsage).toHaveProperty('claude-sonnet-4-5');
-        // The extractor (not directly returned) uses modelUsage; this test proves
-        // our modelUsage payload reached metadata so the new tie-break logic can
-        // operate on it.
+        expect(withSpanSpy).toHaveBeenCalledOnce();
+        expect(extractedResponseModel).toBeUndefined();
       });
 
       describe('gen_ai.turn marker spans', () => {

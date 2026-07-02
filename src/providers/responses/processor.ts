@@ -27,6 +27,10 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
     metadata.model = data.model;
   }
 
+  if (typeof data.conversation?.id === 'string' && data.conversation.id) {
+    metadata.conversationId = data.conversation.id;
+  }
+
   // Deep research annotations (citations)
   if (Array.isArray(processedOutput.annotations) && processedOutput.annotations.length > 0) {
     metadata.annotations = processedOutput.annotations;

@@ -252,6 +252,7 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: HyperbolicProviderOptions) {
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: 'hyperbolic',
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'HYPERBOLIC_API_KEY',

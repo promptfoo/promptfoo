@@ -40,6 +40,7 @@ export function createNscaleProvider(
 
   const nscaleConfig = {
     ...options,
+    genAIProviderName: 'nscale',
     config: {
       apiBaseUrl: 'https://inference.api.nscale.com/v1',
       apiKey: getApiKey(),

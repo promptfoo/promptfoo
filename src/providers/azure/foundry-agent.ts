@@ -530,7 +530,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const spanContext = buildChatSpanContext({
       system: 'azure',
+      providerName: 'azure.ai.inference',
+      operationName: 'invoke_agent',
       model: this.deploymentName,
+      requestModel:
+        typeof context?.prompt?.config?.modelName === 'string'
+          ? context.prompt.config.modelName
+          : this.assistantConfig.modelName,
+      agentName: this.deploymentName,
       providerId: this.id(),
       prompt,
       context,
@@ -585,7 +592,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           index: turnCount,
           startTime: callStartedAt,
           endTime: callEndedAt,
-          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          system: 'azure',
+          providerName: 'azure.ai.inference',
+          attributes: { 'gen_ai.turn.index': turnCount },
           errorMessage,
           logLabel: 'AzureFoundryAgent',
         });
@@ -593,8 +602,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
       // The Responses API can resolve with a failed/errored response object
       // instead of throwing. Surface that on the turn marker so a failed model
-      // round is not reported as OK (the parent chat span is already marked
-      // failed downstream via processResponse).
+      // round is not reported as OK (the parent span is already marked failed
+      // downstream via processResponse).
       const responseFailureMessage = (resp: any): string | undefined => {
         if (resp?.error) {
           return typeof resp.error === 'string'
@@ -609,11 +618,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
       let turnStartedAt = Date.now();
       let response;
+      let conversationId: string | undefined;
       try {
         response = await openAIClient.responses.create(
           body as ResponseCreateParamsNonStreaming,
           responseOptions,
         );
+        conversationId = response.conversation?.id;
         emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
       } catch (err) {
         emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
@@ -646,6 +657,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             } as ResponseCreateParamsNonStreaming,
             responseOptions,
           );
+          conversationId ??= response.conversation?.id;
           emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
         } catch (err) {
           emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
@@ -660,6 +672,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
 
       const result = await this.processResponse(response, effectiveConfig);
+      if (conversationId) {
+        result.metadata = { ...result.metadata, conversationId };
+      }
       if (isCacheEnabled() && !result.error) {
         try {
           const cache = await getCache();

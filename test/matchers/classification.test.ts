@@ -121,6 +121,11 @@ describe('matchesClassification', () => {
         id: 'hf:text-classification:foobar',
       },
     };
+    const providerCallContext = {
+      prompt: { raw: output, label: 'classification' },
+      vars: {},
+      traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+    };
 
     const mockCallApi = vi.spyOn(
       HuggingfaceTextClassificationProvider.prototype,
@@ -132,12 +137,14 @@ describe('matchesClassification', () => {
       });
     });
 
-    await expect(matchesClassification(expected, output, threshold, grading)).resolves.toEqual({
+    await expect(
+      matchesClassification(expected, output, threshold, grading, providerCallContext),
+    ).resolves.toEqual({
       pass: true,
       reason: `Classification ${expected} has score 0.60 >= ${threshold}`,
       score: 0.6,
     });
-    expect(mockCallApi).toHaveBeenCalledWith('Sample output');
+    expect(mockCallApi).toHaveBeenCalledWith('Sample output', providerCallContext);
 
     mockCallApi.mockRestore();
   });

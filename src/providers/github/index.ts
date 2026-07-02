@@ -11,6 +11,7 @@ export function createGitHubProvider(
   const modelName = splits.slice(1).join(':') || 'openai/gpt-5';
   return new OpenAiChatCompletionProvider(modelName, {
     ...providerOptions,
+    genAIProviderName: 'github',
     config: {
       ...providerOptions.config,
       apiBaseUrl: 'https://models.github.ai/inference',

@@ -6,7 +6,9 @@ import sys
 import tempfile
 import unittest
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from typing import Any, Dict
+from unittest.mock import MagicMock, call, patch
+from urllib.parse import quote_plus
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from python import persistent_wrapper
@@ -204,6 +206,51 @@ class TestInitTracing(unittest.TestCase):
     def tearDown(self) -> None:
         persistent_wrapper._tracer = self.original_tracer
         persistent_wrapper._tracing_enabled = self.original_tracing_enabled
+
+    def test_resolves_default_otlp_traces_endpoint(self) -> None:
+        for environment in ({}, {"OTEL_EXPORTER_OTLP_ENDPOINT": ""}):
+            with self.subTest(environment=environment):
+                with patch.dict(os.environ, environment, clear=True):
+                    self.assertEqual(
+                        persistent_wrapper._get_otlp_traces_endpoint(),
+                        "http://localhost:4318/v1/traces",
+                    )
+
+    def test_appends_traces_path_to_generic_otlp_endpoint(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318/base/"},
+            clear=True,
+        ):
+            self.assertEqual(
+                persistent_wrapper._get_otlp_traces_endpoint(),
+                "http://collector:4318/base/v1/traces",
+            )
+
+    def test_preserves_compatibility_endpoint_with_traces_path(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318/v1/traces/"},
+            clear=True,
+        ):
+            self.assertEqual(
+                persistent_wrapper._get_otlp_traces_endpoint(),
+                "http://collector:4318/v1/traces",
+            )
+
+    def test_prefers_exact_signal_specific_otlp_traces_endpoint(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://base:4318",
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://traces:4318/custom",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                persistent_wrapper._get_otlp_traces_endpoint(),
+                "http://traces:4318/custom",
+            )
 
     def test_successful_init_does_not_write_to_stderr(self) -> None:
         """Tests that successful tracing initialization stays quiet."""
@@ -412,7 +459,7 @@ class TestMain(unittest.TestCase):
 class TestHandleCall(unittest.TestCase):
     """Tests for handle_call function."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.request_file = os.path.join(self.temp_dir, "request.json")
@@ -426,7 +473,7 @@ class TestHandleCall(unittest.TestCase):
     def _raise_error(self):
         raise ValueError("Test error")
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         """Clean up temp files."""
         import shutil
 
@@ -552,6 +599,33 @@ class TestHandleCall(unittest.TestCase):
         self.assertEqual(response["data"]["emoji"], "🎉")
         self.assertEqual(response["data"]["chinese"], "中文")
 
+    def test_cached_trace_command_returns_result_without_user_function(self) -> None:
+        cached_result = {"embedding": [0.1, 0.2]}
+        with open(self.request_file, "w") as f:
+            json.dump(
+                [
+                    "prompt",
+                    {"config": {}},
+                    {
+                        "__promptfooApiType": "call_embedding_api",
+                        "__promptfooCached": True,
+                    },
+                    cached_result,
+                ],
+                f,
+            )
+
+        with patch("sys.stdout", io.StringIO()):
+            persistent_wrapper.handle_call(
+                f"CALL|__promptfoo_trace_cached_result|{self.request_file}|{self.response_file}",
+                self.mock_module,
+                "default_func",
+            )
+
+        with open(self.response_file) as f:
+            response = json.load(f)
+        self.assertEqual(response, {"type": "result", "data": cached_result})
+
     def test_file_verification_retry(self) -> None:
         """Tests that file verification retries on failure."""
         with open(self.request_file, "w") as f:
@@ -628,6 +702,883 @@ class TestAsyncFunctionHandling(unittest.TestCase):
 
         self.assertEqual(response["type"], "result")
         self.assertEqual(response["data"], 12)
+
+
+class TestTracedCall(unittest.TestCase):
+    """Tests for _traced_call tracing logic.
+
+    opentelemetry is an optional dependency (not installed in CI), so we
+    inject fake modules into sys.modules so the lazy imports inside
+    _traced_call resolve without the real package.
+    """
+
+    def setUp(self) -> None:
+        """Set up mock tracer, fake OTEL modules, and enable tracing."""
+        self.original_tracing = persistent_wrapper._tracing_enabled
+        self.original_tracer = persistent_wrapper._tracer
+        self.original_semconv_opt_in = os.environ.get("OTEL_SEMCONV_STABILITY_OPT_IN")
+
+        # Build a mock span that supports context manager
+        self.mock_span = MagicMock()
+        self.mock_span.__enter__ = MagicMock(return_value=self.mock_span)
+        self.mock_span.__exit__ = MagicMock(return_value=False)
+
+        self.mock_tracer = MagicMock()
+        self.mock_tracer.start_as_current_span.return_value = self.mock_span
+
+        persistent_wrapper._tracing_enabled = True
+        persistent_wrapper._tracer = self.mock_tracer
+
+        # Inject fake opentelemetry modules so lazy imports succeed
+        # without the real package being installed.
+        self._saved_modules = {}
+        fake_propagate = MagicMock()
+        fake_propagate.extract = MagicMock(return_value=None)
+        fake_trace = MagicMock()
+        fake_trace.SpanKind = MagicMock()
+        fake_trace.SpanKind.CLIENT = 3
+        self.mock_status = MagicMock(side_effect=lambda code, msg="": MagicMock())
+        fake_trace.Status = self.mock_status
+        fake_trace.StatusCode = MagicMock()
+        fake_trace.StatusCode.OK = 0
+        fake_trace.StatusCode.ERROR = 1
+
+        for mod_name, mod in [
+            ("opentelemetry", MagicMock()),
+            ("opentelemetry.propagate", fake_propagate),
+            ("opentelemetry.trace", fake_trace),
+        ]:
+            self._saved_modules[mod_name] = sys.modules.get(mod_name)
+            sys.modules[mod_name] = mod
+
+    def tearDown(self) -> None:
+        persistent_wrapper._tracing_enabled = self.original_tracing
+        persistent_wrapper._tracer = self.original_tracer
+        if self.original_semconv_opt_in is None:
+            os.environ.pop("OTEL_SEMCONV_STABILITY_OPT_IN", None)
+        else:
+            os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] = self.original_semconv_opt_in
+        # Restore original sys.modules state
+        for mod_name, original in self._saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+    def _make_context(self, traceparent: str = "00-abcd1234-5678-01") -> Dict[str, str]:
+        """Helper to build a context dict with traceparent."""
+        return {"traceparent": traceparent}
+
+    def test_latest_opt_in_accepts_comma_separated_environment_value(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"OTEL_SEMCONV_STABILITY_OPT_IN": "http, gen_ai_latest_experimental"},
+        ):
+            self.assertTrue(persistent_wrapper._use_gen_ai_latest_experimental())
+
+    def test_skips_tracing_when_disabled(self) -> None:
+        """When tracing is disabled, should call method directly."""
+        persistent_wrapper._tracing_enabled = False
+        func = MagicMock(return_value="result")
+        result = persistent_wrapper._traced_call(func, ["a"], "call_api")
+        self.assertEqual(result, "result")
+        self.mock_tracer.start_as_current_span.assert_not_called()
+
+    def test_skips_tracing_without_traceparent(self) -> None:
+        """Without traceparent in args, should call method directly."""
+        func = MagicMock(return_value="result")
+        # Only 2 args = no context
+        result = persistent_wrapper._traced_call(func, ["prompt", {}], "call_api")
+        self.assertEqual(result, "result")
+        self.mock_tracer.start_as_current_span.assert_not_called()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_call_api_preserves_legacy_attributes(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        """Default mode should retain the pre-migration Python span convention."""
+        func = MagicMock(return_value={"output": "hi"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0], "python call_api"
+        )
+        self.mock_span.set_attribute.assert_any_call("gen_ai.system", "python")
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "call_api"
+        )
+        self.assertNotIn(
+            call("gen_ai.provider.name", "python"),
+            self.mock_span.set_attribute.mock_calls,
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_call_embedding_api_preserves_legacy_operation(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        """Default mode should retain legacy embedding function naming."""
+        func = MagicMock(return_value={"output": [0.1, 0.2]})
+        ctx = self._make_context()
+        ctx["__promptfooApiType"] = "call_embedding_api"
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
+
+        func.assert_called_once_with("prompt", {})
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "call_embedding_api"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_classification_uses_custom_operation_name(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(return_value={"classification": {"safe": 1.0}})
+        ctx = self._make_context()
+        ctx["__promptfooApiType"] = "call_classification_api"
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "custom_classifier")
+
+        func.assert_called_once_with("prompt", {})
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0], "classification"
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "classification"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_cached_result_marks_span_without_calling_user_code(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        cached_result = {"embedding": [0.1, 0.2]}
+        func = MagicMock(return_value=cached_result)
+        ctx = self._make_context()
+        ctx.update(
+            {
+                "__promptfooApiType": "call_embedding_api",
+                "__promptfooCached": True,
+            }
+        )
+
+        result = persistent_wrapper._traced_call(
+            func, ["prompt", {}, ctx, cached_result], "call_embedding_api"
+        )
+
+        self.assertEqual(result, cached_result)
+        self.mock_span.set_attribute.assert_any_call("promptfoo.cache_hit", True)
+
+    def test_embedding_context_is_not_forwarded_without_tracing(self) -> None:
+        persistent_wrapper._tracing_enabled = False
+        func = MagicMock(return_value={"embedding": [0.1, 0.2]})
+        ctx = {
+            "traceparent": "00-abcd1234-5678-01",
+            "__promptfooApiType": "call_embedding_api",
+        }
+
+        persistent_wrapper._traced_call(func, ["prompt", {"config": {}}, ctx], "custom")
+
+        func.assert_called_once_with("prompt", {"config": {}})
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_call_api_latest_maps_to_chat(self, _mock_latest: MagicMock) -> None:
+        """Latest opt-in should emit spec attributes and span names."""
+        func = MagicMock(return_value={"output": "hi"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(
+            func, ["prompt", {"config": {"model": "gpt-4"}}, ctx], "call_api"
+        )
+
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0], "chat gpt-4"
+        )
+        self.mock_span.set_attribute.assert_any_call("gen_ai.provider.name", "python")
+        self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
+        self.assertNotIn(
+            call("gen_ai.system", "python"), self.mock_span.set_attribute.mock_calls
+        )
+        self.mock_span.set_status.assert_not_called()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_latest_response_metadata_matches_typescript(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "output": "hi",
+                "finishReason": "stop",
+                "metadata": {
+                    "model": "gpt-4.1-2026-06-01",
+                    "responseId": "resp-123",
+                    "conversationId": "conversation-456",
+                },
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.response.model", "gpt-4.1-2026-06-01"
+        )
+        self.mock_span.set_attribute.assert_any_call("gen_ai.response.id", "resp-123")
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.conversation.id", "conversation-456"
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.response.finish_reasons", ["stop"]
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_call_embedding_latest_maps_to_embeddings(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        """call_embedding_api with latest opt-in should map to 'embeddings'."""
+        func = MagicMock(return_value={"output": [0.1]})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(
+            func,
+            ["prompt", {"config": {"model": "text-embedding"}}, ctx],
+            "call_embedding_api",
+        )
+
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0],
+            "embeddings text-embedding",
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "embeddings"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_error_dict_sets_error_type(self, _mock_latest: MagicMock) -> None:
+        """Error dict with 'code' key should set error.type attribute."""
+        func = MagicMock(return_value={"error": {"code": "rate_limit_exceeded"}})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call(
+            "error.type", "rate_limit_exceeded"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_error_string_sets_standard_fallback(self, _mock_latest: MagicMock) -> None:
+        """String error should set error.type to the standard fallback value."""
+        func = MagicMock(return_value={"error": "something failed"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_empty_structured_error_is_not_treated_as_success(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(return_value={"error": {}})
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_status.assert_called_once()
+        self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_string_error_uses_http_status_type(self, _mock_latest: MagicMock) -> None:
+        func = MagicMock(
+            return_value={
+                "error": "rate limited",
+                "metadata": {"http": {"status": 429}},
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("error.type", "429")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_structured_error_status_uses_only_message(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "error": {
+                    "code": 429,
+                    "message": "rate limited",
+                    "secret": "must-not-export",
+                }
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        status_message = self.mock_status.call_args.args[1]
+        self.assertEqual(status_message, "rate limited")
+        self.assertNotIn("must-not-export", status_message)
+        self.mock_span.set_attribute.assert_any_call("error.type", "429")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_nested_error_metadata_is_not_serialized(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "error": {
+                    "code": {"secret": "must-not-export-code"},
+                    "message": {"secret": "must-not-export-message"},
+                }
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        status_message = self.mock_status.call_args.args[1]
+        self.assertEqual(status_message, "Provider error")
+        self.assertNotIn("must-not-export", status_message)
+        self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_http_failure_with_output_sets_error_status(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "output": "API error: 400 Bad Request",
+                "metadata": {
+                    "http": {
+                        "status": 400,
+                        "statusText": ["must-not-export-status"],
+                    }
+                },
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.assertEqual(self.mock_status.call_args.args[1], "HTTP 400")
+        self.mock_span.set_attribute.assert_any_call("error.type", "400")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_exception_sets_error_type(self, _mock_latest: MagicMock) -> None:
+        """Thrown exception should set error.type to exception class name."""
+        func = MagicMock(side_effect=ValueError("boom"))
+        ctx = self._make_context()
+        with self.assertRaises(ValueError):
+            persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        func.assert_called_once()
+        self.mock_span.set_attribute.assert_any_call("error.type", "ValueError")
+        self.mock_span.add_event.assert_called_once_with(
+            "exception",
+            {
+                "exception.type": "ValueError",
+                "exception.message": "boom",
+            },
+        )
+        self.mock_span.record_exception.assert_not_called()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_error_telemetry_sanitizes_url_credentials(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        secret_message = (
+            "request failed "
+            "https://alice:collector-password@example.test/path?token=secret"
+        )
+        func = MagicMock(side_effect=ValueError(secret_message))
+        ctx = self._make_context()
+
+        with self.assertRaises(ValueError):
+            persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        status_message = self.mock_status.call_args.args[1]
+        exception_attributes = self.mock_span.add_event.call_args.args[1]
+        telemetry = f"{status_message} {exception_attributes}"
+        self.assertNotIn("collector-password", telemetry)
+        self.assertNotIn("token=secret", telemetry)
+        self.assertIn("<REDACTED>", telemetry)
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_tracing_error_after_provider_call_returns_result_without_retry(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        """Tracing failures after provider execution should not call the provider twice."""
+        result = {"error": {"code": "rate_limit_exceeded"}}
+        func = MagicMock(return_value=result)
+        ctx = self._make_context()
+
+        def fail_on_error_type(key: str, _value: Any) -> None:
+            if key == "error.type":
+                raise RuntimeError("span write failed")
+
+        self.mock_span.set_attribute.side_effect = fail_on_error_type
+
+        actual = persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.assertEqual(actual, result)
+        func.assert_called_once()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_latest_token_details_use_current_attribute_names(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "output": "ok",
+                "tokenUsage": {
+                    "cached": 7,
+                    "completionDetails": {
+                        "reasoning": 11,
+                        "acceptedPrediction": 3,
+                        "rejectedPrediction": 2,
+                        "cacheReadInputTokens": 5,
+                        "cacheCreationInputTokens": 4,
+                    },
+                },
+            }
+        )
+
+        persistent_wrapper._traced_call(
+            func, ["prompt", {}, self._make_context()], "call_api"
+        )
+
+        expected = [
+            call("gen_ai.usage.cached_tokens", 7),
+            call("gen_ai.usage.reasoning.output_tokens", 11),
+            call("gen_ai.usage.accepted_prediction_tokens", 3),
+            call("gen_ai.usage.rejected_prediction_tokens", 2),
+            call("gen_ai.usage.cache_read.input_tokens", 5),
+            call("gen_ai.usage.cache_creation.input_tokens", 4),
+        ]
+        for expected_call in expected:
+            self.assertIn(expected_call, self.mock_span.set_attribute.mock_calls)
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_legacy_token_details_keep_existing_attribute_names(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "tokenUsage": {
+                    "completionDetails": {
+                        "reasoning": 11,
+                        "cacheReadInputTokens": 5,
+                        "cacheCreationInputTokens": 4,
+                    }
+                }
+            }
+        )
+
+        persistent_wrapper._traced_call(
+            func, ["prompt", {}, self._make_context()], "call_api"
+        )
+
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.usage.reasoning_tokens", 11
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.usage.cache_read_input_tokens", 5
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.usage.cache_creation_input_tokens", 4
+        )
+
+    def test_body_sanitizer_recursively_redacts_exact_sensitive_json_fields(
+        self,
+    ) -> None:
+        body = json.dumps(
+            {
+                "access_token": "ya29.access/token+value=",
+                "nested": [
+                    {"x-api-key": "key.with/slash+padding="},
+                    {"session": "session=value"},
+                ],
+                "privateKey": (
+                    "-----BEGIN PRIVATE KEY-----\nmaterial\n-----END PRIVATE KEY-----"
+                ),
+                "token_count": 42,
+                "session_summary": "safe summary",
+            }
+        )
+
+        sanitized = json.loads(persistent_wrapper._sanitize_body(body))
+
+        self.assertEqual(sanitized["access_token"], "<REDACTED>")
+        self.assertEqual(sanitized["nested"][0]["x-api-key"], "<REDACTED>")
+        self.assertEqual(sanitized["nested"][1]["session"], "<REDACTED>")
+        self.assertEqual(sanitized["privateKey"], "<REDACTED>")
+        self.assertEqual(sanitized["token_count"], 42)
+        self.assertEqual(sanitized["session_summary"], "safe summary")
+
+    def test_body_sanitizer_redacts_provider_prefixed_credentials(self) -> None:
+        credentials = {
+            "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "AZURE_OPENAI_API_KEY": "azure-opaque-value",
+            "OPENAI_API_KEY": "openai-opaque-value",
+            "GITHUB_TOKEN": "ghp_abcdefghijklmnopqrstuvwxyz123456",
+            "HF_TOKEN": "hf_abcdefghijklmnopqrstuvwxyz123456",
+            "HUGGINGFACE_API_KEY": "huggingface-opaque-value",
+            "GOOGLE_API_KEY": "AIzaSyExampleKeyMaterial",
+            "DATABRICKS_TOKEN": "dapiabcdefghijklmnopqrstuvwxyz",
+        }
+
+        for field, value in credentials.items():
+            with self.subTest(field=field):
+                json_body = persistent_wrapper._sanitize_body(
+                    json.dumps({field: value})
+                )
+                encoded_value = quote_plus(value)
+                form_body = persistent_wrapper._sanitize_body(
+                    f"{quote_plus(field)}={encoded_value}"
+                )
+                assignment = persistent_wrapper._sanitize_body(f"{field}={value}")
+
+                self.assertNotIn(value, json_body)
+                self.assertNotIn(encoded_value, form_body)
+                self.assertNotIn(value, assignment)
+
+    def test_body_sanitizer_preserves_benign_credential_like_fields(self) -> None:
+        body = json.dumps(
+            {
+                "token_count": 4,
+                "max_tokens": 128,
+                "input_tokens": 32,
+                "github_token_count": 2,
+                "session_summary": "safe",
+                "public_key": "public",
+                "monkey": "banana",
+                "api_key_hint": "last four",
+                "tokenizer": "cl100k_base",
+                "authorization_mode": "rbac",
+                "password_policy": "strong",
+                "signature_algorithm": "sha256",
+                "secret_recipe": "cake",
+                "access_key_description": "identifier only",
+                "oauth": "enabled",
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+                "pad_token": "[PAD]",
+                "continuation_token": "page-2",
+                "next_token": "page-3",
+                "is_secret": False,
+                "has_password": False,
+                "requires_credentials": False,
+                "keyboard_access_key": "menu-shortcut",
+            }
+        )
+
+        self.assertEqual(persistent_wrapper._sanitize_body(body), body)
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(
+                "https://example.test/search?code=200&key=id"
+            ),
+            "https://example.test/search?code=200&key=id",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body("has_password=false&is_secret=true"),
+            "has_password=false&is_secret=true",
+        )
+
+    def test_body_sanitizer_redacts_standard_credential_carriers(self) -> None:
+        body = json.dumps(
+            {
+                "Proxy-Authorization": "Basic dXNlcjpwYXNz",
+                "Ocp-Apim-Subscription-Key": "opaque-subscription-value",
+                "key": "AIzaSySyntheticKeyMaterial",
+            }
+        )
+        form = (
+            "subscription-key=opaque-subscription-value"
+            "&x-functions-key=opaque-function-value"
+        )
+        url = (
+            "https://example.test/run?code=opaque-function-code"
+            "&key=AIzaSySyntheticKeyMaterial"
+        )
+        encoded_url = (
+            "https://example.test/run?%6B%65%79=opaque-synthetic-provider-secret"
+            "&co%64e=opaque-function-code&api%5Fkey=encoded-api-secret"
+            "&access%5Ftoken=encoded-access-secret"
+            "&subscription%2Dkey=encoded-subscription-secret"
+        )
+        signature = "0123456789abcdef" * 4
+        signed_url = (
+            f"https://storage.test/object?X-Amz-Signature={signature}"
+            f"&X-Goog-Signature={signature}"
+        )
+        userinfo_url = "https://alice:supersecret@example.test/path"
+        database_dsn = "postgres://dbuser:p%40ssw0rd@db.example.test/app"
+        raw_at_database_dsn = "postgres://dbuser:p@ss@db.example.test/app"
+        username_only_url = "https://opaque-access-credential@example.test/path"
+
+        self.assertNotIn("dXNlcjpwYXNz", persistent_wrapper._sanitize_body(body))
+        self.assertNotIn(
+            "opaque-subscription-value", persistent_wrapper._sanitize_body(body)
+        )
+        self.assertNotIn(
+            "AIzaSySyntheticKeyMaterial", persistent_wrapper._sanitize_body(body)
+        )
+        self.assertNotIn(
+            "opaque-subscription-value", persistent_wrapper._sanitize_body(form)
+        )
+        self.assertNotIn(
+            "opaque-function-value", persistent_wrapper._sanitize_body(form)
+        )
+        self.assertNotIn("opaque-function-code", persistent_wrapper._sanitize_body(url))
+        self.assertNotIn(
+            "AIzaSySyntheticKeyMaterial", persistent_wrapper._sanitize_body(url)
+        )
+        self.assertNotIn(
+            "opaque-synthetic-provider-secret",
+            persistent_wrapper._sanitize_body(encoded_url),
+        )
+        self.assertNotIn(
+            "opaque-function-code", persistent_wrapper._sanitize_body(encoded_url)
+        )
+        self.assertNotIn(
+            "encoded-api-secret", persistent_wrapper._sanitize_body(encoded_url)
+        )
+        self.assertNotIn(
+            "encoded-access-secret", persistent_wrapper._sanitize_body(encoded_url)
+        )
+        self.assertNotIn(
+            "encoded-subscription-secret",
+            persistent_wrapper._sanitize_body(encoded_url),
+        )
+        self.assertNotIn(signature, persistent_wrapper._sanitize_body(signed_url))
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(userinfo_url),
+            "https://<REDACTED>@example.test/path",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(database_dsn),
+            "postgres://<REDACTED>@db.example.test/app",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(raw_at_database_dsn),
+            "postgres://<REDACTED>@db.example.test/app",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(username_only_url),
+            "https://<REDACTED>@example.test/path",
+        )
+
+    def test_body_sanitizer_redacts_assignments_in_json_strings(self) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = json.dumps(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"debug dump: OPENAI_API_KEY={secret}",
+                    }
+                ]
+            }
+        )
+
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_redacts_assignments_after_json_like_properties(
+        self,
+    ) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = f'{{"password":"first-secret"}} trailing OPENAI_API_KEY={secret}'
+
+        sanitized = persistent_wrapper._sanitize_body(body)
+        self.assertNotIn("first-secret", sanitized)
+        self.assertNotIn(secret, sanitized)
+
+    def test_body_sanitizer_scans_large_non_sensitive_assignment_text(self) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = ("a=" * 10_000) + f" OPENAI_API_KEY={secret}"
+
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_redacts_escaped_keys_in_oversized_json(self) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = (
+            r'{"OPENAI\u005fAPI\u005fKEY":"'
+            + secret
+            + r'","padding":"'
+            + ("x" * 17_000)
+            + r'"}'
+        )
+        nested_body = json.dumps(
+            {
+                "credentials": {"username": "alice", "value": secret},
+                "padding": "x" * 17_000,
+            }
+        )
+
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(nested_body))
+
+    def test_body_sanitizer_fails_closed_beyond_parser_limit(self) -> None:
+        body = json.dumps({"message": "x" * 300_000})
+        unicode_body = json.dumps({"message": "é" * 140_000}, ensure_ascii=False)
+        surrogate_body = '{"message":"' + ("\ud800" * 100_000) + '"}'
+
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(body), "<REDACTED_OVERSIZED_JSON>"
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(unicode_body),
+            "<REDACTED_OVERSIZED_JSON>",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(surrogate_body),
+            "<REDACTED_OVERSIZED_JSON>",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body("a" * 300_000),
+            "<REDACTED_OVERSIZED_BODY>",
+        )
+
+    def test_body_sanitizer_handles_deeply_nested_json(self) -> None:
+        secret = "opaque-secret-value-1234567890"
+        body = (
+            ('{"a":' * 1_000)
+            + json.dumps({"credentials": {"username": "alice", "value": secret}})
+            + ("}" * 1_000)
+        )
+
+        self.assertIsInstance(persistent_wrapper._sanitize_body(body), str)
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_fails_closed_for_unsafe_json_numbers(self) -> None:
+        body = (
+            '{"OPENAI_API_KEY":"opaque-synthetic-provider-secret",'
+            '"large":1e400,"id":9007199254740993}'
+        )
+        underflow_body = '{"password":"secret","p":1e-400}'
+        safe_body = '{"password":"secret","timestamp_us":1719234567890123}'
+        smallest_body = '{"password":"secret","p":5e-324}'
+
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(body),
+            "<REDACTED_UNSANITIZABLE_JSON>",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(underflow_body),
+            "<REDACTED_UNSANITIZABLE_JSON>",
+        )
+        self.assertEqual(
+            json.loads(persistent_wrapper._sanitize_body(safe_body))["timestamp_us"],
+            1719234567890123,
+        )
+        self.assertEqual(
+            json.loads(persistent_wrapper._sanitize_body(smallest_body))["p"],
+            5e-324,
+        )
+
+    def test_body_sanitizer_handles_lone_unicode_surrogates(self) -> None:
+        body = '{"message":"\ud800"}'
+
+        self.assertIsInstance(persistent_wrapper._sanitize_body(body), str)
+
+    def test_body_sanitizer_redacts_form_headers_and_private_keys(self) -> None:
+        form = persistent_wrapper._sanitize_body(
+            "message=keep&access_token=ya29.access%2Ftoken%2Bvalue%3D"
+            "&client_secret=short%2F%2B%3D"
+        )
+        self.assertIn("message=keep", form)
+        self.assertNotIn("ya29", form)
+        self.assertNotIn("short", form)
+
+        headers = persistent_wrapper._sanitize_body(
+            "response text Authorization: Basic dXNlcjpwYXNzLys=\n"
+            "Cookie: session=abc/+=; other=value"
+        )
+        self.assertNotIn("dXNlcjpwYXNzLys=", headers)
+        self.assertNotIn("session=abc/+", headers)
+
+        private_key = persistent_wrapper._sanitize_body(
+            "-----BEGIN RSA PRIVATE KEY-----\n"
+            "secret material\n"
+            "-----END RSA PRIVATE KEY-----"
+        )
+        unmatched_private_keys = persistent_wrapper._sanitize_body(
+            "-----BEGIN PRIVATE KEY-----\n" * 1_000
+        )
+        self.assertEqual(private_key, "<REDACTED_PRIVATE_KEY>")
+        self.assertEqual(unmatched_private_keys, "<REDACTED_PRIVATE_KEY>")
+
+    def test_body_sanitizer_preserves_benign_values_and_formatting(self) -> None:
+        body = (
+            '{ "token_count": 4, "session_summary": "safe", "message": "'
+            + ("a" * 64)
+            + '/text" }'
+        )
+
+        self.assertEqual(persistent_wrapper._sanitize_body(body), body)
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_traced_bodies_redact_common_credentials(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        api_key = "sk-abcdefghijklmnopqrstuvwxyz123456"
+        bearer = "abcdefghijklmnopqrstuvwxyz1234567890"
+        func = MagicMock(return_value={"output": f"Authorization: Bearer {bearer}"})
+
+        persistent_wrapper._traced_call(
+            func,
+            [f'{{"api_key":"{api_key}"}}', {}, self._make_context()],
+            "call_api",
+        )
+
+        body_values = [
+            value
+            for key, value in (
+                entry.args for entry in self.mock_span.set_attribute.mock_calls
+            )
+            if key in {"promptfoo.request.body", "promptfoo.response.body"}
+        ]
+        self.assertEqual(len(body_values), 2)
+        self.assertTrue(all("<REDACTED" in value for value in body_values))
+        self.assertTrue(all(api_key not in value for value in body_values))
+        self.assertTrue(all(bearer not in value for value in body_values))
 
 
 if __name__ == "__main__":
