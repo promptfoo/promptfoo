@@ -6,7 +6,7 @@ import type {
   CodexSandboxFailure,
   CodexToolExitCode,
   SkillCallEntry,
-} from '../../contracts/providers';
+} from './codexTypes';
 
 export type {
   CodexDroppedEvent,
@@ -15,7 +15,7 @@ export type {
   CodexProviderError,
   CodexSandboxFailure,
   CodexToolExitCode,
-} from '../../contracts/providers';
+} from './codexTypes';
 
 export interface CodexExecutionHealthInput {
   eventCoverage: CodexExecutionEventCoverage;
