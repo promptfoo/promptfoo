@@ -233,6 +233,49 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('uses the first surviving output in sparse rows for Human Eval YAML', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [
+              null as any,
+              {
+                pass: true,
+                text: 'surviving output',
+                metadata: { redteamFinalPrompt: 'surviving prompt' },
+                gradingResult: { comment: 'surviving comment' },
+              },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Human Eval YAML'));
+
+    await waitFor(() => {
+      expect(yamlDumpMock).toHaveBeenCalledWith([
+        {
+          vars: {
+            testVar: 'value',
+            output: 'surviving output',
+            redteamFinalPrompt: 'surviving prompt',
+            comment: 'surviving comment',
+          },
+          assert: [{ type: 'javascript', value: 'JSON.parse(output).pass' }],
+          metadata: undefined,
+        },
+      ]);
+    });
+  });
+
   it('handles malformed output structures in DPO JSON export without crashing', async () => {
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
@@ -461,6 +504,61 @@ describe('DownloadMenu', () => {
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).toBeDisabled();
+    });
+
+    it('ignores deleted output cells when checking for failed tests', async () => {
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [
+            {
+              test: { vars: { testVar: 'sparse-pass' } },
+              vars: ['value1', 'value2'],
+              outputs: [null as any, { pass: true, text: 'surviving pass' }],
+            },
+          ],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      renderDownloadDialog();
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('downloads only rows with surviving failed outputs', async () => {
+      const failedTest = { vars: { testVar: 'failed' } };
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [
+            {
+              test: { vars: { testVar: 'sparse-pass' } },
+              vars: ['value1', 'value2'],
+              outputs: [null as any, { pass: true, text: 'surviving pass' }],
+            },
+            {
+              test: failedTest,
+              vars: ['value3', 'value4'],
+              outputs: [null as any, { pass: false, text: 'surviving failure' }],
+            },
+          ],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      renderDownloadDialog();
+      await userEvent.click(screen.getByRole('button', { name: /Download Failed Tests/i }));
+
+      await waitFor(() => {
+        expect(yamlDumpMock).toHaveBeenCalledWith(
+          { ...mockConfig, tests: [failedTest] },
+          { skipInvalid: true },
+        );
+      });
     });
 
     it('enables the button when there are failed tests', async () => {
