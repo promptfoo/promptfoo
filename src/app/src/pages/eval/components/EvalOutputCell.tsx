@@ -193,10 +193,6 @@ export function extractMarkdownImageSources(markdown: string): string[] {
 }
 
 export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
-  if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
-    return image.data;
-  }
-
   return resolveImageSource(image);
 }
 
@@ -1355,15 +1351,22 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const markdownComponents = useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <img
-          loading="lazy"
-          src={src}
-          alt={alt}
-          onClick={() => toggleLightbox(src)}
-          style={{ cursor: 'pointer' }}
-        />
-      ),
+      img: ({ src, alt }: { src?: string; alt?: string }) => {
+        const safeSrc = resolveImageSource(src);
+        if (!safeSrc) {
+          return null;
+        }
+
+        return (
+          <img
+            loading="lazy"
+            src={safeSrc}
+            alt={alt}
+            onClick={() => toggleLightbox(safeSrc)}
+            style={{ cursor: 'pointer' }}
+          />
+        );
+      },
     }),
     [toggleLightbox],
   );

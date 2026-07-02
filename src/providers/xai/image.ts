@@ -2,10 +2,12 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import {
-  buildStructuredImageOutputs,
+  buildSafeStructuredImageOutputs,
   callOpenAiImageApi,
-  formatOutput,
+  formatStructuredImageOutput,
   OpenAiImageProvider,
+  shouldEvictCachedExternalImageResponse,
+  UNUSABLE_CACHED_EXTERNAL_IMAGE_ERROR,
 } from '../openai/image';
 import { getRequestTimeoutMs } from '../shared';
 import { getXAICostInUsd } from './chat';
@@ -196,8 +198,12 @@ export class XAIImageProvider extends OpenAiImageProvider {
     let data: any, status: number, statusText: string;
     let cached = false;
     let latencyMs: number | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    const evictFromCache = async () => {
+      await (deleteFromCache ?? data?.deleteFromCache)?.();
+    };
     try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -210,23 +216,41 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
     if (data.error) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
     }
 
     try {
-      const formattedOutput = formatOutput(data, prompt, responseFormat);
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        context,
+        responseFormat,
+      );
+      const formattedOutput = formatStructuredImageOutput(
+        data,
+        prompt,
+        responseFormat,
+        undefined,
+        images,
+      );
       if (typeof formattedOutput === 'object') {
+        await evictFromCache();
         return formattedOutput;
+      }
+
+      if (shouldEvictCachedExternalImageResponse(data, formattedOutput, cached)) {
+        await evictFromCache();
+        return { error: UNUSABLE_CACHED_EXTERNAL_IMAGE_ERROR };
       }
 
       const reportedCost = getXAICostInUsd(data.usage);
@@ -239,7 +263,6 @@ export class XAIImageProvider extends OpenAiImageProvider {
             config.resolution,
             this.countSourceImages(config),
           ));
-      const images = buildStructuredImageOutputs(data);
 
       return {
         output: formattedOutput,
@@ -250,7 +273,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
