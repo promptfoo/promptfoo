@@ -146,6 +146,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                    |
 | [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                              |
 | [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT)  |
+| [select-lowest-cost](/docs/configuration/expected-outputs/deterministic/#select-lowest-cost)                       | Select lowest-cost output, optionally among passing outputs        |
+| [select-lowest-latency](/docs/configuration/expected-outputs/deterministic/#select-lowest-latency)                 | Select fastest passing output                                      |
 | [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |

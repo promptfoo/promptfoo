@@ -123,7 +123,7 @@ function hasInvalidAssertionValue(testCase: unknown): boolean {
 }
 
 // Deliberately shallow (top-level) — does NOT descend into assert-sets. The
-// runtime detects comparison assertions (select-best / max-score) only at the top
+// runtime detects comparison assertions only at the top
 // level of test.assert and silently skips any nested inside an assert-set, so the
 // readiness gate mirrors that to avoid falsely blocking a config the runtime runs.
 function getAssertions(testCase: unknown): AssertionOrSet[] {
@@ -134,7 +134,11 @@ function getAssertions(testCase: unknown): AssertionOrSet[] {
     : [];
 }
 
-type ComparisonAssertionType = 'select-best' | 'max-score';
+type ComparisonAssertionType =
+  | 'select-best'
+  | 'max-score'
+  | 'select-lowest-cost'
+  | 'select-lowest-latency';
 
 function containsComparisonAssertion(
   assertions: AssertionOrSet[],
@@ -353,6 +357,7 @@ function getComparisonSetupIssues(
   const promptCount = prompts.length;
   let hasInsufficientSelectBest = false;
   let hasInsufficientMaxScore = false;
+  let hasInsufficientMetricSelector = false;
 
   if (Array.isArray(tests)) {
     for (const testCase of tests.map((testCase) => (isRecord(testCase) ? testCase : {}))) {
@@ -367,18 +372,31 @@ function getComparisonSetupIssues(
         outputCount < 2 &&
         !hasDynamicOutput &&
         containsComparisonAssertion(assertions, 'max-score');
+      hasInsufficientMetricSelector ||=
+        outputCount < 2 &&
+        !hasDynamicOutput &&
+        (containsComparisonAssertion(assertions, 'select-lowest-cost') ||
+          containsComparisonAssertion(assertions, 'select-lowest-latency'));
     }
   } else if (countTests(tests) > 0) {
     const outputCount = countOutputsForTest(defaultTest, {}, providers, prompts);
     const hasDynamicOutput = hasDynamicOutputForTest(defaultTest, {}, providers, prompts);
     hasInsufficientSelectBest = containsComparisonAssertion(defaultAssertions, 'select-best');
     hasInsufficientMaxScore = containsComparisonAssertion(defaultAssertions, 'max-score');
+    hasInsufficientMetricSelector =
+      containsComparisonAssertion(defaultAssertions, 'select-lowest-cost') ||
+      containsComparisonAssertion(defaultAssertions, 'select-lowest-latency');
     hasInsufficientSelectBest &&= outputCount < 2 && !hasDynamicOutput;
     hasInsufficientMaxScore &&= outputCount < 2 && !hasDynamicOutput;
+    hasInsufficientMetricSelector &&= outputCount < 2 && !hasDynamicOutput;
   }
 
-  if (hasInsufficientSelectBest || hasInsufficientMaxScore) {
-    const label = hasInsufficientSelectBest ? 'Choose best output' : 'Choose highest score';
+  if (hasInsufficientSelectBest || hasInsufficientMaxScore || hasInsufficientMetricSelector) {
+    const label = hasInsufficientSelectBest
+      ? 'Choose best output'
+      : hasInsufficientMaxScore
+        ? 'Choose highest score'
+        : 'Metric selection';
     // Route the user to whichever axis is shorter — adding to the longer one would not increase
     // outputs per test case.
     issues.push({

@@ -113,7 +113,7 @@ describe('selectMaxScore', () => {
     );
   });
 
-  it('should throw error when no other assertions exist', async () => {
+  it('should throw when no scoring assertions exist', async () => {
     const outputs = ['Output 0', 'Output 1'];
     const results = [
       {
@@ -123,7 +123,14 @@ describe('selectMaxScore', () => {
         },
         gradingResult: {
           ...createMockResult(1.0, 0).gradingResult,
-          componentResults: [], // Empty component results
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Selection result',
+              assertion: { type: 'select-lowest-cost' } as Assertion,
+            },
+          ],
         },
       },
       {
@@ -139,7 +146,7 @@ describe('selectMaxScore', () => {
     ];
 
     await expect(selectMaxScore(outputs, results, mockAssertion)).rejects.toThrow(
-      'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
+      'max-score requires at least one other assertion (besides max-score or select-* assertions) to aggregate scores from',
     );
   });
 

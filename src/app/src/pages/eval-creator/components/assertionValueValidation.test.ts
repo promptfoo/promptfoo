@@ -164,6 +164,17 @@ describe('getRunnableAssertionValueError', () => {
         getRunnableAssertionValueError(make({ type: 'max-score', value: undefined as any })),
       ).toBeUndefined();
     });
+
+    it.each([
+      'select-lowest-cost',
+      'select-lowest-latency',
+    ] as const)('does not require a value for %s', (type) => {
+      expect(getRunnableAssertionValueError(make({ type, value: undefined }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type, value: '' }))).toBeUndefined();
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { onlyPassing: true } })),
+      ).toBeUndefined();
+    });
   });
 });
 
