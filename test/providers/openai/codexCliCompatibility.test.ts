@@ -64,8 +64,9 @@ function createSdkFixture(options: FixtureOptions = {}) {
   const cliBin = path.join(cliDirectory, 'bin', 'codex.js');
   fs.mkdirSync(path.dirname(cliBin), { recursive: true });
   fs.writeFileSync(cliBin, '#!/usr/bin/env node\n');
+  const cliManifestPath = path.join(cliDirectory, 'package.json');
   fs.writeFileSync(
-    path.join(cliDirectory, 'package.json'),
+    cliManifestPath,
     JSON.stringify({
       name: '@openai/codex',
       version: installedCliVersion,
@@ -73,7 +74,7 @@ function createSdkFixture(options: FixtureOptions = {}) {
     }),
   );
 
-  return { cliBin, sdkEntryPoint };
+  return { cliBin, cliManifestPath, sdkEntryPoint };
 }
 
 function mockVersionProbe(version: string) {
@@ -113,6 +114,20 @@ describe('preflightCodexSdkCliCompatibility', () => {
     for (const directory of fixtureDirectories.splice(0)) {
       fs.rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it('rejects an absolute entry point outside the Codex SDK package', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-not-codex-sdk-'));
+    fixtureDirectories.push(root);
+    const sdkEntryPoint = path.join(root, 'nested', 'dist', 'index.js');
+    fs.mkdirSync(path.dirname(sdkEntryPoint), { recursive: true });
+    fs.writeFileSync(sdkEntryPoint, 'export {};\n');
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'another-package' }));
+
+    await expect(
+      preflightCodexSdkCliCompatibility({ sdkEntryPoint, sdkModule: mockSdkModule, env: {} }),
+    ).rejects.toThrow('Could not locate the @openai/codex-sdk manifest');
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 
   it('accepts a custom CLI with the exact SDK-declared event protocol version', async () => {
@@ -207,6 +222,23 @@ describe('preflightCodexSdkCliCompatibility', () => {
     expect(mockExecFile).not.toHaveBeenCalled();
   });
 
+  it('rejects a missing bundled CLI entry point declared with string bin syntax', async () => {
+    const { cliManifestPath, sdkEntryPoint } = createSdkFixture();
+    fs.writeFileSync(
+      cliManifestPath,
+      JSON.stringify({
+        name: '@openai/codex',
+        version: '0.142.3',
+        bin: 'bin/missing.js',
+      }),
+    );
+
+    await expect(
+      preflightCodexSdkCliCompatibility({ sdkEntryPoint, sdkModule: mockSdkModule, env: {} }),
+    ).rejects.toThrow('The bundled Codex CLI entry point does not exist');
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-exact SDK CLI dependency because compatibility is ambiguous', async () => {
     const { sdkEntryPoint } = createSdkFixture({ supportedCliVersion: '^0.142.3' });
 
@@ -227,7 +259,11 @@ describe('preflightCodexSdkCliCompatibility', () => {
         _options: unknown,
         callback: (...args: any[]) => void,
       ) => {
-        callback(new Error("unexpected argument '--experimental-json'"), '', '');
+        callback(
+          new Error("unexpected argument '--experimental-json'"),
+          'partial stdout',
+          'stderr detail',
+        );
       },
     );
 
@@ -238,7 +274,9 @@ describe('preflightCodexSdkCliCompatibility', () => {
         codexPathOverride: '/custom/codex',
         env: {},
       }),
-    ).rejects.toThrow(/JSON event mode probe failed.*unexpected argument '--experimental-json'/);
+    ).rejects.toThrow(
+      /JSON event mode probe failed.*unexpected argument '--experimental-json'.*partial stdout.*stderr detail/s,
+    );
   });
 
   it('fails closed when the CLI version output is unrecognized', async () => {
@@ -262,6 +300,36 @@ describe('preflightCodexSdkCliCompatibility', () => {
         env: {},
       }),
     ).rejects.toThrow('JSON event mode probe returned an unrecognized version');
+  });
+
+  it('rejects malformed semantic versions in otherwise recognizable CLI output', async () => {
+    const { sdkEntryPoint } = createSdkFixture();
+    mockVersionProbe('0.142.3-alpha.');
+
+    await expect(
+      preflightCodexSdkCliCompatibility({
+        sdkEntryPoint,
+        sdkModule: mockSdkModule,
+        codexPathOverride: '/custom/codex',
+        env: {},
+      }),
+    ).rejects.toThrow('JSON event mode probe returned an invalid semantic version');
+  });
+
+  it('fails closed when the SDK returns an incomplete event result', async () => {
+    const { sdkEntryPoint } = createSdkFixture();
+    mockSchemaRun.mockResolvedValue(undefined);
+
+    await expect(
+      preflightCodexSdkCliCompatibility({
+        sdkEntryPoint,
+        sdkModule: mockSdkModule,
+        codexPathOverride: '/custom/codex',
+        env: {},
+      }),
+    ).rejects.toThrow(
+      'SDK returned an unexpected result for the representative JSONL event stream',
+    );
   });
 
   it('fails closed when the SDK parser cannot consume the representative event schema', async () => {
