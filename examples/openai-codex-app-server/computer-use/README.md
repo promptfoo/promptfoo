@@ -51,7 +51,10 @@ bash run-e2e.sh
 ```
 
 With no arguments, the runner performs a fresh `eval --no-cache --no-share`
-and writes `.tmp/results.json`. It:
+and writes `.tmp/results.json`. The default smoke run also sets
+`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` so it never depends on
+remote generation or email verification; custom commands keep remote grading
+available. It:
 
 1. Recreates an owner-only, marker-protected `CODEX_HOME` without copying auth.
 2. Creates a disposable local marketplace entry for the exact plugin directory,
@@ -68,8 +71,9 @@ desktop or missing Accessibility permission should produce a failed eval, not
 a passing result.
 
 The runner forwards additional arguments as the Promptfoo command and resolves
-relative paths from this example directory. Custom commands write only the
-output path that you explicitly pass.
+relative paths from this example directory. Promptfoo's own state (database,
+logs) is redirected to the owner-only `.tmp/promptfoo-home`, so custom commands
+write only that contained state plus the output path that you explicitly pass.
 
 ## Run a bounded red team
 

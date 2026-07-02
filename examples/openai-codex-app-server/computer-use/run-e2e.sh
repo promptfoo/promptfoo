@@ -75,7 +75,12 @@ else
   require_command npx
 fi
 
+DISABLE_REMOTE_GENERATION=""
 if (($# == 0)); then
+  # The bundled config's redteam case is already materialized, so the default smoke
+  # run must not depend on remote generation (or its email-verification prompt).
+  # Custom commands keep remote grading available.
+  DISABLE_REMOTE_GENERATION=true
   set -- eval \
     -c "$EXAMPLE_DIR/promptfooconfig.yaml" \
     --no-cache \
@@ -93,6 +98,49 @@ if [[ "$(cd -- "$TMP_DIR" && pwd -P)" != "$TMP_DIR" ]]; then
   exit 1
 fi
 chmod 700 "$TMP_DIR"
+
+# Keep Promptfoo's own state (database, logs, evalLastWritten) inside the disposable
+# tree so red-team artifacts never land in the caller's ~/.promptfoo.
+PROMPTFOO_STATE_DIR="$TMP_DIR/promptfoo-home"
+mkdir -p "$PROMPTFOO_STATE_DIR"
+chmod 700 "$PROMPTFOO_STATE_DIR"
+
+# Register target-process cleanup before the first fallible Codex command so a failed
+# preflight cannot leave a stale, intentionally vulnerable target running.
+terminate_process() {
+  local pid="${1:-}"
+  if [[ -z "$pid" ]]; then
+    return
+  fi
+  kill "$pid" 2>/dev/null || true
+  for _ in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      return
+    fi
+    sleep 0.1
+  done
+  kill -9 "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+terminate_target_processes() {
+  local command
+  local pid
+  while read -r pid command; do
+    if [[ "$command" == "$TARGET_APP_BINARY" ]]; then
+      terminate_process "$pid"
+    fi
+  done < <(ps -axo pid=,command=)
+}
+
+cleanup() {
+  terminate_process "${TARGET_PID:-}"
+  terminate_target_processes
+}
+trap cleanup EXIT
+
+terminate_target_processes
 
 if [[ -L "$CODEX_HOME_DIR" ]]; then
   echo "Refusing to replace symlinked Codex home: $CODEX_HOME_DIR" >&2
@@ -152,40 +200,6 @@ isolated_codex plugin list --json >"$TMP_DIR/plugin-list.json"
 rm -rf -- "$WORKSPACE_DIR"
 mkdir -p "$WORKSPACE_DIR"
 
-terminate_process() {
-  local pid="${1:-}"
-  if [[ -z "$pid" ]]; then
-    return
-  fi
-  kill "$pid" 2>/dev/null || true
-  for _ in {1..20}; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      wait "$pid" 2>/dev/null || true
-      return
-    fi
-    sleep 0.1
-  done
-  kill -9 "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-}
-
-terminate_target_processes() {
-  local command
-  local pid
-  while read -r pid command; do
-    if [[ "$command" == "$TARGET_APP_BINARY" ]]; then
-      terminate_process "$pid"
-    fi
-  done < <(ps -axo pid=,command=)
-}
-
-cleanup() {
-  terminate_process "${TARGET_PID:-}"
-  terminate_target_processes
-}
-trap cleanup EXIT
-
-terminate_target_processes
 rm -rf -- "$TARGET_APP_DIR"
 mkdir -p \
   "$TARGET_APP_DIR/Contents/MacOS" \
@@ -206,9 +220,13 @@ fi
 
 (
   cd "$EXAMPLE_DIR"
+  if [[ -n "$DISABLE_REMOTE_GENERATION" ]]; then
+    export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+  fi
   CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
     COMPUTER_USE_WORKING_DIR="$WORKSPACE_DIR" \
     COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
+    PROMPTFOO_CONFIG_DIR="$PROMPTFOO_STATE_DIR" \
     PROMPTFOO_DISABLE_TELEMETRY=true \
     PROMPTFOO_DISABLE_UPDATE=true \
     "${PROMPTFOO_COMMAND[@]}" "$@"
