@@ -5,6 +5,8 @@
 export type CacheOptions = {
   /** Whether to bypass cache usage for this fetch */
   bust?: boolean;
+  /** Defer writing a successful response until the caller validates and commits it. */
+  deferCacheWrite?: boolean;
   /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
   repeatIndex?: number;
 };

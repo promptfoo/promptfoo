@@ -12,13 +12,20 @@ import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
-import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
+import {
+  type FetchOptions,
+  fetchWithRetries,
+  getEffectiveFetchSignal,
+  getFetchWithProxyHeaders,
+  normalizeRetryOnStatusCodes,
+} from './util/fetch/index';
 import {
   getCloudBearerToken,
   getCloudTaskTeamId,
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
+import { resolveFetchRetryMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -279,6 +286,7 @@ export type FetchWithCacheResult<T> = {
   statusText: string;
   headers?: Record<string, string>;
   latencyMs?: number;
+  commitToCache?: () => Promise<void>;
   deleteFromCache?: () => Promise<void>;
 };
 
@@ -287,9 +295,14 @@ type SerializedFetchResponse = string;
 type PreparedFetchResponse = {
   response: SerializedFetchResponse;
   cacheable: boolean;
+  requestOrder?: number;
 };
 
-const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+const inflightFetchResponses = new Map<string, Promise<PreparedFetchResponse>>();
+const fetchCacheMutationTails = new Map<string, Promise<void>>();
+const fetchCacheProcessId = crypto.randomUUID();
+let nextFetchRequestOrder = 0;
+const FETCH_CACHE_ORDER_METADATA_KEY = '__promptfooFetchCacheOrder';
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
@@ -482,7 +495,7 @@ function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | nu
   return { cacheable: false, identity: undefined };
 }
 
-function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown) {
+function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown) {
   const identity: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(options).sort(([keyA], [keyB]) =>
@@ -494,6 +507,10 @@ function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown)
 
     if (key === 'body') {
       identity.body = bodyIdentity;
+      continue;
+    }
+
+    if (key === 'retryOnStatusCodes') {
       continue;
     }
 
@@ -514,7 +531,7 @@ function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown)
 
 function getFetchCacheKey(
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   method: string,
   format: 'json' | 'text',
   repeatIndex?: number,
@@ -552,9 +569,85 @@ function getAbortSignalId(signal: AbortSignal) {
   return signalId;
 }
 
-function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+async function withFetchCacheMutation<T>(
+  cacheKey: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = fetchCacheMutationTails.get(cacheKey) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  fetchCacheMutationTails.set(cacheKey, tail);
+
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (fetchCacheMutationTails.get(cacheKey) === tail) {
+      fetchCacheMutationTails.delete(cacheKey);
+    }
+  }
+}
+
+function getFetchCacheOrderMetadata(response: SerializedFetchResponse | undefined):
+  | {
+      processId: string;
+      requestOrder: number;
+    }
+  | undefined {
+  if (response === undefined) {
+    return undefined;
+  }
+
+  try {
+    const metadata = JSON.parse(response)?.[FETCH_CACHE_ORDER_METADATA_KEY];
+    if (
+      typeof metadata?.processId === 'string' &&
+      Number.isSafeInteger(metadata.requestOrder) &&
+      metadata.requestOrder >= 0
+    ) {
+      return metadata;
+    }
+  } catch {
+    // Legacy or externally written cache entries have no ordering metadata.
+  }
+  return undefined;
+}
+
+async function commitFetchResponse(
+  cache: Cache,
+  cacheKey: string,
+  preparedResponse: PreparedFetchResponse,
+): Promise<boolean> {
+  return withFetchCacheMutation(cacheKey, async () => {
+    const requestOrder = preparedResponse.requestOrder ?? 0;
+    const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+    const currentOrder = getFetchCacheOrderMetadata(currentResponse);
+    if (
+      currentOrder?.processId === fetchCacheProcessId &&
+      requestOrder < currentOrder.requestOrder
+    ) {
+      return false;
+    }
+    await cache.set(cacheKey, preparedResponse.response);
+    return true;
+  });
+}
+
+function getInflightFetchCacheKey(
+  cacheKey: string,
+  url: RequestInfo,
+  options: FetchOptions,
+  maxRetries: number,
+  deferCacheWrite: boolean,
+) {
+  const signal = getEffectiveFetchSignal(url, options);
+  const retryStatusKey = options.retryOnStatusCodes?.join(',') ?? '';
+  const retryKey = `${cacheKey}:maxRetries:${maxRetries}:retryOnStatusCodes:${retryStatusKey}:deferCacheWrite:${deferCacheWrite}`;
+  return signal ? `${retryKey}:signal:${getAbortSignalId(signal)}` : retryKey;
 }
 
 function serializeFetchResponse(
@@ -563,6 +656,7 @@ function serializeFetchResponse(
   statusText: string,
   headers: Record<string, string>,
   latencyMs: number | undefined,
+  requestOrder?: number,
 ): SerializedFetchResponse {
   return JSON.stringify({
     data,
@@ -570,6 +664,14 @@ function serializeFetchResponse(
     statusText,
     headers,
     latencyMs,
+    ...(requestOrder === undefined
+      ? {}
+      : {
+          [FETCH_CACHE_ORDER_METADATA_KEY]: {
+            processId: fetchCacheProcessId,
+            requestOrder,
+          },
+        }),
   });
 }
 
@@ -578,6 +680,7 @@ function deserializeFetchResponse<T>(
   cached: boolean,
   cache: Cache,
   cacheKey: string,
+  commitToCache?: () => Promise<void>,
 ) {
   const parsedResponse = JSON.parse(response);
   return {
@@ -587,9 +690,16 @@ function deserializeFetchResponse<T>(
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
     latencyMs: parsedResponse.latencyMs,
+    commitToCache,
     deleteFromCache: async () => {
-      await cache.del(cacheKey);
-      logger.debug(`Evicted from cache: ${cacheKey}`);
+      await withFetchCacheMutation(cacheKey, async () => {
+        const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+        if (currentResponse !== response) {
+          return;
+        }
+        await cache.del(cacheKey);
+        logger.debug(`Evicted from cache: ${cacheKey}`);
+      });
     },
   };
 }
@@ -654,7 +764,9 @@ async function prepareFetchResponse(
   maxRetries: number | undefined,
   isIdempotent: boolean,
   format: 'json' | 'text',
+  requestOrder: number,
 ): Promise<PreparedFetchResponse> {
+  const sanitizedUrl = sanitizeUrl(getRequestUrlString(url));
   const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
   const response = result.resp;
   const responseText = result.respText;
@@ -663,14 +775,6 @@ async function prepareFetchResponse(
 
   try {
     const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
-    const serializedResponse = serializeFetchResponse(
-      parsedData,
-      response.status,
-      response.statusText,
-      headers,
-      fetchLatencyMs,
-    );
-
     if (!response.ok) {
       return {
         response:
@@ -682,25 +786,44 @@ async function prepareFetchResponse(
                 headers,
                 fetchLatencyMs,
               )
-            : serializedResponse,
+            : serializeFetchResponse(
+                parsedData,
+                response.status,
+                response.statusText,
+                headers,
+                fetchLatencyMs,
+              ),
         cacheable: false,
       };
     }
 
     if (format === 'json' && parsedData?.error) {
-      logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+      logger.debug('[Cache] Not caching response because it contains an error key', {
+        url: sanitizedUrl,
+      });
       return {
-        response: serializedResponse,
+        response: serializeFetchResponse(
+          parsedData,
+          response.status,
+          response.statusText,
+          headers,
+          fetchLatencyMs,
+        ),
         cacheable: false,
       };
     }
 
-    logger.debug(
-      `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
-    );
     return {
-      response: serializedResponse,
+      response: serializeFetchResponse(
+        parsedData,
+        response.status,
+        response.statusText,
+        headers,
+        fetchLatencyMs,
+        requestOrder,
+      ),
       cacheable: true,
+      requestOrder,
     };
   } catch (err) {
     throw new Error(
@@ -748,30 +871,38 @@ async function prepareFetchResponse(
  */
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const requestOptions: FetchOptions = {
+    ...options,
+    retryOnStatusCodes: normalizeRetryOnStatusCodes(options.retryOnStatusCodes),
+  };
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, repeatIndex } = cacheOptions;
+  const { bust = false, deferCacheWrite = false, repeatIndex } = cacheOptions;
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
+  const method = (
+    requestOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
   const cacheKey =
-    cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format, repeatIndex) : null;
+    cacheEnabled && !bust
+      ? getFetchCacheKey(url, requestOptions, method, format, repeatIndex)
+      : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      options,
+      requestOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -801,34 +932,66 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
+    logger.debug('[Cache] Returning cached response', {
+      url: sanitizeUrl(getRequestUrlString(url)),
+    });
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(
+    cacheKey,
+    url,
+    requestOptions,
+    resolveFetchRetryMaxRetries(maxRetries),
+    deferCacheWrite,
+  );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   if (!inflightResponse) {
+    const requestOrder = ++nextFetchRequestOrder;
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        options,
+        requestOptions,
         timeout,
         maxRetries,
         isIdempotent,
         format,
+        requestOrder,
       );
-      if (preparedResponse.cacheable) {
-        await cache.set(cacheKey, preparedResponse.response);
+      if (preparedResponse.cacheable && !deferCacheWrite) {
+        const committed = await commitFetchResponse(cache, cacheKey, preparedResponse);
+        if (committed) {
+          logger.debug('[Cache] Stored response in cache', {
+            url: sanitizeUrl(getRequestUrlString(url)),
+          });
+        }
       }
-      return preparedResponse.response;
+      return preparedResponse;
     })().finally(() => {
       inflightFetchResponses.delete(inflightCacheKey);
     });
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await inflightResponse;
-  return deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  const preparedResponse = await inflightResponse;
+  const commitToCache =
+    deferCacheWrite && preparedResponse.cacheable
+      ? async () => {
+          const committed = await commitFetchResponse(cache, cacheKey, preparedResponse);
+          if (committed) {
+            logger.debug('[Cache] Committed validated response to cache', {
+              url: sanitizeUrl(getRequestUrlString(url)),
+            });
+          }
+        }
+      : undefined;
+  return deserializeFetchResponse<T>(
+    preparedResponse.response,
+    false,
+    cache,
+    cacheKey,
+    commitToCache,
+  );
 }
 
 /**
@@ -877,6 +1040,7 @@ export function disableCache() {
  */
 export async function clearCache() {
   inflightFetchResponses.clear();
+  fetchCacheMutationTails.clear();
   namespacedCacheInstances.clear();
   return getCacheInstance().clear();
 }

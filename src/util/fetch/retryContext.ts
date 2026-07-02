@@ -5,6 +5,7 @@ interface FetchRetryContext {
 }
 
 const fetchRetryContext = new AsyncLocalStorage<FetchRetryContext>();
+const DEFAULT_FETCH_RETRIES = 4;
 
 /**
  * Run `fn` with a fetch retry context so nested `fetchWithRetries` /
@@ -25,4 +26,13 @@ export function withFetchRetryContext<T>(
  */
 export function getFetchRetryContextMaxRetries(): number | undefined {
   return fetchRetryContext.getStore()?.maxRetries;
+}
+
+/** Resolve an explicit or contextual retry budget to the shared fetch default. */
+export function resolveFetchRetryMaxRetries(maxRetries?: number): number {
+  const resolved = maxRetries ?? getFetchRetryContextMaxRetries() ?? DEFAULT_FETCH_RETRIES;
+  if (!Number.isFinite(resolved)) {
+    return DEFAULT_FETCH_RETRIES;
+  }
+  return Math.max(0, Math.floor(resolved));
 }

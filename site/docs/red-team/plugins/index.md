@@ -57,6 +57,8 @@ _🌐 indicates that plugin uses remote inference in Promptfoo Community edition
 
 Some plugins point to your own LLM provider to generate adversarial probes (like `policy` and `intent`), while others must point to Promptfoo's remote generation endpoint for specialized attack generation (like `harmful:*` and security-focused plugins).
 
+Remote test-case requests sent through Promptfoo's task endpoint use the shared HTTP retry machinery and budget with an endpoint-specific status policy; see [Remote Generation Errors](/docs/red-team/troubleshooting/remote-generation) for failure and retry behavior.
+
 ## How to Select Plugins
 
 Begin by assessing your LLM application's architecture, including potential attack surfaces and relevant risk categories. Clearly define permissible and prohibited behaviors, extending beyond conventional security or privacy requirements. We recommend starting with a limited set of plugins to establish baseline insights, then gradually adding more as you refine your understanding of the model's vulnerabilities. Keep in mind that increasing the number of plugins lengthens test durations and requires additional inference.
