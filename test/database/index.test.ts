@@ -28,6 +28,22 @@ vi.mock('os', async (importOriginal) => {
   return { ...actual, homedir: vi.fn(actual.homedir) };
 });
 
+// Passthrough fs mock with a fault-injection switch for statSync; the ESM namespace
+// itself cannot be spied on.
+const statSyncFault = vi.hoisted(() => ({ error: undefined as Error | undefined }));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    statSync: ((...args: Parameters<typeof actual.statSync>) => {
+      if (statSyncFault.error) {
+        throw statSyncFault.error;
+      }
+      return actual.statSync(...args);
+    }) as typeof actual.statSync,
+  };
+});
+
 const ORIGINAL_HOME_DIR = os.homedir();
 const VITEST_WORKER_MARKER = '__vitest_worker__';
 const JEST_NATIVE_PROMISE_MARKER = Symbol.for('jest-native-promise');
@@ -74,6 +90,7 @@ describe('database', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    statSyncFault.error = undefined;
     vi.mocked(os.homedir).mockReset();
     vi.mocked(os.homedir).mockReturnValue(ORIGINAL_HOME_DIR);
     vi.mocked(getConfigDirectoryPath).mockReset();
@@ -275,6 +292,54 @@ describe('database', () => {
       expect(() => getDbPath()).toThrow(
         'Refusing to open the default Promptfoo database while running tests',
       );
+    });
+
+    it('should fail closed when stat-based identity checks error', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'eio-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'eio-aliased-config');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.symlinkSync(
+        defaultConfigDir,
+        aliasedConfigDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      statSyncFault.error = Object.assign(new Error('EIO: i/o error, stat'), { code: 'EIO' });
+
+      try {
+        // An indeterminate identity error must propagate instead of being read
+        // as "different files", which would let the alias reach the user DB.
+        expect(() => getDbPath()).toThrow('EIO');
+      } finally {
+        statSyncFault.error = undefined;
+      }
+    });
+
+    it('should fail closed when realpath-based identity checks error', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'estale-home');
+      const aliasedConfigDir = path.join(tempConfigDir, 'estale-aliased-config');
+      fs.mkdirSync(path.join(fakeHomeDir, '.promptfoo'), { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      const injectedError = Object.assign(new Error('ESTALE: stale file handle'), {
+        code: 'ESTALE',
+      });
+      const realpathSpy = vi.spyOn(fs.realpathSync, 'native').mockImplementation(() => {
+        throw injectedError;
+      });
+
+      try {
+        expect(() => getDbPath()).toThrow('ESTALE');
+      } finally {
+        realpathSpy.mockRestore();
+      }
     });
 
     it('should respect filesystem case sensitivity for existing databases', () => {

@@ -35,6 +35,11 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
+function isMissingPathError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
 function databasePathsReferToSameFile(firstPath: string, secondPath: string): boolean {
   const resolvedFirstPath = path.resolve(firstPath);
   const resolvedSecondPath = path.resolve(secondPath);
@@ -52,8 +57,13 @@ function databasePathsReferToSameFile(firstPath: string, secondPath: string): bo
     ) {
       return true;
     }
-  } catch {
-    // Missing files can still resolve through a shared directory alias below.
+  } catch (error) {
+    // Missing files can still resolve through a shared directory alias below, but any
+    // other identity error (EIO, ESTALE, EACCES, ...) is indeterminate — propagating it
+    // fails closed instead of letting a test runner mutate user data.
+    if (!isMissingPathError(error)) {
+      throw error;
+    }
   }
 
   try {
@@ -67,7 +77,10 @@ function databasePathsReferToSameFile(firstPath: string, secondPath: string): bo
         path.basename(resolvedSecondPath),
       )
     );
-  } catch {
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      throw error;
+    }
     return false;
   }
 }
