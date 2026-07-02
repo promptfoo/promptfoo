@@ -16,7 +16,9 @@ import logger from '../logger';
 import {
   asEvaluateResult,
   getResultIndexKey,
+  sanitizePromptForArtifact,
   sanitizeResultForJsonlArtifact,
+  sanitizeTableForArtifact,
 } from '../models/evalResult';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -33,7 +35,12 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateResult, EvaluateTableOutput } from '../types';
+import type {
+  EvaluateResult,
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  EvaluateTableOutput,
+} from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
@@ -331,12 +338,104 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   };
 };
 
+const outputToHtmlReportTableCell = (
+  output: EvaluateTableOutput | null | undefined,
+  options: {
+    rowIndex: number;
+    outputIndex: number;
+    description: string;
+  },
+) => {
+  if (output == null) {
+    return output;
+  }
+  return {
+    kind: 'output',
+    detailId: `result-detail-${options.rowIndex}-${options.outputIndex}`,
+    detailTitle: `Result detail - row ${options.rowIndex + 1}, prompt ${options.outputIndex + 1}`,
+    description: options.description,
+    ...outputToHtmlReportCell(output),
+  };
+};
+
+const isEvaluateTableOutput = (
+  output: EvaluateTableOutput | null | undefined,
+): output is EvaluateTableOutput => output != null;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stripConfigPrompt(prompt: unknown): unknown {
+  if (typeof prompt === 'string') {
+    return '[prompt stripped]';
+  }
+  if (Array.isArray(prompt)) {
+    return prompt.map(stripConfigPrompt);
+  }
+  if (!isRecord(prompt)) {
+    return prompt;
+  }
+
+  const isPromptObject = ['id', 'raw', 'template', 'display', 'label'].some((key) => key in prompt);
+  if (isPromptObject) {
+    return {
+      ...prompt,
+      ...('raw' in prompt && { raw: '[prompt stripped]' }),
+      ...('template' in prompt && { template: '[prompt stripped]' }),
+      ...('display' in prompt && { display: '[prompt stripped]' }),
+      ...('label' in prompt && { label: '[prompt stripped]' }),
+    };
+  }
+
+  return Object.fromEntries(
+    Object.entries(prompt).map(([key, value]) => [key, stripConfigPrompt(value)]),
+  );
+}
+
+function stripConfigTestVars(test: unknown): unknown {
+  if (Array.isArray(test)) {
+    return test.map(stripConfigTestVars);
+  }
+  if (!isRecord(test)) {
+    return test;
+  }
+  return 'vars' in test ? { ...test, vars: undefined } : test;
+}
+
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(config, {
+  const sanitized = sanitizeObject(config, {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
+  const projected = sanitized as Record<string, unknown>;
+
+  if (getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) && 'prompts' in projected) {
+    projected.prompts = stripConfigPrompt(projected.prompts);
+  }
+  if (getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false)) {
+    if ('tests' in projected) {
+      projected.tests = stripConfigTestVars(projected.tests);
+    }
+    if ('defaultTest' in projected) {
+      projected.defaultTest = stripConfigTestVars(projected.defaultTest);
+    }
+    if (Array.isArray(projected.scenarios)) {
+      projected.scenarios = projected.scenarios.map((scenario) => {
+        if (!isRecord(scenario)) {
+          return scenario;
+        }
+        return {
+          ...scenario,
+          ...('config' in scenario && { config: stripConfigTestVars(scenario.config) }),
+          ...('tests' in scenario && { tests: stripConfigTestVars(scenario.tests) }),
+        };
+      });
+    }
+  }
+
+  return sanitized;
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
@@ -447,12 +546,38 @@ export function createOutputMetadata(evalRecord: Eval) {
   };
 }
 
+// Project a summary before it is serialized to a file artifact (json/yaml/txt/html/xml). For
+// non-persisted evals the in-memory results are not redacted at the DB / JSONL boundary, and
+// legacy V2 summaries also carry a denormalized table with its own copies of result data.
+function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
+  summary: T,
+): T {
+  if (Array.isArray(summary.results)) {
+    summary.results = (summary.results as unknown[]).map((result) =>
+      isRecord(result) ? sanitizeResultForJsonlArtifact(result) : result,
+    ) as T['results'];
+  }
+  if ('prompts' in summary && Array.isArray(summary.prompts)) {
+    (summary as EvaluateSummaryV3).prompts = summary.prompts.map((prompt) =>
+      sanitizePromptForArtifact(prompt),
+    );
+  }
+  // Legacy (V2) summaries also carry a denormalized `table` whose head, rows, and outputs embed
+  // copies of prompt, variable, response, metadata, grading, and test-case data.
+  if ('table' in summary && summary.table) {
+    (summary as EvaluateSummaryV2).table = sanitizeTableForArtifact(
+      (summary as EvaluateSummaryV2).table,
+    );
+  }
+  return summary;
+}
+
 export async function createOutputData(
   evalRecord: Eval,
   shareableUrl: string | null,
   options: OutputOptions = {},
 ): Promise<OutputFile> {
-  const summary = await evalRecord.toEvaluateSummary();
+  const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
   let traces;
   try {
@@ -556,6 +681,63 @@ async function writeJsonOutputSafely(
   }
 }
 
+async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {
+  const table = sanitizeTableForArtifact(await evalRecord.getTable());
+  invariant(table, 'Table is required');
+  const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const metadata = createOutputMetadata(evalRecord);
+  const template = await fsPromises.readFile(
+    path.join(getDirectory(), 'tableOutput.html'),
+    'utf-8',
+  );
+  const htmlTable = [
+    [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ],
+    ...table.body.map((row, rowIndex) => [
+      ...row.vars.map((value, variableIndex) => ({
+        kind: 'variable',
+        name: table.head.vars[variableIndex],
+        text: value,
+      })),
+      ...row.outputs.map((output, outputIndex) =>
+        outputToHtmlReportTableCell(output, {
+          rowIndex,
+          outputIndex,
+          description: row.description || row.test?.description || '',
+        }),
+      ),
+    ]),
+  ];
+  const reportOutputs = table.body.flatMap((row) => row.outputs.filter(isEvaluateTableOutput));
+  const totalResults = reportOutputs.length;
+  const successes = reportOutputs.filter((output) => output.pass).length;
+  const errors = reportOutputs.filter(
+    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+  ).length;
+  const failures = totalResults - successes - errors;
+  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+  const htmlOutput = getNunjucksEngine().renderString(template, {
+    config: redactedConfig,
+    table: htmlTable,
+    results: summary,
+    metadata,
+    report: {
+      totalResults,
+      totalRows: table.body.length,
+      promptCount: table.head.prompts.length,
+      variableCount: table.head.vars.length,
+      successes,
+      failures,
+      errors,
+      passRateDisplay: `${passRate.toFixed(1)}%`,
+    },
+  });
+  await fsPromises.writeFile(outputPath, htmlOutput);
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -614,60 +796,7 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-    const metadata = createOutputMetadata(evalRecord);
-    const template = await fsPromises.readFile(
-      path.join(getDirectory(), 'tableOutput.html'),
-      'utf-8',
-    );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value, variableIndex) => ({
-          kind: 'variable',
-          name: table.head.vars[variableIndex],
-          text: value,
-        })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
-      ]),
-    ];
-    const reportOutputs = table.body.flatMap((row) => row.outputs);
-    const totalResults = reportOutputs.length;
-    const successes = reportOutputs.filter((output) => output.pass).length;
-    const errors = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-    ).length;
-    const failures = totalResults - successes - errors;
-    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
-      table: htmlTable,
-      results: summary,
-      metadata,
-      report: {
-        totalResults,
-        totalRows: table.body.length,
-        promptCount: table.head.prompts.length,
-        variableCount: table.head.vars.length,
-        successes,
-        failures,
-        errors,
-        passRateDisplay: `${passRate.toFixed(1)}%`,
-      },
-    });
-    await fsPromises.writeFile(outputPath, htmlOutput);
+    await writeHtmlOutput(outputPath, evalRecord);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {
@@ -730,7 +859,7 @@ export async function writeOutput(
       throw error;
     }
   } else if (outputExtension === 'xml') {
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
