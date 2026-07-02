@@ -15,7 +15,7 @@
   "core -> contracts": 1,
   "core -> legacy-contracts": 94,
   "core -> legacy-runtime": 47,
-  "core -> node": 85,
+  "core -> node": 86,
   "core -> providers": 22,
   "core -> redteam": 8,
   "legacy-contracts -> contracts": 18,
