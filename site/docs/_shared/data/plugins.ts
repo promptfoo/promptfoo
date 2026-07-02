@@ -1696,6 +1696,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Detects directory traversal payloads in model output (e.g. ../../etc/passwd, windows\\system32, /proc/self)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/path-traversal-output/',
+    name: 'Path Traversal Output',
+    pluginId: 'path-traversal-output',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'PII exposed through API or database',
     label: 'pii',
     link: '/docs/red-team/plugins/pii/',
@@ -2027,6 +2042,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Detects dangerous shell command payloads in model output (destructive rm, pipe-to-shell, reverse shells, env exfiltration)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/shell-cmd-output/',
+    name: 'Shell Command Output',
+    pluginId: 'shell-cmd-output',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to execute shell commands through the model',
     label: 'technical',
     link: '/docs/red-team/plugins/shell-injection/',
@@ -2066,6 +2096,21 @@ export const PLUGINS = [
       rag: true,
       agent: true,
       chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Detects SQL injection payloads in model output (tautology bypasses, UNION SELECT, DROP TABLE, comment truncation)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/sqli-output/',
+    name: 'SQLi Output',
+    pluginId: 'sqli-output',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
     },
     vulnerabilityType: 'security',
   },
@@ -2467,6 +2512,21 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'harmful',
     isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Detects cross-site scripting payloads in model output (script tags, event handlers, javascript: URIs, data: URIs, srcdoc)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/xss-output/',
+    name: 'XSS Output',
+    pluginId: 'xss-output',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
   },
   {
     category: 'Dataset',
