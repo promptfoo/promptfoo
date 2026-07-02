@@ -1658,7 +1658,7 @@ describe('OpenAICodexAppServerProvider', () => {
     server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
 
     await expect(firstResultPromise).resolves.toMatchObject({ output: 'Queued cleanup first' });
-    await expect(secondResultPromise).resolves.toEqual({
+    await expect(secondResultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(
@@ -2106,7 +2106,7 @@ describe('OpenAICodexAppServerProvider', () => {
     expect((provider as any).threadPromises.size).toBe(0);
 
     const secondResultPromise = provider.callApi('Pending persistent thread');
-    await expect(firstResultPromise).resolves.toEqual({
+    await expect(firstResultPromise).resolves.toMatchObject({
       error:
         'Error calling OpenAI Codex app-server: codex app-server exited with code 1 signal null',
     });
@@ -2358,22 +2358,29 @@ describe('OpenAICodexAppServerProvider', () => {
       (message) => message.method === 'thread/start' && message.id !== firstThreadStart.id,
     );
     server.send({ id: firstThreadStart.id, result: { thread: { id: 'thr_concurrent_1' } } });
-    server.send({ id: secondThreadStart.id, result: { thread: { id: 'thr_concurrent_2' } } });
 
     const firstTurnStart = await waitForMessage(
       server,
       (message) =>
         message.method === 'turn/start' && message.params?.threadId === 'thr_concurrent_1',
     );
+    server.send({
+      id: firstTurnStart.id,
+      result: { turn: { id: 'turn_concurrent_1', status: 'inProgress' } },
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    // The first turn is active while the second call still owns a pending thread/start
+    // request. A connection-level parse failure is ambiguous and must not contaminate
+    // the active row.
+    server.stdout.write('not-json-during-pending-request\n');
+
+    server.send({ id: secondThreadStart.id, result: { thread: { id: 'thr_concurrent_2' } } });
     const secondTurnStart = await waitForMessage(
       server,
       (message) =>
         message.method === 'turn/start' && message.params?.threadId === 'thr_concurrent_2',
     );
-    server.send({
-      id: firstTurnStart.id,
-      result: { turn: { id: 'turn_concurrent_1', status: 'inProgress' } },
-    });
     server.send({
       id: secondTurnStart.id,
       result: { turn: { id: 'turn_concurrent_2', status: 'inProgress' } },
@@ -2419,8 +2426,14 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
-    await expect(firstResultPromise).resolves.toMatchObject({ output: 'Concurrent first' });
-    await expect(secondResultPromise).resolves.toMatchObject({ output: 'Concurrent second' });
+    const [firstResult, secondResult] = await Promise.all([
+      firstResultPromise,
+      secondResultPromise,
+    ]);
+    expect(firstResult).toMatchObject({ output: 'Concurrent first' });
+    expect(secondResult).toMatchObject({ output: 'Concurrent second' });
+    expect(firstResult.metadata?.executionHealth?.droppedEvents).toEqual([]);
+    expect(secondResult.metadata?.executionHealth?.droppedEvents).toEqual([]);
   });
 
   it('shares an in-flight persistent thread start for concurrent calls with the same cache key', async () => {
@@ -2535,7 +2548,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
 
     abortController.abort();
-    await expect(firstResultPromise).resolves.toEqual({
+    await expect(firstResultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(server.proc.kill).not.toHaveBeenCalled();
@@ -2633,7 +2646,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
 
     abortController.abort();
-    await expect(firstResultPromise).resolves.toEqual({
+    await expect(firstResultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(server.proc.kill).not.toHaveBeenCalled();
@@ -2918,7 +2931,7 @@ describe('OpenAICodexAppServerProvider', () => {
       });
       server.send({ id: interrupt.id, result: {} });
 
-      await expect(resultPromise).resolves.toEqual({
+      await expect(resultPromise).resolves.toMatchObject({
         error: 'Error calling OpenAI Codex app-server: codex app-server turn timed out after 1ms',
       });
     } finally {
@@ -2958,7 +2971,7 @@ describe('OpenAICodexAppServerProvider', () => {
       await waitForMessageWithoutTimers(server, (message) => message.method === 'turn/start');
       await vi.advanceTimersByTimeAsync(1);
 
-      await expect(resultPromise).resolves.toEqual({
+      await expect(resultPromise).resolves.toMatchObject({
         error:
           'Error calling OpenAI Codex app-server: codex app-server request timed out: turn/start',
       });
@@ -2995,7 +3008,7 @@ describe('OpenAICodexAppServerProvider', () => {
       );
       await vi.advanceTimersByTimeAsync(1);
 
-      await expect(timedOutResultPromise).resolves.toEqual({
+      await expect(timedOutResultPromise).resolves.toMatchObject({
         error:
           'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
       });
@@ -3091,7 +3104,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
     abortController.abort();
 
-    await expect(abortedResultPromise).resolves.toEqual({
+    await expect(abortedResultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(server.proc.kill).not.toHaveBeenCalled();
@@ -3142,7 +3155,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
 
     abortController.abort();
-    await expect(resultPromise).resolves.toEqual({
+    await expect(resultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(server.proc.kill).not.toHaveBeenCalled();
@@ -3184,7 +3197,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
 
     abortController.abort();
-    await expect(resultPromise).resolves.toEqual({
+    await expect(resultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(server.proc.kill).not.toHaveBeenCalled();
@@ -3233,7 +3246,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
     abortController.abort();
 
-    await expect(abortedResultPromise).resolves.toEqual({
+    await expect(abortedResultPromise).resolves.toMatchObject({
       error: 'OpenAI Codex app-server call aborted',
     });
     expect(server.proc.kill).not.toHaveBeenCalled();
@@ -3301,7 +3314,7 @@ describe('OpenAICodexAppServerProvider', () => {
       await waitForMessageWithoutTimers(firstServer, (message) => message.method === 'initialize');
       await vi.advanceTimersByTimeAsync(1);
 
-      await expect(firstResultPromise).resolves.toEqual({
+      await expect(firstResultPromise).resolves.toMatchObject({
         error:
           'Error calling OpenAI Codex app-server: codex app-server request timed out: initialize',
       });
@@ -3799,7 +3812,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect(setTimeoutSpy.mock.calls.some(([, timeoutMs]) => timeoutMs === 17)).toBe(true);
       await vi.advanceTimersByTimeAsync(17);
 
-      await expect(secondResultPromise).resolves.toEqual({
+      await expect(secondResultPromise).resolves.toMatchObject({
         error:
           'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
       });
@@ -3843,7 +3856,7 @@ describe('OpenAICodexAppServerProvider', () => {
     server.proc.exitCode = 1;
     server.proc.emit('exit', 1, null);
 
-    await expect(resultPromise).resolves.toEqual({
+    await expect(resultPromise).resolves.toMatchObject({
       error:
         'Error calling OpenAI Codex app-server: codex app-server exited with code 1 signal null',
     });
@@ -3905,7 +3918,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
     firstServer.proc.exitCode = 1;
     firstServer.proc.emit('exit', 1, null);
-    await expect(firstResultPromise).resolves.toEqual({
+    await expect(firstResultPromise).resolves.toMatchObject({
       error:
         'Error calling OpenAI Codex app-server: codex app-server exited with code 1 signal null',
     });
@@ -4574,6 +4587,266 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(result.output).toBe('Done');
   });
 
+  it('returns structured exit codes and dropped events without classifying command prose', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { reuse_server: false, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Inspect fixture output');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_execution_health' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_execution_health', status: 'inProgress' } },
+    });
+
+    server.stdout.write('not-json-one\n');
+    server.stdout.write('not-json-two\n');
+    server.send({
+      method: 'item/started',
+      params: {
+        threadId: 'thr_execution_health',
+        turnId: 'turn_execution_health',
+        item: {
+          id: 'cmd-missing-completion',
+          type: 'commandExecution',
+          command: 'pwd',
+          status: 'inProgress',
+        },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_execution_health',
+        turnId: 'turn_execution_health',
+        item: {
+          id: 'cmd-fixture',
+          type: 'commandExecution',
+          command: 'rg fixture missing-file',
+          status: 'failed',
+          exitCode: 2,
+          aggregatedOutput: '429 Could not resolve host ECONNREFUSED bwrap Landlock',
+        },
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_execution_health',
+        turnId: 'turn_execution_health',
+        itemId: 'msg-execution-health',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_execution_health',
+        turn: { id: 'turn_execution_health', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.output).toBe('Done');
+    expect(result.metadata?.executionHealth).toMatchObject({
+      eventCoverage: 'stream',
+      toolExitCodes: [{ itemId: 'cmd-fixture', status: 'failed', exitCode: 2 }],
+      providerErrors: [],
+      sandboxFailures: [],
+      droppedEvents: [
+        { source: 'json-rpc', reason: 'malformed', count: 2 },
+        {
+          source: 'item-lifecycle',
+          reason: 'missing-completion',
+          count: 1,
+          itemId: 'cmd-missing-completion',
+          itemType: 'commandExecution',
+        },
+      ],
+    });
+  });
+
+  it('retains structured provider errors after a successful retry', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Recover from provider error');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_provider_retry' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_provider_retry', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'error',
+      params: {
+        threadId: 'thr_provider_retry',
+        turnId: 'turn_provider_retry',
+        willRetry: true,
+        error: {
+          message: 'Upstream connection failed',
+          codexErrorInfo: { type: 'HttpConnectionFailed', httpStatusCode: 503 },
+        },
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_provider_retry',
+        turnId: 'turn_provider_retry',
+        itemId: 'msg-provider-retry',
+        delta: 'Recovered',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_provider_retry',
+        turn: { id: 'turn_provider_retry', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Recovered');
+    expect(result.metadata?.executionHealth?.providerErrors).toEqual([
+      {
+        source: 'stream',
+        message: 'Upstream connection failed',
+        kind: 'HttpConnectionFailed',
+        httpStatusCode: 503,
+        retryable: true,
+        fatal: false,
+      },
+    ]);
+  });
+
+  it('returns structured sandbox failure metadata for failed turns', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Run inside sandbox');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_sandbox_failure' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_sandbox_failure', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_sandbox_failure',
+        turn: {
+          id: 'turn_sandbox_failure',
+          status: 'failed',
+          items: [],
+          error: {
+            message: 'Sandbox setup failed',
+            code: 'sandbox_error',
+            codexErrorInfo: { type: 'SandboxError' },
+          },
+        },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.error).toContain('Sandbox setup failed');
+    expect(result.metadata?.executionHealth?.providerErrors).toEqual([
+      {
+        source: 'turn',
+        message: 'Sandbox setup failed',
+        code: 'sandbox_error',
+        kind: 'SandboxError',
+        fatal: true,
+      },
+    ]);
+    expect(result.metadata?.executionHealth?.sandboxFailures).toEqual([
+      {
+        source: 'turn',
+        message: 'Sandbox setup failed',
+        code: 'sandbox_error',
+      },
+    ]);
+  });
+
+  it('preserves structured error data from JSON-RPC response failures', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Start a sandboxed turn');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_rpc_sandbox' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      error: {
+        code: -32_000,
+        message: 'turn could not start',
+        data: {
+          codexErrorInfo: { type: 'SandboxError' },
+        },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.error).toContain('turn could not start');
+    expect(result.metadata?.executionHealth?.providerErrors).toEqual([
+      {
+        source: 'json-rpc',
+        message: 'turn could not start',
+        code: -32_000,
+        kind: 'SandboxError',
+        fatal: true,
+      },
+    ]);
+    expect(result.metadata?.executionHealth?.sandboxFailures).toEqual([
+      {
+        source: 'json-rpc',
+        message: 'turn could not start',
+        code: -32_000,
+      },
+    ]);
+  });
+
   it('sanitizes sensitive command metadata', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -4714,6 +4987,9 @@ describe('OpenAICodexAppServerProvider', () => {
         source: 'heuristic',
       },
     ]);
+    expect(result.metadata?.executionHealth?.successfulSkillCalls).toEqual(
+      result.metadata?.skillCalls,
+    );
   });
 
   it('detects repo-local skill calls without accepting wildcard or unrelated skill paths', async () => {
@@ -4859,6 +5135,7 @@ describe('OpenAICodexAppServerProvider', () => {
         source: 'heuristic',
       },
     ]);
+    expect(result.metadata?.executionHealth?.successfulSkillCalls).toEqual([]);
   });
 
   it('kills the app-server process during cleanup', async () => {

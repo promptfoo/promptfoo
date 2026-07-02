@@ -35,6 +35,65 @@ export interface ImageOutput {
   mimeType?: string;
 }
 
+export interface SkillCallEntry {
+  name: string;
+  input?: unknown;
+  path?: string;
+  source?: 'heuristic' | 'tool';
+  is_error?: boolean;
+}
+
+export type CodexExecutionEventCoverage = 'stream' | 'final-items';
+
+export interface CodexToolExitCode {
+  itemId?: string;
+  status?: string;
+  exitCode: number;
+}
+
+export interface CodexProviderError {
+  source: 'provider' | 'stream' | 'turn' | 'item' | 'json-rpc';
+  message?: string;
+  code?: string | number;
+  kind?: string;
+  httpStatusCode?: number;
+  retryable?: boolean;
+  fatal: boolean;
+}
+
+export interface CodexDroppedEvent {
+  source: 'event-stream' | 'item-lifecycle' | 'json-rpc';
+  reason: 'reported' | 'missing-completion' | 'malformed' | 'oversized';
+  count: number;
+  itemId?: string;
+  itemType?: string;
+}
+
+export interface CodexSandboxFailure {
+  source: CodexProviderError['source'];
+  message?: string;
+  code?: string | number;
+  itemId?: string;
+  exitCode?: number;
+}
+
+/**
+ * Versioned execution diagnostics returned by the Codex providers.
+ *
+ * Classifications in this envelope come only from structured provider data or
+ * protocol lifecycle observations. Command output and error prose are not
+ * interpreted as machine-readable failure signals.
+ */
+export interface CodexExecutionHealth {
+  schemaVersion: 1;
+  eventCoverage: CodexExecutionEventCoverage;
+  toolExitCodes: CodexToolExitCode[];
+  providerErrors: CodexProviderError[];
+  droppedEvents: CodexDroppedEvent[];
+  sandboxFailures: CodexSandboxFailure[];
+  successfulSkillCalls: SkillCallEntry[];
+}
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -61,6 +120,7 @@ export interface ProviderResponse {
   latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
+    executionHealth?: CodexExecutionHealth;
     http?: {
       status: number;
       statusText: string;

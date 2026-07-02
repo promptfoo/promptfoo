@@ -31,6 +31,15 @@ import {
   usesCustomModelProvider,
 } from './codexApiKeyGating';
 import {
+  buildCodexExecutionHealth,
+  buildCodexProviderError,
+  buildCodexSandboxFailure,
+  type CodexDroppedEvent,
+  type CodexExecutionHealth,
+  type CodexProviderError,
+  type CodexSandboxFailure,
+} from './codexExecutionHealth';
+import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
   getCodexSkillMetadataFields,
@@ -160,12 +169,18 @@ type CodexPromptInputItem =
 type CodexPromptInput = string | CodexPromptInputItem[];
 
 interface CodexStreamingState {
+  traceEvents: boolean;
   items: any[];
   usage: any;
   turnCompleted: boolean;
   lastStreamError?: string;
+  lastStreamErrorDetails?: unknown;
+  providerErrors: CodexProviderError[];
+  droppedEvents: CodexDroppedEvent[];
+  sandboxFailures: CodexSandboxFailure[];
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
+  activeItemTypes: Map<string, string | undefined>;
   lastEventTime: number;
   reasoningTexts: string[];
   conversationMessages: Array<{ role: string; content: string }>;
@@ -179,6 +194,18 @@ interface CodexStreamingState {
   activeTurnSpan?: Span;
   /** 1-based index of the currently open turn, stamped on item spans for correlation. */
   activeTurnIndex: number;
+}
+
+class CodexStreamingError extends Error {
+  constructor(
+    message: string,
+    readonly state: CodexStreamingState,
+    readonly structuredCause?: unknown,
+    readonly aborted: boolean = false,
+  ) {
+    super(message);
+    this.name = 'CodexStreamingError';
+  }
 }
 
 const MINIMAL_CLI_ENV_KEYS = [
@@ -361,7 +388,8 @@ export interface OpenAICodexSDKConfig {
   inherit_process_env?: boolean;
 
   /**
-   * Enable streaming events (default: false for simplicity)
+   * Emit item- and turn-level OpenTelemetry spans from the event stream.
+   * Execution health always consumes the stream, even when this is false.
    */
   enable_streaming?: boolean;
 
@@ -475,83 +503,73 @@ const CODEX_RATE_LIMIT_CODES = [
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
 
-const CODEX_RATE_LIMIT_PATTERNS = [
-  /\b429\b/,
-  /\brate[\s_-]*limit(?:ed|ing| reached| exceeded)?\b/i,
-  /\btoo many requests\b/i,
-  /\btokens per (?:minute|min)\b/i,
-  /\brequests per (?:minute|min)\b/i,
-  /\bexceeded your current quota\b/i,
-];
-
-function extractCodexRateLimitCode(message: string): string | undefined {
-  const lowerMessage = message.toLowerCase();
-  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
-  if (explicitCode) {
-    return explicitCode;
-  }
-
-  if (
-    /\bexceeded your current quota\b/i.test(message) ||
-    /\bcheck your plan and billing details\b/i.test(message)
-  ) {
-    return 'insufficient_quota';
-  }
-
-  return undefined;
+function getRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
-function extractCodexRetryAfterMs(message: string): number | undefined {
-  const match = message.match(
-    /\b(?:please\s+)?(?:try\s+again\s+in|retry(?:\s+again)?\s+(?:after|in))\s+(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)\b/i,
-  );
-  if (!match) {
+function getFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function getStructuredCodexError(error: unknown): Record<string, unknown> | undefined {
+  const errorRecord = getRecord(error);
+  if (!errorRecord) {
     return undefined;
   }
+  return getRecord(errorRecord.cause) ?? getRecord(errorRecord.data) ?? errorRecord;
+}
 
-  const amount = Number(match[1]);
-  if (!Number.isFinite(amount) || amount < 0) {
-    return undefined;
+function getStructuredRetryAfterMs(errorRecord: Record<string, unknown>): number | undefined {
+  const direct =
+    getFiniteNumber(errorRecord.retryAfterMs) ?? getFiniteNumber(errorRecord.retry_after_ms);
+  if (direct !== undefined && direct >= 0) {
+    return direct;
   }
 
-  const unit = match[2].toLowerCase();
-  const multiplier =
-    unit.startsWith('m') && unit !== 'ms' && !unit.startsWith('milli')
-      ? 60_000
-      : unit.startsWith('s')
-        ? 1000
-        : 1;
-  return Math.ceil(amount * multiplier);
+  const headers = getRecord(errorRecord.headers);
+  const retryAfterMsHeader = headers?.['retry-after-ms'];
+  if (typeof retryAfterMsHeader === 'string') {
+    const parsed = Number(retryAfterMsHeader);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  const retryAfterHeader = headers?.['retry-after'];
+  if (typeof retryAfterHeader === 'string') {
+    const parsed = Number(retryAfterHeader);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed * 1000;
+    }
+  }
+  const nestedError = getRecord(errorRecord.cause) ?? getRecord(errorRecord.data);
+  if (nestedError) {
+    return getStructuredRetryAfterMs(nestedError);
+  }
+  return undefined;
 }
 
 function buildCodexRateLimitResponse(
   error: unknown,
   message: string,
 ): ProviderResponse | undefined {
-  const errorRecord =
-    typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : undefined;
-  const status =
-    typeof errorRecord?.status === 'number'
-      ? errorRecord.status
-      : typeof errorRecord?.statusCode === 'number'
-        ? errorRecord.statusCode
-        : undefined;
+  const errorRecord = getStructuredCodexError(error);
+  if (!errorRecord) {
+    return undefined;
+  }
+  const normalizedError = buildCodexProviderError(error, { source: 'provider', fatal: true });
+  const status = normalizedError.httpStatusCode;
   const rawCode =
-    typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
-  const code =
-    rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
-      ? rawCode
-      : extractCodexRateLimitCode(message);
+    typeof normalizedError.code === 'string' ? normalizedError.code.toLowerCase() : undefined;
+  const code = CODEX_RATE_LIMIT_CODES.find((knownCode) => knownCode === rawCode);
+  const retryAfterMs = getStructuredRetryAfterMs(errorRecord);
+  const isStructuredRateLimit = status === 429 || code !== undefined || retryAfterMs !== undefined;
 
-  if (
-    status !== 429 &&
-    code === undefined &&
-    !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
-  ) {
+  if (!isStructuredRateLimit) {
     return undefined;
   }
 
-  const retryAfterMs = extractCodexRetryAfterMs(message);
   const rateLimitError = new HttpRateLimitError({
     status: status ?? 429,
     retryAfterMs,
@@ -1083,12 +1101,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     runOptions: any,
     callOptions?: CallApiOptionsParams,
     skillRootPrefixes: readonly string[] = [],
+    traceEvents: boolean = false,
   ): Promise<any> {
-    const { events } = await thread.runStreamed(prompt, runOptions);
     const tracer = trace.getTracer('promptfoo.codex-sdk');
-    const state = this.createCodexStreamingState(prompt);
+    const state = this.createCodexStreamingState(prompt, traceEvents);
 
     try {
+      const { events } = await thread.runStreamed(prompt, runOptions);
       for await (const event of events) {
         const eventTime = Date.now();
         if (callOptions?.abortSignal?.aborted) {
@@ -1101,14 +1120,49 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       if (!state.turnCompleted) {
         if (state.lastStreamError) {
-          if (!state.activeTurnSpan) {
+          if (state.traceEvents && !state.activeTurnSpan) {
             this.startTurnSpan(state, tracer, state.lastEventTime);
           }
-          this.endTurnSpan(state, state.lastEventTime, undefined, state.lastStreamError);
-          throw new Error(`Codex stream ended after error: ${state.lastStreamError}`);
+          if (state.traceEvents) {
+            this.endTurnSpan(state, state.lastEventTime, undefined, state.lastStreamError);
+          }
+          state.providerErrors.push(
+            buildCodexProviderError(state.lastStreamErrorDetails ?? state.lastStreamError, {
+              source: 'turn',
+              fatal: true,
+            }),
+          );
+          throw new CodexStreamingError(
+            `Codex stream ended after error: ${state.lastStreamError}`,
+            state,
+            state.lastStreamErrorDetails,
+          );
         }
-        throw new Error('Codex stream ended before turn completion');
+        const message = 'Codex stream ended before turn completion';
+        state.providerErrors.push(
+          buildCodexProviderError(message, { source: 'turn', fatal: true }),
+        );
+        throw new CodexStreamingError(message, state);
       }
+    } catch (error) {
+      if (error instanceof CodexStreamingError) {
+        throw error;
+      }
+
+      const aborted =
+        (error instanceof Error && error.name === 'AbortError') ||
+        callOptions?.abortSignal?.aborted === true;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!aborted) {
+        state.providerErrors.push(
+          buildCodexProviderError(error, { source: 'stream', fatal: true }),
+        );
+        const sandboxFailure = buildCodexSandboxFailure(error, { source: 'stream' });
+        if (sandboxFailure) {
+          state.sandboxFailures.push(sandboxFailure);
+        }
+      }
+      throw new CodexStreamingError(message, state, error, aborted);
     } finally {
       this.endUnclosedStreamingSpans(state);
     }
@@ -1116,14 +1170,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return this.buildStreamingTurnResult(state);
   }
 
-  private createCodexStreamingState(prompt: CodexPromptInput): CodexStreamingState {
+  private createCodexStreamingState(
+    prompt: CodexPromptInput,
+    traceEvents: boolean,
+  ): CodexStreamingState {
     return {
+      traceEvents,
       items: [],
       usage: undefined,
       turnCompleted: false,
       lastStreamError: undefined,
+      lastStreamErrorDetails: undefined,
+      providerErrors: [],
+      droppedEvents: [],
+      sandboxFailures: [],
       activeSpans: new Map(),
       itemStartTimes: new Map(),
+      activeItemTypes: new Map(),
       lastEventTime: Date.now(),
       reasoningTexts: [],
       conversationMessages: [
@@ -1145,6 +1208,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     eventTime: number,
     skillRootPrefixes: readonly string[],
   ): void {
+    const droppedEventCount =
+      typeof event.droppedEventCount === 'number'
+        ? event.droppedEventCount
+        : event.dropped_event_count;
+    if (typeof droppedEventCount === 'number' && droppedEventCount > 0) {
+      state.droppedEvents.push({
+        source: 'event-stream',
+        reason: 'reported',
+        count: droppedEventCount,
+      });
+    }
+
     switch (event.type) {
       case 'item.started':
         this.handleStreamingItemStarted(event, state, tracer, eventTime);
@@ -1158,32 +1233,63 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       case 'turn.completed':
         state.usage = event.usage;
         state.turnCompleted = true;
-        if (!state.activeTurnSpan) {
+        if (state.traceEvents && !state.activeTurnSpan) {
           // Some Codex SDK streams emit `turn.completed` without a prior
           // `turn.started`. Lazily synthesize a turn span so the
           // `gen_ai.turn *` count still reflects this SDK turn.
           this.startTurnSpan(state, tracer, state.lastEventTime);
         }
-        this.endTurnSpan(state, eventTime, event.usage);
+        if (state.traceEvents) {
+          this.endTurnSpan(state, eventTime, event.usage);
+        }
         logger.debug('Codex turn completed', { usage: state.usage });
         return;
       case 'turn.failed': {
         const errorMsg = event.error?.message || 'Turn failed';
-        if (!state.activeTurnSpan) {
+        state.providerErrors.push(
+          buildCodexProviderError(event.error ?? errorMsg, {
+            source: 'turn',
+            fatal: true,
+          }),
+        );
+        const sandboxFailure = buildCodexSandboxFailure(event.error, { source: 'turn' });
+        if (sandboxFailure) {
+          state.sandboxFailures.push(sandboxFailure);
+        }
+        if (state.traceEvents && !state.activeTurnSpan) {
           this.startTurnSpan(state, tracer, state.lastEventTime);
         }
-        this.endTurnSpan(state, eventTime, undefined, errorMsg);
+        if (state.traceEvents) {
+          this.endTurnSpan(state, eventTime, undefined, errorMsg);
+        }
         logger.error('Codex turn failed', { error: errorMsg });
         const previousStreamError =
           state.lastStreamError && state.lastStreamError !== errorMsg
             ? ` Previous stream error: ${state.lastStreamError}`
             : '';
-        throw new Error(`Codex turn failed: ${errorMsg}${previousStreamError}`);
+        const structuredCause = {
+          ...(getRecord(state.lastStreamErrorDetails) ?? {}),
+          ...(getRecord(event.error) ?? {}),
+          message: errorMsg,
+        };
+        throw new CodexStreamingError(
+          `Codex turn failed: ${errorMsg}${previousStreamError}`,
+          state,
+          structuredCause,
+        );
       }
       case 'error': {
         const errorMsg =
           typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
         state.lastStreamError = errorMsg;
+        state.lastStreamErrorDetails = event;
+        state.providerErrors.push(
+          buildCodexProviderError(event, { source: 'stream', fatal: false }),
+        );
+        const sandboxFailure = buildCodexSandboxFailure(event, { source: 'stream' });
+        if (sandboxFailure) {
+          state.sandboxFailures.push(sandboxFailure);
+        }
         logger.debug('Codex stream error event received; waiting for terminal event', {
           error: errorMsg,
         });
@@ -1192,10 +1298,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       case 'thread.started':
         return;
       case 'turn.started':
-        this.startTurnSpan(state, tracer, eventTime);
+        if (state.traceEvents) {
+          this.startTurnSpan(state, tracer, eventTime);
+        }
         return;
-      default:
+      default: {
         logger.debug('Codex unknown event type', { type: event.type });
+      }
     }
   }
 
@@ -1208,9 +1317,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const item = event.item;
     if (!item) {
       logger.warn('Codex item.started event missing item', { event });
+      state.droppedEvents.push({
+        source: 'event-stream',
+        reason: 'malformed',
+        count: 1,
+      });
       return;
     }
-    if (!state.activeTurnSpan) {
+    if (state.traceEvents && !state.activeTurnSpan) {
       // Stream omitted `turn.started`; open a turn span lazily so the first
       // item lands inside a real turn and gets a `gen_ai.turn.index` tag.
       this.startTurnSpan(state, tracer, eventTime);
@@ -1223,6 +1337,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     const itemId = String(item.id);
+    state.activeItemTypes.set(itemId, typeof item.type === 'string' ? item.type : undefined);
+    if (!state.traceEvents) {
+      logger.debug('Codex item started', { itemId, type: item.type });
+      return;
+    }
     const span = this.startStreamingItemSpan(
       tracer,
       item,
@@ -1245,9 +1364,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const item = event.item;
     if (!item) {
       logger.warn('Codex item.completed event missing item', { event });
+      state.droppedEvents.push({
+        source: 'event-stream',
+        reason: 'malformed',
+        count: 1,
+      });
       return;
     }
-    if (!state.activeTurnSpan) {
+    if (state.traceEvents && !state.activeTurnSpan) {
       // Same lazy-open as `handleStreamingItemStarted`: covers streams that
       // emit only `item.completed` events without prior `turn.started` /
       // `item.started` events.
@@ -1257,6 +1381,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const itemId = item.id ? String(item.id) : crypto.randomUUID();
     state.items.push(item);
     this.collectStreamingItemText(item, state);
+    state.activeItemTypes.delete(itemId);
+
+    if (!state.traceEvents) {
+      logger.debug('Codex item completed', { itemId, type: item.type });
+      return;
+    }
 
     const span =
       state.activeSpans.get(itemId) ??
@@ -1295,7 +1425,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     skillRootPrefixes: readonly string[],
   ): void {
     const item = event.item;
-    if (item?.id) {
+    if (state.traceEvents && item?.id) {
       const itemId = String(item.id);
       const span = state.activeSpans.get(itemId);
       if (span) {
@@ -1461,6 +1591,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private endUnclosedStreamingSpans(state: CodexStreamingState): void {
+    for (const [itemId, itemType] of state.activeItemTypes) {
+      logger.warn('Codex item lifecycle not properly closed', { itemId });
+      state.droppedEvents.push({
+        source: 'item-lifecycle',
+        reason: 'missing-completion',
+        count: 1,
+        itemId,
+        ...(itemType ? { itemType } : {}),
+      });
+    }
     for (const [itemId, span] of state.activeSpans) {
       logger.warn('Codex item span not properly closed', { itemId });
       span.setStatus({ code: SpanStatusCode.ERROR, message: 'Span not properly closed' });
@@ -1468,10 +1608,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
-    closeTurnSpan(state, {
-      errorMessage: 'Turn span not properly closed',
-      logLabel: 'CodexSDK',
-    });
+    state.activeItemTypes.clear();
+    if (state.traceEvents) {
+      closeTurnSpan(state, {
+        errorMessage: 'Turn span not properly closed',
+        logLabel: 'CodexSDK',
+      });
+    }
   }
 
   private buildStreamingTurnResult(state: CodexStreamingState): {
@@ -1480,6 +1623,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     usage: any;
     reasoningTexts: string[];
     conversationMessages: Array<{ role: string; content: string }>;
+    providerErrors: CodexProviderError[];
+    droppedEvents: CodexDroppedEvent[];
+    sandboxFailures: CodexSandboxFailure[];
   } {
     const agentMessages = state.items.filter((item) => item.type === 'agent_message');
     const finalAgentMessage = [...agentMessages]
@@ -1491,6 +1637,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       usage: state.usage,
       reasoningTexts: state.reasoningTexts,
       conversationMessages: state.conversationMessages,
+      providerErrors: state.providerErrors,
+      droppedEvents: state.droppedEvents,
+      sandboxFailures: state.sandboxFailures,
     };
   }
 
@@ -2122,7 +2271,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
-      return { error: `Error calling OpenAI Codex SDK: ${errorMessage}` };
+      return {
+        error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
+        metadata: {
+          executionHealth: this.sanitizeCodexExecutionHealth(
+            buildCodexExecutionHealth({
+              eventCoverage: 'stream',
+              providerErrors: [buildCodexProviderError(error, { source: 'provider', fatal: true })],
+            }),
+          ),
+        },
+      };
     }
 
     // Get current trace context for deep tracing
@@ -2162,7 +2321,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Check abort signal
     if (callOptions?.abortSignal?.aborted) {
-      return { error: 'OpenAI Codex SDK call aborted before it started' };
+      return this.buildCodexAbortResponse(
+        'OpenAI Codex SDK call aborted before it started',
+        skillRootPrefixes,
+        'stream',
+      );
     }
 
     let localInstance: any = undefined;
@@ -2197,26 +2360,91 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       return this.buildCodexProviderResponse(turn, sessionId, skillRootPrefixes, resolvedConfig);
     } catch (error: unknown) {
-      const isAbort =
-        (error instanceof Error && error.name === 'AbortError') ||
-        callOptions?.abortSignal?.aborted;
-
-      if (isAbort) {
+      const streamingError = error instanceof CodexStreamingError ? error : undefined;
+      if (this.isCodexAbort(error, callOptions)) {
         logger.warn('OpenAI Codex SDK call aborted');
-        return { error: 'OpenAI Codex SDK call aborted' };
+        return this.buildCodexAbortResponse(
+          'OpenAI Codex SDK call aborted',
+          skillRootPrefixes,
+          'stream',
+          streamingError?.state,
+        );
       }
 
-      // Safely extract error message - error may not be an Error object
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
-      return (
-        buildCodexRateLimitResponse(error, errorMessage) ?? {
-          error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
-        }
-      );
+      return this.buildCodexExecutionErrorResponse(error, skillRootPrefixes, 'stream');
     } finally {
       await this.cleanupCodexTurn(resolvedConfig, cacheKey, useLocalInstance, localInstance);
     }
+  }
+
+  private isCodexAbort(error: unknown, callOptions: CallApiOptionsParams | undefined): boolean {
+    return (
+      (error instanceof CodexStreamingError && error.aborted) ||
+      (error instanceof Error && error.name === 'AbortError') ||
+      callOptions?.abortSignal?.aborted === true
+    );
+  }
+
+  private buildCodexAbortResponse(
+    error: string,
+    skillRootPrefixes: readonly string[],
+    eventCoverage: 'stream' | 'final-items',
+    state?: CodexStreamingState,
+  ): ProviderResponse {
+    return {
+      error,
+      metadata: this.buildCodexResponseMetadata(
+        state?.items ?? [],
+        skillRootPrefixes,
+        eventCoverage,
+        {
+          providerErrors: state?.providerErrors,
+          droppedEvents: state?.droppedEvents,
+          sandboxFailures: state?.sandboxFailures,
+        },
+      ),
+    };
+  }
+
+  private buildCodexExecutionErrorResponse(
+    error: unknown,
+    skillRootPrefixes: readonly string[],
+    eventCoverage: 'stream' | 'final-items',
+  ): ProviderResponse {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
+    const streamingError = error instanceof CodexStreamingError ? error : undefined;
+    const structuredError = streamingError?.structuredCause ?? error;
+    const response = buildCodexRateLimitResponse(structuredError, errorMessage) ?? {
+      error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
+    };
+    const providerErrors = streamingError?.state.providerErrors ?? [
+      buildCodexProviderError(structuredError, { source: 'provider', fatal: true }),
+    ];
+    const sandboxFailures = [...(streamingError?.state.sandboxFailures ?? [])];
+    const sandboxFailure = streamingError
+      ? undefined
+      : buildCodexSandboxFailure(structuredError, { source: 'provider' });
+    if (sandboxFailure) {
+      sandboxFailures.push(sandboxFailure);
+    }
+
+    return {
+      ...response,
+      metadata: {
+        ...response.metadata,
+        ...this.buildCodexResponseMetadata(
+          streamingError?.state.items ?? [],
+          skillRootPrefixes,
+          eventCoverage,
+          {
+            providerErrors,
+            droppedEvents: streamingError?.state.droppedEvents,
+            sandboxFailures,
+          },
+        ),
+      },
+    };
   }
 
   private buildCodexRunOptions(
@@ -2311,9 +2539,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         instanceKey,
         activeInstance,
       );
-      const turn = resolvedConfig.enable_streaming
-        ? await this.runStreaming(thread, promptInput, runOptions, callOptions, skillRootPrefixes)
-        : await thread.run(promptInput, runOptions);
+      const turn = await this.runStreaming(
+        thread,
+        promptInput,
+        runOptions,
+        callOptions,
+        skillRootPrefixes,
+        resolvedConfig.enable_streaming === true,
+      );
 
       return {
         turn,
@@ -2336,7 +2569,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       output,
       tokenUsage,
       cost: this.calculateCodexResponseCost(tokenUsage, resolvedConfig.model),
-      metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
+      metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes, 'stream', {
+        providerErrors: turn.providerErrors,
+        droppedEvents: turn.droppedEvents,
+        sandboxFailures: turn.sandboxFailures,
+      }),
       raw: JSON.stringify(turn),
       sessionId,
     };
@@ -2345,13 +2582,35 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private buildCodexResponseMetadata(
     items: any[],
     skillRootPrefixes: readonly string[],
+    eventCoverage: 'stream' | 'final-items',
+    health: {
+      providerErrors?: readonly CodexProviderError[];
+      droppedEvents?: readonly CodexDroppedEvent[];
+      sandboxFailures?: readonly CodexSandboxFailure[];
+    } = {},
   ): ProviderResponse['metadata'] {
     const skillMetadata = this.buildSkillMetadata(items, skillRootPrefixes);
-    if (!skillMetadata) {
-      return undefined;
-    }
+    const skillFields = getCodexSkillMetadataFields(skillMetadata);
 
-    return getCodexSkillMetadataFields(skillMetadata);
+    return {
+      ...skillFields,
+      executionHealth: this.sanitizeCodexExecutionHealth(
+        buildCodexExecutionHealth({
+          eventCoverage,
+          items,
+          providerErrors: health.providerErrors,
+          droppedEvents: health.droppedEvents,
+          sandboxFailures: health.sandboxFailures,
+          successfulSkillCalls: skillMetadata?.skillCalls,
+        }),
+      ),
+    };
+  }
+
+  private sanitizeCodexExecutionHealth(health: CodexExecutionHealth): CodexExecutionHealth {
+    return this.redactTracePii(
+      sanitizeObject(health, { context: 'Codex execution health' }),
+    ) as CodexExecutionHealth;
   }
 
   private buildCodexTokenUsage(turnUsage: any): ProviderResponse['tokenUsage'] {
