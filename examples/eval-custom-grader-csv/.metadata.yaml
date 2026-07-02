@@ -1,0 +1,5 @@
+title: 'Custom Grader with CSV Test Cases'
+description: 'Use custom TypeScript assertion scripts with test cases loaded from a CSV file'
+tags:
+  - Evaluation
+  - Configuration

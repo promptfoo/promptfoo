@@ -555,6 +555,11 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'examples',
+      label: 'Examples',
+    },
+    {
+      type: 'doc',
       id: 'contributing',
     },
     {

@@ -1,0 +1,5 @@
+title: 'Max-Score Selection'
+description: 'Objectively select the best output from multiple providers using weighted assertion scores'
+tags:
+  - Evaluation
+  - Python

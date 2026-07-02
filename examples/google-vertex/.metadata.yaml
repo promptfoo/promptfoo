@@ -1,0 +1,6 @@
+title: 'Google Vertex AI'
+description: 'Evaluate Vertex AI models (Gemini, Claude, Llama) with function calling, structured output, and search grounding'
+tags:
+  - Providers
+  - Tool Use
+  - Model Comparison

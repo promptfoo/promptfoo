@@ -1,0 +1,4 @@
+title: 'Variables Referencing Other Variables'
+description: 'Using Nunjucks templates within variable values to reference other test variables'
+tags:
+  - Configuration
