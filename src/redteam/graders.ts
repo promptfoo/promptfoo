@@ -79,6 +79,7 @@ import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medica
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
 import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
+import { OpenAIGuardrailsGrader } from './plugins/openaiGuardrails';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
 import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
@@ -227,6 +228,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
+  'promptfoo:redteam:openai-guardrails': new OpenAIGuardrailsGrader(),
   'promptfoo:redteam:pharmacy:controlled-substance-compliance':
     new PharmacyControlledSubstanceCompliancePluginGrader(),
   'promptfoo:redteam:pharmacy:dosage-calculation': new PharmacyDosageCalculationPluginGrader(),
