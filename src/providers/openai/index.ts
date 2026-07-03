@@ -130,7 +130,7 @@ export class OpenAiGenericProvider implements ApiProvider {
    * prefix while retaining the real request model in {@link modelName}.
    */
   protected getCapabilityModelName(): string {
-    return this.modelName;
+    return this.modelName === 'openai/chat-latest' ? 'chat-latest' : this.modelName;
   }
 
   protected isGPT5Model(): boolean {

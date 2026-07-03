@@ -491,9 +491,36 @@ providers:
 - **`medium`**: Balanced reasoning for moderate complexity
 - **`high`**: Maximum reasoning for complex problem-solving
 
+### ChatGPT Instant (`chat-latest`)
+
+OpenAI exposes the current ChatGPT Instant model as `chat-latest`. This floating alias can change as OpenAI updates the underlying snapshot. For production API use, OpenAI recommends `gpt-5.5`; use a dated or family-specific model when you need a stable eval baseline.
+
+OpenAI's pricing docs list `chat-latest` at $5 input, $0.50 cached input, and $30 output per 1M tokens.
+
+Promptfoo uses OpenAI's published Standard price for the alias. Batch, Flex, Priority, and GPT-5.5-specific long-context costs remain unpriced unless OpenAI publishes and enables them for `chat-latest`.
+
+#### Available Models
+
+| Model       | Description                          | Pricing (Input / Cached Input / Output) |
+| ----------- | ------------------------------------ | --------------------------------------- |
+| chat-latest | Latest Instant model used in ChatGPT | $5 / $0.50 / $30 per 1M tokens          |
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: openai:chat:chat-latest
+    config:
+      max_tokens: 2048
+
+  - id: openai:responses:chat-latest
+    config:
+      max_output_tokens: 2048
+```
+
 ### GPT-5.3 Instant
 
-GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
+GPT-5.3 Instant remains available as the older `gpt-5.3-chat-latest` alias. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
 
 #### Available Models
 
@@ -2014,6 +2041,7 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.4-nano-2026-03-17` - Dated snapshot of gpt-5.4-nano
 - `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
 - `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
+- `chat-latest` - Latest ChatGPT Instant alias
 - `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model

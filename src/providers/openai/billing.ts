@@ -62,7 +62,7 @@ const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6-sol'], rates: perMillion(0.5) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.25) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.1) },
-  { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
+  { models: ['chat-latest', 'gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.25) },
   { models: ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'], rates: perMillion(0.075) },
   { models: ['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'], rates: perMillion(0.02) },
@@ -212,6 +212,10 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
     rates: { input: perMillion(2), cachedInput: perMillion(0.5), output: perMillion(8) },
   },
 ]);
+
+// OpenAI currently publishes only standard pricing for this floating alias.
+const STANDARD_ONLY_TEXT_MODELS = new Set(['chat-latest']);
+const TEXT_PRICED_IMAGE_INPUT_MODELS = new Set(['chat-latest']);
 
 const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
   {
@@ -489,6 +493,10 @@ function getModelRates(
     };
   }
 
+  if (tier !== 'standard' && STANDARD_ONLY_TEXT_MODELS.has(modelName)) {
+    return undefined;
+  }
+
   if (tier === 'priority' && PRIORITY_TEXT_RATES[modelName]) {
     return { text: PRIORITY_TEXT_RATES[modelName] };
   }
@@ -514,6 +522,14 @@ function getModelRates(
 
   return {
     text: discountedText,
+    ...(TEXT_PRICED_IMAGE_INPUT_MODELS.has(modelName)
+      ? {
+          image: {
+            input: discountedText.input,
+            cachedInput: discountedText.cachedInput,
+          },
+        }
+      : {}),
     ...(model?.cost?.audioInput || model?.cost?.audioOutput
       ? {
           audio: {
@@ -731,12 +747,15 @@ export function calculateOpenAIUsageCost(
       output: config.audioOutputCost ?? config.audioCost,
     },
   );
+  const imageInputCost = TEXT_PRICED_IMAGE_INPUT_MODELS.has(modelName)
+    ? (config.inputCost ?? config.cost)
+    : undefined;
   const imageCost = calculateModalCost(
     rates.image,
     usage.imageInputTokens,
     cachedInput.imageInputTokens,
     usage.imageOutputTokens,
-    {},
+    { input: imageInputCost, cachedInput: imageInputCost },
   );
 
   return textCost + audioCost + imageCost;

@@ -281,6 +281,19 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for chat-latest', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'chat-latest')).toBe(true);
+    expect(calculateOpenAICost('chat-latest', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 5 + 500 * 30) / 1e6,
+      6,
+    );
+  });
+
+  it('does not invent long-context pricing for chat-latest', () => {
+    const cost = calculateOpenAICost('chat-latest', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 5 + 1_000 * 30) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.5', () => {
     const cost = calculateOpenAICost('gpt-5.5', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 5 + 500 * 30) / 1e6, 6);

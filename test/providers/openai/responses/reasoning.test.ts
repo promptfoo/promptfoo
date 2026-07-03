@@ -174,6 +174,26 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect(body.temperature).toBeUndefined();
   });
 
+  it.each([
+    'chat-latest',
+    'openai/chat-latest',
+    'vendor/chat-latest',
+  ])('should treat %s as a non-reasoning chat model', async (model) => {
+    const provider = new OpenAiResponsesProvider(model, {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'medium',
+        temperature: 0.7,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.model).toBe(model);
+    expect(body.temperature).toBe(0.7);
+    expect(body.reasoning).toBeUndefined();
+  });
+
   describe('deep research model validation', () => {
     it('should require web_search_preview tool for deep research models', async () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
