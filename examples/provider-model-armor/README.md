@@ -104,13 +104,17 @@ The Vertex configuration:
 
 ### Using the Dataset
 
-The included CSV covers benign prompts and each Model Armor filter type. Its `__expected` column applies `guardrails` to benign rows and `not-guardrails` to expected findings:
+The included CSV covers benign prompts and each Model Armor filter type:
 
 ```yaml
 tests: file://datasets/model-armor-test.csv
 ```
 
-Each row includes the prompt, expected filter, description, and assertion.
+Every row carries two assertions. `__expected` applies `guardrails` to benign rows and
+`not-guardrails` to expected findings, and `__expected2` is a per-row `javascript:` check
+that the normalized output names the expected filter — for example, a prompt-injection row
+must report `Prompt Injection`, not just any match. This keeps a disabled or overbroad
+filter (one that matches everything) from silently satisfying an unrelated category.
 
 The example uses Model Armor's basic SDP configuration, whose built-in coverage is limited to
 credit cards, US SSNs, financial account numbers, US ITINs, Google Cloud credentials, and Google
@@ -125,7 +129,13 @@ When Model Armor reports a policy match, you'll see:
 - `guardrails.flaggedInput: true` - The finding came from the input prompt
 - `guardrails.reason` - Detailed explanation of which filters matched
 
-The included configurations test prompt-side protection. Promptfoo currently handles Vertex `finishReason: MODEL_ARMOR` as a provider error, so regular `guardrails` assertions do not grade response-template blocks. Use the direct `sanitizeModelResponse` API with a normalized transform when you need response-side regression tests.
+The included configurations test prompt-side protection. Promptfoo currently handles Vertex `finishReason: MODEL_ARMOR` as a provider error, so regular `guardrails` assertions do not grade response-template blocks. For response-side regression tests, call the direct `sanitizeModelResponse` API and point at the response-side export of the transform:
+
+```yaml
+transformResponse: file://transforms/sanitize-response.mjs:transformModelArmorModelResponse
+```
+
+The default export attributes findings to `flaggedInput` (`sanitizeUserPrompt`); `transformModelArmorModelResponse` attributes them to `flaggedOutput` so response violations are not misreported as prompt findings.
 
 For debugging, inspect the raw Model Armor response in `metadata.modelArmor`, which contains the full `sanitizationResult` including individual filter states and confidence levels.
 
