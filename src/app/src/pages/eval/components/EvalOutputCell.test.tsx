@@ -2381,6 +2381,10 @@ describe('isImageProvider helper function', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
   });
 
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
+  });
+
   it('should return false for text completion providers', () => {
     expect(isImageProvider('openai:gpt-4')).toBe(false);
   });

@@ -4,7 +4,6 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -12,6 +11,7 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -341,7 +341,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
       }
 
       if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+        config[key] = loadYaml(fs.readFileSync(filePath, 'utf8'));
       } else if (filePath.endsWith('.json')) {
         config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else {

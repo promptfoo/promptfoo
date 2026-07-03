@@ -666,10 +666,8 @@ redteam:
     - harmful:self-harm
     - harmful:sexual
     - harmful:violence
-    - prompt-injection
-    - jailbreak
   strategies:
-    - id: prompt-injection
+    - id: jailbreak-templates
     - id: jailbreak
     - id: translation # Test evasion through different languages
     - id: misspelling # Test evasion through character substitution
