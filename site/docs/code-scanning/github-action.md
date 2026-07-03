@@ -83,6 +83,64 @@ The detached base worktree preserves relative `guidanceFile` paths. For `workflo
 
 If you made changes to your PR and want to run another scan, you can trigger a new scan by commenting on the PR with `@promptfoo-scanner`.
 
+### Manual Scans with `workflow_dispatch`
+
+You can also start a scan manually by dispatching a workflow with a `pr_number` input. The Action associates its results with that PR, but it always scans the checked-out workspace (`--compare HEAD`). A `workflow_dispatch` run checks out the dispatch ref you selected — **not** the PR's head — so unless you explicitly check out the PR head, dispatching from `main` for PR 123 scans `main` while reporting the results against PR 123.
+
+Resolve the PR's **immutable head SHA** through the GitHub API, check that exact SHA out, and fail closed if the workspace `HEAD` does not match it before running the Action:
+
+```yaml
+name: Promptfoo Code Scan (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to scan
+        required: true
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+      - name: Resolve PR head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        run: |
+          head_sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the requested PR head
+        uses: actions/checkout@v6
+        with:
+          # Pin to the immutable commit SHA, not a mutable branch ref.
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Verify workspace HEAD matches the requested PR head
+        env:
+          EXPECTED_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Workspace HEAD ($actual_sha) does not match requested PR head ($EXPECTED_SHA); refusing to scan the wrong ref"
+            exit 1
+          fi
+
+      - name: Run Promptfoo Code Scan
+        uses: promptfoo/code-scan-action@v0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+When you also materialize a trusted `config-path`, resolve it from the PR's base SHA (as shown above) so policy comes from the base while the scanned code comes from the verified PR head.
+
 ### Fork Pull Requests
 
 By default, code scanning is disabled for fork PRs. This is because any GitHub user can open a fork PR on public repositories.
