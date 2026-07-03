@@ -63,7 +63,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -170,7 +170,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -225,7 +225,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -325,7 +325,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -354,7 +354,7 @@ Example `.gitlab-ci.yml`:
 ```yaml
 model-security-scan:
   stage: test
-  image: node:20
+  image: node:24
 
   before_script:
     - apt-get update && apt-get install -y python3 python3-pip
@@ -486,7 +486,7 @@ version: 2.1
 jobs:
   model-scan:
     docker:
-      - image: cimg/node:20.0
+      - image: cimg/node:lts
 
     steps:
       - checkout
