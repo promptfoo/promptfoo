@@ -52,11 +52,25 @@ function getRuntimeMetadata() {
 
 export class Telemetry {
   private telemetryDisabledRecorded = false;
-  private id: string;
+  private id: string | null = null;
 
-  constructor() {
+  constructor(initializeImmediately: boolean = true) {
+    if (initializeImmediately) {
+      this.initialize();
+    }
+  }
+
+  initialize(): void {
+    if (this.id !== null) {
+      return;
+    }
     this.id = getUserId();
     void this.identify();
+  }
+
+  private getId(): string {
+    this.id ??= getUserId();
+    return this.id;
   }
 
   private getPersonProperties(ciFlag: boolean) {
@@ -77,7 +91,7 @@ export class Telemetry {
       try {
         const personProperties = this.getPersonProperties(isCI());
         client.identify({
-          distinctId: this.id,
+          distinctId: this.getId(),
           properties: personProperties,
         });
         client.flush().catch(() => {
@@ -101,6 +115,7 @@ export class Telemetry {
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    this.initialize();
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
@@ -122,7 +137,7 @@ export class Telemetry {
     if (client && !getEnvBool('IS_TESTING')) {
       try {
         client.capture({
-          distinctId: this.id,
+          distinctId: this.getId(),
           event: eventName,
           properties: {
             ...propertiesWithMetadata,
@@ -150,7 +165,7 @@ export class Telemetry {
         environment: getEnvString('NODE_ENV', 'development'),
         email: personProperties.email,
         meta: {
-          user_id: this.id,
+          user_id: this.getId(),
           ...propertiesWithMetadata,
         },
       }),
@@ -206,7 +221,10 @@ export class Telemetry {
   }
 }
 
-const telemetry = new Telemetry();
+// The CLI initializes this singleton after early --env-file handling so identity and all other
+// process-global state use the same config directory. Direct Telemetry instances retain eager
+// initialization for backward compatibility.
+const telemetry = new Telemetry(false);
 
 // Use Symbol.for to ensure the same symbol across module reloads (e.g., in tests).
 // This prevents MaxListenersExceededWarning when tests use vi.resetModules().
