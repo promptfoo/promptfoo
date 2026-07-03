@@ -280,6 +280,13 @@ describe('Risk Scoring', () => {
       expect(systemScore.distribution.informational).toBe(2);
       expect(systemScore.distribution.low).toBe(0);
       expect(systemScore.distribution.medium).toBe(1);
+      expect(
+        systemScore.distribution.informational +
+          systemScore.distribution.low +
+          systemScore.distribution.medium +
+          systemScore.distribution.high +
+          systemScore.distribution.critical,
+      ).toBe(3);
     });
   });
 

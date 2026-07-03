@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
-import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import {
+  CLOUD_API_HOST,
+  CloudConfig,
+  cloudConfig,
+  SHARING_CUTOFF_DATE,
+} from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -333,6 +338,36 @@ describe('CloudConfig', () => {
       );
     });
 
+    it('should set sharing to false when user is created exactly on the cutoff date', async () => {
+      const cutoffResponse = {
+        ...mockResponse,
+        hasActiveLicense: false,
+        user: {
+          ...mockResponse.user,
+          createdAt: new Date(SHARING_CUTOFF_DATE.getTime()),
+        },
+      };
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(cutoffResponse),
+        text: () => Promise.resolve(JSON.stringify(cutoffResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: false,
+          }),
+        }),
+      );
+    });
+
     it('should preserve existing sharing value when public cloud omits hasActiveLicense', async () => {
       // Pre-set sharing to true to verify it is preserved
       vi.mocked(readGlobalConfig).mockReturnValue({
@@ -389,7 +424,7 @@ describe('CloudConfig', () => {
         name: 'On-Prem User',
         email: 'user@example.com',
         // Account created well after the public-cloud grandfathering cutoff.
-        createdAt: new Date('2026-04-01T00:00:00Z'),
+        createdAt: new Date(SHARING_CUTOFF_DATE.getTime() + 24 * 60 * 60 * 1000),
         updatedAt: new Date('2026-04-01T00:00:00Z'),
       },
       organization: {

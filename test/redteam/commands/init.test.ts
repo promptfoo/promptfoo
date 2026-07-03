@@ -176,6 +176,12 @@ describe('renderRedteamConfig', () => {
 });
 
 describe('redteamInit', () => {
+  const SELECT_PROMPT_TYPE = 'prompt_model_chatbot';
+  const SELECT_RUN_TIMING = 'now';
+  const SELECT_MODEL_ID = 'openai:gpt-5-mini';
+  const SELECT_PLUGINS = 'default';
+  const SELECT_STRATEGIES = 'default';
+
   let originalExitCode: number | string | null | undefined;
 
   beforeEach(() => {
@@ -186,11 +192,11 @@ describe('redteamInit', () => {
 
     vi.mocked(input).mockResolvedValue('target');
     vi.mocked(select)
-      .mockResolvedValueOnce('prompt_model_chatbot')
-      .mockResolvedValueOnce('now')
-      .mockResolvedValueOnce('openai:gpt-5-mini')
-      .mockResolvedValueOnce('default')
-      .mockResolvedValueOnce('default');
+      .mockResolvedValueOnce(SELECT_PROMPT_TYPE)
+      .mockResolvedValueOnce(SELECT_RUN_TIMING)
+      .mockResolvedValueOnce(SELECT_MODEL_ID)
+      .mockResolvedValueOnce(SELECT_PLUGINS)
+      .mockResolvedValueOnce(SELECT_STRATEGIES);
     vi.mocked(editor).mockResolvedValue('User query: {{prompt}}');
     vi.mocked(confirm).mockResolvedValue(true);
     vi.mocked(readGlobalConfig).mockReturnValue({ hasHarmfulRedteamConsent: true } as any);
