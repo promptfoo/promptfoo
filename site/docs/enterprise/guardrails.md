@@ -128,7 +128,7 @@ if (result.action === 'block' || result.action === 'error') {
 }
 ```
 
-Gate the model call on the aggregate `action`: `allow`, `log`, `warn`, `block`, or `error`. Choose an explicit policy for `warn` and `error`; do not let either fall through by accident. The endpoint evaluates every active guardrail attached to the target ID and also returns `severity`, `guardrailResults`, and `latencyMs`. A transforming policy can return `sanitizedContent`. Keep the per-guardrail results for audit and debugging instead of reducing the response to a boolean. See the [`POST /api/v1/guardrails/{id}/evaluate` endpoint](/docs/api-reference/#tag/guardrails) in the API reference for the full request and response schema.
+Gate the model call on the aggregate `action`: `allow`, `log`, `warn`, `block`, or `error`. Choose an explicit policy for `warn` and `error`; do not let either fall through by accident. The endpoint evaluates every active guardrail attached to the target ID and also returns `severity`, `guardrailResults`, and `latencyMs`. A transforming policy can return `sanitizedContent`. Keep the per-guardrail results for audit and debugging instead of reducing the response to a boolean. See the [`POST /api/v1/guardrails/{id}/evaluate` endpoint](https://www.promptfoo.dev/docs/api-reference/#tag/guardrails) in the API reference for the full request and response schema.
 
 ### Parallel Execution
 
