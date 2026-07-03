@@ -39,6 +39,13 @@ interface CliState {
    */
   _retryErrorResultIds?: string[];
 
+  /**
+   * Snapshot of ALL result IDs that existed before a retry ran. Used to count only
+   * rows newly persisted by this retry as replacements, so a pre-existing duplicate
+   * success at the same (evalId, testIdx, promptIdx) is not miscounted.
+   */
+  _retryPreexistingResultIds?: string[];
+
   // debug log file
   debugLogFile?: string;
 

@@ -245,4 +245,58 @@ describe('evaluation replay helpers', () => {
     expect(JSON.stringify(selection)).not.toContain('secret-value');
     expect(selection.tests[0].fingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
+
+  // Fix 8 (thread 3481053724): two identical selected tests at [0, 1] used to
+  // collapse to [1, 1] after an unrelated test was inserted before them; both
+  // selection entries mapped to the first matching fingerprint.
+  it('restores duplicate identical selected tests to distinct indices after insertion', () => {
+    const identical = { vars: { input: 'same' } };
+    const original = [identical, { ...identical }];
+    const selection = createTestCaseSelection(original, [0, 1]);
+
+    const reordered = [
+      { vars: { input: 'inserted' } },
+      { vars: { input: 'same' } },
+      { vars: { input: 'same' } },
+    ];
+    const restored = restoreTestCaseSelection(reordered, selection);
+    expect(restored).toHaveLength(2);
+    expect(new Set(restored).size).toBe(2);
+    expect([...restored].sort((a, b) => a - b)).toEqual([1, 2]);
+  });
+
+  it('keeps distinct duplicate rows one-to-one even when an unselected duplicate exists', () => {
+    const tests = [
+      { vars: { input: 'dup' } },
+      { vars: { input: 'dup' } },
+      { vars: { input: 'dup' } },
+    ];
+    // Select only indices 1 and 2; the unselected duplicate at 0 must not be consumed.
+    const selection = createTestCaseSelection(tests, [1, 2]);
+    expect(restoreTestCaseSelection(tests, selection)).toEqual([1, 2]);
+  });
+
+  // Fix 6 (thread 3481053714): the raw JSON.stringify prompt fingerprint threw on
+  // bigint/circular prompt config and rejected credential rotation.
+  it('fingerprints prompt config with bigint and circular references without throwing', () => {
+    const circular: Record<string, unknown> = { limit: 1n };
+    circular.self = circular;
+    const prompts = [{ raw: 'p', label: 'P', config: circular }];
+
+    let selection: ReturnType<typeof createPromptSelection> | undefined;
+    expect(() => {
+      selection = createPromptSelection(prompts);
+    }).not.toThrow();
+    expect(selection?.prompts[0].fingerprint).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('allows prompt-config credential rotation without rejecting replay', () => {
+    const selection = createPromptSelection([
+      { raw: 'p', label: 'P', config: { apiKey: 'old-secret' } },
+    ]);
+    expect(JSON.stringify(selection)).not.toContain('old-secret');
+    expect(() =>
+      applyPromptSelection([{ raw: 'p', label: 'P', config: { apiKey: 'new-secret' } }], selection),
+    ).not.toThrow();
+  });
 });

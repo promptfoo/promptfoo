@@ -74,6 +74,7 @@ vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
   assertErrorResultsReplaced: vi.fn().mockResolvedValue(undefined),
   deleteErrorResults: vi.fn(),
+  getAllResultIds: vi.fn().mockResolvedValue([]),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
 }));
@@ -1474,7 +1475,7 @@ describe('evalCommand', () => {
         { loadEnvFiles: true },
       );
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
-      expect(assertErrorResultsReplaced).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(assertErrorResultsReplaced).toHaveBeenCalledWith(['result-1', 'result-2'], []);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
       latestSpy.mockRestore();

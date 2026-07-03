@@ -13,7 +13,9 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import {
+  assertErrorResultsReplaced,
   deleteErrorResults,
+  getAllResultIds,
   getErrorResultIds,
   recalculatePromptMetrics,
   retryCommand,
@@ -1598,6 +1600,73 @@ describe('retry command', () => {
 
       // Null score should be treated as 0
       expect(evalRecord.prompts[0].metrics?.score).toBe(0.5);
+    });
+  });
+
+  // Fix 4 (thread 3481053693): duplicate prompt selection legitimately produces
+  // multiple rows with the same (evalId, testIdx, promptIdx) key. A pre-existing
+  // duplicate success must NOT be miscounted as this retry's replacement.
+  describe('assertErrorResultsReplaced with duplicate prompt selection', () => {
+    const mockProvider = { id: 'test-provider' };
+
+    async function insertRow(
+      evalId: string,
+      id: string,
+      failureReason: ResultFailureReason,
+      success: boolean,
+    ) {
+      const db = await getDb();
+      await db.insert(evalResultsTable).values([
+        {
+          id,
+          evalId,
+          // Duplicate prompt selection: both rows share the same execution key.
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success,
+          score: success ? 1 : 0,
+          failureReason,
+          namedScores: {},
+        },
+      ]);
+    }
+
+    it('fails closed when only a pre-existing duplicate success shares the retry key', async () => {
+      const evalId = uniqueEvalId();
+      await Eval.create({}, [], { id: evalId });
+      // One old duplicate success + one stale error at the SAME key 0:0.
+      await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
+      await insertRow(evalId, `${evalId}-stale-error`, ResultFailureReason.ERROR, false);
+
+      const errorResultIds = await getErrorResultIds(evalId);
+      const preexistingResultIds = await getAllResultIds(evalId);
+      expect(errorResultIds).toEqual([`${evalId}-stale-error`]);
+      expect(preexistingResultIds).toHaveLength(2);
+
+      // No new row persisted by "this retry" -> must fail closed, preserving the error.
+      await expect(
+        assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
+      ).rejects.toThrow('Retry produced no persisted replacement');
+    });
+
+    it('passes once this retry persists a genuinely new replacement row', async () => {
+      const evalId = uniqueEvalId();
+      await Eval.create({}, [], { id: evalId });
+      await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
+      await insertRow(evalId, `${evalId}-stale-error`, ResultFailureReason.ERROR, false);
+
+      const errorResultIds = await getErrorResultIds(evalId);
+      const preexistingResultIds = await getAllResultIds(evalId);
+
+      // Simulate the retry persisting a fresh replacement row at the same key.
+      await insertRow(evalId, `${evalId}-new-row`, ResultFailureReason.NONE, true);
+
+      await expect(
+        assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
+      ).resolves.toBeUndefined();
     });
   });
 });

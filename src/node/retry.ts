@@ -210,6 +210,24 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
 }
 
 /**
+ * Snapshot of every result ID that exists for an evaluation. Captured before a
+ * retry so {@link assertErrorResultsReplaced} can distinguish rows newly persisted
+ * by the retry from pre-existing rows (including older duplicate successes) that
+ * share the same (evalId, testIdx, promptIdx) execution key.
+ */
+export async function getAllResultIds(evalId: string): Promise<string[]> {
+  const db = await getDb();
+
+  const rows = await db
+    .select({ id: evalResultsTable.id })
+    .from(evalResultsTable)
+    .where(eq(evalResultsTable.evalId, evalId))
+    .all();
+
+  return rows.map((r) => r.id);
+}
+
+/**
  * Deletes ERROR results after successful retry.
  * Uses batch delete for better performance.
  */
@@ -246,8 +264,18 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   logger.debug(`Deleted ${resultIds.length} error results from database`);
 }
 
-/** Ensure every stale ERROR row has a persisted row for the same execution index. */
-export async function assertErrorResultsReplaced(resultIds: string[]): Promise<void> {
+/**
+ * Ensure every stale ERROR row has a row NEWLY persisted by this retry for the same
+ * execution index. `preexistingResultIds` is the snapshot of result IDs captured
+ * before the retry ran; only rows absent from that snapshot count as replacements,
+ * so an older duplicate success sharing the same (evalId, testIdx, promptIdx) key
+ * (which resume can legitimately leave untouched) is never miscounted as this
+ * retry's replacement.
+ */
+export async function assertErrorResultsReplaced(
+  resultIds: string[],
+  preexistingResultIds: string[] = [],
+): Promise<void> {
   if (resultIds.length === 0) {
     return;
   }
@@ -273,7 +301,9 @@ export async function assertErrorResultsReplaced(resultIds: string[]): Promise<v
     throw new Error('Could not verify all original ERROR rows after retry. They were preserved.');
   }
 
-  const staleIds = new Set(resultIds);
+  // A replacement must be a row this retry newly persisted: exclude both the stale
+  // ERROR rows and every other row that already existed before the retry.
+  const preexistingIds = new Set([...resultIds, ...preexistingResultIds]);
   const replacementCounts = new Map<string, number>();
   const testIndicesByEval = new Map<string, Set<number>>();
   for (const row of staleRows) {
@@ -302,7 +332,7 @@ export async function assertErrorResultsReplaced(resultIds: string[]): Promise<v
         )
         .all();
       for (const row of candidateRows) {
-        if (!staleIds.has(row.id)) {
+        if (!preexistingIds.has(row.id)) {
           const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
           replacementCounts.set(key, (replacementCounts.get(key) ?? 0) + 1);
         }
@@ -511,6 +541,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     return originalEval;
   }
 
+  // Snapshot every existing result ID BEFORE the retry so replacement verification
+  // only credits rows this retry newly persisted (not pre-existing duplicates).
+  const preexistingResultIds = await getAllResultIds(evalId);
+
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
@@ -602,7 +636,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
 
-    await assertErrorResultsReplaced(errorResultIds);
+    await assertErrorResultsReplaced(errorResultIds, preexistingResultIds);
 
     let errorRowsDeleted = false;
     try {

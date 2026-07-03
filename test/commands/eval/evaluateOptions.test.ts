@@ -293,6 +293,29 @@ describe('evaluateOptions behavior', () => {
       expect(clearResultsSpy).not.toHaveBeenCalled();
     });
 
+    it('should persist the directory of an auto-discovered default config as configBasePath', async () => {
+      // `promptfoo eval` without -c: resolveConfigs leaves basePath empty even
+      // though defaultConfigPath names the loaded file (fix 7, thread 3481053720).
+      const autoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-autoconfig-'));
+      const autoConfigPath = path.join(autoDir, 'promptfooconfig.yaml');
+      fs.writeFileSync(
+        autoConfigPath,
+        yaml.dump({
+          providers: ['echo'],
+          prompts: ['Hello {{input}}'],
+          tests: [{ vars: { input: 'auto' } }],
+        }),
+      );
+
+      try {
+        await doEval({ table: false, write: false }, {}, autoConfigPath, {});
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(initialEval.runtimeOptions?.configBasePath).toBe(path.resolve(autoDir));
+      } finally {
+        fs.rmSync(autoDir, { recursive: true, force: true });
+      }
+    });
+
     it('should apply a test suite transform before evaluation', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-transform.yaml', {
         providers: [{ id: 'openai:gpt-4o-mini' }],

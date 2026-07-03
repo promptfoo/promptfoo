@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   redactAzureBlobSasTokens,
+  redactSecretLeaves,
   restoreAzureBlobSasTokens,
   sanitizeBody,
   sanitizeObject,
   sanitizeRuntimeOptions,
   sanitizeUrl,
   sanitizeUrlEncodedString,
+  stableStringify,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -20,6 +22,68 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('redactSecretLeaves', () => {
+  it('preserves non-secret auth/session structure while redacting secret leaves', () => {
+    const result = redactSecretLeaves({
+      url: 'https://api.test/chat',
+      auth: {
+        type: 'oauth2',
+        grantType: 'client_credentials',
+        tokenUrl: 'https://auth.test/token',
+        scopes: ['read', 'write'],
+        clientSecret: 'sentinel-secret',
+        token: 'sentinel-token',
+      },
+      session: { source: 'response', header: 'x-session-id', parser: 'json' },
+    }) as any;
+
+    expect(result.auth).toEqual({
+      type: 'oauth2',
+      grantType: 'client_credentials',
+      tokenUrl: 'https://auth.test/token',
+      scopes: ['read', 'write'],
+      clientSecret: '[REDACTED]',
+      token: '[REDACTED]',
+    });
+    expect(result.session).toEqual({ source: 'response', header: 'x-session-id', parser: 'json' });
+    expect(JSON.stringify(result)).not.toContain('sentinel');
+  });
+
+  it('redacts a non-structural secret container whole', () => {
+    const result = redactSecretLeaves({
+      credentials: { username: 'user', password: 'sentinel-pw' },
+    }) as any;
+    expect(result.credentials).toBe('[REDACTED]');
+    expect(JSON.stringify(result)).not.toContain('user');
+  });
+
+  it('is cycle- and BigInt-safe', () => {
+    const circular: Record<string, unknown> = { limit: 1n, name: 'x' };
+    circular.self = circular;
+    const result = redactSecretLeaves(circular) as any;
+    expect(result.limit).toEqual({ __promptfooBigInt: '1' });
+    expect(result.self).toBe('[Circular]');
+    expect(result.name).toBe('x');
+  });
+});
+
+describe('stableStringify', () => {
+  it('is deterministic regardless of key order', () => {
+    expect(stableStringify({ b: 1, a: 2 })).toBe(stableStringify({ a: 2, b: 1 }));
+  });
+
+  it('omits undefined properties like JSON.stringify', () => {
+    expect(stableStringify({ a: 1, b: undefined })).toBe(stableStringify({ a: 1 }));
+  });
+
+  it('serializes bigint and circular references without throwing', () => {
+    const circular: Record<string, unknown> = { n: 5n };
+    circular.self = circular;
+    expect(() => stableStringify(circular)).not.toThrow();
+    expect(stableStringify(circular)).toContain('__promptfooBigInt');
+  });
 });
 
 describe('sanitizeRuntimeOptions', () => {

@@ -70,6 +70,7 @@ import { isUuid } from '../util/uuid';
 import {
   assertErrorResultsReplaced,
   deleteErrorResults,
+  getAllResultIds,
   getErrorResultIds,
   recalculatePromptMetrics,
 } from './retry';
@@ -471,6 +472,7 @@ export async function doEval(
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
     let retryErrorResultIds: string[] | undefined;
+    let retryPreexistingResultIds: string[] | undefined;
     const resumeId =
       resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
@@ -529,6 +531,10 @@ export async function doEval(
         logger.info('✅ No ERROR results found in the latest evaluation');
         return latestEval;
       }
+
+      // Snapshot every pre-existing result ID so replacement verification credits
+      // only rows this retry newly persists, never a pre-existing duplicate success.
+      retryPreexistingResultIds = await getAllResultIds(latestEval.id);
 
       logger.info(`Found ${retryErrorResultIds.length} ERROR results to retry`);
 
@@ -593,6 +599,7 @@ export async function doEval(
       if (retryErrorResultIds) {
         cliState.retryMode = true;
         cliState._retryErrorResultIds = retryErrorResultIds;
+        cliState._retryPreexistingResultIds = retryPreexistingResultIds ?? [];
       }
     }
 
@@ -881,7 +888,16 @@ export async function doEval(
     }
 
     const cloudPermissionConfig = validatedProviderSelection
-      ? buildProviderPermissionConfig(config, validatedProviderSelection)
+      ? buildProviderPermissionConfig(config, validatedProviderSelection, {
+          // Effective providers a filtered run can still execute beyond the
+          // selected matrix: resolved per-test `provider` overrides, defaultTest
+          // and grader providers, plus the red-team provider. Without these the
+          // projected permission boundary would authorize only the top-level
+          // matrix while `callActiveProvider` runs an unauthorized override.
+          tests: testSuite.tests,
+          defaultTest: testSuite.defaultTest,
+          redteam: config.redteam,
+        })
       : config;
     await checkCloudPermissions(cloudPermissionConfig as UnifiedConfig);
 
@@ -981,9 +997,21 @@ export async function doEval(
 
     const effectiveConfigEnvPaths =
       cliEnvPaths ?? resolveEnvPathsForPersistence(commandLineOptions?.envPath);
+    // `resolveConfigs` leaves basePath empty for an auto-discovered default config
+    // (`promptfoo eval` without -c) even though `defaultConfigPath` names the loaded
+    // file, and for a purely in-memory default there is no file at all. Persist the
+    // directory of the auto-discovered config (or cwd for an in-memory default) so a
+    // resume/retry from another directory resolves relative provider/prompt/test/env
+    // paths against the original base instead of the new cwd.
+    const effectiveConfigBasePath =
+      _basePath && _basePath.length > 0
+        ? path.resolve(_basePath)
+        : defaultConfigPath
+          ? path.resolve(path.dirname(defaultConfigPath))
+          : path.resolve('.');
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
-      ...(_basePath ? { configBasePath: path.resolve(_basePath) } : {}),
+      ...(effectiveConfigBasePath ? { configBasePath: effectiveConfigBasePath } : {}),
       ...(effectiveConfigEnvPaths ? { configEnvPaths: effectiveConfigEnvPaths } : {}),
       ...(effectiveConfigEnvPaths ? { configEnvSource: cliEnvPaths ? 'cli' : 'config' } : {}),
       ...(providerFilter ? { providerFilter } : {}),
@@ -1080,7 +1108,7 @@ export async function doEval(
       // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
-        await assertErrorResultsReplaced(errorResultIds);
+        await assertErrorResultsReplaced(errorResultIds, cliState._retryPreexistingResultIds ?? []);
         try {
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
@@ -1098,6 +1126,7 @@ export async function doEval(
       cleanupHandler(); // Always cleanup, even if evaluate() throws
       if (retryErrors) {
         delete cliState._retryErrorResultIds;
+        delete cliState._retryPreexistingResultIds;
         cliState.retryMode = false;
       }
       if (resumeEval) {

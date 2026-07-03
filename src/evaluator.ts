@@ -91,6 +91,7 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { redactSecretLeaves } from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2249,84 +2250,14 @@ function canonicalizeSelectionFingerprintValue(
   }
 }
 
-const TEST_SELECTION_SECRET_FIELDS = new Set([
-  'accesskeyid',
-  'accesstoken',
-  'apikey',
-  'apisecret',
-  'auth',
-  'authorization',
-  'authtoken',
-  'bearer',
-  'bearertoken',
-  'clientsecret',
-  'cookie',
-  'credentials',
-  'idtoken',
-  'passphrase',
-  'passwd',
-  'password',
-  'privatekey',
-  'pwd',
-  'refreshtoken',
-  'secret',
-  'secretaccesskey',
-  'secretkey',
-  'secrets',
-  'session',
-  'sessionid',
-  'setcookie',
-  'sig',
-  'signature',
-  'token',
-  'xapikey',
-  'xauth',
-  'xaccesstoken',
-  'xauthtoken',
-  'xsecret',
-]);
-
-function isTestSelectionSecretField(key: string): boolean {
-  const normalized = key.toLowerCase().replaceAll(/[-_.]/g, '');
-  return TEST_SELECTION_SECRET_FIELDS.has(normalized) || normalized.endsWith('apikey');
-}
-
-function sanitizeProviderUrlForSelection(value: string): string {
-  try {
-    const url = new URL(value);
-    if (url.password) {
-      url.password = '[REDACTED]';
-    }
-    for (const key of url.searchParams.keys()) {
-      if (isTestSelectionSecretField(key)) {
-        url.searchParams.set(key, '[REDACTED]');
-      }
-    }
-    return url.toString();
-  } catch {
-    return value;
-  }
-}
-
-function sanitizeProviderForTestSelection(value: unknown, key?: string): unknown {
-  if (key && isTestSelectionSecretField(key)) {
-    return '[REDACTED]';
-  }
-  if (typeof value === 'string' && key && /^(?:base)?url$/i.test(key)) {
-    return sanitizeProviderUrlForSelection(value);
-  }
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeProviderForTestSelection(item));
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([childKey, childValue]) => [
-      childKey,
-      sanitizeProviderForTestSelection(childValue, childKey),
-    ]),
-  );
+// Redact credentials from a per-test provider reference before fingerprinting.
+// Shares the canonical leaf-redacting sanitizer with the top-level provider
+// fingerprint so both preserve non-secret authentication/session STRUCTURE (auth
+// type, grant type, token URL, placement, scopes, session method) while redacting
+// only the secret leaves. Preserving that structure lets replay fail closed when
+// a bearer→api-key swap or token-endpoint change drifts the test provider.
+function sanitizeProviderForTestSelection(value: unknown): unknown {
+  return redactSecretLeaves(value);
 }
 
 function sanitizeAssertionProviderForSelection(assertion: unknown): unknown {
@@ -2427,18 +2358,13 @@ export function restoreTestCaseSelection(
   if (!selection || !Array.isArray(selection.tests)) {
     throw new Error('Stored test case selection is invalid.');
   }
-  const fingerprintsByIndex = new Map<number, string>();
-  const fingerprintAt = (index: number) => {
-    let fingerprint = fingerprintsByIndex.get(index);
-    if (fingerprint === undefined) {
-      fingerprint = getTestCaseFingerprint(testCases[index]);
-      fingerprintsByIndex.set(index, fingerprint);
-    }
-    return fingerprint;
-  };
-  const restoredIndices: Array<number | undefined> = new Array(selection.tests.length);
-  const unresolvedByFingerprint = new Map<string, number[]>();
-
+  // Distinct original indices to restore. Entries repeating the SAME original
+  // index are a deliberate repeat of one logical row and must resolve to the same
+  // restored index; entries with DISTINCT original indices — even when their
+  // content (fingerprint) is identical — are separate rows and must consume
+  // distinct restored indices one-to-one so duplicate provenance is preserved.
+  const fingerprintByOriginalIndex = new Map<number, string>();
+  const distinctOriginalIndicesByFingerprint = new Map<string, number[]>();
   selection.tests.forEach((entry, selectionIndex) => {
     if (
       !Number.isSafeInteger(entry.index) ||
@@ -2448,36 +2374,69 @@ export function restoreTestCaseSelection(
     ) {
       throw new Error(`Stored test case selection entry ${selectionIndex} is invalid.`);
     }
-    if (entry.index < testCases.length && fingerprintAt(entry.index) === entry.fingerprint) {
-      restoredIndices[selectionIndex] = entry.index;
-      return;
+    const existingFingerprint = fingerprintByOriginalIndex.get(entry.index);
+    if (existingFingerprint === undefined) {
+      fingerprintByOriginalIndex.set(entry.index, entry.fingerprint);
+      const group = distinctOriginalIndicesByFingerprint.get(entry.fingerprint) ?? [];
+      group.push(entry.index);
+      distinctOriginalIndicesByFingerprint.set(entry.fingerprint, group);
+    } else if (existingFingerprint !== entry.fingerprint) {
+      // Same original index reported with two different fingerprints is corrupt.
+      throw new Error(`Stored test case selection entry ${selectionIndex} is invalid.`);
     }
-    const unresolvedEntries = unresolvedByFingerprint.get(entry.fingerprint) ?? [];
-    unresolvedEntries.push(selectionIndex);
-    unresolvedByFingerprint.set(entry.fingerprint, unresolvedEntries);
   });
 
-  for (let index = 0; index < testCases.length && unresolvedByFingerprint.size > 0; index++) {
-    const fingerprint = fingerprintAt(index);
-    const unresolvedEntries = unresolvedByFingerprint.get(fingerprint);
-    if (unresolvedEntries) {
-      for (const selectionIndex of unresolvedEntries) {
-        restoredIndices[selectionIndex] = index;
+  // Candidate resolved indices per needed fingerprint, in ascending config order.
+  const candidatesByFingerprint = new Map<string, number[]>();
+  const neededFingerprints = new Set(distinctOriginalIndicesByFingerprint.keys());
+  for (let index = 0; index < testCases.length && neededFingerprints.size > 0; index++) {
+    const fingerprint = getTestCaseFingerprint(testCases[index]);
+    if (!neededFingerprints.has(fingerprint)) {
+      continue;
+    }
+    const candidates = candidatesByFingerprint.get(fingerprint) ?? [];
+    candidates.push(index);
+    candidatesByFingerprint.set(fingerprint, candidates);
+  }
+
+  // For each fingerprint group, map its distinct original indices (ascending) to
+  // distinct candidate indices (ascending) with a monotonic, fixed-point-preferring
+  // greedy: each original index takes the earliest still-available candidate that is
+  // not before it, while reserving enough later candidates for the remaining rows.
+  const restoredByOriginalIndex = new Map<number, number>();
+  for (const [fingerprint, originalIndicesRaw] of distinctOriginalIndicesByFingerprint) {
+    const originalIndices = [...originalIndicesRaw].sort((a, b) => a - b);
+    const candidates = candidatesByFingerprint.get(fingerprint) ?? [];
+    const groupSize = originalIndices.length;
+    let position = -1;
+    for (let j = 0; j < groupSize; j++) {
+      const maxPosition = candidates.length - (groupSize - j);
+      let candidatePosition = position + 1;
+      while (
+        candidatePosition < maxPosition &&
+        candidates[candidatePosition] < originalIndices[j]
+      ) {
+        candidatePosition++;
       }
-      unresolvedByFingerprint.delete(fingerprint);
+      if (candidatePosition >= candidates.length) {
+        // Fewer surviving rows than distinct selected rows for this fingerprint;
+        // leave the rest unassigned so the missing check below fails closed.
+        break;
+      }
+      restoredByOriginalIndex.set(originalIndices[j], candidates[candidatePosition]);
+      position = candidatePosition;
     }
   }
 
-  const missingSelectionIndex = restoredIndices.findIndex((index) => index === undefined);
-  if (missingSelectionIndex !== -1) {
-    const entry = selection.tests[missingSelectionIndex];
-    if (entry) {
+  return selection.tests.map((entry, selectionIndex) => {
+    const restored = restoredByOriginalIndex.get(entry.index);
+    if (restored === undefined) {
       throw new Error(
-        `Selected test case ${missingSelectionIndex} (original index ${entry.index}) no longer exists in the resolved configuration. The evaluation was not changed.`,
+        `Selected test case ${selectionIndex} (original index ${entry.index}) no longer exists in the resolved configuration. The evaluation was not changed.`,
       );
     }
-  }
-  return restoredIndices as number[];
+    return restored;
+  });
 }
 
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {

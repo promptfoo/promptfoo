@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { getDb } from '../../src/database/index';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
 import {
+  assertErrorResultsReplaced,
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
@@ -831,5 +833,54 @@ describe('retryCommand', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Cloud sync failed. Run promptfoo share eval-123 to retry manually.',
     );
+  });
+});
+
+// Fix 4 (thread 3481053693): a pre-existing duplicate success at the same
+// (evalId, testIdx, promptIdx) key must not be miscounted as this retry's
+// replacement. A retry that resume skips (persisting no new row) must fail closed
+// so the stale ERROR row is preserved.
+describe('assertErrorResultsReplaced replacement accounting', () => {
+  function sequencedDb(results: Array<Array<Record<string, unknown>>>) {
+    let call = 0;
+    return {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            all: async () => results[call++] ?? [],
+          }),
+        }),
+      }),
+    };
+  }
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('fails closed when only a pre-existing duplicate success shares the retry key', async () => {
+    const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1 };
+    const oldDuplicateSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1 };
+    vi.mocked(getDb).mockResolvedValue(
+      sequencedDb([[staleError], [staleError, oldDuplicateSuccess]]) as any,
+    );
+
+    await expect(
+      // The pre-retry snapshot contains both the stale error and the old success.
+      assertErrorResultsReplaced(['err'], ['err', 'old-success']),
+    ).rejects.toThrow('Retry produced no persisted replacement');
+  });
+
+  it('passes when this retry persists a genuinely new replacement row', async () => {
+    const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1 };
+    const oldDuplicateSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1 };
+    const newlyPersisted = { evalId: 'e', id: 'new-row', testIdx: 0, promptIdx: 1 };
+    vi.mocked(getDb).mockResolvedValue(
+      sequencedDb([[staleError], [staleError, oldDuplicateSuccess, newlyPersisted]]) as any,
+    );
+
+    await expect(
+      assertErrorResultsReplaced(['err'], ['err', 'old-success']),
+    ).resolves.toBeUndefined();
   });
 });

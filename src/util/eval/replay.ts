@@ -1,5 +1,6 @@
 import { generateIdFromPrompt } from '../../models/prompt';
 import { sha256 } from '../createHash';
+import { redactSecretLeaves, stableStringify } from '../sanitizer';
 
 interface PersistedPrompt {
   id?: string;
@@ -19,11 +20,11 @@ interface PromptSelection {
 }
 
 function getPromptFingerprint(prompt: ReplayPrompt): string {
-  return sha256(
-    JSON.stringify(prompt, (_key, value) =>
-      typeof value === 'function' ? Function.prototype.toString.call(value) : value,
-    ),
-  );
+  // Raw JSON.stringify throws on bigint/circular prompt config and fingerprints
+  // raw credential values (so rotating a prompt-config secret would reject an
+  // otherwise-equivalent replay). Use the shared cycle/BigInt-safe canonicalizer
+  // that redacts only credential leaves while preserving semantic prompt config.
+  return sha256(stableStringify(redactSecretLeaves(prompt)));
 }
 
 export function createPromptSelection(prompts: ReplayPrompt[]): PromptSelection {

@@ -779,6 +779,191 @@ export const sanitizeBody = sanitizeObject;
 export const sanitizeHeaders = sanitizeObject;
 export const sanitizeQueryParams = sanitizeObject;
 
+/**
+ * Container keys whose SHAPE is not a secret and must survive redaction. Their
+ * secret leaves (token, clientSecret, password, …) are still redacted, but the
+ * structural fields around them (auth type, grant type, token URL, header
+ * placement, key name, scopes, session URL/method/parser) are preserved. This is
+ * what lets replay fingerprints notice a bearer→api-key or endpoint change and
+ * lets shared configs keep their authentication shape without leaking credentials.
+ */
+const STRUCTURE_PRESERVING_SECRET_KEYS = new Set(['auth', 'session']);
+
+// Secret field names recognized by the replay/share canonicalizer beyond
+// SECRET_FIELD_NAMES, kept as a superset of the historical per-fingerprint sets so
+// switching to the shared canonicalizer never weakens redaction.
+const REPLAY_EXTRA_SECRET_FIELDS = new Set(['accesskeyid', 'secretaccesskey']);
+
+function normalizeReplayFieldName(fieldName: string): string {
+  // Strip separators AND dots so nested keys (`a.b.token`) normalize like the
+  // historical selection sanitizer did.
+  return fieldName.toLowerCase().replace(/[-_.\s=]/g, '');
+}
+
+/**
+ * Whether a field name denotes a credential leaf for replay/share redaction. A
+ * superset of {@link isSecretField} so the shared canonicalizer never redacts less
+ * than the previous provider/test fingerprint sanitizers.
+ */
+export function isReplaySecretField(fieldName: string): boolean {
+  const normalized = normalizeReplayFieldName(fieldName);
+  return (
+    isSecretField(fieldName) ||
+    normalized.endsWith('apikey') ||
+    REPLAY_EXTRA_SECRET_FIELDS.has(normalized)
+  );
+}
+
+function isStructurePreservingSecretKey(fieldName: string): boolean {
+  return STRUCTURE_PRESERVING_SECRET_KEYS.has(normalizeReplayFieldName(fieldName));
+}
+
+const URL_KEY_RE = /^(?:base)?url$/i;
+
+/** Redact a primitive (non-object) leaf value based on its key and content. */
+function redactPrimitiveLeaf(value: unknown, key: string | undefined): unknown {
+  if (typeof key === 'string') {
+    if (typeof value === 'string' && URL_KEY_RE.test(key)) {
+      return sanitizeUrl(value);
+    }
+    if (isStructurePreservingSecretKey(key)) {
+      // An `auth`/`session` value that is itself a bare credential string is
+      // redacted; a structural expression (source path, method) is kept.
+      return typeof value === 'string' && looksLikeSecret(value) ? REDACTED : value;
+    }
+    if (isReplaySecretField(key)) {
+      return REDACTED;
+    }
+  }
+  if (typeof value === 'string' && looksLikeSecret(value)) {
+    return REDACTED;
+  }
+  return value;
+}
+
+function redactSecretLeavesInner(
+  value: unknown,
+  key: string | undefined,
+  seen: WeakSet<object>,
+): unknown {
+  if (typeof value === 'bigint') {
+    return { __promptfooBigInt: value.toString() };
+  }
+  if (typeof value === 'function') {
+    return { __promptfooFunction: Function.prototype.toString.call(value) };
+  }
+  if (typeof value === 'symbol') {
+    return { __promptfooSymbol: String(value) };
+  }
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value !== 'object') {
+    return redactPrimitiveLeaf(value, key);
+  }
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => redactSecretLeavesInner(item, key, seen));
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    // A non-structural secret CONTAINER (e.g. `credentials: {...}`) is redacted
+    // whole, matching the previous behavior. `auth`/`session` fall through and
+    // recurse so their non-secret structure survives.
+    if (
+      typeof key === 'string' &&
+      isReplaySecretField(key) &&
+      !isStructurePreservingSecretKey(key)
+    ) {
+      return REDACTED;
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([childKey, childValue]) => [
+        childKey,
+        redactSecretLeavesInner(childValue, childKey, seen),
+      ]),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/**
+ * Canonical, credential-aware, cycle/BigInt-safe redactor shared by replay
+ * fingerprints (provider + test) and the remote share projection. Unlike
+ * {@link sanitizeObject}, it redacts only credential LEAVES and preserves the
+ * surrounding structure, including the non-secret shape of `auth`/`session`
+ * containers. Functions, symbols, BigInts, and circular references are replaced
+ * with stable structural markers so the result is always JSON-serializable.
+ */
+export function redactSecretLeaves<T>(value: T): T {
+  return redactSecretLeavesInner(value, undefined, new WeakSet<object>()) as T;
+}
+
+function stableStringifyInner(value: unknown, seen: WeakSet<object>): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'bigint') {
+    return JSON.stringify({ __promptfooBigInt: value.toString() });
+  }
+  if (typeof value === 'function') {
+    return JSON.stringify({ __promptfooFunction: Function.prototype.toString.call(value) });
+  }
+  if (typeof value === 'symbol') {
+    return JSON.stringify({ __promptfooSymbol: String(value) });
+  }
+  if (typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
+  if (seen.has(value)) {
+    return '"[Circular]"';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      // Match JSON.stringify: an `undefined` array hole serializes as `null`.
+      return `[${value
+        .map((item) => (item === undefined ? 'null' : stableStringifyInner(item, seen)))
+        .join(',')}]`;
+    }
+    if (value instanceof Date) {
+      return JSON.stringify(value.toISOString());
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      // Match JSON.stringify: properties whose value is `undefined` are omitted, so
+      // `{ a, config: undefined }` and `{ a }` share a fingerprint.
+      .filter((childKey) => record[childKey] !== undefined)
+      .map(
+        (childKey) => `${JSON.stringify(childKey)}:${stableStringifyInner(record[childKey], seen)}`,
+      )
+      .join(',')}}`;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/**
+ * Deterministic, cycle/BigInt-safe serialization with sorted keys. Suitable for
+ * hashing config fingerprints without throwing on `bigint`, circular references,
+ * functions, or symbols.
+ */
+export function stableStringify(value: unknown): string {
+  return stableStringifyInner(value, new WeakSet<object>());
+}
+
 function getSecretLookingRawQueryKeys(search: string): Set<string> {
   const secretKeys = new Set<string>();
 
