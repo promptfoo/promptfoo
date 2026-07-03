@@ -62,6 +62,7 @@ const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6-sol'], rates: perMillion(0.5) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.25) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.1) },
+  { models: ['chat-latest'], rates: perMillion(0.5) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.25) },
   { models: ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'], rates: perMillion(0.075) },
