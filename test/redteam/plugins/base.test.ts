@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } f
 import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
-import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
+import {
+  type GeneratedPrompt,
+  RedteamGraderBase,
+  RedteamPluginBase,
+} from '../../../src/redteam/plugins/base';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
@@ -2184,6 +2188,40 @@ describe('RedteamGraderBase', () => {
 
       // All fields should flow through
       expect(tests[0]?.metadata?.pluginConfig).toEqual(fullConfig);
+    });
+
+    it('merges per-prompt metadata from generatePrompts into generated test cases', async () => {
+      // Exercises the generatePrompts() primitive: a subclass can attach
+      // per-prompt metadata to a GeneratedPrompt and generateTests() surfaces it
+      // through promptsToTestCases without disturbing the plugin metadata.
+      class MetadataPlugin extends RedteamPluginBase {
+        readonly id = 'metadata-plugin-id';
+
+        protected async getTemplate(): Promise<string> {
+          return 'template';
+        }
+
+        protected getAssertions(prompt: string): Assertion[] {
+          return [{ type: 'contains', value: prompt }];
+        }
+
+        protected async generatePrompts(): Promise<GeneratedPrompt[]> {
+          return [{ __prompt: 'seeded prompt', metadata: { seededBy: 'test', weight: 3 } }];
+        }
+      }
+
+      const plugin = new MetadataPlugin(testProvider, 'test purpose', 'testVar', {});
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(tests[0]?.vars?.testVar).toBe('seeded prompt');
+      expect(tests[0]?.metadata).toEqual(
+        expect.objectContaining({
+          pluginId: 'metadata-plugin-id',
+          seededBy: 'test',
+          weight: 3,
+        }),
+      );
     });
   });
 
