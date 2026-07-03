@@ -37,6 +37,11 @@ function unquote(value: string): string {
 
 type SectionItem = { description?: string; location?: string };
 
+// While scanning we track an exact list-item match separately from a looser
+// substring match, so a valid prompt whose name *contains* the missing ref
+// (e.g. `- GhostBuster` when `Ghost` is missing) can't steal the location.
+type WorkingItem = SectionItem & { looseLocation?: string };
+
 function refLocation(
   source: PromptReferenceSource,
   line: string,
@@ -62,7 +67,7 @@ function collectSectionItems(
   let inSection = false;
   let itemIndent: number | undefined;
   let promptsIndent: number | undefined;
-  const items: SectionItem[] = [{}];
+  const items: WorkingItem[] = [{}];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -105,10 +110,22 @@ function collectSectionItems(
       promptsIndent = undefined;
       continue;
     }
-    item.location ??= refLocation(source, line, i + 1, ref);
+    const location = refLocation(source, line, i + 1, ref);
+    if (location) {
+      // A block list item whose whole value is the ref is an exact match and
+      // wins; otherwise keep it only as a substring fallback.
+      if (isListItem && unquote(stripped) === ref) {
+        item.location ??= location;
+      } else {
+        item.looseLocation ??= location;
+      }
+    }
   }
 
-  return items;
+  return items.map((item) => ({
+    description: item.description,
+    location: item.location ?? item.looseLocation,
+  }));
 }
 
 /**

@@ -312,6 +312,34 @@ describe('validateTestPromptReferences', () => {
       );
     });
 
+    it('should not let a prompt whose name contains the missing ref steal the location', () => {
+      // `Ghost Extended` is a valid prompt referenced on line 7; the missing
+      // `Ghost` is on line 8. A raw substring match would wrongly report line 7.
+      const promptsWithGhost: Prompt[] = [{ raw: 'x', label: 'Ghost Extended' }];
+      const tests: TestCase[] = [{ description: 'substr', prompts: ['Ghost Extended', 'Ghost'] }];
+      expect(() =>
+        validateTestPromptReferences(tests, promptsWithGhost, undefined, {
+          promptReferenceSources: [
+            {
+              path: 'promptfooconfig.yaml',
+              content: [
+                'prompts:',
+                '  - raw: x',
+                '    label: Ghost Extended',
+                'tests:',
+                '  - description: substr',
+                '    prompts:',
+                '      - Ghost Extended',
+                '      - Ghost',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ).toThrow(
+        /promptfooconfig\.yaml:8:9: Test #1 \("substr"\) references prompt "Ghost" which does not exist/,
+      );
+    });
+
     it('should point at the defaultTest prompt line when tests reference the same missing prompt', () => {
       const defaultTest: Partial<TestCase> = { prompts: ['Missing Prompt'] };
       const tests: TestCase[] = [
