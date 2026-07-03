@@ -13,22 +13,49 @@ function createApiConfig(apiBaseUrl: string): ApiConfig {
 }
 
 describe('mergeApiConfigPersistedState', () => {
-  it('prefers the configured API base URL over a stale local default', () => {
+  it('drops the exact legacy local default without re-persisting the dev port', () => {
     const currentState = createApiConfig('http://localhost:18601');
     const merged = mergeApiConfigPersistedState(
       { apiBaseUrl: 'http://localhost:15500' },
       currentState,
     );
 
+    // Falls back to the environment default and does NOT re-persist, so the dev-only port
+    // never leaks into a later `promptfoo view` session.
     expect(merged.apiBaseUrl).toBe('http://localhost:18601');
-    expect(merged.persistApiBaseUrl).toBe(true);
+    expect(merged.persistApiBaseUrl).toBe(false);
   });
 
-  it('upgrades stale IPv6 loopback defaults to the configured API base URL', () => {
+  it('drops the legacy default with a trailing slash', () => {
     const currentState = createApiConfig('http://localhost:18601');
-    const merged = mergeApiConfigPersistedState({ apiBaseUrl: 'http://[::1]:15500' }, currentState);
+    const merged = mergeApiConfigPersistedState(
+      { apiBaseUrl: 'http://localhost:15500/' },
+      currentState,
+    );
 
     expect(merged.apiBaseUrl).toBe('http://localhost:18601');
+    expect(merged.persistApiBaseUrl).toBe(false);
+  });
+
+  it('preserves explicit loopback aliases on the legacy port as user choices', () => {
+    for (const alias of ['http://127.0.0.1:15500', 'http://[::1]:15500']) {
+      const merged = mergeApiConfigPersistedState(
+        { apiBaseUrl: alias },
+        createApiConfig('http://localhost:18601'),
+      );
+
+      expect(merged.apiBaseUrl).toBe(alias);
+      expect(merged.persistApiBaseUrl).toBe(true);
+    }
+  });
+
+  it('treats a blank persisted API base URL as unset', () => {
+    const currentState = createApiConfig('http://localhost:18601');
+    const merged = mergeApiConfigPersistedState({ apiBaseUrl: '' }, currentState);
+
+    // A blank persisted value must not override the environment default or force persistence.
+    expect(merged.apiBaseUrl).toBe('http://localhost:18601');
+    expect(merged.persistApiBaseUrl).toBe(false);
   });
 
   it('keeps a custom persisted API base URL', () => {
@@ -42,14 +69,17 @@ describe('mergeApiConfigPersistedState', () => {
     expect(merged.persistApiBaseUrl).toBe(true);
   });
 
-  it('keeps the local default when there is no configured API base URL', () => {
+  it('drops the legacy default to same-origin when there is no environment default', () => {
     const currentState = createApiConfig('');
     const merged = mergeApiConfigPersistedState(
       { apiBaseUrl: 'http://localhost:15500' },
       currentState,
     );
 
-    expect(merged.apiBaseUrl).toBe('http://localhost:15500');
+    // Under `promptfoo view` (no dev default), fall back to same-origin rather than a stale
+    // localhost:15500 that may not be where the server is actually listening.
+    expect(merged.apiBaseUrl).toBe('');
+    expect(merged.persistApiBaseUrl).toBe(false);
   });
 
   it('ignores malformed persisted state', () => {

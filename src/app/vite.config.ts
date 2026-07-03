@@ -8,6 +8,7 @@ import react from '@vitejs/plugin-react';
 import { configDefaults } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 import {
+  assertDevApiPortsDoNotCollide,
   browserModulesPlugin,
   reactCompilerPlugin,
   vendorCodeSplittingGroups,
@@ -65,6 +66,12 @@ const showTestConsoleOutput =
 const remoteApiBaseUrl =
   process.env.PROMPTFOO_REMOTE_API_BASE_URL ||
   (process.env.NODE_ENV === 'development' ? `http://localhost:${API_PORT}` : '');
+
+assertDevApiPortsDoNotCollide({
+  nodeEnv: process.env.NODE_ENV,
+  apiPort: API_PORT,
+  remoteApiBaseUrl,
+});
 Object.assign(process.env, { VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL: remoteApiBaseUrl });
 
 // https://vitejs.dev/config/

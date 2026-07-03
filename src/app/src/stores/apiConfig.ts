@@ -10,66 +10,43 @@ export interface ApiConfig {
   enablePersistApiBaseUrl: () => void;
 }
 
-const LEGACY_LOCAL_API_PORT = '15500';
+// The old single-port launcher auto-persisted exactly this URL as the API base. It is now
+// the dev UI's own origin (see vite.config.ts), so it must not survive as the API target.
+const LEGACY_LOCAL_API_BASE_URLS = new Set(['http://localhost:15500', 'http://localhost:15500/']);
 
-type PersistedApiConfig = Pick<Partial<ApiConfig>, 'apiBaseUrl'>;
-
-function getPersistedApiConfig(persistedState: unknown): PersistedApiConfig {
+function getPersistedApiBaseUrl(persistedState: unknown): string | undefined {
   if (
     typeof persistedState !== 'object' ||
     persistedState === null ||
     Array.isArray(persistedState)
   ) {
-    return {};
+    return undefined;
   }
 
   const apiBaseUrl = (persistedState as { apiBaseUrl?: unknown }).apiBaseUrl;
-  return typeof apiBaseUrl === 'string' ? { apiBaseUrl } : {};
-}
-
-function isLegacyLocalApiBaseUrl(apiBaseUrl: unknown) {
-  if (typeof apiBaseUrl !== 'string') {
-    return false;
-  }
-
-  try {
-    const url = new URL(apiBaseUrl);
-    return (
-      url.protocol === 'http:' &&
-      ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname) &&
-      url.port === LEGACY_LOCAL_API_PORT &&
-      ['', '/'].includes(url.pathname)
-    );
-  } catch {
-    return false;
-  }
+  // Treat blank strings as unset so a persisted "" never overrides the environment default
+  // (the dev API port under `npm run dev`, same-origin under `promptfoo view`).
+  return typeof apiBaseUrl === 'string' && apiBaseUrl.trim() !== '' ? apiBaseUrl : undefined;
 }
 
 export function mergeApiConfigPersistedState(
   persistedState: unknown,
   currentState: ApiConfig,
 ): ApiConfig {
-  const persistedConfig = getPersistedApiConfig(persistedState);
-  const currentApiBaseUrl = currentState.apiBaseUrl;
-  const hasPersistedApiBaseUrl = persistedConfig.apiBaseUrl !== undefined;
+  const persistedApiBaseUrl = getPersistedApiBaseUrl(persistedState);
 
-  if (
-    currentApiBaseUrl &&
-    currentApiBaseUrl !== persistedConfig.apiBaseUrl &&
-    isLegacyLocalApiBaseUrl(persistedConfig.apiBaseUrl)
-  ) {
-    return {
-      ...currentState,
-      ...persistedConfig,
-      apiBaseUrl: currentApiBaseUrl,
-      persistApiBaseUrl: true,
-    };
+  // Drop a missing/blank value or the exact legacy default and fall back to the environment
+  // default without re-persisting, so the dev-only port never leaks into a later
+  // `promptfoo view` session. Only the exact `http://localhost:15500` literal is migrated:
+  // explicit loopback aliases (127.0.0.1, [::1]) were deliberate user choices and are kept.
+  if (persistedApiBaseUrl === undefined || LEGACY_LOCAL_API_BASE_URLS.has(persistedApiBaseUrl)) {
+    return currentState;
   }
 
   return {
     ...currentState,
-    ...persistedConfig,
-    persistApiBaseUrl: hasPersistedApiBaseUrl || currentState.persistApiBaseUrl,
+    apiBaseUrl: persistedApiBaseUrl,
+    persistApiBaseUrl: true,
   };
 }
 

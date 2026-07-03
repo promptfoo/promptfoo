@@ -46,7 +46,9 @@ vi.mock('@app/hooks/useApiHealth', () => ({
 describe('LauncherPage', () => {
   beforeEach(() => {
     mockFetch.mockReset();
-    useApiConfig.setState({ apiBaseUrl: '', persistApiBaseUrl: false, fetchingPromise: null });
+    act(() => {
+      useApiConfig.setState({ apiBaseUrl: '', persistApiBaseUrl: false, fetchingPromise: null });
+    });
     mockLocalStorage.getItem.mockReset();
     mockLocalStorage.removeItem.mockReset();
     mockLocalStorage.setItem.mockReset();
@@ -76,7 +78,9 @@ describe('LauncherPage', () => {
   });
 
   it('shows the configured API base URL when one is set', async () => {
-    useApiConfig.setState({ apiBaseUrl: 'http://localhost:18601' });
+    act(() => {
+      useApiConfig.setState({ apiBaseUrl: 'http://localhost:18601' });
+    });
 
     renderLauncher();
 
