@@ -4,6 +4,7 @@ import {
   isProviderResponseRateLimited,
   isTransientConnectionError,
 } from '../../src/scheduler/types';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 
 import type { ProviderResponse } from '../../src/types/providers';
 
@@ -30,6 +31,15 @@ describe('isProviderResponseRateLimited', () => {
         output: 'success',
         metadata: { http: { status: 200, statusText: 'OK', headers: {} } },
       };
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
+
+    it('should not retry a quota response just because it also has HTTP 429', () => {
+      const result: ProviderResponse = {
+        error: 'Quota exceeded: HTTP 429 Too Many Requests',
+        metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+      };
+
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
   });
@@ -99,6 +109,13 @@ describe('isProviderResponseRateLimited', () => {
 
     it('should handle undefined error gracefully', () => {
       expect(isProviderResponseRateLimited(undefined, undefined)).toBe(false);
+    });
+
+    it('should conservatively retry future structured rate-limit kinds', () => {
+      const error = new HttpRateLimitError({ status: 429 });
+      (error as unknown as { kind: string }).kind = 'concurrent_limit';
+
+      expect(isProviderResponseRateLimited(undefined, error)).toBe(true);
     });
   });
 

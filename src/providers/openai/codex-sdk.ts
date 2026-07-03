@@ -505,6 +505,55 @@ const CODEX_RATE_LIMIT_CODES = [
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
 
+const CODEX_RATE_LIMIT_PATTERNS = [
+  /\b429\b/,
+  /\brate[\s_-]*limit(?:ed|ing| reached| exceeded)?\b/i,
+  /\btoo many requests\b/i,
+  /\btokens per (?:minute|min)\b/i,
+  /\brequests per (?:minute|min)\b/i,
+  /\bexceeded your current quota\b/i,
+];
+
+function extractCodexRateLimitCode(message: string): string | undefined {
+  const lowerMessage = message.toLowerCase();
+  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
+  if (explicitCode) {
+    return explicitCode;
+  }
+
+  if (
+    /\bexceeded your current quota\b/i.test(message) ||
+    /\bcheck your plan and billing details\b/i.test(message)
+  ) {
+    return 'insufficient_quota';
+  }
+
+  return undefined;
+}
+
+function extractCodexRetryAfterMs(message: string): number | undefined {
+  const match = message.match(
+    /\b(?:please\s+)?(?:try\s+again\s+in|retry(?:\s+again)?\s+(?:after|in))\s+(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)\b/i,
+  );
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return undefined;
+  }
+
+  const unit = match[2].toLowerCase();
+  const multiplier =
+    unit.startsWith('m') && unit !== 'ms' && !unit.startsWith('milli')
+      ? 60_000
+      : unit.startsWith('s')
+        ? 1000
+        : 1;
+  return Math.ceil(amount * multiplier);
+}
+
 function getRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
     ? (value as Record<string, unknown>)
@@ -515,11 +564,27 @@ function getFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function getStructuredRetryAfterMs(errorRecord: Record<string, unknown>): number | undefined {
+function getStructuredRetryAfterMs(
+  errorRecord: Record<string, unknown>,
+  visited: Set<Record<string, unknown>> = new Set(),
+): number | undefined {
+  if (visited.has(errorRecord)) {
+    return undefined;
+  }
+  visited.add(errorRecord);
+
   const direct =
     getFiniteNumber(errorRecord.retryAfterMs) ?? getFiniteNumber(errorRecord.retry_after_ms);
   if (direct !== undefined && direct >= 0) {
     return direct;
+  }
+
+  const seconds =
+    getFiniteNumber(errorRecord.retry_after) ??
+    getFiniteNumber(errorRecord.retryAfter) ??
+    getFiniteNumber(errorRecord.retry_after_seconds);
+  if (seconds !== undefined && seconds >= 0) {
+    return seconds * 1000;
   }
 
   const headers = getRecord(errorRecord.headers);
@@ -541,7 +606,7 @@ function getStructuredRetryAfterMs(errorRecord: Record<string, unknown>): number
     if (!nestedError) {
       continue;
     }
-    const nestedRetryAfterMs = getStructuredRetryAfterMs(nestedError);
+    const nestedRetryAfterMs = getStructuredRetryAfterMs(nestedError, visited);
     if (nestedRetryAfterMs !== undefined) {
       return nestedRetryAfterMs;
     }
@@ -552,20 +617,26 @@ function getStructuredRetryAfterMs(errorRecord: Record<string, unknown>): number
 function buildCodexRateLimitResponse(
   error: unknown,
   message: string,
+  options: { allowProseFallback?: boolean } = {},
 ): ProviderResponse | undefined {
   const errorRecord = getRecord(error);
-  if (!errorRecord) {
-    return undefined;
-  }
   const normalizedError = getCodexProviderError(error);
   const status = normalizedError?.httpStatusCode;
   const rawCode =
     typeof normalizedError?.code === 'string' ? normalizedError.code.toLowerCase() : undefined;
-  const code = CODEX_RATE_LIMIT_CODES.find((knownCode) => knownCode === rawCode);
-  const retryAfterMs = getStructuredRetryAfterMs(errorRecord);
-  const isStructuredRateLimit = status === 429 || code !== undefined;
+  const structuredCode = CODEX_RATE_LIMIT_CODES.find((knownCode) => knownCode === rawCode);
+  const code =
+    structuredCode ?? (options.allowProseFallback ? extractCodexRateLimitCode(message) : undefined);
+  const retryAfterMs =
+    (errorRecord ? getStructuredRetryAfterMs(errorRecord) : undefined) ??
+    (options.allowProseFallback ? extractCodexRetryAfterMs(message) : undefined);
+  const isRateLimit =
+    status === 429 ||
+    code !== undefined ||
+    (options.allowProseFallback &&
+      CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message)));
 
-  if (!isStructuredRateLimit) {
+  if (!isRateLimit) {
     return undefined;
   }
 
@@ -2342,7 +2413,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
     const streamingError = error instanceof CodexStreamingError ? error : undefined;
     const structuredError = streamingError?.structuredCause ?? error;
-    const response = buildCodexRateLimitResponse(structuredError, errorMessage) ?? {
+    const response = buildCodexRateLimitResponse(structuredError, errorMessage, {
+      // The pinned exec JSONL protocol exposes terminal throttles as prose-only
+      // stream errors. Limit fallback matching to that terminal stream boundary;
+      // command output and successful intermediate events never reach this path.
+      allowProseFallback: streamingError !== undefined,
+    }) ?? {
       error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
     };
     const providerError = getCodexProviderError(structuredError);

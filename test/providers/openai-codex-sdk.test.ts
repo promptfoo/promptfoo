@@ -518,7 +518,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.metadata?.executionHealth?.providerError).toBeUndefined();
       });
 
-      it('should not classify error prose containing status or transport phrases', async () => {
+      it('should classify terminal SDK rate-limit prose without treating it as provider metadata', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(
           Object.assign(
@@ -532,12 +532,14 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Test prompt');
 
-        expect(result.metadata?.http).toBeUndefined();
+        expect(result.metadata?.http).toEqual({
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after-ms': '1250' },
+        });
         expect(result.metadata?.executionHealth?.providerError).toBeUndefined();
         expect(result.metadata?.executionHealth?.sandboxFailure).toBe(false);
-        expect(result.error).toBe(
-          'Error calling OpenAI Codex SDK: Fixture mentions HTTP 429, Could not resolve host, and ECONNREFUSED',
-        );
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
       });
 
       it('should expose transient TPM throttles with scheduler retry timing', async () => {
@@ -2053,8 +2055,6 @@ describe('OpenAICodexSDKProvider', () => {
             type: 'error',
             message:
               'Reconnecting... 5/5 (Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000)',
-            status: 429,
-            code: 'rate_limit_exceeded',
           };
         };
 
@@ -2068,10 +2068,78 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
         expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
-        expect(result.metadata?.executionHealth?.providerError).toEqual({
-          code: 'rate_limit_exceeded',
-          httpStatusCode: 429,
+        expect(result.metadata?.executionHealth?.providerError).toBeUndefined();
+      });
+
+      it('should read structured retry hints from nested errors and Codex fields', async () => {
+        const nestedMsEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Rate limited',
+              status: 429,
+              data: { headers: { 'retry-after-ms': '750' } },
+            },
+          };
+        };
+        const nestedSecondsEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Rate limited',
+              status: 429,
+              cause: { headers: { 'retry-after': '2' } },
+            },
+          };
+        };
+        const codexSecondsEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Rate limited',
+              status: 429,
+              retry_after_seconds: 1.5,
+            },
+          };
+        };
+
+        mockRunStreamed
+          .mockResolvedValueOnce({ events: nestedMsEvents() })
+          .mockResolvedValueOnce({ events: nestedSecondsEvents() })
+          .mockResolvedValueOnce({ events: codexSecondsEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
         });
+
+        const nestedMsResult = await provider.callApi('Test nested millisecond hint');
+        const nestedSecondsResult = await provider.callApi('Test nested second hint');
+        const codexSecondsResult = await provider.callApi('Test Codex second hint');
+
+        expect(nestedMsResult.metadata?.http?.headers).toEqual({ 'retry-after-ms': '750' });
+        expect(nestedSecondsResult.metadata?.http?.headers).toEqual({ 'retry-after-ms': '2000' });
+        expect(codexSecondsResult.metadata?.http?.headers).toEqual({ 'retry-after-ms': '1500' });
+      });
+
+      it('should tolerate cycles in structured retry metadata', async () => {
+        const terminalError: Record<string, unknown> = {
+          type: 'error',
+          message: 'exceeded retry limit, last status: 429 Too Many Requests',
+        };
+        terminalError.cause = terminalError;
+        const mockEvents = async function* () {
+          yield terminalError;
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test cyclic retry metadata');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
       });
 
       it('should preserve TPM context when a stream later fails generically', async () => {

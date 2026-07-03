@@ -237,7 +237,7 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `enable_streaming`       | boolean  | Emit item- and turn-level OpenTelemetry spans from the internal event stream                         | false                |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
 
-Codex SDK throttles participate in promptfoo's adaptive rate-limit scheduler only when the SDK error exposes a structured HTTP status, error code, or retry delay. Promptfoo does not classify error message text such as `429` as a rate limit. Structured transient throttles without a reset hint use a 60-second delay; structured hard-quota errors are returned without retrying.
+Codex SDK throttles participate in promptfoo's adaptive rate-limit scheduler using structured HTTP status, error code, or retry-delay fields when available. The currently pinned Codex exec protocol reports terminal throttles as message-only stream errors, so promptfoo also recognizes rate-limit prose at that terminal SDK boundary. Command output and successful intermediate events are never classified as throttles. Transient throttles without a reset hint use a 60-second delay; hard-quota errors are returned without retrying.
 
 ### Sandbox Modes
 
@@ -698,15 +698,15 @@ providers:
 
 Codex responses include `response.metadata.executionHealth` with a small, versioned summary:
 
-| Field            | Description                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------- |
-| `schemaVersion`  | Contract version. Currently `1`.                                                                  |
-| `toolExitCodes`  | Numeric exit codes for completed command items. A nonzero exit is not a provider failure.         |
-| `providerError`  | The terminal provider error's structured code, kind, and HTTP status, when the SDK supplies them. |
-| `droppedEvents`  | Items that started but did not receive a completion event.                                        |
-| `sandboxFailure` | Whether the terminal error carries an explicit Codex sandbox discriminator.                       |
+| Field            | Description                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`  | Contract version. Currently `1`.                                                                                                             |
+| `toolExitCodes`  | Numeric exit codes for completed command items. A nonzero exit is not a provider failure.                                                    |
+| `providerError`  | Reserved for a terminal provider error's structured code, kind, and HTTP status. The current exec JSONL protocol does not emit these fields. |
+| `droppedEvents`  | Items that started but did not receive a completion event.                                                                                   |
+| `sandboxFailure` | Reserved for an explicit Codex sandbox discriminator. The current exec JSONL protocol does not emit one.                                     |
 
-Promptfoo does not infer these fields from command output or error prose. Confirmed skill usage remains available separately in `response.metadata.skillCalls`.
+Promptfoo does not infer these fields from command output or error prose. `toolExitCodes` covers completed commands with numeric exit codes; it does not summarize other failed item types. Confirmed skill usage remains available separately in `response.metadata.skillCalls`.
 
 The `CodexExecutionHealth` type is exported from `promptfoo/contracts`.
 

@@ -42,15 +42,7 @@ export function isProviderResponseRateLimited(
     return true;
   }
   if (isHttpRateLimitError(error)) {
-    return error.kind === 'rate_limit';
-  }
-  if (result?.metadata?.http?.status === 429) {
-    return true;
-  }
-  // Providers with execution health have already classified their failures
-  // from structured protocol data. Do not reinterpret their diagnostic prose.
-  if (result?.metadata?.executionHealth) {
-    return false;
+    return error.kind !== 'quota';
   }
   // String fallback for providers that fold the structured error into
   // `error: formatRateLimitErrorMessage(...)`. The "Quota exceeded:"
@@ -63,6 +55,14 @@ export function isProviderResponseRateLimited(
     return false;
   }
   if (error?.message?.includes('Quota exceeded:')) {
+    return false;
+  }
+  if (result?.metadata?.http?.status === 429) {
+    return true;
+  }
+  // Codex providers classify terminal stream errors before returning a response.
+  // Do not reinterpret other execution-health diagnostic prose here.
+  if (result?.metadata?.executionHealth) {
     return false;
   }
 
