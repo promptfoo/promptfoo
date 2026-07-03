@@ -64,9 +64,11 @@ providers:
 
 ## Portkey MCP Gateway
 
-To test an MCP server exposed through [Portkey's MCP Gateway](https://portkey.ai/docs/product/mcp-gateway/) directly, use promptfoo's [`mcp` provider](/docs/providers/mcp/) and put the gateway URL in `server.url`. Do not set `PORTKEY_API_BASE_URL` to `https://mcp.portkey.ai`: that setting configures the OpenAI-compatible chat-completions endpoint used by the `portkey:` provider, not an MCP endpoint.
+Promptfoo can connect to [Portkey's MCP Gateway](https://portkey.ai/docs/product/mcp-gateway/) in two ways. Use the [`mcp` provider](/docs/providers/mcp/) to test or red team the MCP server directly. To test an LLM application that uses the server, add the same server block to the model provider's [`mcp` config](/docs/integrations/mcp/).
 
-The MCP Gateway exposes each registered server (including internal servers) at `https://mcp.portkey.ai/<server-slug>/mcp`, where `<server-slug>` is the slug configured in Portkey's MCP Registry. For non-interactive CLI and CI runs, use a workspace user API key with the `mcp invoke` permission in the `x-portkey-api-key` header. Portkey also supports an interactive OAuth flow when no API key is provided. See [Portkey's MCP Gateway authentication guide](https://portkey.ai/docs/product/mcp-gateway/authentication).
+`PORTKEY_API_BASE_URL` does not configure the MCP connection. It sets the OpenAI-compatible chat-completions endpoint used by the `portkey:` provider and defaults to `https://api.portkey.ai/v1`. Put the MCP Gateway URL in `server.url` instead.
+
+The gateway exposes each registered server at `https://mcp.portkey.ai/<server-slug>/mcp`, where `<server-slug>` is the slug from Portkey's MCP Registry. For non-interactive CLI and CI runs, send a workspace user API key with `mcp invoke` permission in the `x-portkey-api-key` header. Without an API key, Portkey starts an interactive OAuth flow intended for browser-based clients. See [Portkey's authentication guide](https://portkey.ai/docs/product/mcp-gateway/authentication).
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -91,4 +93,4 @@ tests:
         value: 'expected result'
 ```
 
-Each direct functional test supplies a JSON tool call in the form `{"tool": "tool_name", "args": {...}}`. You can also red team the same `id: mcp` target with the [`mcp` red team plugin](/docs/red-team/plugins/mcp/); promptfoo materializes generated attacks into calls to the server's tools. To test an LLM application's prompt-to-tool behavior instead, put the same `server` block under the model provider's [`mcp` config](/docs/integrations/mcp/).
+Each functional test sends one JSON tool call in the form `{"tool": "tool_name", "args": {...}}`. For a red-team run, use the same `id: mcp` target with the [`mcp` plugin](/docs/red-team/plugins/mcp/); Promptfoo converts generated attacks into valid calls to the server's tools.
