@@ -45,6 +45,10 @@ interface FileData {
 
 export interface Part {
   text?: string;
+  // True for interim thinking output (text or images) when thoughts are
+  // requested; thought parts are not final content and are billed as
+  // thinking tokens rather than per-image output.
+  thought?: boolean;
   inlineData?: Blob;
   functionCall?: FunctionCall;
   functionResponse?: FunctionResponse;
@@ -233,6 +237,13 @@ export interface CompletionOptions {
     thinkingConfig?: {
       thinkingBudget?: number;
       thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
+    };
+
+    // Image configuration for Gemini image models; the top-level
+    // imageAspectRatio/imageSize options override matching fields here.
+    imageConfig?: {
+      aspectRatio?: string;
+      imageSize?: string;
     };
   };
 

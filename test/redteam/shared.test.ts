@@ -109,6 +109,7 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
 vi.mock('fs');
 vi.mock('fs/promises');
 vi.mock('js-yaml');
+vi.mock('../../src/util/yamlLoad');
 vi.mock('os');
 
 describe('doRedteamRun', () => {

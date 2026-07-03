@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
@@ -231,6 +231,18 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it.each([
+    ['a parent directory contains #', 'test.csv', 'fixtures#1'],
+    ['the filename contains #', 'test#1.csv', ''],
+  ])('should read CSV when %s', async (_scenario, filePath, basePath) => {
+    vi.mocked(fs.readFileSync).mockReturnValue('var1,__expected\nvalue1,expected1');
+
+    const result = await readStandaloneTestsFile(filePath, basePath);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ var1: 'value1' });
   });
 
   it('should read CSV file with BOM (Byte Order Mark) and return test cases', async () => {
@@ -1593,6 +1605,18 @@ describe('readTests', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
+  });
+
+  it('should handle xlsx sheet names containing dots in array format', async () => {
+    const mockData = [{ name: 'decimal-sheet', value: 'result' }];
+    const parseXlsxFileMock = vi.fn().mockResolvedValue(mockData);
+    mockParseXlsxFileState.implementation = parseXlsxFileMock;
+
+    const result = await readTests(['file://test.xlsx#2.9']);
+
+    expect(parseXlsxFileMock).toHaveBeenCalledWith(expect.stringContaining('test.xlsx#2.9'));
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ name: 'decimal-sheet', value: 'result' });
   });
 
   it('should handle xls files in array format', async () => {
