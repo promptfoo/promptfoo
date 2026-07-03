@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import { generateConfigFile } from '../../code-scan-action/src/config';
