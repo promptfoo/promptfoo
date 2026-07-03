@@ -1562,6 +1562,32 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
+  it('should include YAML location when an inline test references a missing prompt', async () => {
+    const configText = [
+      'providers:',
+      '  - echo',
+      'prompts:',
+      '  - raw: Hello',
+      '    label: Existing Prompt',
+      'tests:',
+      '  - description: Missing prompt',
+      '    prompts:',
+      '      - Missing Prompt',
+    ].join('\n');
+
+    vi.mocked(fs.readFileSync).mockReturnValue(configText);
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello', label: 'Existing Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+
+    await expect(resolveConfigs({ config: ['config.yaml'] }, {})).rejects.toThrow(
+      /config\.yaml:9:9: Test #1 \("Missing prompt"\) references prompt "Missing Prompt" which does not exist/,
+    );
+  });
+
   it('should return the provider configs selected by a target filter', async () => {
     const providers = [
       { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
