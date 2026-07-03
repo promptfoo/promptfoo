@@ -2299,6 +2299,7 @@ async function applyInputTransform(
   testCase.metadata = propagateRemoteGeneratedVarProvenance(
     testCase.metadata ?? {},
     getChangedVarNames(varsBeforeTransform, testCase.vars ?? {}),
+    { varsAfterTransform: testCase.vars ?? {}, varsBeforeTransform },
   );
 }
 

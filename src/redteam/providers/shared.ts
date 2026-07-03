@@ -575,6 +575,7 @@ export async function createIterationContext({
                 metadata: propagateRemoteGeneratedVarProvenance(
                   context.test.metadata ?? {},
                   changedVarNames,
+                  { varsAfterTransform: iterationVars, varsBeforeTransform },
                 ),
               },
             }

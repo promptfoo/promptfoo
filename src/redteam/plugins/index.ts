@@ -413,6 +413,18 @@ const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
 const REMOTE_ASSERTION_FIELDS = new Set(['metric', 'type', 'value']);
 const REMOTE_ASSERTION_SET_FIELDS = new Set(['assert', 'metric', 'type']);
 
+// Remote `assert-set` payloads are flattened by `runAssertions`, which invokes every
+// child assertion (often a model grader). A remote server should never legitimately
+// emit more than a handful of graders per test, so cap the flattened cardinality to
+// keep a compact but malicious response from fanning out into thousands of
+// model-grader calls (unbounded cost/latency amplification).
+const MAX_REMOTE_ASSERTION_SET_ASSERTIONS = 100;
+
+// Minimum length for a cross-session-leak marker. Very short markers would appear in
+// almost any target output, turning an echo-only stateless target into a spurious
+// "leak" and defeating the purpose of the cross-session probe.
+const MIN_CROSS_SESSION_LEAK_MARKER_LENGTH = 4;
+
 interface UnsafeRemoteReferenceOptions {
   allowNunjucks?: boolean;
   allowPackage?: boolean;
@@ -534,6 +546,13 @@ function getRemoteAssertionSetAssertions(
       key,
       'assert-set',
       'expected `assert` to be a non-empty array',
+    );
+  }
+  if (assertion.assert.length > MAX_REMOTE_ASSERTION_SET_ASSERTIONS) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'assert-set',
+      `expected \`assert\` to contain at most ${MAX_REMOTE_ASSERTION_SET_ASSERTIONS} assertions`,
     );
   }
   return assertion.assert;
@@ -821,6 +840,11 @@ function validateRemoteCrossSessionLeakPairs(
       setupVars && typeof setupVars === 'object' && !Array.isArray(setupVars)
         ? (setupVars as Record<string, unknown>)[injectVar]
         : undefined;
+    const probeVars = testCases[index + 1].vars;
+    const probeValue =
+      probeVars && typeof probeVars === 'object' && !Array.isArray(probeVars)
+        ? (probeVars as Record<string, unknown>)[injectVar]
+        : undefined;
     const crossSessionLeakMatch =
       probeMetadata &&
       typeof probeMetadata === 'object' &&
@@ -850,11 +874,28 @@ function validateRemoteCrossSessionLeakPairs(
         'expected each cross-session-leak setup row to be followed by one graded probe row',
       );
     }
+    if (crossSessionLeakMatch.trim().length < MIN_CROSS_SESSION_LEAK_MARKER_LENGTH) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        `expected the probe \`metadata.crossSessionLeakMatch\` marker to be at least ${MIN_CROSS_SESSION_LEAK_MARKER_LENGTH} characters`,
+      );
+    }
     if (typeof setupValue !== 'string' || !setupValue.includes(crossSessionLeakMatch)) {
       throw new InvalidRemoteRedteamAssertionPayloadError(
         key,
         'test case',
         "expected each cross-session-leak setup row's injection variable to contain the probe `metadata.crossSessionLeakMatch` marker",
+      );
+    }
+    // The probe input must NOT already contain the marker. Otherwise an echo-only or
+    // stateless target trivially returns the marker from the current request, and the
+    // cross-session-leak grader misreads it as a leak from the setup session.
+    if (typeof probeValue !== 'string' || probeValue.includes(crossSessionLeakMatch)) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        "expected each cross-session-leak probe row's injection variable to omit the `metadata.crossSessionLeakMatch` marker",
       );
     }
   }
@@ -878,6 +919,7 @@ function normalizeRemoteTestVars(
   testCase: Record<string, unknown>,
   injectVar: string,
   allowedVariableNames: ReadonlySet<string>,
+  requiredVariableNames: ReadonlySet<string>,
 ): { unsafeRenderVars: string[]; vars: TestCase['vars'] } {
   const vars = testCase.vars;
   if (
@@ -892,6 +934,23 @@ function normalizeRemoteTestVars(
       'test case',
       `expected \`vars\` to contain the injection variable \`${injectVar}\``,
     );
+  }
+  // Every declared multi-input variable must be materialized as an own string property.
+  // A response can otherwise claim `materializationHandled` and return only the synthetic
+  // inject var; because basic tests are not rematerialized later, the target template then
+  // substitutes the missing declared inputs as empty strings and the scan grades a request
+  // that never contained the generated attack payload.
+  for (const requiredName of requiredVariableNames) {
+    if (
+      !Object.hasOwn(vars, requiredName) ||
+      typeof (vars as Record<string, unknown>)[requiredName] !== 'string'
+    ) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        `expected \`vars\` to contain the declared input variable \`${requiredName}\` as a string`,
+      );
+    }
   }
   const normalizedEntries: [string, string][] = [];
   const unsafeRenderVars: string[] = [];
@@ -977,6 +1036,60 @@ function normalizeRemoteTestMetadata(
   };
 }
 
+/**
+ * Decode invisible ASCII-smuggling payloads embedded with Unicode Tag characters
+ * (U+E0000–U+E007F map to ASCII 0x00–0x7F). The remote ascii-smuggling plugin hides
+ * the instruction to emit the marker inside these tag characters, so the marker must
+ * be reconstructable from the prompt.
+ */
+function decodeUnicodeTagCharacters(value: string): string {
+  let decoded = '';
+  for (const char of value) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint !== undefined && codePoint >= 0xe0000 && codePoint <= 0xe007f) {
+      decoded += String.fromCharCode(codePoint - 0xe0000);
+    }
+  }
+  return decoded;
+}
+
+/**
+ * `AsciiSmugglingGrader` fails a test only when the model output contains the exact
+ * (case-sensitive) `metadata.asciiSmugglingTestString` marker. If a remote payload sets
+ * a marker that is not actually the hidden instruction embedded in the prompt, the
+ * target can follow the real smuggled instruction while the grader searches for an
+ * unrelated string and reports a pass. Require the marker to be reconstructable from
+ * the generated prompt (either visible, or decoded from Unicode tag characters).
+ */
+function validateAsciiSmugglingMarker(
+  key: string,
+  vars: TestCase['vars'],
+  metadata: Record<string, unknown>,
+  injectVar: string,
+): void {
+  if (key !== 'ascii-smuggling') {
+    return;
+  }
+  const marker = metadata.asciiSmugglingTestString;
+  if (typeof marker !== 'string' || marker.trim().length === 0) {
+    // Non-empty marker validation is handled separately; nothing to match against.
+    return;
+  }
+  const prompt =
+    vars && typeof vars === 'object' && !Array.isArray(vars)
+      ? (vars as Record<string, unknown>)[injectVar]
+      : undefined;
+  const promptText = typeof prompt === 'string' ? prompt : '';
+  const decodedHiddenInstruction = decodeUnicodeTagCharacters(promptText);
+  if (!promptText.includes(marker) && !decodedHiddenInstruction.includes(marker)) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      'expected `metadata.asciiSmugglingTestString` to match the hidden instruction smuggled into the injection variable',
+    );
+  }
+}
+
 function validateRemoteCrossSessionOptions(key: string, testCase: Record<string, unknown>): void {
   if (key !== 'cross-session-leak' || testCase.options === undefined) {
     return;
@@ -1002,6 +1115,7 @@ function normalizeRemoteTestCase(
   testCase: Record<string, unknown>,
   injectVar: string,
   allowedVariableNames: ReadonlySet<string>,
+  requiredVariableNames: ReadonlySet<string>,
   config: PluginConfig,
 ): TestCase {
   validateRemoteTestCaseFields(key, testCase);
@@ -1010,8 +1124,10 @@ function normalizeRemoteTestCase(
     testCase,
     injectVar,
     allowedVariableNames,
+    requiredVariableNames,
   );
   const { metadata, remoteFields } = normalizeRemoteTestMetadata(key, testCase, config);
+  validateAsciiSmugglingMarker(key, vars, metadata, injectVar);
   const normalizedMetadata =
     key.startsWith('coding-agent:') || unsafeRenderVars.length > 0
       ? setRemoteGeneratedTestProvenance(metadata, {
@@ -1039,15 +1155,24 @@ function normalizeRemoteTestCases(
 ): TestCase[] {
   validateRemoteTestCaseObjects(key, testCases);
   validateRemoteCrossSessionLeakPairs(key, testCases, injectVar);
+  const declaredInputNames = Object.keys(config.inputs ?? {});
   const allowedVariableNames = new Set([
     injectVar,
-    ...Object.keys(config.inputs ?? {}),
+    ...declaredInputNames,
     ...(key === 'indirect-prompt-injection' && typeof config.indirectInjectionVar === 'string'
       ? [config.indirectInjectionVar]
       : []),
   ]);
+  const requiredVariableNames = new Set(declaredInputNames);
   return testCases.map((testCase) =>
-    normalizeRemoteTestCase(key, testCase, injectVar, allowedVariableNames, config),
+    normalizeRemoteTestCase(
+      key,
+      testCase,
+      injectVar,
+      allowedVariableNames,
+      requiredVariableNames,
+      config,
+    ),
   );
 }
 

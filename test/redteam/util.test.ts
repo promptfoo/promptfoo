@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   getRemoteGeneratedTestProvenance,
   getSessionId,
+  propagateRemoteGeneratedVarProvenance,
   setRemoteGeneratedTestProvenance,
   trustRemoteGeneratedTestVars,
 } from '../../src/redteam/remoteTestProvenance';
@@ -60,6 +61,81 @@ describe('remote generated test provenance', () => {
       metadata: [],
       unsafeRenderVars: ['copiedAttack'],
       vars: [],
+    });
+  });
+
+  describe('propagateRemoteGeneratedVarProvenance', () => {
+    const codingAgentMetadata = () =>
+      setRemoteGeneratedTestProvenance(
+        { pluginId: 'coding-agent:secret-env-read' },
+        { metadata: [], unsafeRenderVars: ['prompt'], vars: ['prompt'] },
+      );
+
+    it('keeps a freshly minted local verifier control trusted while still skipping its render', () => {
+      // A local transformVars mints a brand-new secret to plant. It is NOT remote-derived, so it
+      // must stay out of the verifier-untrusted `vars` list; otherwise the coding-agent verifier
+      // drops it from its trusted evidence controls and a real leak passes unnoticed.
+      const updated = propagateRemoteGeneratedVarProvenance(
+        codingAgentMetadata(),
+        ['secretEnvValue'],
+        {
+          varsBeforeTransform: { prompt: 'remote attack payload' },
+          varsAfterTransform: {
+            prompt: 'remote attack payload',
+            secretEnvValue: 'FRESH-LOCAL-SECRET-0123456789',
+          },
+        },
+      );
+
+      expect(getRemoteGeneratedTestProvenance(updated)).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['prompt', 'secretEnvValue'],
+        vars: ['prompt'],
+      });
+    });
+
+    it('marks transform outputs that copy remote content as remote-derived', () => {
+      const updated = propagateRemoteGeneratedVarProvenance(
+        codingAgentMetadata(),
+        ['copiedAttack'],
+        {
+          varsBeforeTransform: { prompt: 'remote attack payload' },
+          varsAfterTransform: {
+            prompt: 'remote attack payload',
+            copiedAttack: 'remote attack payload',
+          },
+        },
+      );
+
+      expect(getRemoteGeneratedTestProvenance(updated)).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['prompt', 'copiedAttack'],
+        vars: ['prompt', 'copiedAttack'],
+      });
+    });
+
+    it('marks transform outputs that embed remote content as remote-derived', () => {
+      const updated = propagateRemoteGeneratedVarProvenance(codingAgentMetadata(), ['wrapped'], {
+        varsBeforeTransform: { prompt: 'remote attack payload' },
+        varsAfterTransform: {
+          prompt: 'remote attack payload',
+          wrapped: 'PREFIX remote attack payload SUFFIX',
+        },
+      });
+
+      expect(getRemoteGeneratedTestProvenance(updated)?.vars).toEqual(['prompt', 'wrapped']);
+    });
+
+    it('stays conservative and marks every changed var when transform vars are unavailable', () => {
+      const updated = propagateRemoteGeneratedVarProvenance(codingAgentMetadata(), [
+        'secretEnvValue',
+      ]);
+
+      expect(getRemoteGeneratedTestProvenance(updated)).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['prompt', 'secretEnvValue'],
+        vars: ['prompt', 'secretEnvValue'],
+      });
     });
   });
 });

@@ -43,6 +43,10 @@ function mockTransformVars(code: string, input: any, context?: any) {
   if (code.includes('{ ...vars') && code.includes('copiedAttack: vars.prompt')) {
     return { ...input, copiedAttack: input.prompt };
   }
+  if (code.includes('{ ...vars') && code.includes('secretEnvValue:')) {
+    // Mints a fresh local verifier control that is NOT derived from any remote var.
+    return { ...input, secretEnvValue: 'FRESH-LOCAL-SECRET-0123456789' };
+  }
   if (code.includes('return {') && code.includes('context.uuid')) {
     return {
       ...input,
