@@ -2,12 +2,15 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
+  isClaudeRegionalPremiumModel,
+  isClaudeSonnet5Model,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
@@ -211,6 +214,24 @@ describe('Anthropic utilities', () => {
     it('should calculate tiered cost for Claude Sonnet 4.6 latest alias', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
       expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+    });
+
+    it('should calculate default cost for Claude Sonnet 5 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    });
+
+    it('should calculate standard cost for Claude Sonnet 5 at or below 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+      // Per Anthropic pricing, Sonnet 5 bills its full 1M context at the standard rate —
+      // unlike Sonnet 4.5, there is no >200K surcharge.
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
+      // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2 (NOT the 2.25 tiered rate)
+      expect(cost).toBe(1.2);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
@@ -1833,6 +1854,22 @@ describe('Anthropic utilities', () => {
         8,
       );
     });
+
+    it('composes the regional premium with the Sonnet 4.5/4.6 long-context tier', () => {
+      // Regression: the regional premium must multiply the tier-selected rate, not override it.
+      // >200K regional Sonnet 4.6 bills at 1.1x the $6/$22.5 long-context tier.
+      expect(
+        calculateAnthropicCost('us.anthropic.claude-sonnet-4-6', {}, 300_000, 20_000),
+      ).toBeCloseTo(((300_000 / 1e6) * 6 + (20_000 / 1e6) * 22.5) * 1.1, 6);
+      // <=200K regional bills at 1.1x the $3/$15 base tier.
+      expect(
+        calculateAnthropicCost('eu.anthropic.claude-sonnet-4-6', {}, 150_000, 10_000),
+      ).toBeCloseTo(((150_000 / 1e6) * 3 + (10_000 / 1e6) * 15) * 1.1, 6);
+      // The global endpoint bills at the tier rate with no premium.
+      expect(
+        calculateAnthropicCost('global.anthropic.claude-sonnet-4-6', {}, 300_000, 20_000),
+      ).toBeCloseTo((300_000 / 1e6) * 6 + (20_000 / 1e6) * 22.5, 6);
+    });
   });
 
   describe('sampling-params-deprecated model detection', () => {
@@ -1898,6 +1935,82 @@ describe('Anthropic utilities', () => {
       for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
+    });
+
+    it('detects Claude Sonnet 5 across provider naming schemes', () => {
+      for (const id of [
+        'claude-sonnet-5',
+        'anthropic:messages:claude-sonnet-5',
+        'anthropic.claude-sonnet-5',
+        'us.anthropic.claude-sonnet-5',
+        'eu.anthropic.claude-sonnet-5',
+        'global.anthropic.claude-sonnet-5',
+        // A trailing date snapshot is a real, supported form and must match.
+        'claude-sonnet-5-20260630',
+      ]) {
+        expect(isClaudeSonnet5Model(id)).toBe(true);
+        // Sonnet 5 deprecates sampling params (verified against the live API)...
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+        // ...but is NOT always-on adaptive thinking (thinking can still be disabled).
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('does not treat Sonnet 4.x or hypothetical Sonnet 50 as Sonnet 5', () => {
+      for (const id of [
+        'claude-sonnet-4-5',
+        'claude-sonnet-4-5-20250929',
+        'claude-sonnet-4-6',
+        // Boundary: a hypothetical higher-numbered "50" must not match "5".
+        'claude-sonnet-50',
+      ]) {
+        expect(isClaudeSonnet5Model(id)).toBe(false);
+      }
+      // Sonnet 4.5/4.6 keep sampling-param support.
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-sonnet-4-6')).toBe(false);
+    });
+
+    it('flags Claude 4.5+ models for the regional endpoint premium but not earlier releases', () => {
+      // Sonnet 4.5, Haiku 4.5, Opus 4.5, and every later model (4.6/4.7/4.8 + Claude 5).
+      for (const id of [
+        'claude-sonnet-5',
+        'us.anthropic.claude-sonnet-5',
+        'claude-fable-5',
+        'claude-mythos-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-opus-4-5-20251101',
+        'claude-sonnet-4-6',
+        'claude-sonnet-4-5-20250929',
+        'claude-haiku-4-5-20251001',
+      ]) {
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+      }
+      // Opus 4.1 and earlier + pre-4.5 Sonnet/Haiku retain base pricing on all endpoints.
+      for (const id of [
+        'claude-opus-4-1-20250805',
+        'claude-opus-4-20250514',
+        'claude-sonnet-4-20250514',
+        'claude-sonnet-4-0',
+        'claude-3-7-sonnet-20250219',
+        'claude-3-5-haiku-20241022',
+      ]) {
+        expect(isClaudeRegionalPremiumModel(id)).toBe(false);
+      }
+    });
+
+    it('resolves the user-facing warning name for recognized Claude families', () => {
+      expect(getClaudeModelWarningName('claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('us.anthropic.claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('claude-opus-4-8')).toBe('Claude Opus 4.7 and 4.8');
+      expect(getClaudeModelWarningName('claude-opus-4-7')).toBe('Claude Opus 4.7 and 4.8');
+      expect(getClaudeModelWarningName('claude-fable-5')).toBe(
+        'Claude Fable 5 and Claude Mythos 5',
+      );
+      // Regional-premium-only tiers and unrecognized models have no warning name.
+      expect(getClaudeModelWarningName('claude-sonnet-4-6')).toBeUndefined();
+      expect(getClaudeModelWarningName('claude-3-7-sonnet-20250219')).toBeUndefined();
     });
   });
 });
