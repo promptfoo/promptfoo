@@ -91,4 +91,4 @@ tests:
         value: 'expected result'
 ```
 
-Each direct test supplies a JSON tool call in the form `{"tool": "tool_name", "args": {...}}`. To test an LLM application's prompt-to-tool behavior, put the same `server` block under the LLM provider's [`mcp` config](/docs/integrations/mcp/). That LLM or application target is also the appropriate shape for the [`mcp` red team plugin](/docs/red-team/plugins/mcp/); direct `id: mcp` tests are deterministic tool-level evals without an LLM.
+Each direct functional test supplies a JSON tool call in the form `{"tool": "tool_name", "args": {...}}`. You can also red team the same `id: mcp` target with the [`mcp` red team plugin](/docs/red-team/plugins/mcp/); promptfoo materializes generated attacks into calls to the server's tools. To test an LLM application's prompt-to-tool behavior instead, put the same `server` block under the model provider's [`mcp` config](/docs/integrations/mcp/).
