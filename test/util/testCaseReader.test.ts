@@ -464,6 +464,30 @@ not valid json`,
     ]);
   });
 
+  it('should redact SAS tokens in malformed Azure Blob JSONL parse errors', async () => {
+    const blobUri = 'az://account/container/tests.jsonl?sp=r&sig=SECRETSIG';
+    vi.mocked(readAzureBlobText).mockResolvedValue('{"vars":{"x":"a"}}\n{"vars": BROKEN}');
+
+    const error = await readStandaloneTestsFile(blobUri).then(
+      () => {
+        throw new Error('expected readStandaloneTestsFile to reject');
+      },
+      (err) => err as Error,
+    );
+    expect(error.message).toContain(
+      'Failed to parse JSONL test file az://account/container/tests.jsonl?<redacted> on line 2:',
+    );
+    expect(error.message).not.toContain('SECRETSIG');
+  });
+
+  it('should throw a descriptive error for a malformed standalone JSON test file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('{"vars": {');
+
+    await expect(readStandaloneTestsFile('bad.json')).rejects.toThrow(
+      /Failed to parse JSON test file .*bad\.json:/,
+    );
+  });
+
   it('should read CSV test sets from Azure Blob Storage URIs', async () => {
     const blobUri = 'az://account/container/tests.csv';
     vi.mocked(readAzureBlobText).mockResolvedValue('review_id,__expected\nreview-004,ready');

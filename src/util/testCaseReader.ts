@@ -17,7 +17,7 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
+import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -138,17 +138,19 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
     });
     return csvRowsToTestCases(parseCsvRows(fileContent));
   }
+  // Use the sanitized URI in parse errors so SAS tokens never leak into logs.
+  const sanitizedVarsPath = sanitizeAzureBlobUriForError(varsPath);
   if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file - azure blob',
     });
-    return parseJsonTestCases(fileContent);
+    return parseJsonTestCases(fileContent, sanitizedVarsPath);
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file - azure blob',
     });
-    return parseJsonlTestCases(fileContent, varsPath);
+    return parseJsonlTestCases(fileContent, sanitizedVarsPath);
   }
 
   telemetry.record('feature_used', {
@@ -337,11 +339,18 @@ function parseCsvRows(fileContent: string): CsvRow[] {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonTestCases(fileContent);
+  return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
-function parseJsonTestCases(fileContent: string): TestCase[] {
-  const jsonData = yaml.load(fileContent) as any;
+function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
+  let jsonData: any;
+  try {
+    jsonData = yaml.load(fileContent);
+  } catch (err) {
+    throw new Error(
+      `Failed to parse JSON test file ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
   return testCases.map((item, idx) => ({
     ...item,
