@@ -91,12 +91,15 @@ export async function matchesSearchRubric(
   );
 
   if (resp.error || !resp.output) {
+    // Transport/provider failure: fail closed with a grader-error tag so
+    // fallback chains and inverse-aware callers do not mask the outage.
     return {
       pass: false,
       score: 0,
       reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
       tokensUsed: resp.tokenUsage,
       assertion,
+      metadata: { graderError: true },
     };
   }
 

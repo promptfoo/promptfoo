@@ -139,6 +139,9 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        // A provider/transport outage is tagged as a grader error so fallback
+        // chains and inverse-aware callers fail closed instead of masking it.
+        metadata: { graderError: true },
       }),
     );
   });

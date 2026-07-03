@@ -227,12 +227,31 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).toThrow(/tests\[0\]\.assert\[0\].*no next assertion/);
     });
 
-    it('rejects malformed defaultTest chains', () => {
+    it('allows an isolated defaultTest chain to terminate with a trailing fallback', () => {
+      // Scenario- and data-driven suites are validated with an empty top-level
+      // `tests` array; the concrete test cases (and their assertions) are built
+      // later, then defaultTest.assert is prepended. A trailing default fallback
+      // therefore resolves to the first scenario/data assertion at runtime, so
+      // it must not be rejected as orphaned here.
       expect(() =>
         validateAssertions([], {
-          assert: [{ type: 'equals', value: 'orphan', fallback: 'next' }],
+          assert: [{ type: 'equals', value: 'scenario primary', fallback: 'next' }],
         }),
-      ).toThrow(/defaultTest\.assert\[0\].*no next assertion/);
+      ).not.toThrow();
+    });
+
+    it('still rejects structurally malformed isolated defaultTest chains', () => {
+      // The trailing-fallback relaxation does not disable structural checks: a
+      // non-terminal fallback whose next link is an unsupported target is still
+      // rejected even when validating defaultTest in isolation.
+      expect(() =>
+        validateAssertions([], {
+          assert: [
+            { type: 'equals', value: 'primary', fallback: 'next' },
+            { type: 'select-best', value: 'not a valid fallback target' },
+          ],
+        }),
+      ).toThrow(/defaultTest\.assert\[0\].*not supported as fallback target/);
     });
 
     it('allows defaultTest fallback chains to terminate in each test assertion list', () => {
@@ -319,6 +338,44 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).toThrow(
         /redteam guardrail assertions cannot be fallback chain sources/,
       );
+    });
+
+    it('rejects inverse (not-guardrails) redteam fallback primaries', () => {
+      // The inverse spelling must be treated as a redteam guardrail too, so a
+      // slipped-through safety check cannot be masked by a passing fallback.
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'not-guardrails',
+              config: { purpose: 'redteam' },
+              fallback: 'next',
+            },
+            { type: 'contains', value: 'ok' },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(
+        /redteam guardrail assertions cannot be fallback chain sources/,
+      );
+    });
+
+    it('does not treat a non-redteam not-guardrails assertion as a redteam guardrail', () => {
+      // Without redteam purpose it is an ordinary assertion and may source a
+      // fallback chain.
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            { type: 'not-guardrails', fallback: 'next' },
+            { type: 'contains', value: 'ok' },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).not.toThrow();
     });
   });
 

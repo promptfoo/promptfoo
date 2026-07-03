@@ -126,17 +126,25 @@ function formatSingleResult(
   let assertions: FormattedEvalResult['assertions'] = null;
   if (result.gradingResult) {
     const componentResults = result.gradingResult.componentResults || [];
+    // Canonical scoring projection: diagnostic fallback-chain primaries
+    // (`fallbackIntermediate`) are retained upstream for traceability but must
+    // not be counted or surfaced as scoring components. Labels are read from
+    // each component's own `assertion` — joining by config index mislabels
+    // results once fallback intermediates are interleaved.
+    const scoringComponentResults = componentResults.filter(
+      (cr) => cr.metadata?.fallbackIntermediate !== true,
+    );
     assertions = {
       totalAssertions: result.testCase.assert?.length || 0,
-      passedAssertions: componentResults.filter((r) => r.pass).length,
-      failedAssertions: componentResults.filter((r) => !r.pass).length,
-      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({
+      passedAssertions: scoringComponentResults.filter((r) => r.pass).length,
+      failedAssertions: scoringComponentResults.filter((r) => !r.pass).length,
+      componentResults: scoringComponentResults.slice(0, assertionLimit).map((cr, idx) => ({
         index: idx,
-        type: result.testCase.assert?.[idx]?.type || 'unknown',
+        type: cr.assertion?.type || 'unknown',
         pass: cr.pass,
         score: cr.score,
         reason: truncateText(cr.reason || '', 100),
-        metric: result.testCase.assert?.[idx]?.metric,
+        metric: cr.assertion?.metric,
       })),
     };
   }

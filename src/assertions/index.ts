@@ -292,6 +292,10 @@ const ASSERTION_HANDLERS: Record<
           reason:
             'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
           assertion: params.assertion,
+          // The validator itself could not execute (missing native dependency).
+          // Tag it as an assertion error so it fails closed and is not masked by
+          // a passing fallback.
+          metadata: { assertionError: true },
         };
       }
       throw error;
@@ -672,8 +676,15 @@ export async function runAssertion({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
+    // If weight is 0, treat this as a metric-only assertion that can't fail —
+    // UNLESS the handler hard-errored. A grader outage (`graderError`) or a
+    // validator that could not execute (`assertionError`, e.g. a thrown
+    // javascript/python/ruby assertion) must fail closed so it is not masked by
+    // the weight-zero pass coercion and remains eligible to terminate a
+    // fallback chain.
+    const isHardError =
+      result.metadata?.assertionError === true || result.metadata?.graderError === true;
+    if (assertion.weight === 0 && !isHardError) {
       return {
         ...result,
         pass: true, // Force pass for weight=0 assertions
@@ -774,7 +785,7 @@ async function executeFallbackChain(
     vars?: Record<string, VarValue>;
     latencyMs?: number;
     traceId?: string;
-    traceData?: TraceData | null;
+    getTraceData: () => Promise<TraceData | null>;
   },
 ): Promise<{
   result: GradingResult;
@@ -787,6 +798,13 @@ async function executeFallbackChain(
     const { assertion, index } = asserts[currentIndex];
     const assertionHasFallback = hasFallback(assertion);
 
+    // Only a reached assertion that actually needs trace context triggers the
+    // (memoized) trace-store fetch — an unreached fallback target never does.
+    const traceData =
+      context.traceId && assertionMayNeedTraceContext(assertion)
+        ? await context.getTraceData()
+        : null;
+
     const result = await runAssertion({
       prompt: context.prompt,
       provider: context.provider,
@@ -797,7 +815,7 @@ async function executeFallbackChain(
       latencyMs: context.latencyMs,
       assertIndex: index,
       traceId: context.traceId,
-      traceData: context.traceData,
+      traceData,
     });
 
     if (
@@ -942,17 +960,24 @@ export async function runAssertions({
   // Categorize assertions into independent and fallback chains
   const categorized = categorizeAssertions(asserts);
 
-  const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
-  let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
-    try {
-      preloadedTraceData = await loadTraceData(traceId);
-    } catch (error) {
-      logger.debug(`Failed to preload trace data for assertions: ${error}`);
-      preloadedTraceData = null;
+  // Load trace data lazily and at most once. Only an assertion that is actually
+  // reached and needs trace context triggers the trace-store fetch: a passing
+  // fallback primary can leave its trace-aware fallback target unreached, and
+  // that unreached target must not incur the (potentially multi-second) trace
+  // polling.
+  let traceDataPromise: Promise<TraceData | null> | undefined;
+  const getTraceData = (): Promise<TraceData | null> => {
+    if (!traceId) {
+      return Promise.resolve(null);
     }
-  }
+    if (!traceDataPromise) {
+      traceDataPromise = loadTraceData(traceId).catch((error) => {
+        logger.debug(`Failed to load trace data for assertions: ${error}`);
+        return null;
+      });
+    }
+    return traceDataPromise;
+  };
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
@@ -981,7 +1006,7 @@ export async function runAssertions({
         vars,
         latencyMs,
         traceId,
-        traceData: preloadedTraceData,
+        getTraceData,
       });
 
       const finalAssert = asserts[chainResult.finalIndex];
@@ -1005,6 +1030,9 @@ export async function runAssertions({
       return;
     }
 
+    const traceData =
+      traceId && assertionMayNeedTraceContext(assertion) ? await getTraceData() : null;
+
     const result = await runAssertion({
       prompt,
       provider,
@@ -1015,7 +1043,7 @@ export async function runAssertions({
       latencyMs,
       assertIndex: index,
       traceId,
-      traceData: preloadedTraceData,
+      traceData,
     });
 
     assertResult.addResult({
