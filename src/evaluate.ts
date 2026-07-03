@@ -17,7 +17,7 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
+import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -291,7 +291,7 @@ async function resolveNestedProviders(
 
 async function maybeShareEval(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
-  evalResult: Awaited<ReturnType<typeof doEvaluate>>,
+  evalResult: Eval,
 ): Promise<void> {
   if (!testSuiteConfig.writeLatestResults || !testSuiteConfig.sharing) {
     return;
@@ -360,10 +360,15 @@ export async function evaluateWithSource(
 
   await maybeShareEval(testSuiteConfig, ret);
   if (testSuiteConfig.outputPath) {
-    if (typeof testSuiteConfig.outputPath === 'string') {
-      await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
-    } else if (Array.isArray(testSuiteConfig.outputPath)) {
-      await writeMultipleOutputs(testSuiteConfig.outputPath, evalRecord, null);
+    const outputPaths =
+      typeof testSuiteConfig.outputPath === 'string'
+        ? [testSuiteConfig.outputPath]
+        : testSuiteConfig.outputPath;
+    warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
+    // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
+    // case too — matching the doEval call site in src/node/doEval.ts.
+    if (outputPaths.length) {
+      await writeMultipleOutputs(outputPaths, evalRecord, null);
     }
   }
 

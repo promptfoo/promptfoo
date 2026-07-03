@@ -1,7 +1,6 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
@@ -9,8 +8,14 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { loadYaml } from '../../util/yamlLoad';
 import { redteamProviderManager } from '../providers/shared';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -128,6 +133,7 @@ async function processRemoteChunk(
     testCases,
     injectVar,
     config,
+    ...remoteGenerationContextPayload(config.targetId),
     email: getUserEmail(),
   };
 
@@ -135,9 +141,7 @@ async function processRemoteChunk(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(payload),
     },
     getRequestTimeoutMs(),
@@ -434,7 +438,7 @@ async function translateBatchCore(
     }
 
     try {
-      const yamlResult = yaml.load(result.output) as any;
+      const yamlResult = loadYaml(result.output) as any;
       if (yamlResult && typeof yamlResult === 'object') {
         const translations: Record<string, string> = {};
         for (const lang of languages) {

@@ -10,8 +10,8 @@ import * as path from 'path';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import { prepareComments } from '../../src/codeScan/util/github';
-import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
+import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -23,7 +23,7 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
+import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
 
 interface ActionInputs {
   apiHost: string;
@@ -384,13 +384,33 @@ function buildCommentBody(comment: Comment): string {
   return body;
 }
 
+function buildGeneralCommentBody(comment: Comment): string {
+  const body = buildCommentBody(comment);
+  const location =
+    comment.file && comment.line
+      ? comment.startLine && comment.startLine !== comment.line
+        ? `${comment.file}:${comment.startLine}-${comment.line}`
+        : `${comment.file}:${comment.line}`
+      : comment.file;
+  return location ? `**${location}**\n\n${body}` : body;
+}
+
 function toReviewComment(comment: Comment) {
+  // GitHub's createReview API requires start_line < line for multi-line comments and
+  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
+  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
+  // caller having run that clamp. The ternary also narrows startLine to `number`,
+  // dropping the null/undefined the API type rejects.
+  const startLine =
+    comment.startLine && comment.line && comment.startLine < comment.line
+      ? comment.startLine
+      : undefined;
   return {
     path: comment.file!,
     line: comment.line || undefined,
-    start_line: comment.startLine || undefined,
+    start_line: startLine,
     side: 'RIGHT' as const,
-    start_side: comment.startLine ? ('RIGHT' as const) : undefined,
+    start_side: startLine ? ('RIGHT' as const) : undefined,
     body: buildCommentBody(comment),
   };
 }
@@ -437,7 +457,7 @@ async function postGeneralComments(
       owner: context.owner,
       repo: context.repo,
       issue_number: context.number,
-      body: buildCommentBody(comment),
+      body: buildGeneralCommentBody(comment),
     });
   }
 
@@ -455,14 +475,19 @@ async function postFallbackComments(
 
   try {
     const octokit = github.getOctokit(githubToken);
-    const { lineComments, generalComments, reviewBody } = prepareComments(
-      comments,
-      review,
-      minimumSeverity,
+    const {
+      lineComments: preparedLineComments,
+      generalComments,
+      reviewBody,
+    } = prepareComments(comments, review, minimumSeverity);
+    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+      githubToken,
+      context,
+      preparedLineComments,
     );
 
     await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, generalComments);
+    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
 
     core.info('✅ All comments posted to PR by action');
   } catch (error) {
@@ -612,19 +637,35 @@ async function handleScanResponse(
   context: PullRequestContext,
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
+  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
+  const hasPrFindings = hasPrPostableFindings(comments);
 
   // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran.
-  if (skipReason) {
+  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
+  // responses still need processing when a finding can be surfaced through SARIF or PR
+  // comments, because those output channels intentionally support different locations.
+  if (skipReason && !hasSarifFindings && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
 
+  if (skipReason) {
+    // Carry the skipReason into the warning: a contradictory response (skip + real
+    // findings) signals a server-side bug, and the reason text is the operator's only
+    // clue to which path produced it.
+    core.warning(
+      `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
+    );
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  emitConfiguredSarifOutput(scanResponse, inputs);
+  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
+  if (!skipReason || hasSarifFindings) {
+    emitConfiguredSarifOutput(scanResponse, inputs);
+  }
 
-  if ((comments.length > 0 || review) && commentsPosted === false) {
+  if ((hasPrFindings || review) && commentsPosted === false) {
     await postFallbackComments(
       inputs.githubToken,
       context,

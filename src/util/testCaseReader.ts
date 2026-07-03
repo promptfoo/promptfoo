@@ -6,7 +6,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -21,6 +20,7 @@ import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
+import { loadYaml } from './yamlLoad';
 
 import type {
   CsvRow,
@@ -35,7 +35,6 @@ type StandaloneTestsFileMetadata = {
   pathWithoutFunction: string;
   maybeFunctionName: string | undefined;
   fileExtension: string;
-  extensionWithoutSheet: string;
 };
 
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
@@ -59,7 +58,7 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
+      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
@@ -179,13 +178,8 @@ async function readLocalStandaloneTestsFile(
   basePath: string,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
-  const {
-    resolvedVarsPath,
-    pathWithoutFunction,
-    maybeFunctionName,
-    fileExtension,
-    extensionWithoutSheet,
-  } = getStandaloneTestsFileMetadata(varsPath, basePath);
+  const { resolvedVarsPath, pathWithoutFunction, maybeFunctionName, fileExtension } =
+    getStandaloneTestsFileMetadata(varsPath, basePath);
 
   if (isJavascriptFile(pathWithoutFunction)) {
     telemetry.record('feature_used', {
@@ -206,7 +200,7 @@ async function readLocalStandaloneTestsFile(
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
   }
-  if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
+  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -228,7 +222,7 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
-    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
+    const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     const rows = maybeLoadConfigFromExternalFile(
       rawContent,
       'test-config',
@@ -269,16 +263,20 @@ function getStandaloneTestsFileMetadata(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
-  const extensionWithoutSheet = fileExtension.split('#')[0];
+  // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
+  // characters in parent directories and non-Excel filenames.
+  const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
+  const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
+  const fileExtension =
+    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
+      ? sheetAwareExtension
+      : parsePath(pathWithoutFunction).ext.slice(1);
 
   return {
     resolvedVarsPath,
     pathWithoutFunction,
     maybeFunctionName,
     fileExtension,
-    extensionWithoutSheet,
   };
 }
 
@@ -347,7 +345,7 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
 }
 
 function parseJsonTestCases(fileContent: string): TestCase[] {
-  const jsonData = yaml.load(fileContent) as any;
+  const jsonData = loadYaml(fileContent) as any;
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
   return testCases.map((item, idx) => ({
     ...item,
@@ -368,13 +366,13 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
       const row = JSON.parse(line);
       return {
         ...row,
-        description: `Row #${idx + 1}`,
+        description: row.description || `Row #${idx + 1}`,
       };
     });
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
-  const rawContent = yaml.load(fileContent);
+  const rawContent = loadYaml(fileContent);
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
@@ -408,7 +406,7 @@ export async function readTest(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
-    const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
+    const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(
       rawContent,
       'test-config',
@@ -526,7 +524,7 @@ export async function loadTestsFromGlob(
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
+      const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(
         rawContent,
         'test-config',

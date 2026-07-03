@@ -286,7 +286,9 @@ export function authCommand(program: Command) {
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
-      const apiHost = cmdObj.host || cloudConfig.getApiHost();
+      // Strip a trailing slash from the --host flag so the login-time validate /
+      // team-fetch requests don't hit `//api/v1/...` (which some on-prem ingresses 404).
+      const apiHost = (cmdObj.host || cloudConfig.getApiHost())?.replace(/\/+$/, '');
 
       try {
         if (cmdObj.apiKey) {

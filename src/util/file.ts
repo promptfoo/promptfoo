@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
@@ -17,6 +17,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderEnvOnlyInObject, renderVarsInObject } from './render';
 import { getNunjucksEngine } from './templates';
+import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -218,7 +219,7 @@ export function loadJsonSchemaFileReference(fileRef: string): JsonSchemaFileSnap
       extension === '.json'
         ? JSON.parse(contents)
         : extension === '.yaml' || extension === '.yml'
-          ? yaml.load(contents)
+          ? loadYaml(contents)
           : contents.trim();
     if (
       (isParsedSchema &&
@@ -399,7 +400,7 @@ export function maybeLoadFromExternalFile(
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
+        const parsed = loadYaml(contents);
         if (parsed === null || parsed === undefined) {
           continue; // Skip empty files
         }
@@ -448,7 +449,7 @@ export function maybeLoadFromExternalFile(
   }
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
     try {
-      return yaml.load(contents);
+      return loadYaml(contents);
     } catch (error) {
       throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
     }
@@ -495,7 +496,7 @@ function captureJsonSchemaFile(
       extension === '.json'
         ? JSON.parse(contents)
         : extension === '.yaml' || extension === '.yml'
-          ? yaml.load(contents)
+          ? loadYaml(contents)
           : contents;
     if (
       (isParsedSchema &&

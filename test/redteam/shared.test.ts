@@ -5,8 +5,8 @@ import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
-import { doEval } from '../../src/commands/eval';
 import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
+import { doEval } from '../../src/node/doEval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
@@ -19,7 +19,7 @@ vi.mock('../../src/redteam/commands/generate');
 vi.mock('../../src/util/verboseToggle', () => ({
   initVerboseToggle: vi.fn(),
 }));
-vi.mock('../../src/commands/eval', async (importOriginal) => {
+vi.mock('../../src/node/doEval', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
@@ -109,6 +109,7 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
 vi.mock('fs');
 vi.mock('fs/promises');
 vi.mock('js-yaml');
+vi.mock('../../src/util/yamlLoad');
 vi.mock('os');
 
 describe('doRedteamRun', () => {

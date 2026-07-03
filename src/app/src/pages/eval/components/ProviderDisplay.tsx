@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { findProviderConfig, getProviderDisplayName, type ProviderDef } from './providerConfig';
 
 interface ProviderDisplayProps {

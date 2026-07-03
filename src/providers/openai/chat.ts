@@ -30,7 +30,7 @@ import {
 } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -64,6 +64,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.functions, vars);
   }
 
   private async initializeMCP(): Promise<void> {
@@ -178,33 +182,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error; // Re-throw so caller can handle fallback behavior
     }
-  }
-
-  protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
-  }
-
-  protected isReasoningModel(): boolean {
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.isGPT5Model()
-    );
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
   }
 
   protected getGenAISystem(): string {
@@ -498,14 +475,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+            ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
         'json',
-        context?.bustCache ?? context?.debug,
+        this.shouldBustCache(context),
         this.config.maxRetries,
       ));
 

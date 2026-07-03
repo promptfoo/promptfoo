@@ -9,7 +9,7 @@ import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
-import { writeMultipleOutputs, writeOutput } from '../src/util/index';
+import { warnOnDegradedJsonlRecovery, writeMultipleOutputs, writeOutput } from '../src/util/index';
 import { createMockProvider } from './factories/provider';
 
 vi.mock('../src/cache');
@@ -239,6 +239,7 @@ describe('evaluate function', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
+    vi.mocked(warnOnDegradedJsonlRecovery).mockImplementation(() => {});
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -557,7 +558,39 @@ describe('evaluate function', () => {
       outputPath: 'test.json',
     };
     await evaluate(testSuite);
-    expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.json'], expect.any(Eval), null);
+  });
+
+  it('should finalize JSONL files streamed during evaluation', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: 'test.jsonl',
+    };
+    await evaluate(testSuite);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.jsonl'], expect.any(Eval), null);
+  });
+
+  it('finalizes every output path (JSONL included) and warns on degraded recovery', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: ['test.jsonl', 'test.json'],
+    };
+
+    await evaluate(testSuite);
+
+    // JSONL is no longer filtered out post-run — both paths are finalized — and the recovery
+    // warning hook is consulted with the full path list.
+    expect(warnOnDegradedJsonlRecovery).toHaveBeenCalledWith(expect.any(Eval), [
+      'test.jsonl',
+      'test.json',
+    ]);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['test.jsonl', 'test.json'],
+      expect.any(Eval),
+      null,
+    );
   });
 
   it('should skip writing output when outputPath is empty', async () => {
@@ -575,11 +608,11 @@ describe('evaluate function', () => {
     const testSuite = {
       prompts: ['test'],
       providers: [],
-      outputPath: ['test1.json', 'test2.json'],
+      outputPath: ['test1.json', 'test2.jsonl', 'test3.json'],
     };
     await evaluate(testSuite);
     expect(writeMultipleOutputs).toHaveBeenCalledWith(
-      ['test1.json', 'test2.json'],
+      ['test1.json', 'test2.jsonl', 'test3.json'],
       expect.any(Eval),
       null,
     );

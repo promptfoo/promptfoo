@@ -21,6 +21,8 @@ type EnvVars = {
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
+  /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
+  PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
   PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
@@ -28,6 +30,7 @@ type EnvVars = {
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
+  PROMPTFOO_DISABLE_RUNTIME_WARNINGS?: boolean;
   /**
    * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
    * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
@@ -56,6 +59,8 @@ type EnvVars = {
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
+  PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
@@ -345,6 +350,9 @@ type EnvVars = {
 
   // MiniMax
   MINIMAX_API_KEY?: string;
+
+  // Moonshot AI (Kimi)
+  MOONSHOT_API_KEY?: string;
 
   // n8n
   N8N_API_KEY?: string;

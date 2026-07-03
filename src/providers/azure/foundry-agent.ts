@@ -6,6 +6,13 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
+  emitTurnMarkerSpan,
+  extractProviderResponseAttributes,
+  getGenAITracer,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -121,10 +128,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       modelName: this.assistantConfig.modelName || deploymentName,
       providerType: 'azure',
       functionCallbackHandler: new FunctionCallbackHandler(),
+      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens); the Foundry
+      // usage object is Responses-shaped (input_tokens/output_tokens). Pass the token counts so
+      // cost is non-zero (previously `usage` was passed into the ignored config slot).
       costCalculator: (_modelName: string, usage: any, requestConfig?: any) =>
         calculateAzureCost(
           requestConfig?.model || this.assistantConfig.modelName || this.deploymentName,
-          usage,
+          requestConfig,
+          usage?.prompt_tokens ?? usage?.input_tokens,
+          usage?.completion_tokens ?? usage?.output_tokens,
         ) ?? 0,
     });
 
@@ -514,6 +526,26 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'azure',
+      model: this.deploymentName,
+      providerId: this.id(),
+      prompt,
+      context,
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
@@ -543,11 +575,50 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const responseOptions = this.getAgentReference(agent);
       const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;
       const startTime = Date.now();
+      const tracer = getGenAITracer();
+      let turnCount = 0;
 
-      let response = await openAIClient.responses.create(
-        body as ResponseCreateParamsNonStreaming,
-        responseOptions,
-      );
+      const emitTurnSpan = (callStartedAt: number, callEndedAt: number, errorMessage?: string) => {
+        turnCount += 1;
+        emitTurnMarkerSpan({
+          tracer,
+          index: turnCount,
+          startTime: callStartedAt,
+          endTime: callEndedAt,
+          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          errorMessage,
+          logLabel: 'AzureFoundryAgent',
+        });
+      };
+
+      // The Responses API can resolve with a failed/errored response object
+      // instead of throwing. Surface that on the turn marker so a failed model
+      // round is not reported as OK (the parent chat span is already marked
+      // failed downstream via processResponse).
+      const responseFailureMessage = (resp: any): string | undefined => {
+        if (resp?.error) {
+          return typeof resp.error === 'string'
+            ? resp.error
+            : resp.error.message || resp.error.code || 'Response failed';
+        }
+        if (resp?.status === 'failed') {
+          return resp.incomplete_details?.reason || 'Response status: failed';
+        }
+        return undefined;
+      };
+
+      let turnStartedAt = Date.now();
+      let response;
+      try {
+        response = await openAIClient.responses.create(
+          body as ResponseCreateParamsNonStreaming,
+          responseOptions,
+        );
+        emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
+      } catch (err) {
+        emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+        throw err;
+      }
       while (Date.now() - startTime <= maxLoopTimeMs) {
         const functionCalls = this.getCallableFunctionCalls(
           response,
@@ -566,13 +637,20 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
         );
-        response = await openAIClient.responses.create(
-          {
-            input: outputs as ResponseFunctionToolCallOutputItem[],
-            previous_response_id: response.id,
-          } as ResponseCreateParamsNonStreaming,
-          responseOptions,
-        );
+        turnStartedAt = Date.now();
+        try {
+          response = await openAIClient.responses.create(
+            {
+              input: outputs as ResponseFunctionToolCallOutputItem[],
+              previous_response_id: response.id,
+            } as ResponseCreateParamsNonStreaming,
+            responseOptions,
+          );
+          emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
+        } catch (err) {
+          emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+          throw err;
+        }
       }
 
       if (Date.now() - startTime > maxLoopTimeMs) {

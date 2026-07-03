@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
@@ -40,6 +39,8 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
+import { loadYaml } from '../util/yamlLoad';
+import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
@@ -125,6 +126,7 @@ const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
+  'agent-rubric',
   'answer-relevance',
   'context-faithfulness',
   'context-recall',
@@ -231,6 +233,7 @@ const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
   (params: AssertionParams) => GradingResult | Promise<GradingResult>
 > = {
+  'agent-rubric': handleAgentRubric,
   'answer-relevance': handleAnswerRelevance,
   bleu: handleBleuScore,
   classifier: handleClassifier,
@@ -953,7 +956,7 @@ export async function runCompareAssertion(
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
+    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

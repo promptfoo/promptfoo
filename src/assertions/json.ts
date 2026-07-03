@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import {
   getEffectiveJsonSchemaFileRef,
   getJsonSchemaFileSnapshot,
@@ -265,10 +265,15 @@ export function getJsonSchemaFileRuntimeState(
 function getJsonSchemaValidator({
   renderedValue,
   assertion,
-}: Pick<AssertionParams, 'renderedValue' | 'assertion'>):
-  | { validate: ValidateFunction }
-  | { failure: GradingResult } {
+  valueFromScript,
+  valueFromScriptResolved,
+}: Pick<
+  AssertionParams,
+  'renderedValue' | 'assertion' | 'valueFromScript' | 'valueFromScriptResolved'
+>): { validate: ValidateFunction } | { failure: GradingResult } {
+  const isLegacyDirectInvocation = valueFromScriptResolved === undefined;
   let shouldEvictRawSnapshot = false;
+
   try {
     const ajv = getAjv();
     const snapshot = getJsonSchemaFileSnapshot(assertion);
@@ -281,8 +286,16 @@ function getJsonSchemaValidator({
           contextualizeJsonSchemaFileError(assertion.type, snapshot.error),
         );
       }
+
       if (snapshot.format === 'text') {
-        schema = yaml.load(String(renderedValue));
+        try {
+          schema = yaml.load(String(renderedValue));
+        } catch (error) {
+          if (error instanceof yaml.YAMLException) {
+            throw new JsonSchemaConfigurationError('schema compilation failed');
+          }
+          throw error;
+        }
         staticSource = `${snapshot.source}\0${String(renderedValue)}`;
         if (schema === undefined || schema === null) {
           throw new JsonSchemaConfigurationError(
@@ -295,32 +308,55 @@ function getJsonSchemaValidator({
       }
     } else if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
-        const source = resolveJsonSchemaFileReference(renderedValue);
-        const cachedSnapshot = staticFileSnapshotCache.get(assertion);
-        const loadedSnapshot =
-          cachedSnapshot?.source === source
-            ? cachedSnapshot.snapshot
-            : loadJsonSchemaFileReference(renderedValue);
-        if (cachedSnapshot?.source !== source && !('error' in loadedSnapshot)) {
-          staticFileSnapshotCache.set(assertion, { source, snapshot: loadedSnapshot });
-        }
-        if ('error' in loadedSnapshot) {
-          throw new JsonSchemaConfigurationError(
-            contextualizeJsonSchemaFileError(assertion.type, loadedSnapshot.error),
-          );
-        }
-        shouldEvictRawSnapshot = true;
-        if (loadedSnapshot.format === 'text') {
-          const schemaText = String(loadedSnapshot.schema);
-          schema = yaml.load(schemaText);
-          staticSource = `${loadedSnapshot.source}\0${schemaText}`;
+        if (isLegacyDirectInvocation) {
+          if (valueFromScript === undefined) {
+            throw new Error(
+              `${assertion.type} references a file that does not export a JSON schema`,
+            );
+          }
+          schema = valueFromScript;
         } else {
-          schema = loadedSnapshot.schema;
-          staticSource = loadedSnapshot.source;
+          const source = resolveJsonSchemaFileReference(renderedValue);
+          const cachedSnapshot = staticFileSnapshotCache.get(assertion);
+          const loadedSnapshot =
+            cachedSnapshot?.source === source
+              ? cachedSnapshot.snapshot
+              : loadJsonSchemaFileReference(renderedValue);
+          if (cachedSnapshot?.source !== source && !('error' in loadedSnapshot)) {
+            staticFileSnapshotCache.set(assertion, { source, snapshot: loadedSnapshot });
+          }
+          if ('error' in loadedSnapshot) {
+            throw new JsonSchemaConfigurationError(
+              contextualizeJsonSchemaFileError(assertion.type, loadedSnapshot.error),
+            );
+          }
+          shouldEvictRawSnapshot = true;
+          if (loadedSnapshot.format === 'text') {
+            const schemaText = String(loadedSnapshot.schema);
+            try {
+              schema = yaml.load(schemaText);
+            } catch (error) {
+              if (error instanceof yaml.YAMLException) {
+                throw new JsonSchemaConfigurationError('schema compilation failed');
+              }
+              throw error;
+            }
+            staticSource = `${loadedSnapshot.source}\0${schemaText}`;
+          } else {
+            schema = loadedSnapshot.schema;
+            staticSource = loadedSnapshot.source;
+          }
         }
       } else {
         schema = yaml.load(renderedValue);
       }
+    } else if (
+      isLegacyDirectInvocation &&
+      renderedValue !== undefined &&
+      typeof renderedValue !== 'object' &&
+      typeof renderedValue !== 'boolean'
+    ) {
+      throw new Error(`${assertion.type} assertion must have a string or object value`);
     }
 
     if (
@@ -338,6 +374,7 @@ function getJsonSchemaValidator({
     if (cached) {
       return { validate: ensureSynchronousValidator(cached) };
     }
+
     const cachedBySchemaId = getMatchingSchemaIdValidator(ajv, compilableSchema, assertion);
     if (cachedBySchemaId) {
       const validate = ensureSynchronousValidator(cachedBySchemaId);
@@ -372,22 +409,28 @@ function getJsonSchemaValidator({
       }
       throw error;
     }
+
     assertionOwnedValidators.set(validate, {
       assertion,
       schema: schemaToCompile,
       ...(schemaId && { schemaId }),
     });
+
     try {
       validate = ensureSynchronousValidator(validate);
     } catch (error) {
       removeOwnedValidator(ajv, validate, assertion);
       throw error;
     }
+
     cacheValidator(ajv, assertion, staticSource, validate, compilableSchema);
     return { validate };
   } catch (error) {
     if (shouldEvictRawSnapshot) {
       staticFileSnapshotCache.delete(assertion);
+    }
+    if (isLegacyDirectInvocation) {
+      throw error;
     }
     return {
       failure: {
@@ -405,6 +448,7 @@ export function handleIsJson({
   renderedValue,
   inverse,
   assertion,
+  valueFromScript,
   valueFromScriptResolved,
 }: AssertionParams): GradingResult {
   let parsedJson;
@@ -420,6 +464,8 @@ export function handleIsJson({
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
+      valueFromScript,
+      valueFromScriptResolved,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;
@@ -459,6 +505,7 @@ export function handleContainsJson({
   renderedValue,
   outputString,
   inverse,
+  valueFromScript,
   valueFromScriptResolved,
 }: AssertionParams): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
@@ -470,6 +517,8 @@ export function handleContainsJson({
     const validatorResult = getJsonSchemaValidator({
       renderedValue,
       assertion,
+      valueFromScript,
+      valueFromScriptResolved,
     });
     if ('failure' in validatorResult) {
       return validatorResult.failure;

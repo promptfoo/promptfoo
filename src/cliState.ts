@@ -22,6 +22,7 @@ export function redactLogMessage(message: string): string {
 interface CliState {
   basePath?: string;
   config?: Partial<UnifiedConfig>;
+  selectedProviderConfigs?: Partial<UnifiedConfig>['providers'];
 
   // Forces remote inference wherever possible
   remote?: boolean;

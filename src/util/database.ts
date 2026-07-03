@@ -17,6 +17,7 @@ import {
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvaluateSummaryV2,
@@ -32,7 +33,6 @@ import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 import { restoreAzureBlobSasTokens } from './sanitizer';
 import {
-  clearStandaloneEvalCache,
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
@@ -40,8 +40,9 @@ import {
 
 import type { StandaloneEval } from './standaloneEvalCache';
 
+export { clearStandaloneEvalCache } from './standaloneEvalCache';
+
 export type { StandaloneEval };
-export { clearStandaloneEvalCache };
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -160,7 +161,7 @@ export async function writeResultsToDatabase(
     }
   });
 
-  clearStandaloneEvalCache();
+  notifyEvaluationChanged(evalId);
 
   return evalId;
 }
@@ -456,7 +457,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
-  clearStandaloneEvalCache();
+  notifyEvaluationsDeleted([evalId]);
 }
 
 /**
@@ -464,6 +465,11 @@ export async function deleteEval(evalId: string) {
  * @param ids - The IDs of the evals to delete.
  */
 export async function deleteEvals(ids: string[]): Promise<void> {
+  // Deleting zero evals must not emit a delete signal: the watcher would broadcast an empty
+  // deletedEvalIds list, which clients interpret as "all evals deleted" and reload/clear.
+  if (ids.length === 0) {
+    return;
+  }
   const db = await getDb();
   await db.transaction(async (tx) => {
     await deleteTraceRecordsForEvals(tx, ids);
@@ -473,7 +479,7 @@ export async function deleteEvals(ids: string[]): Promise<void> {
     await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
-  clearStandaloneEvalCache();
+  notifyEvaluationsDeleted(ids);
 }
 
 /**
@@ -492,7 +498,7 @@ export async function deleteAllEvals(): Promise<void> {
     await tx.delete(evalsToTagsTable).run();
     await tx.delete(evalsTable).run();
   });
-  clearStandaloneEvalCache();
+  notifyEvaluationsDeleted();
 }
 
 export async function getStandaloneEvals({

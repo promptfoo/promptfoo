@@ -53,12 +53,19 @@ If a target or generated tests are missing, use `promptfoo-provider-setup` or
 
 ### 2. Preflight
 
-From the promptfoo repo, align Node first:
+Use the CLI form that matches your environment for every command below: from the
+promptfoo repo, `npm run local -- redteam …` (align Node first with
+`source ~/.nvm/nvm.sh && nvm use`); outside the repo (an installed plugin or your
+own app project), `npx promptfoo@latest redteam …`, or a globally installed
+`promptfoo redteam …`.
+
+Validate first:
 
 ```bash
-source ~/.nvm/nvm.sh && nvm use
 npm run local -- validate config -c path/to/redteam.yaml
 npm run local -- validate target -c path/to/redteam.yaml
+# Outside the repo:
+npx promptfoo@latest validate config -c path/to/redteam.yaml
 ```
 
 Check that generated tests include `assert`, `metadata.pluginId`,
@@ -80,6 +87,8 @@ Evaluate generated tests:
 
 ```bash
 npm run local -- redteam eval -c path/to/redteam.yaml -o /tmp/redteam-results.json --no-cache --no-share --no-progress-bar
+# Outside the repo:
+npx promptfoo@latest redteam eval -c path/to/redteam.yaml -o /tmp/redteam-results.json --no-cache --no-share --no-progress-bar
 ```
 
 Generate and evaluate in one command only when needed. `redteam run` has no

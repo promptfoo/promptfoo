@@ -26,7 +26,11 @@ import {
 } from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import {
+  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
+} from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -38,6 +42,7 @@ import {
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { calculateBedrockCost } from './pricing';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -80,8 +85,9 @@ export interface BedrockConverseOptions extends BedrockOptions {
     | {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
       }
-    | { type: 'adaptive' }
+    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
     | { type: 'disabled' };
 
   // Reasoning configuration (Amazon Nova 2 models)
@@ -140,108 +146,6 @@ export interface BedrockConverseToolConfig {
   name?: string;
   description?: string;
   input_schema?: Record<string, unknown>;
-}
-
-/**
- * Bedrock model pricing per 1M tokens
- * Prices as of 2025 - may need updates
- */
-const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
-  // Claude Opus 4.8
-  'anthropic.claude-opus-4-8': { input: 5, output: 25 },
-  // Claude Opus 4.7
-  'anthropic.claude-opus-4-7': { input: 5, output: 25 },
-  // Claude Opus 4.6
-  'anthropic.claude-opus-4-6': { input: 5, output: 25 },
-  // Claude Opus 4.5
-  'anthropic.claude-opus-4-5': { input: 5, output: 25 },
-  // Claude Opus 4/4.1
-  'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 4/4.5
-  'anthropic.claude-sonnet-4': { input: 3, output: 15 },
-  // Claude Haiku 4.5
-  'anthropic.claude-haiku-4': { input: 1, output: 5 },
-  // Claude 3.x
-  'anthropic.claude-3-opus': { input: 15, output: 75 },
-  'anthropic.claude-3-5-sonnet': { input: 3, output: 15 },
-  'anthropic.claude-3-7-sonnet': { input: 3, output: 15 },
-  'anthropic.claude-3-5-haiku': { input: 0.8, output: 4 },
-  'anthropic.claude-3-haiku': { input: 0.25, output: 1.25 },
-  // Amazon Nova
-  'amazon.nova-micro': { input: 0.035, output: 0.14 },
-  'amazon.nova-lite': { input: 0.06, output: 0.24 },
-  'amazon.nova-pro': { input: 0.8, output: 3.2 },
-  'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
-  // Amazon Titan Text
-  'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
-  'amazon.titan-text-express': { input: 0.8, output: 1.6 },
-  'amazon.titan-text-premier': { input: 0.5, output: 1.5 },
-  // Meta Llama
-  'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
-  'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
-  'meta.llama3-1-405b': { input: 5.32, output: 16 },
-  'meta.llama3-2-1b': { input: 0.1, output: 0.1 },
-  'meta.llama3-2-3b': { input: 0.15, output: 0.15 },
-  'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
-  'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
-  'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
-  'meta.llama4-scout': { input: 0.17, output: 0.68 },
-  'meta.llama4-maverick': { input: 0.17, output: 0.68 },
-  'meta.llama4': { input: 1.0, output: 3.0 },
-  // Mistral
-  'mistral.mistral-7b': { input: 0.15, output: 0.2 },
-  'mistral.mixtral-8x7b': { input: 0.45, output: 0.7 },
-  'mistral.mistral-large': { input: 4, output: 12 },
-  'mistral.mistral-small': { input: 1, output: 3 },
-  'mistral.pixtral-large': { input: 2, output: 6 },
-  // AI21 Jamba
-  'ai21.jamba-1-5-mini': { input: 0.2, output: 0.4 },
-  'ai21.jamba-1-5-large': { input: 2, output: 8 },
-  // Cohere
-  'cohere.command-r': { input: 0.5, output: 1.5 },
-  'cohere.command-r-plus': { input: 3, output: 15 },
-  // DeepSeek
-  'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
-  'deepseek.r1': { input: 1.35, output: 5.4 },
-  // Qwen
-  'qwen.qwen3-32b': { input: 0.2, output: 0.6 },
-  'qwen.qwen3-235b': { input: 0.18, output: 0.54 },
-  'qwen.qwen3-coder-30b': { input: 0.2, output: 0.6 },
-  'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
-  'qwen.qwen3': { input: 0.5, output: 1.5 },
-  // Writer Palmyra
-  'writer.palmyra-x5': { input: 0.6, output: 6 },
-  'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // OpenAI GPT-OSS
-  'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
-  'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
-};
-
-/**
- * Calculate cost based on model and token usage
- */
-function calculateBedrockConverseCost(
-  modelId: string,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (promptTokens === undefined || completionTokens === undefined) {
-    return undefined;
-  }
-
-  // Find matching pricing
-  const normalizedModelId = modelId.toLowerCase();
-  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
-    if (normalizedModelId.includes(modelPrefix)) {
-      const inputCost = (promptTokens / 1_000_000) * pricing.input;
-      const outputCost = (completionTokens / 1_000_000) * pricing.output;
-      return inputCost + outputCost;
-    }
-  }
-
-  return undefined;
 }
 
 /**
@@ -774,9 +678,14 @@ function extractTextFromContentBlocks(
         if ('reasoningText' in reasoning && reasoning.reasoningText) {
           const thinkingText = reasoning.reasoningText.text || '';
           const signature = reasoning.reasoningText.signature || '';
-          parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
-          if (signature) {
-            parts.push(`Signature: ${signature}`);
+          // Adaptive thinking with the default display "omitted" (Claude 5)
+          // returns an empty thinking block carrying only a signature —
+          // exclude it, matching outputFromMessage on the Anthropic paths.
+          if (thinkingText.trim() !== '') {
+            parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
+            if (signature) {
+              parts.push(`Signature: ${signature}`);
+            }
           }
         } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
           parts.push('<thinking>[Redacted]</thinking>');
@@ -808,6 +717,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private mcpInitError: Error | null = null;
   private registeredForShutdown = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
+  private forcedToolChoiceRemovalWarned = false;
 
   constructor(
     modelName: string,
@@ -1052,7 +962,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+    // Newer Claude models deprecate manual sampling controls at the model
     // level — a request that pins `temperature` or `topP` on Bedrock returns
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
@@ -1127,9 +1037,20 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     });
 
     const converseTools = convertToolsToConverseFormat([...mcpTools, ...dedupedConfigTools]);
-    const toolChoice = configToolChoice
+    const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
+    const dropForcedToolChoice =
+      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      requestedToolChoice !== undefined &&
+      ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
+    if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
+      logger.warn(
+        'Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of Claude Fable 5 and Claude Mythos 5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+      );
+      this.forcedToolChoiceRemovalWarned = true;
+    }
+    const toolChoice = dropForcedToolChoice ? undefined : requestedToolChoice;
 
     return {
       tools: converseTools,
@@ -1168,14 +1089,34 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
+    // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
+    // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
+    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
+    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
+      delete fields.temperature;
+      delete fields.top_p;
+      delete fields.top_k;
+      const additionalThinking = fields.thinking as
+        | { type: string; display?: 'summarized' | 'omitted' }
+        | undefined;
+      const normalizedThinking = normalizeClaudeThinkingConfig(this.modelName, additionalThinking);
+      if (normalizedThinking === undefined) {
+        delete fields.thinking;
+      } else {
+        fields.thinking = normalizedThinking;
+      }
+    }
 
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
-      fields.thinking =
-        isSamplingParamsDeprecatedClaudeModel(this.modelName) &&
-        this.config.thinking.type === 'enabled'
-          ? { type: 'adaptive' }
-          : this.config.thinking;
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        this.config.thinking,
+      );
+      if (normalizedThinking !== undefined) {
+        fields.thinking = normalizedThinking;
+      }
     }
 
     // Add reasoning configuration for Amazon Nova 2 models
@@ -1553,7 +1494,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Calculate cost
-    const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
+    const cost = calculateBedrockCost(
+      this.modelName,
+      promptTokens,
+      completionTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      this.getRegion(),
+      this.config.serviceTier,
+    );
 
     // Build metadata
     const metadata: Record<string, unknown> = {};
@@ -1798,7 +1747,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let output = '';
       let reasoning = '';
       let stopReason: string | undefined;
-      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+      let usage: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+        cacheReadInputTokens?: number;
+        cacheWriteInputTokens?: number;
+      } = {};
 
       // Track tool use blocks being streamed
       const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
@@ -1857,9 +1812,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         toolsDisabled,
       );
 
-      // Combine reasoning, output, and tool use
+      // Combine reasoning, output, and tool use. Skip whitespace-only
+      // reasoning — omitted-display adaptive thinking streams empty deltas.
       const parts: string[] = [];
-      if (reasoning) {
+      if (reasoning.trim()) {
         parts.push(`<thinking>\n${reasoning}\n</thinking>`);
       }
       if (output) {
@@ -1893,10 +1849,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         numRequests: 1,
       };
 
-      const cost = calculateBedrockConverseCost(
+      const cost = calculateBedrockCost(
         this.modelName,
         usage.inputTokens,
         usage.outputTokens,
+        usage.cacheReadInputTokens,
+        usage.cacheWriteInputTokens,
+        this.getRegion(),
+        this.config.serviceTier,
       );
 
       // Surface MCP failures via the response `error` field. If the model also
