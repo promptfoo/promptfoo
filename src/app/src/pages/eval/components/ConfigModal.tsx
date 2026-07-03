@@ -3,7 +3,7 @@ import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { Check, ClipboardCopy, Download } from 'lucide-react';
 import { useTableStore } from './store';
 

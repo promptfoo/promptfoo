@@ -1,9 +1,9 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import * as yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestCasesSection from './TestCasesSection';
 
@@ -23,9 +23,9 @@ vi.mock('@promptfoo/csv', () => ({
   testCaseFromCsvRow: vi.fn(),
 }));
 
-// Mock js-yaml
-vi.mock('js-yaml', () => ({
-  load: vi.fn(),
+// Mock the shared YAML loader
+vi.mock('@promptfoo/util/yamlLoad', () => ({
+  loadYaml: vi.fn(),
 }));
 
 // Mock TestCaseDialog to avoid rendering issues
@@ -376,7 +376,7 @@ describe('TestCasesSection', () => {
         },
       ];
 
-      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
+      vi.mocked(loadYaml).mockReturnValue(mockYamlData);
 
       createFileReaderMock('- description: Math test');
 
@@ -421,7 +421,7 @@ describe('TestCasesSection', () => {
         assert: [{ type: 'contains', value: 'world' }],
       };
 
-      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
+      vi.mocked(loadYaml).mockReturnValue(mockYamlData);
 
       createFileReaderMock('description: Single test');
 
@@ -478,7 +478,7 @@ describe('TestCasesSection', () => {
         },
       ];
 
-      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
+      vi.mocked(loadYaml).mockReturnValue(mockYamlData);
 
       createFileReaderMock('- description: Test');
 
@@ -529,7 +529,7 @@ describe('TestCasesSection', () => {
         null,
       ];
 
-      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
+      vi.mocked(loadYaml).mockReturnValue(mockYamlData);
 
       createFileReaderMock('invalid');
 
@@ -560,7 +560,7 @@ describe('TestCasesSection', () => {
       const user = userEvent.setup();
       const mockYamlData = ['string instead of object', null, undefined, 123, true];
 
-      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
+      vi.mocked(loadYaml).mockReturnValue(mockYamlData);
 
       createFileReaderMock('invalid');
 
@@ -587,7 +587,7 @@ describe('TestCasesSection', () => {
 
     it('handles invalid YAML format', async () => {
       const user = userEvent.setup();
-      vi.mocked(yaml.load).mockReturnValue('invalid string');
+      vi.mocked(loadYaml).mockReturnValue('invalid string');
 
       createFileReaderMock('invalid yaml');
 
@@ -614,7 +614,7 @@ describe('TestCasesSection', () => {
 
     it('handles file parsing errors gracefully', async () => {
       const user = userEvent.setup();
-      vi.mocked(yaml.load).mockImplementation(() => {
+      vi.mocked(loadYaml).mockImplementation(() => {
         throw new Error('YAML parsing failed');
       });
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

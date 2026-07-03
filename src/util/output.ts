@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { collectBlobHashes } from '../blobs/blobRefs';
 import { BLOB_MAX_SIZE } from '../blobs/constants';
 import { VERSION } from '../constants';

@@ -275,6 +275,32 @@ docker build -t promptfoo:custom .
 # docker build --platform linux/amd64 -t promptfoo:custom .
 ```
 
+Images built from this Dockerfile are marked as custom containers. To apply a Promptfoo update,
+first advance the checkout to the desired release, then rebuild and redeploy. If a runtime notice is
+active, also update the image's Node.js base to a supported version. Use `docker build --pull` when a
+tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
+version.
+
+Custom Dockerfiles that bake Promptfoo into another base image should identify themselves so update
+notices do not suggest a host-level `npm` or `npx` command:
+
+```dockerfile
+ENV PROMPTFOO_RUNNING_IN_DOCKER=1
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+```
+
+If your Dockerfile derives from the official Promptfoo image, reset the upstream-image marker while
+keeping container detection enabled. This prevents update notices from suggesting that users replace
+your customized image with the upstream image:
+
+```dockerfile
+FROM ghcr.io/promptfoo/promptfoo:latest
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+```
+
+Existing derived images that inherit the marker receive safe fallback guidance to refresh the
+Promptfoo base, rebuild the customized image, and then redeploy it.
+
 ### 3. Run the Custom Docker Container
 
 Use the same `docker run` command as in Method 1, but replace the image name:
@@ -431,7 +457,7 @@ spec:
     spec:
       containers:
         - name: promptfoo
-          image: promptfoo/promptfoo:latest
+          image: ghcr.io/promptfoo/promptfoo:latest
           volumeMounts:
             - name: config
               mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
