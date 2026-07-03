@@ -126,6 +126,62 @@ describe('EvalResult', () => {
       expect(JSON.stringify(result)).not.toContain(errorSecret);
     });
 
+    it('redacts AWS/Azure credential fields in provider config (name-based)', () => {
+      // Regression: Bedrock (`secretAccessKey`/`sessionToken`) and Azure
+      // (`azureClientSecret`) credentials use realistic values that fall
+      // outside the value-shape `looksLikeSecret` heuristics (a 40-char AWS
+      // secret is below the 64-char base64 threshold; Azure secrets contain
+      // `~`/`.`), so they must be redacted by field name.
+      const providerOptions = {
+        id: 'bedrock:anthropic.claude-3',
+        config: {
+          region: 'us-east-1',
+          accessKeyId: 'ASIAIOSFODNN7EXAMPLE',
+          secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+          sessionToken: 'short-session-token',
+          azureClientSecret: 'abc8Q~someSecretValue.With-Tilde_and.Dots123',
+        },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result.config).toEqual({
+        region: 'us-east-1',
+        accessKeyId: '[REDACTED]',
+        secretAccessKey: '[REDACTED]',
+        sessionToken: '[REDACTED]',
+        azureClientSecret: '[REDACTED]',
+      });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+      expect(serialized).not.toContain('short-session-token');
+      expect(serialized).not.toContain('abc8Q~someSecretValue');
+    });
+
+    it('redacts secrets exposed via a nested config toJSON()', () => {
+      // Attack: a nested config object whose custom toJSON() returns credentials.
+      // Redaction must run AFTER serialization so the toJSON output is caught,
+      // not bypassed.
+      const leakyCreds = {
+        toJSON() {
+          return {
+            apiKey: 'sk-ant-api03-TOJSON-SHOULD-NOT-PERSIST',
+            secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+          };
+        },
+      };
+      const result = sanitizeProvider({
+        id: 'test-provider',
+        config: { creds: leakyCreds },
+      } as unknown as ProviderOptions);
+
+      expect(result.config).toEqual({
+        creds: { apiKey: '[REDACTED]', secretAccessKey: '[REDACTED]' },
+      });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('sk-ant-api03-TOJSON-SHOULD-NOT-PERSIST');
+      expect(serialized).not.toContain('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+    });
+
     it('should omit provider configs that throw during sanitization', () => {
       const errorSecret = 'sk-provider-error-should-never-log';
       const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);

@@ -142,6 +142,22 @@ export const SECRET_FIELD_NAMES = new Set([
   'cookie',
   'setcookie', // set-cookie
 
+  // Cloud provider credentials (AWS / Azure / GCP)
+  // These are real provider-config fields (e.g. Bedrock `secretAccessKey` /
+  // `sessionToken`, Azure `azureClientSecret`) that would otherwise only be caught
+  // by value-shape heuristics. A 40-char AWS secret access key and an Azure client
+  // secret (which contains `~`/`.`) both fall below/outside the `looksLikeSecret`
+  // patterns, so match them by name. SDK v3 camelCase and env-var snake_case forms
+  // normalize to distinct keys, so include both.
+  'accesskeyid', // accessKeyId
+  'awsaccesskeyid', // AWS_ACCESS_KEY_ID
+  'secretaccesskey', // secretAccessKey
+  'awssecretaccesskey', // AWS_SECRET_ACCESS_KEY
+  'sessiontoken', // sessionToken (AWS STS / OAuth session tokens)
+  'awssessiontoken', // AWS_SESSION_TOKEN
+  'azureclientsecret', // azureClientSecret
+  'sastoken', // Azure Shared Access Signature token
+
   // Certificate and encryption
   'certificatepassword',
   'keystorepassword',

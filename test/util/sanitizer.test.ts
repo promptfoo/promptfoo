@@ -1127,14 +1127,53 @@ describe('sanitizeObject', () => {
       const awsConfig = {
         region: 'us-east-1',
         accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        // Realistic 40-char AWS secret access key: below the 64-char base64
+        // `looksLikeSecret` threshold, so it must be caught by field name.
         secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        // Short session token: not matched by value shape, must be caught by name.
         sessionToken: 'session-token-value',
       };
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('session-token-value');
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
+    });
+
+    it('should sanitize temporary AWS credentials and snake_case env-var forms', () => {
+      const awsConfig = {
+        region: 'us-west-2',
+        // Temporary STS access key starts with ASIA (not AKIA), so value-shape
+        // detection misses it — the field name must redact it.
+        accessKeyId: 'ASIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        aws_secret_access_key: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        aws_session_token: 'short-session-token',
+      };
+      const result = sanitizeObject(awsConfig);
+      expect(result.region).toBe('us-west-2');
+      expect(result.accessKeyId).toBe('[REDACTED]');
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.aws_secret_access_key).toBe('[REDACTED]');
+      expect(result.aws_session_token).toBe('[REDACTED]');
+    });
+
+    it('should sanitize Azure client secret and SAS token by field name', () => {
+      const azureConfig = {
+        region: 'eastus',
+        clientId: 'my-app-client-id-1234',
+        tenantId: 'my-tenant-id-1234',
+        // Azure client secrets contain `~` and `.`, which fall outside the base64
+        // `looksLikeSecret` charset, so they must be caught by field name.
+        azureClientSecret: 'abc8Q~someSecretValue.With-Tilde_and.Dots123',
+        sasToken: '?sv=2021-08-06&sig=abc123def456',
+      };
+      const result = sanitizeObject(azureConfig);
+      expect(result.region).toBe('eastus');
+      expect(result.clientId).toBe('my-app-client-id-1234');
+      expect(result.tenantId).toBe('my-tenant-id-1234');
+      expect(result.azureClientSecret).toBe('[REDACTED]');
+      expect(result.sasToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {
