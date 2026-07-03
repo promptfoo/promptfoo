@@ -83,7 +83,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             
             Additional plugins: ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join(', ')}
             
-            Example: ["harmful", "pii", "prompt-injection"]
+            Example: ["harmful", "pii", "hijacking"]
           `,
         ),
       strategies: z
@@ -97,7 +97,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             
             Additional strategies: ${Array.from(ADDITIONAL_STRATEGIES).sort().join(', ')}
             
-            Example: ["jailbreak", "prompt-injection"]
+            Example: ["jailbreak", "jailbreak-templates"]
           `,
         ),
       numTests: z
