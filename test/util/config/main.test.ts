@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
@@ -45,6 +45,7 @@ vi.mock('node:fs', () => ({
 
 vi.mock('os');
 vi.mock('js-yaml');
+vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
