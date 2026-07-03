@@ -2500,6 +2500,41 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.tokenUsage).toEqual({ total: 7, numRequests: 1 });
   });
 
+  it('reports cost for priced embedding models', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2], 10_000) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    // $0.20 per 1M input tokens
+    expect(response.cost).toBeCloseTo(0.002, 10);
+  });
+
+  it('omits cost for cached embedding responses', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        embedding: { values: [0.1, 0.2] },
+        usageMetadata: { promptTokenCount: 10_000 },
+      },
+      cached: true,
+    } as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    expect(response.cached).toBe(true);
+    expect(response.cost).toBeUndefined();
+  });
+
+  it('omits cost when the response has no usage metadata', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2]) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    expect(response.cost).toBeUndefined();
+  });
+
   it('forwards taskType, outputDimensionality, and title from config', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1], 1) as any);
 
