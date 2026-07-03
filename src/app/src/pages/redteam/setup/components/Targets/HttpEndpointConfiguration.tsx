@@ -31,7 +31,7 @@ import { Switch } from '@app/components/ui/switch';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import {
   AlignLeft,
   Check,

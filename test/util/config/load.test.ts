@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
@@ -2428,7 +2428,6 @@ describe('readConfig', () => {
   it('should handle empty YAML file by defaulting to empty object', async () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue('');
     vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as path.ParsedPath);
-    vi.spyOn(yaml, 'load').mockReturnValue(null);
     mockDereference.mockResolvedValueOnce({});
 
     const result = await readConfig('empty.yaml');
