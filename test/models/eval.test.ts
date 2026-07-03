@@ -3366,6 +3366,136 @@ describe('evaluator', () => {
 
       expect(projected.results.results[0].response?.metadata).toBeUndefined();
     });
+
+    // Regression for PR #9591 review (thread 3481318126): active strip flags must gate
+    // the SQL projections so the discarded payload never crosses the SQLite/Drizzle
+    // boundary (it was previously materialized in full and only dropped afterward).
+    it('does not hydrate stripped response/vars/grading payloads across the DB boundary', async () => {
+      const secret = 'HYDRATION_SECRET_PAYLOAD';
+      const big = secret.repeat(2500); // ~57 KB per field
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          vars: { query: big },
+          response: { output: big, prompt: big },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: big,
+            componentResults: [{ pass: false, score: 0, reason: big }],
+          } as any,
+          metadata: { pluginId: 'harmful' },
+        }),
+      );
+
+      const db = await getDb();
+      const originalExecute = db.$client.execute.bind(db.$client);
+      const materializedRows: string[] = [];
+      const executeSpy = vi
+        .spyOn(db.$client, 'execute')
+        .mockImplementation(async (statement: any) => {
+          const queryResult = await originalExecute(statement);
+          materializedRows.push(JSON.stringify(queryResult.rows));
+          return queryResult;
+        });
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+      });
+      try {
+        const projected = await eval1.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        // The stripped classes are still projected to safe placeholders in the result.
+        const result = projected.results.results[0];
+        expect(result.response).toEqual({ output: '[output stripped]' });
+        expect(result.vars).toEqual({});
+        expect(result.gradingResult).toBeNull();
+        // And the discarded payload never crossed the database boundary.
+        expect(materializedRows.join('')).not.toContain(secret);
+      } finally {
+        restoreEnv();
+        executeSpy.mockRestore();
+      }
+    });
+
+    // Regression for PR #9591 review (thread 3481318130): compact history must be typed
+    // and bounded — prompt/output must be strings, and oversized media is dropped from
+    // the summary (kept behind full row-detail hydration).
+    it('bounds compact history media and rejects non-string prompt/output', async () => {
+      const hugeAudio = 'A'.repeat(1_500_000); // well over the media byte budget
+      const smallImage = { data: 'A'.repeat(32), format: 'png' };
+      const createResult = () =>
+        createEvaluateResult({
+          metadata: {
+            pluginId: 'harmful',
+            redteamHistory: [
+              {
+                prompt: 'small prompt',
+                promptAudio: { data: hugeAudio, format: 'wav' },
+                output: 'small output',
+                outputImage: smallImage,
+                score: 1,
+              },
+              {
+                prompt: { injected: 'OBJECT_PROMPT_SECRET' },
+                output: { nested: 'OBJECT_OUTPUT_SECRET' },
+                score: 1,
+              },
+            ],
+          },
+        });
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createResult());
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createResult());
+
+      for (const eval_ of [persistedEval, inMemoryEval]) {
+        const projected = await eval_.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        const result = projected.results.results[0];
+        const history = result.metadata?.redteamHistory as any[];
+
+        // Oversized media dropped from the summary; small media retained.
+        expect(history[0]).not.toHaveProperty('promptAudio');
+        expect(history[0].outputImage).toEqual(smallImage);
+        expect(history[0].prompt).toBe('small prompt');
+        // Non-string prompt/output rejected: never reaches the summary (would crash the
+        // report's ChatMessages renderer as a React child).
+        expect(history[1].prompt).toBeUndefined();
+        expect(history[1].output).toBeUndefined();
+
+        const serialized = JSON.stringify(result);
+        expect(serialized).not.toContain('OBJECT_PROMPT_SECRET');
+        expect(serialized).not.toContain('OBJECT_OUTPUT_SECRET');
+        expect(serialized).not.toContain(hugeAudio);
+        expect(serialized.length).toBeLessThan(200_000);
+      }
+    });
+
+    // Regression for PR #9591 review (thread 3481318136): persisted/legacy configs can
+    // carry redteam.plugins as a non-array; the compact path must not throw
+    // `plugins.map is not a function`.
+    it('loads the compact report when config.redteam.plugins is a malformed object', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      eval1.config = { redteam: { plugins: { id: 'policy' } as any } };
+
+      const projected = await eval1.toResultsFile({
+        resultProjection: 'redteamReport',
+        includeTraces: false,
+      });
+
+      expect(projected.results.results).toHaveLength(1);
+      // An invalid (non-array) plugin collection is omitted rather than crashing.
+      expect(projected.config.redteam).not.toHaveProperty('plugins');
+    });
   });
 
   describe('getTablePage', () => {

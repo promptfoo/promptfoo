@@ -59,6 +59,8 @@ import {
 import EvalResult, {
   getOutputStripFlags,
   getResultIndexKey,
+  MAX_COMPACT_HISTORY_MEDIA_LENGTH,
+  MAX_COMPACT_HISTORY_TEXT_LENGTH,
   type OutputStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
@@ -302,6 +304,12 @@ function jsonHistoryForRedteamReport(
     return sql<string | null>`NULL`;
   }
 
+  const promptFields = stripFlags.shouldStripPromptText
+    ? []
+    : ['prompt', 'promptAudio', 'promptImage'];
+  const outputFields = stripFlags.shouldStripResponseOutput
+    ? []
+    : ['output', 'outputAudio', 'outputImage'];
   const allowedFields = [
     'id',
     'parentId',
@@ -310,10 +318,15 @@ function jsonHistoryForRedteamReport(
     'wasSelected',
     'graderPassed',
     'role',
-    ...(stripFlags.shouldStripPromptText ? [] : ['prompt', 'promptAudio', 'promptImage']),
-    ...(stripFlags.shouldStripResponseOutput ? [] : ['output', 'outputAudio', 'outputImage']),
+    ...promptFields,
+    ...outputFields,
   ];
 
+  // Bound each turn so the compact summary the browser loads eagerly cannot be blown up
+  // by a chatty/adversarial run: prompt/output must be text (truncated), and media
+  // objects over the inline budget are dropped from the summary (still available via
+  // full row-detail hydration). Keep these limits in sync with the JS projection in
+  // `evalResult.ts` (`projectRedteamHistoryForOutput`).
   return sql<string | null>`CASE
     WHEN json_type(${metadata}, ${path}) = 'array'
     THEN (
@@ -322,9 +335,11 @@ function jsonHistoryForRedteamReport(
           SELECT json_group_object(
             history_field.key,
             CASE
-              WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
               WHEN history_field.type = 'true' THEN json('true')
               WHEN history_field.type = 'false' THEN json('false')
+              WHEN history_field.key IN ('prompt', 'output')
+                THEN substr(history_field.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
               ELSE history_field.value
             END
           )
@@ -342,6 +357,16 @@ function jsonHistoryForRedteamReport(
               WHEN 'graderPassed' THEN history_field.type IN ('true', 'false')
               WHEN 'role' THEN history_field.type = 'text'
                 AND history_field.value IN ('user', 'assistant', 'system')
+              WHEN 'prompt' THEN history_field.type = 'text'
+              WHEN 'output' THEN history_field.type = 'text'
+              WHEN 'promptAudio' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              WHEN 'promptImage' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              WHEN 'outputAudio' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              WHEN 'outputImage' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
               ELSE 1
             END
         )))
@@ -745,11 +770,17 @@ function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<
           ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
           ...(tools !== undefined && { config: { tools } }),
         };
-  const plugins = config.redteam?.plugins
-    ?.map(projectPluginForRedteamReport)
-    .filter((plugin) => plugin !== undefined) as
-    | NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']>
-    | undefined;
+  // The save/API boundary only guarantees `config` is a record, so persisted or legacy
+  // data can carry `redteam.plugins` as a non-array (e.g. `{ id: 'policy' }`). Guard with
+  // Array.isArray before mapping; an invalid collection is omitted rather than throwing
+  // `plugins.map is not a function` and breaking the whole compact report load.
+  const plugins = (
+    Array.isArray(config.redteam?.plugins)
+      ? config.redteam.plugins
+          .map(projectPluginForRedteamReport)
+          .filter((plugin) => plugin !== undefined)
+      : undefined
+  ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
 
   return {
     ...(config.description !== undefined && { description: config.description }),
@@ -2369,7 +2400,13 @@ export default class Eval {
         promptDisplay: sql<
           string | null
         >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN json_extract(${validPromptJson}, '$.display') ELSE NULL END`,
-        vars: sql<string | null>`(
+        // Build the payload-heavy projections from stripFlags so classes an active
+        // strip discards never cross the SQLite/Drizzle boundary (they are otherwise
+        // materialized in full and only dropped later in createRedteamReportResult,
+        // preserving the OOM/timeout mode this compact path exists to remove).
+        vars: stripFlags.shouldStripTestVars
+          ? sql<string | null>`NULL`
+          : sql<string | null>`(
           SELECT json_group_object(
             report_vars.key,
             CASE report_vars.type
@@ -2388,12 +2425,16 @@ export default class Eval {
           )})
         )`,
         responseExists: jsonIsObject(evalResultsTable.response),
-        responseOutput: sql<string | null>`${validResponseJson} -> '$.output'`,
-        responsePrompt: sql<string | null>`${validResponseJson} -> '$.prompt'`,
-        responseRedteamFinalPrompt: jsonTextOrNull(
-          validResponseJson,
-          '$.metadata.redteamFinalPrompt',
-        ),
+        responseOutput: stripFlags.shouldStripResponseOutput
+          ? sql<string | null>`NULL`
+          : sql<string | null>`${validResponseJson} -> '$.output'`,
+        responsePrompt: stripFlags.shouldStripPromptText
+          ? sql<string | null>`NULL`
+          : sql<string | null>`${validResponseJson} -> '$.prompt'`,
+        responseRedteamFinalPrompt:
+          stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+            ? sql<string | null>`NULL`
+            : jsonTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
         errorExists: sql<number>`CASE
           WHEN ${evalResultsTable.error} IS NOT NULL AND ${evalResultsTable.error} <> '' THEN 1
           ELSE 0
@@ -2402,14 +2443,30 @@ export default class Eval {
         success: evalResultsTable.success,
         score: evalResultsTable.score,
         latencyMs: evalResultsTable.latencyMs,
-        gradingResultExists: jsonIsObject(evalResultsTable.gradingResult),
-        gradingPass: jsonBooleanOrNull(validGradingResultJson, '$.pass'),
-        gradingScore: jsonNumberOrNull(validGradingResultJson, '$.score'),
-        gradingReason: jsonTextOrNull(validGradingResultJson, '$.reason'),
-        gradingAssertionType: jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
-        gradingAssertionMetric: jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
-        gradingSuggestions: jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
-        gradingComponentResults: sql<string | null>`CASE
+        gradingResultExists: stripFlags.shouldStripGradingResult
+          ? sql<number>`0`
+          : jsonIsObject(evalResultsTable.gradingResult),
+        gradingPass: stripFlags.shouldStripGradingResult
+          ? sql<number | null>`NULL`
+          : jsonBooleanOrNull(validGradingResultJson, '$.pass'),
+        gradingScore: stripFlags.shouldStripGradingResult
+          ? sql<number | null>`NULL`
+          : jsonNumberOrNull(validGradingResultJson, '$.score'),
+        gradingReason: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonTextOrNull(validGradingResultJson, '$.reason'),
+        gradingAssertionType: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
+        gradingAssertionMetric: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
+        gradingSuggestions: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
+        gradingComponentResults: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : sql<string | null>`CASE
           WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
           THEN (
             SELECT json_group_array(
@@ -2451,7 +2508,10 @@ export default class Eval {
         END`,
         metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
         metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
-        metadataRedteamFinalPrompt: jsonTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
+        metadataRedteamFinalPrompt:
+          stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+            ? sql<string | null>`NULL`
+            : jsonTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
         metadataRedteamHistory: jsonHistoryForRedteamReport(
           validMetadataJson,
           '$.redteamHistory',

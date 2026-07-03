@@ -33,6 +33,57 @@ interface RiskCategoryDrawerProps {
   numFailed: number;
 }
 
+// Full row details are the unbounded payloads intentionally moved out of the report
+// summary, so retaining every inspected row would recreate the browser OOM this drawer
+// is meant to avoid. Keep only a small LRU with an explicit count + byte budget.
+const MAX_DETAIL_CACHE_ENTRIES = 5;
+const MAX_DETAIL_CACHE_BYTES = 5 * 1024 * 1024;
+
+type DetailsCacheEntry = { result: EvaluateResult; bytes: number };
+type DetailsCache = { evalId: string; results: Map<string, DetailsCacheEntry>; bytes: number };
+
+function createDetailsCache(evalId: string): DetailsCache {
+  return { evalId, results: new Map(), bytes: 0 };
+}
+
+function estimateResultBytes(result: EvaluateResult): number {
+  try {
+    return JSON.stringify(result).length;
+  } catch {
+    return 0;
+  }
+}
+
+function retainRowDetail(cache: DetailsCache, key: string, result: EvaluateResult): void {
+  const existing = cache.results.get(key);
+  if (existing) {
+    cache.bytes -= existing.bytes;
+    cache.results.delete(key);
+  }
+  const bytes = estimateResultBytes(result);
+  // A single row larger than the whole budget is still displayed, just never retained.
+  if (bytes > MAX_DETAIL_CACHE_BYTES) {
+    return;
+  }
+  cache.results.set(key, { result, bytes });
+  cache.bytes += bytes;
+  // Evict oldest (insertion-ordered) entries until within both bounds.
+  while (
+    cache.results.size > MAX_DETAIL_CACHE_ENTRIES ||
+    (cache.bytes > MAX_DETAIL_CACHE_BYTES && cache.results.size > 1)
+  ) {
+    const oldestKey = cache.results.keys().next().value as string | undefined;
+    if (oldestKey === undefined) {
+      break;
+    }
+    const evicted = cache.results.get(oldestKey);
+    cache.results.delete(oldestKey);
+    if (evicted) {
+      cache.bytes -= evicted.bytes;
+    }
+  }
+}
+
 const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
 
 // Sort function for prioritizing specific strategies
@@ -154,19 +205,23 @@ const RiskCategoryDrawer = ({
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
   const [loadingDetailsKey, setLoadingDetailsKey] = React.useState<string | null>(null);
   const [detailsLoadError, setDetailsLoadError] = React.useState<string | null>(null);
-  const detailsCacheRef = React.useRef<{ evalId: string; results: Map<string, EvaluateResult> }>({
-    evalId,
-    results: new Map(),
-  });
+  const detailsCacheRef = React.useRef<DetailsCache>(createDetailsCache(evalId));
   const detailsRequestRef = React.useRef(0);
+  const detailsAbortRef = React.useRef<AbortController | null>(null);
   const detailsContextRef = React.useRef({ category, evalId, open });
   detailsContextRef.current = { category, evalId, open };
 
   React.useEffect(() => {
     detailsContextRef.current = { category, evalId, open };
     detailsRequestRef.current += 1;
-    if (detailsCacheRef.current.evalId !== evalId) {
-      detailsCacheRef.current = { evalId, results: new Map() };
+    // Cancel any in-flight download so a category switch, eval change, or close stops
+    // both the network request and the JSON parsing of a stale full row.
+    detailsAbortRef.current?.abort();
+    detailsAbortRef.current = null;
+    // Drop retained full rows when the eval changes or the drawer closes so the
+    // unbounded payloads never accumulate across evals or sessions.
+    if (detailsCacheRef.current.evalId !== evalId || !open) {
+      detailsCacheRef.current = createDetailsCache(evalId);
     }
     setLoadingDetailsKey(null);
     setDetailsLoadError(null);
@@ -203,10 +258,16 @@ const RiskCategoryDrawer = ({
 
     const requestId = ++detailsRequestRef.current;
     const requestContext = { category, evalId, open };
+    // Abort any previous in-flight download before starting a new one so only the most
+    // recent request keeps network/JSON work alive.
+    detailsAbortRef.current?.abort();
+    const abortController = new AbortController();
+    detailsAbortRef.current = abortController;
     const isCurrentRequest = () => {
       const currentContext = detailsContextRef.current;
       return (
         requestId === detailsRequestRef.current &&
+        !abortController.signal.aborted &&
         currentContext.category === requestContext.category &&
         currentContext.evalId === requestContext.evalId &&
         currentContext.open === requestContext.open
@@ -216,16 +277,16 @@ const RiskCategoryDrawer = ({
 
     try {
       if (detailsCacheRef.current.evalId !== evalId) {
-        detailsCacheRef.current = { evalId, results: new Map() };
+        detailsCacheRef.current = createDetailsCache(evalId);
       }
-      let fullResult = detailsCacheRef.current.results.get(detailsKey);
+      let fullResult = detailsCacheRef.current.results.get(detailsKey)?.result;
       if (!fullResult) {
         const resultIdQuery = compactResult.id
           ? `?resultId=${encodeURIComponent(compactResult.id)}`
           : '';
         const response = await callApi(
           `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}${resultIdQuery}`,
-          { cache: 'no-store' },
+          { cache: 'no-store', signal: abortController.signal },
         );
         if (!response.ok) {
           throw new Error(`Failed to load full result details (${response.status})`);
@@ -235,7 +296,7 @@ const RiskCategoryDrawer = ({
         if (!isCurrentRequest() || detailsCacheRef.current.evalId !== evalId) {
           return;
         }
-        detailsCacheRef.current.results.set(detailsKey, fullResult);
+        retainRowDetail(detailsCacheRef.current, detailsKey, fullResult);
       }
       if (!isCurrentRequest()) {
         return;

@@ -67,6 +67,11 @@ const TRACE_PROMPT_TEXT_ATTRIBUTE_KEYS = [
   'codex.output',
 ] as const;
 
+// OTLP log bodies are persisted by the receiver as `otel.log.body` and can carry
+// deep-agent tool results and message/API content. Treat them as response output so
+// the strip guarantee covers logs the same way it covers response bodies.
+const OTEL_LOG_BODY_ATTRIBUTE_KEY = 'otel.log.body';
+
 const TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS = [
   PromptfooAttributes.RESPONSE_BODY,
   ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
@@ -75,6 +80,7 @@ const TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS = [
   'codex.message',
   'codex.reasoning',
   'codex.reasoning.summary',
+  OTEL_LOG_BODY_ATTRIBUTE_KEY,
 ] as const;
 
 function projectTraceSpanErrorDetails(span: TraceData['spans'][number]) {
@@ -112,6 +118,13 @@ function projectTraceSpanName(
   if (typeof span.attributes['codex.command'] === 'string' && span.name.startsWith('exec ')) {
     return 'exec [output stripped]';
   }
+  // A log-derived span with no event name echoes the (short) log body into the span
+  // name. Once the body attribute is stripped, mask the name too so the secret does
+  // not survive in the name field.
+  const logBody = span.attributes[OTEL_LOG_BODY_ATTRIBUTE_KEY];
+  if (typeof logBody === 'string' && span.name === logBody) {
+    return '[output stripped]';
+  }
   return span.name;
 }
 
@@ -120,6 +133,37 @@ export function projectErrorForOutput(
   stripFlags: OutputStripFlags,
 ): EvaluateResult['error'] {
   return error && hasAnyStripFlag(stripFlags) ? '[error details stripped]' : error;
+}
+
+// Compact redteam-report history is embedded in the report summary that the browser
+// loads eagerly, so a chatty or adversarial run can otherwise reintroduce the OOM this
+// projection exists to prevent. Bound per-turn text and media: text is truncated, and
+// media larger than the inline budget is dropped from the summary (it stays available
+// through full row-detail hydration). Keep the SQL projection in `eval.ts`
+// (`jsonHistoryForRedteamReport`) in sync with these limits.
+export const MAX_COMPACT_HISTORY_TEXT_LENGTH = 10_240;
+export const MAX_COMPACT_HISTORY_MEDIA_LENGTH = 65_536;
+
+// Require history prompt/output to be strings (never nested objects): the report UI
+// renders them as React children and throws on non-string content.
+function boundHistoryText(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  return value.length > MAX_COMPACT_HISTORY_TEXT_LENGTH
+    ? value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+    : value;
+}
+
+function boundHistoryMedia(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const serialized = safeJsonStringify(value);
+  if (typeof serialized !== 'string' || serialized.length > MAX_COMPACT_HISTORY_MEDIA_LENGTH) {
+    return undefined;
+  }
+  return value;
 }
 
 function projectRedteamHistoryForOutput(
@@ -140,6 +184,12 @@ function projectRedteamHistoryForOutput(
   }
 
   return history.filter(isRecord).map((entry) => {
+    const boundedPrompt = boundHistoryText(entry.prompt);
+    const boundedPromptAudio = boundHistoryMedia(entry.promptAudio);
+    const boundedPromptImage = boundHistoryMedia(entry.promptImage);
+    const boundedOutput = boundHistoryText(entry.output);
+    const boundedOutputAudio = boundHistoryMedia(entry.outputAudio);
+    const boundedOutputImage = boundHistoryMedia(entry.outputImage);
     return {
       ...(typeof entry.id === 'string' && { id: entry.id }),
       ...(typeof entry.parentId === 'string' && { parentId: entry.parentId }),
@@ -153,22 +203,66 @@ function projectRedteamHistoryForOutput(
       ...(stripFlags.shouldStripPromptText
         ? { prompt: '[prompt stripped]' }
         : {
-            ...(entry.prompt !== undefined && { prompt: entry.prompt }),
-            ...(entry.promptAudio !== undefined && { promptAudio: entry.promptAudio }),
-            ...(entry.promptImage !== undefined && { promptImage: entry.promptImage }),
+            ...(boundedPrompt !== undefined && { prompt: boundedPrompt }),
+            ...(boundedPromptAudio !== undefined && { promptAudio: boundedPromptAudio }),
+            ...(boundedPromptImage !== undefined && { promptImage: boundedPromptImage }),
           }),
       ...(stripFlags.shouldStripResponseOutput
         ? { output: '[output stripped]' }
         : {
-            ...(entry.output !== undefined && { output: entry.output }),
-            ...(entry.outputAudio !== undefined && { outputAudio: entry.outputAudio }),
-            ...(entry.outputImage !== undefined && { outputImage: entry.outputImage }),
+            ...(boundedOutput !== undefined && { output: boundedOutput }),
+            ...(boundedOutputAudio !== undefined && { outputAudio: boundedOutputAudio }),
+            ...(boundedOutputImage !== undefined && { outputImage: boundedOutputImage }),
           }),
       ...(!forceProjection &&
         !stripFlags.shouldStripTestVars &&
         entry.inputVars !== undefined && { inputVars: entry.inputVars }),
     };
   });
+}
+
+const RESPONSE_OUTPUT_STRIPPED = '[output stripped]';
+
+// First-party agent SDKs (e.g. the Claude Agent SDK) persist complete model-generated
+// tool activity under response metadata: `toolCalls` inputs/results, `skillCalls`
+// inputs, `structuredOutput`, and `permissionDenials`. These carry commands, file
+// contents, and model output, so they must follow the response-output strip policy
+// instead of surviving it because they live under `metadata`. Structural fields
+// (id/name/is_error/tool_name) are preserved so shape and counts remain inspectable.
+function stripAgentCallContent(entry: unknown, contentKeys: readonly string[]): unknown {
+  if (!isRecord(entry)) {
+    return RESPONSE_OUTPUT_STRIPPED;
+  }
+  const projected = { ...entry };
+  for (const key of contentKeys) {
+    if (key in projected) {
+      projected[key] = RESPONSE_OUTPUT_STRIPPED;
+    }
+  }
+  return projected;
+}
+
+function stripResponseContentMetadata(metadata: Record<string, unknown>): void {
+  if ('toolCalls' in metadata) {
+    metadata.toolCalls = Array.isArray(metadata.toolCalls)
+      ? metadata.toolCalls.map((entry) => stripAgentCallContent(entry, ['input', 'output']))
+      : RESPONSE_OUTPUT_STRIPPED;
+  }
+  if ('skillCalls' in metadata) {
+    metadata.skillCalls = Array.isArray(metadata.skillCalls)
+      ? metadata.skillCalls.map((entry) => stripAgentCallContent(entry, ['input']))
+      : RESPONSE_OUTPUT_STRIPPED;
+  }
+  if ('permissionDenials' in metadata) {
+    metadata.permissionDenials = Array.isArray(metadata.permissionDenials)
+      ? metadata.permissionDenials.map((entry) =>
+          stripAgentCallContent(entry, ['input', 'tool_input', 'toolInput']),
+        )
+      : RESPONSE_OUTPUT_STRIPPED;
+  }
+  if ('structuredOutput' in metadata) {
+    metadata.structuredOutput = RESPONSE_OUTPUT_STRIPPED;
+  }
 }
 
 export function projectMetadataForOutput(
@@ -194,6 +288,9 @@ export function projectMetadataForOutput(
     delete projectedMetadata.transformDisplayVars;
     delete projectedMetadata.__promptfooMaterializedMultiInputPrompt;
     delete projectedMetadata.inputMaterialization;
+  }
+  if (stripFlags.shouldStripResponseOutput) {
+    stripResponseContentMetadata(projectedMetadata);
   }
   for (const historyKey of ['redteamHistory', 'redteamTreeHistory'] as const) {
     if (historyKey in projectedMetadata) {
@@ -347,6 +444,58 @@ function projectResultMetadata(
   return projectMetadataForOutput(metadata, stripFlags);
 }
 
+const GRADING_RENDERED_PROMPT_KEY = 'renderedGradingPrompt';
+const GRADING_RENDERED_ASSERTION_KEY = 'renderedAssertionValue';
+
+// Grading metadata recombines otherwise-stripped inputs: `renderedGradingPrompt` embeds
+// the prompt, variables, and response, and `renderedAssertionValue` embeds substituted
+// variables (both also under `componentResults`). Keeping the grading result intact
+// unless the dedicated grading flag is set would leak that content through every
+// content-specific strip flag, so project grading metadata recursively here.
+function projectGradingResultForOutput<T>(gradingResult: T, stripFlags: OutputStripFlags): T {
+  if (!isRecord(gradingResult)) {
+    return gradingResult;
+  }
+  const removeRenderedPrompt =
+    stripFlags.shouldStripPromptText ||
+    stripFlags.shouldStripResponseOutput ||
+    stripFlags.shouldStripTestVars;
+  const removeRenderedAssertion =
+    stripFlags.shouldStripPromptText || stripFlags.shouldStripTestVars;
+  if (!removeRenderedPrompt && !removeRenderedAssertion && !stripFlags.shouldStripMetadata) {
+    return gradingResult;
+  }
+
+  const projected: Record<string, unknown> = { ...gradingResult };
+
+  if (isRecord(projected.metadata)) {
+    if (stripFlags.shouldStripMetadata) {
+      delete projected.metadata;
+    } else {
+      const gradingMetadata = { ...projected.metadata };
+      if (removeRenderedPrompt) {
+        delete gradingMetadata[GRADING_RENDERED_PROMPT_KEY];
+      }
+      if (removeRenderedAssertion) {
+        delete gradingMetadata[GRADING_RENDERED_ASSERTION_KEY];
+      }
+      if (Object.keys(gradingMetadata).length > 0) {
+        projected.metadata = gradingMetadata;
+      } else {
+        delete projected.metadata;
+      }
+    }
+  }
+
+  if (Array.isArray(projected.componentResults)) {
+    projected.componentResults = projected.componentResults.map((component) =>
+      projectGradingResultForOutput(component, stripFlags),
+    );
+  }
+
+  return projected as T;
+}
+
 export function projectEvaluateResultForOutput(result: EvaluateResult): EvaluateResult {
   const {
     shouldStripPromptText,
@@ -383,7 +532,9 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
       : result.promptId,
     response: projectProviderResponse(result.response, stripFlags),
     testCase,
-    gradingResult: shouldStripGradingResult ? null : result.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResultForOutput(result.gradingResult, stripFlags),
     vars: shouldStripTestVars ? {} : result.vars,
     metadata: projectResultMetadata(result.metadata, stripFlags),
     error: projectErrorForOutput(result.error, stripFlags),
@@ -423,7 +574,9 @@ export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTab
           ? (error ?? '')
           : output.text,
       response: projectProviderResponse(output.response, stripFlags),
-      gradingResult: stripFlags.shouldStripGradingResult ? null : output.gradingResult,
+      gradingResult: stripFlags.shouldStripGradingResult
+        ? null
+        : projectGradingResultForOutput(output.gradingResult, stripFlags),
       testCase,
       error,
       metadata,

@@ -1702,6 +1702,172 @@ describe('EvalResult', () => {
     });
   });
 
+  // Regression for PR #9591 review (thread 3481318116): the first-party Claude Agent
+  // SDK persists complete tool/skill/structured-output/permission content under response
+  // metadata. It must follow the response-output strip policy instead of surviving it.
+  describe('response content metadata stripping (PR #9591 review)', () => {
+    const createAgentResult = () =>
+      createEvaluateResult({
+        response: {
+          output: 'AGENT_OUTPUT_SECRET',
+          metadata: {
+            // Claude Agent SDK shape (see src/providers/claude-agent-sdk.ts).
+            toolCalls: [
+              {
+                id: 'toolu_1',
+                name: 'Bash',
+                input: { command: 'cat TOOL_INPUT_SECRET.txt' },
+                output: 'TOOL_RESULT_SECRET file contents',
+                is_error: false,
+                parentToolUseId: null,
+              },
+            ],
+            skillCalls: [
+              {
+                name: 'pdf',
+                input: { skill: 'pdf', args: 'SKILL_INPUT_SECRET' },
+                is_error: false,
+                source: 'tool',
+              },
+            ],
+            structuredOutput: { answer: 'STRUCTURED_OUTPUT_SECRET' },
+            permissionDenials: [
+              { tool_name: 'Write', tool_input: { path: 'PERMISSION_DENIAL_SECRET' } },
+            ],
+            numTurns: 3,
+          },
+        },
+      });
+
+    it('strips content-bearing agent metadata with response output', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(createAgentResult()),
+          sanitizeResultForJsonlArtifact(createAgentResult()),
+        ]) {
+          const metadata = result.response?.metadata as Record<string, any>;
+          // Structural fields survive so shape/counts stay inspectable.
+          expect(metadata.numTurns).toBe(3);
+          expect(metadata.toolCalls[0]).toMatchObject({ id: 'toolu_1', name: 'Bash' });
+          expect(metadata.toolCalls[0].input).toBe('[output stripped]');
+          expect(metadata.toolCalls[0].output).toBe('[output stripped]');
+          expect(metadata.skillCalls[0]).toMatchObject({ name: 'pdf' });
+          expect(metadata.skillCalls[0].input).toBe('[output stripped]');
+          expect(metadata.structuredOutput).toBe('[output stripped]');
+          expect(metadata.permissionDenials[0]).toMatchObject({ tool_name: 'Write' });
+          expect(metadata.permissionDenials[0].tool_input).toBe('[output stripped]');
+          for (const secret of [
+            'AGENT_OUTPUT_SECRET',
+            'TOOL_INPUT_SECRET',
+            'TOOL_RESULT_SECRET',
+            'SKILL_INPUT_SECRET',
+            'STRUCTURED_OUTPUT_SECRET',
+            'PERMISSION_DENIAL_SECRET',
+          ]) {
+            expect(JSON.stringify(result)).not.toContain(secret);
+          }
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('retains agent metadata when no strip flags are enabled', () => {
+      const result = projectEvaluateResultForOutput(createAgentResult());
+      expect(JSON.stringify(result)).toContain('TOOL_RESULT_SECRET');
+      expect(JSON.stringify(result)).toContain('STRUCTURED_OUTPUT_SECRET');
+    });
+  });
+
+  // Regression for PR #9591 review (thread 3481318120): grading metadata recombines
+  // otherwise-stripped inputs (`renderedGradingPrompt` = prompt+vars+response,
+  // `renderedAssertionValue` = substituted vars), including under componentResults, so it
+  // must follow the content-specific strip flags rather than bypass them.
+  describe('grading metadata stripping (PR #9591 review)', () => {
+    const createGradedResult = () =>
+      createEvaluateResult({
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'failed',
+          metadata: {
+            renderedGradingPrompt: 'RENDERED_PROMPT_SECRET with prompt+vars+response',
+            renderedAssertionValue: 'RENDERED_ASSERTION_SECRET substituted value',
+            pluginId: 'harmful',
+          },
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'component failed',
+              metadata: {
+                renderedGradingPrompt: 'COMPONENT_RENDERED_PROMPT_SECRET',
+                renderedAssertionValue: 'COMPONENT_RENDERED_ASSERTION_SECRET',
+              },
+            },
+          ],
+        } as any,
+      });
+
+    it.each([
+      { name: 'response output', env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } },
+      { name: 'prompt text', env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' } },
+      { name: 'test vars', env: { PROMPTFOO_STRIP_TEST_VARS: 'true' } },
+    ])('strips rendered grading prompt under $name stripping', ({ env }) => {
+      const restoreEnv = mockProcessEnv(env);
+      try {
+        const result = projectEvaluateResultForOutput(createGradedResult());
+        const grading = result.gradingResult as any;
+        expect(grading.metadata?.renderedGradingPrompt).toBeUndefined();
+        expect(grading.componentResults[0].metadata?.renderedGradingPrompt).toBeUndefined();
+        // Non-content grading metadata (pluginId, reason) is preserved.
+        expect(grading.metadata?.pluginId).toBe('harmful');
+        expect(grading.reason).toBe('failed');
+        expect(JSON.stringify(result)).not.toContain('RENDERED_PROMPT_SECRET');
+        expect(JSON.stringify(result)).not.toContain('COMPONENT_RENDERED_PROMPT_SECRET');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('strips rendered assertion values under prompt/vars stripping but keeps them under response-output only', () => {
+      const restoreVars = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
+      try {
+        const stripped = projectEvaluateResultForOutput(createGradedResult());
+        expect(JSON.stringify(stripped)).not.toContain('RENDERED_ASSERTION_SECRET');
+        expect(JSON.stringify(stripped)).not.toContain('COMPONENT_RENDERED_ASSERTION_SECRET');
+      } finally {
+        restoreVars();
+      }
+    });
+
+    it('omits grading metadata entirely under metadata stripping', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const result = projectEvaluateResultForOutput(createGradedResult());
+        const grading = result.gradingResult as any;
+        expect(grading.metadata).toBeUndefined();
+        expect(grading.componentResults[0].metadata).toBeUndefined();
+        expect(JSON.stringify(result)).not.toContain('RENDERED_PROMPT_SECRET');
+        expect(JSON.stringify(result)).not.toContain('RENDERED_ASSERTION_SECRET');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('retains grading metadata when only the grading-result flag is set (result nulled)', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
+      try {
+        const result = projectEvaluateResultForOutput(createGradedResult());
+        expect(result.gradingResult).toBeNull();
+        expect(JSON.stringify(result)).not.toContain('RENDERED_PROMPT_SECRET');
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
+
   describe('projectTracesForOutput', () => {
     const createTraces = () =>
       [
@@ -1840,6 +2006,55 @@ describe('EvalResult', () => {
         expect(span.status.message).toBe('[error details stripped]');
         expect(span.attributes).toHaveProperty('codex.error', '[error details stripped]');
         expect(projected[0].spans[1].statusMessage).toBe('[error details stripped]');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    // Regression for PR #9591 review (thread 3481318122): the OTLP receiver persists
+    // each log body as `otel.log.body`, and a short body is echoed into the log-derived
+    // span name. Both must be covered by the response-output projection.
+    it('removes otel.log.body and masks the span name echo under response-output stripping', () => {
+      const createLogTraces = () =>
+        [
+          {
+            traceId: 'log-trace',
+            evaluationId: 'eval-id',
+            testCaseId: 'test-case-id',
+            spans: [
+              {
+                spanId: 'log-span',
+                name: 'BODY_DERIVED_NAME_SECRET',
+                startTime: 0,
+                attributes: {
+                  'otel.log.body': 'BODY_DERIVED_NAME_SECRET',
+                  'otel.log.severity_text': 'INFO',
+                },
+              },
+              {
+                spanId: 'named-log-span',
+                name: 'claude_code.tool_result',
+                startTime: 1,
+                attributes: {
+                  'otel.log.body': 'LOG_BODY_SECRET tool result contents',
+                  'event.name': 'claude_code.tool_result',
+                },
+              },
+            ],
+          },
+        ] as unknown as TraceData[];
+
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+      try {
+        const projected = projectTracesForOutput(createLogTraces());
+        const [echoSpan, namedSpan] = projected[0].spans;
+        expect(echoSpan.attributes).not.toHaveProperty('otel.log.body');
+        expect(echoSpan.name).toBe('[output stripped]');
+        expect(namedSpan.attributes).not.toHaveProperty('otel.log.body');
+        // A span name derived from event.name (not the body) is left untouched.
+        expect(namedSpan.name).toBe('claude_code.tool_result');
+        expect(JSON.stringify(projected)).not.toContain('BODY_DERIVED_NAME_SECRET');
+        expect(JSON.stringify(projected)).not.toContain('LOG_BODY_SECRET');
       } finally {
         restoreEnv();
       }
