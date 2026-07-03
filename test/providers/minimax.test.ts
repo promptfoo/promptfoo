@@ -24,11 +24,16 @@ vi.mock('../../src/logger', () => ({
 
 describe('calculateMiniMaxCost', () => {
   it('should calculate cost without cache for MiniMax-M3', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M3', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(3.0); // (0.6 + 2.4)
+    const cost = calculateMiniMaxCost('MiniMax-M3', {}, 500000, 1000000);
+    expect(cost).toBeCloseTo(1.35); // (0.3 * 0.5 + 1.2) — standard <=512k tier
   });
 
   it('should calculate cost with cache hits for MiniMax-M3', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3', {}, 500000, 1000000, 250000);
+    expect(cost).toBeCloseTo(1.29); // (0.3 * 0.25 + 0.06 * 0.25 + 1.2)
+  });
+
+  it('should calculate long-context cost for MiniMax-M3 above 512k prompt tokens', () => {
     const cost = calculateMiniMaxCost('MiniMax-M3', {}, 1000000, 1000000, 500000);
     expect(cost).toBeCloseTo(2.76); // (0.6 * 0.5 + 0.12 * 0.5 + 2.4)
   });
@@ -104,9 +109,15 @@ describe('MINIMAX_CHAT_MODELS', () => {
   it('should have correct pricing for MiniMax-M3', () => {
     const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M3');
     expect(model).toBeDefined();
-    expect(model?.cost.input).toBeCloseTo(0.6 / 1e6);
-    expect(model?.cost.output).toBeCloseTo(2.4 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.12 / 1e6);
+    expect(model?.cost.input).toBeCloseTo(0.3 / 1e6);
+    expect(model?.cost.output).toBeCloseTo(1.2 / 1e6);
+    expect(model?.cost.cache_read).toBeCloseTo(0.06 / 1e6);
+    expect(model?.cost.longContext).toEqual({
+      threshold: 512_000,
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      cache_read: 0.12 / 1e6,
+    });
   });
 
   it('should have correct pricing for MiniMax-M2.7', () => {

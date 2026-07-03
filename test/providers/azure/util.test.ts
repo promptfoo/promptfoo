@@ -35,6 +35,24 @@ describe('calculateAzureCost', () => {
     expect(typeof cost).toBe('number');
   });
 
+  it('uses long-context pricing for GPT-5.4 above the 272k threshold', () => {
+    expect(calculateAzureCost('gpt-5.4', {}, 272_000, 1_000)).toBeCloseTo(
+      (272_000 * 2.5 + 1_000 * 15) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost('gpt-5.4', {}, 272_001, 1_000)).toBeCloseTo(
+      (272_001 * 5 + 1_000 * 22.5) / 1e6,
+      12,
+    );
+  });
+
+  it('uses long-context pricing for GPT-5.4 pro above the 272k threshold', () => {
+    expect(calculateAzureCost('gpt-5.4-pro', {}, 272_001, 1_000)).toBeCloseTo(
+      (272_001 * 60 + 1_000 * 270) / 1e6,
+      12,
+    );
+  });
+
   it('calculates cost for Claude Fable 5', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });
@@ -108,7 +126,7 @@ describe('AZURE_MODELS cost coverage', () => {
       id: 'gpt-5.4',
       inputTokens: 1000,
       outputTokens: 1000,
-      expectedCost: 0.0125,
+      expectedCost: 0.0175, // $2.50/1M input + $15/1M output
       family: 'GPT-5.x',
     },
     { id: 'gpt-4.1', inputTokens: 1000, outputTokens: 1000, expectedCost: 0.01, family: 'GPT-4.1' },
@@ -117,7 +135,7 @@ describe('AZURE_MODELS cost coverage', () => {
       id: 'o3',
       inputTokens: 1000,
       outputTokens: 1000,
-      expectedCost: 0.05,
+      expectedCost: 0.01, // $2/1M input + $8/1M output (June 2025 price cut)
       family: 'o-series reasoning',
     },
     {
@@ -248,6 +266,25 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.5', 5, 30],
     ['gpt-5.2', 1.75, 14],
     ['gpt-5.1-codex-max', 1.25, 10],
+    ['gpt-5', 1.25, 10],
+    ['gpt-5-pro', 15, 120],
+    ['gpt-5-mini', 0.25, 2],
+    ['gpt-5-nano', 0.05, 0.4],
+    ['gpt-5-chat', 1.25, 10],
+    ['gpt-5-codex', 1.25, 10],
+    ['gpt-5.1', 1.25, 10],
+    ['gpt-5.1-chat', 1.25, 10],
+    ['gpt-5.1-codex', 1.25, 10],
+    ['gpt-5.1-codex-mini', 0.25, 2],
+    ['gpt-5.4-pro', 60, 180],
+    ['gpt-5.4-mini', 0.75, 4.5],
+    ['gpt-5.4-nano', 0.2, 1.25],
+    ['o3', 2, 8],
+    ['gpt-realtime', 4, 16],
+    ['gpt-audio-mini', 0.6, 2.4],
+    ['gpt-4o-mini-transcribe', 1.25, 5],
+    ['gpt-4o-mini-tts', 0.6, 12],
+    ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],
     ['Kimi-K2-Thinking', 0.6, 2.5],
