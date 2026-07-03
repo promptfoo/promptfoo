@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -154,7 +154,9 @@ describe('ResultsCharts', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Pass rates by provider\./)).toBeInTheDocument();
     expect(
-      screen.getByText(/Comparing test-provider-1 with test-provider-2 across 2 paired scores\./),
+      screen.getByText(
+        /Comparing Prompt 1 \(test-provider-1\) with Prompt 2 \(test-provider-2\) across 2 paired scores\./,
+      ),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Compare prompt outputs' }));
@@ -887,6 +889,116 @@ describe('ResultsCharts', () => {
       // datasets are [provider-1, provider-2]; keys are [accuracy, precision, coverage].
       // accuracy -> 0 (zero max), precision -> value / 0.8, coverage -> value / 0.2.
       expect(values).toEqual([0, 0.5, 0.5, 0, 1, 1]);
+    });
+  });
+
+  describe('Accessible summary parity', () => {
+    const buildHistogramTable = (prompt1Scores: number[], prompt2Scores: number[]) => ({
+      head: {
+        prompts: [
+          { provider: 'test-provider-1', metrics: { namedScores: {} } },
+          { provider: 'test-provider-2', metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: prompt1Scores.map((score, rowIdx) => ({
+        outputs: [
+          { score, pass: true, text: 'valid output' },
+          { score: prompt2Scores[rowIdx], pass: true, text: 'valid output' },
+        ],
+        vars: [],
+      })),
+    });
+
+    const renderHistogram = (table: any) => {
+      const scores = calculateScores(table);
+      vi.mocked(useTableStore).mockReturnValue({
+        table,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+      const { unmount } = render(<ResultsCharts scores={scores} />);
+      const region = screen.getByRole('region', { name: 'Score distribution chart' });
+      const summary = region.querySelector('p')?.textContent ?? '';
+      const table_ = within(region).getByRole('table').textContent ?? '';
+      unmount();
+      return { summary, table: table_ };
+    };
+
+    it('distinguishes histograms with equal totals and ranges but different per-prompt bins', () => {
+      // Both distributions have four scored outputs spanning the 0-1 range, so the
+      // prose-only summary is identical. Only the per-bin, per-prompt table recovers
+      // the difference (which prompt produced the 0s vs the 1s).
+      const distributionA = renderHistogram(buildHistogramTable([0, 0], [1, 1]));
+      const distributionB = renderHistogram(buildHistogramTable([1, 1], [0, 0]));
+
+      expect(distributionA.summary).toBe(distributionB.summary);
+      expect(distributionA.table).not.toBe(distributionB.table);
+    });
+
+    const buildScatterTable = (
+      pairs: Array<[number, number]>,
+      providers: [string, string] = ['test-provider-1', 'test-provider-2'],
+    ) => ({
+      head: {
+        prompts: [
+          { provider: providers[0], metrics: { namedScores: {} } },
+          { provider: providers[1], metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: pairs.map(([x, y]) => ({
+        outputs: [
+          { score: x, pass: true, text: 'x output' },
+          { score: y, pass: true, text: 'y output' },
+        ],
+        vars: [],
+      })),
+    });
+
+    const renderScatterSummary = (table: any) => {
+      const scores = calculateScores(table);
+      vi.mocked(useTableStore).mockReturnValue({
+        table,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+      const { unmount } = render(<ResultsCharts scores={scores} />);
+      const region = screen.getByRole('region', { name: 'Prompt score comparison chart' });
+      const summary = region.querySelector('p')?.textContent ?? '';
+      unmount();
+      return summary;
+    };
+
+    it('distinguishes scatter plots with equal direction counts but different coordinates', () => {
+      // Both plots have one "x higher" row and one "y higher" row, so the direction
+      // counts collapse. The plotted score pairs are what keep the summaries distinct.
+      const plotA = renderScatterSummary(
+        buildScatterTable([
+          [0, 1],
+          [1, 0],
+        ]),
+      );
+      const plotB = renderScatterSummary(
+        buildScatterTable([
+          [0.49, 0.51],
+          [0.51, 0.49],
+        ]),
+      );
+
+      expect(plotA).not.toBe(plotB);
+    });
+
+    it('gives distinct axis identities when multiple prompts share a provider', () => {
+      const summary = renderScatterSummary(buildScatterTable([[0.2, 0.8]], ['echo', 'echo']));
+
+      expect(summary).toContain('Prompt 1 (echo)');
+      expect(summary).toContain('Prompt 2 (echo)');
+      expect(summary).not.toContain('Comparing echo with echo');
     });
   });
 

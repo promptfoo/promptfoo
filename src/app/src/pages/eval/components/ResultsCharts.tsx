@@ -63,6 +63,15 @@ const COLOR_PALETTE = [
 const getPromptLabel = (prompt: { provider?: string } | undefined, promptIdx: number): string =>
   prompt?.provider || `Prompt ${promptIdx + 1}`;
 
+// Axis identity for the scatter comparison. The 1-based prompt index keeps each axis
+// unique even when several prompts share a provider (e.g. "echo" vs "echo"), so the
+// non-visual summary never collapses two distinct prompts into the same name.
+const getScatterAxisLabel = (
+  prompt: { provider?: string } | undefined,
+  promptIdx: number,
+): string =>
+  prompt?.provider ? `Prompt ${promptIdx + 1} (${prompt.provider})` : `Prompt ${promptIdx + 1}`;
+
 const formatSummaryScore = (score: number): string =>
   Number.isInteger(score) ? String(score) : score.toFixed(2);
 
@@ -85,36 +94,15 @@ function HistogramChart({ table }: ChartProps) {
   const titleId = useId();
   const summaryId = useId();
 
-  const summary = useMemo(() => {
+  // Compute the binned dataset once so the canvas and the non-visual accessible
+  // summary describe the exact same distribution (per-bin, per-prompt counts).
+  const binnedData = useMemo(() => {
     const scores = table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
 
     if (scores.length === 0) {
-      return 'No scored outputs are available for the score distribution chart.';
-    }
-
-    const minScore = Math.min(...scores);
-    const maxScore = Math.max(...scores);
-    return `Score distribution across ${scores.length} scored outputs from ${table.head.prompts.length} prompts. Scores range from ${formatSummaryScore(minScore)} to ${formatSummaryScore(maxScore)}.`;
-  }, [table]);
-
-  useEffect(() => {
-    if (!histogramCanvasRef.current) {
-      return;
-    }
-
-    if (histogramChartInstance.current) {
-      histogramChartInstance.current.destroy();
-    }
-
-    // Calculate bins and their counts
-    const scores = table.body
-      .flatMap((row) => row.outputs.map((output) => output?.score))
-      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
-
-    if (scores.length === 0) {
-      return;
+      return null;
     }
 
     const maxScore = Math.max(...scores);
@@ -126,11 +114,11 @@ function HistogramChart({ table }: ChartProps) {
     );
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const scores = table.body
+      const promptScores = table.body
         .map((row) => row.outputs[promptIdx]?.score)
         .filter((score) => typeof score === 'number' && !Number.isNaN(score));
       const counts = bins.map(
-        (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
+        (bin) => promptScores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
         label: prompt.provider,
@@ -138,6 +126,53 @@ function HistogramChart({ table }: ChartProps) {
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
     });
+
+    return { totalScores: scores.length, minScore, maxScore, binSize, bins, datasets };
+  }, [table]);
+
+  // Derive the accessible summary from the SAME binned dataset the chart renders so
+  // materially different distributions (e.g. swapped prompt/bin frequencies) produce
+  // materially different non-visual summaries.
+  const summary = useMemo(() => {
+    if (!binnedData) {
+      return {
+        text: 'No scored outputs are available for the score distribution chart.',
+        promptLabels: [] as string[],
+        rows: [] as { range: string; counts: number[] }[],
+      };
+    }
+
+    const { totalScores, minScore, maxScore, binSize, bins, datasets } = binnedData;
+    const promptLabels = table.head.prompts.map((prompt, promptIdx) =>
+      getPromptLabel(prompt, promptIdx),
+    );
+    const rows = bins.map((bin, binIdx) => {
+      const isLastBin = binIdx === bins.length - 1;
+      const upperBound = Number.parseFloat((bin + binSize).toFixed(2));
+      const range = isLastBin
+        ? `${formatSummaryScore(bin)} and above`
+        : `${formatSummaryScore(bin)} to ${formatSummaryScore(upperBound)}`;
+      return { range, counts: datasets.map((dataset) => dataset.data[binIdx]) };
+    });
+    const text = `Score distribution across ${totalScores} scored outputs from ${table.head.prompts.length} prompts. Scores range from ${formatSummaryScore(minScore)} to ${formatSummaryScore(maxScore)}. The table lists how many outputs from each prompt fall into each score range.`;
+
+    return { text, promptLabels, rows };
+  }, [binnedData, table.head.prompts]);
+
+  useEffect(() => {
+    if (!histogramCanvasRef.current) {
+      return;
+    }
+
+    if (histogramChartInstance.current) {
+      histogramChartInstance.current.destroy();
+    }
+
+    if (!binnedData) {
+      return;
+    }
+
+    const { bins, datasets } = binnedData;
 
     histogramChartInstance.current = new Chart(histogramCanvasRef.current, {
       type: 'bar',
@@ -189,7 +224,7 @@ function HistogramChart({ table }: ChartProps) {
         },
       },
     });
-  }, [table]);
+  }, [binnedData, table]);
 
   return (
     <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
@@ -197,8 +232,33 @@ function HistogramChart({ table }: ChartProps) {
         Score distribution chart
       </h3>
       <p id={summaryId} className="sr-only">
-        {summary}
+        {summary.text}
       </p>
+      {summary.rows.length > 0 && (
+        <table className="sr-only">
+          <caption>Score distribution counts per prompt by score range</caption>
+          <thead>
+            <tr>
+              <th scope="col">Score range</th>
+              {summary.promptLabels.map((label, promptIdx) => (
+                <th key={promptIdx} scope="col">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {summary.rows.map((row, binIdx) => (
+              <tr key={binIdx}>
+                <th scope="row">{row.range}</th>
+                {row.counts.map((count, promptIdx) => (
+                  <td key={promptIdx}>{count}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <canvas
         ref={histogramCanvasRef}
         role="img"
@@ -301,8 +361,8 @@ function ScatterChart({ table }: ChartProps) {
   const summaryId = useId();
 
   const comparisonSummary = useMemo(() => {
-    const promptXLabel = getPromptLabel(table.head.prompts[xAxisPrompt], xAxisPrompt);
-    const promptYLabel = getPromptLabel(table.head.prompts[yAxisPrompt], yAxisPrompt);
+    const promptXLabel = getScatterAxisLabel(table.head.prompts[xAxisPrompt], xAxisPrompt);
+    const promptYLabel = getScatterAxisLabel(table.head.prompts[yAxisPrompt], yAxisPrompt);
     const pairs = table.body
       .map((row) => ({
         x: row.outputs[xAxisPrompt]?.score,
@@ -325,7 +385,17 @@ function ScatterChart({ table }: ChartProps) {
     const yHigher = pairs.filter((point) => point.y > point.x).length;
     const ties = pairs.length - xHigher - yHigher;
 
-    return `Comparing ${promptXLabel} with ${promptYLabel} across ${pairs.length} paired scores. ${promptYLabel} is higher in ${yHigher} rows, ${promptXLabel} is higher in ${xHigher} rows, and ${ties} rows tie.`;
+    // Include the actual plotted (x, y) score pairs so plots with identical
+    // direction counts but different coordinates (e.g. [(0, 1), (1, 0)] vs
+    // [(0.49, 0.51), (0.51, 0.49)]) produce distinct non-visual summaries.
+    const pairSummary =
+      pairs.length > 0
+        ? ` Plotted score pairs as (${promptXLabel}, ${promptYLabel}): ${pairs
+            .map((point) => `(${formatSummaryScore(point.x)}, ${formatSummaryScore(point.y)})`)
+            .join('; ')}.`
+        : '';
+
+    return `Comparing ${promptXLabel} with ${promptYLabel} across ${pairs.length} paired scores. ${promptYLabel} is higher in ${yHigher} rows, ${promptXLabel} is higher in ${xHigher} rows, and ${ties} rows tie.${pairSummary}`;
   }, [table, xAxisPrompt, yAxisPrompt]);
 
   useEffect(() => {

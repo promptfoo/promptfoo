@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditResult from './ModelAuditResult';
@@ -291,6 +291,46 @@ describe('ModelAuditResult', () => {
       expect(mockDeleteHistoricalScan).toHaveBeenCalledWith('test-scan-id');
       expect(mockNavigate).toHaveBeenCalledWith('/model-audits');
     });
+  });
+
+  it('clears the previously loaded scan when the route id changes so the title never shows a stale name', async () => {
+    const scanA = createMockScan('scan-a', 'Scan A');
+    mockFetchScanById.mockImplementation(async (scanId: string) => {
+      if (scanId === 'scan-a') {
+        return scanA;
+      }
+      // scan-b is missing; without clearing the prior scan the title would keep
+      // identifying "Scan A" even though the page now shows a different (missing) scan.
+      return null;
+    });
+
+    const router = createMemoryRouter(
+      [{ path: '/model-audit/:id', element: <ModelAuditResult /> }],
+      { initialEntries: ['/model-audit/scan-a'] },
+    );
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <RouterProvider router={router} />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.title).toBe('Scan A | promptfoo');
+    });
+    expect(screen.getByRole('heading', { name: 'Scan A' })).toBeInTheDocument();
+
+    // React Router keeps ModelAuditResult mounted across this navigation.
+    await act(async () => {
+      await router.navigate('/model-audit/scan-b');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Scan not found')).toBeInTheDocument();
+    });
+    // The title must reflect the new (missing) scan id, not the stale prior scan name.
+    expect(document.title).not.toBe('Scan A | promptfoo');
+    expect(document.title).toBe('scan-b | promptfoo');
   });
 
   it('should have back to history navigation', async () => {

@@ -48,6 +48,12 @@ export default function ModelAuditResult() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    // React Router reuses this component across /model-audit/:id navigations, so a
+    // previously loaded scan can linger. Clear it whenever the id changes so the page
+    // title (and error state) never keeps identifying the prior scan while the next one
+    // loads, is missing, or fails to load.
+    setScan(null);
+
     if (!id) {
       setError('No scan ID provided');
       setIsLoading(false);
