@@ -40,7 +40,6 @@ const nodeEngineComparatorSets =
   typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
     ? fallbackNodeEngineComparatorSets
     : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
-
 function parseNodeEngineVersion(
   version: string,
   options: ParseNodeEngineVersionOptions = {},

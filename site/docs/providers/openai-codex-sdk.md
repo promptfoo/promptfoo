@@ -97,6 +97,38 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 
 :::
 
+### Option 3: Run on Amazon Bedrock
+
+Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: openai.gpt-5.5 # Bedrock model id (note the openai. prefix)
+      model_provider: amazon-bedrock
+      sandbox_mode: read-only
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+
+prompts:
+  - 'Write a Python function that calculates the factorial of a number'
+```
+
+Notes:
+
+- **Model ids are Bedrock ids**: use `openai.gpt-5.5` / `openai.gpt-5.4`, not the bare `gpt-5.5`. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`), which is separate from the classic `bedrock-runtime` `InvokeModel` API used by the [`bedrock:` provider](/docs/providers/aws-bedrock/).
+- **Region matters**: GPT-5.5 is available in `us-east-2`; GPT-5.4 in `us-east-2` and `us-west-2`. Request model access first.
+- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. The `bedrock:` provider, by contrast, uses the AWS SDK credential chain directly and does not need this.
+
+:::warning
+
+Credentials placed in `cli_env` are exposed to the Codex agent's shell environment. Scope the IAM permissions to Bedrock inference and prefer short-lived credentials.
+
+:::
+
 ## Quick Start
 
 ### Basic Usage
@@ -181,9 +213,11 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
 | `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
 | `base_url`               | string   | Custom API base URL                                                                                  | None                 |
+| `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
 | `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
 | `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
 | `model`                  | string   | Model to use                                                                                         | SDK default          |
+| `model_provider`         | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
 | `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
 | `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
 | `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |
@@ -202,6 +236,8 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
 | `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
+
+During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
 
 ### Sandbox Modes
 
@@ -224,17 +260,19 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-The SDK supports various OpenAI models. Use `gpt-5.5` for the latest frontier model:
+The SDK supports various OpenAI models. GPT-5.5 remains the broadly available default. If your account has GPT-5.6 preview access, select one of the public preview identifiers:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.5 # Recommended for code tasks
+      model: gpt-5.6-sol
+      model_reasoning_effort: max
 ```
 
 Supported models include:
 
+- **GPT-5.6** - Limited-preview tiers (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`)
 - **GPT-5.5** - Latest frontier model for professional work (`gpt-5.5`)
 - **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
 - **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
@@ -247,7 +285,7 @@ Supported models include:
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
-GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
+GPT-5.6 and GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. GPT-5.6 remains limited to accounts enabled by OpenAI. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
 
 ### Mini Models
 
@@ -396,11 +434,19 @@ providers:
 With streaming enabled, the provider creates spans for:
 
 - **Provider-level calls** - Overall request timing and token usage
+- **SDK turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes.
 - **Agent responses** - Individual message completions
 - **Reasoning steps** - Model reasoning captured in span events
 - **Command executions** - Shell commands with exit codes and output
 - **File changes** - File modifications with paths and change types
 - **MCP tool calls** - External tool invocations
+
+Every item span (commands, file changes, MCP tools, etc.) is additionally tagged with `gen_ai.turn.index` so callers can correlate it back to the SDK turn that emitted it.
+
+The Codex SDK exposes a turn for each `thread.runStreamed()` call, including its
+intermediate tool items. It does not expose each internal model generation, so these
+markers can verify and correlate SDK turns but cannot prove whether tool calls were
+batched into one LLM round-trip.
 
 ### Deep Tracing
 
@@ -414,7 +460,17 @@ providers:
       enable_streaming: true
 ```
 
-Deep tracing injects OpenTelemetry environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACEPARENT`, etc.) into the Codex CLI process. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span.
+Codex configures its log exporter through the `config.toml` in `CODEX_HOME`. Point it at Promptfoo's JSON logs receiver using the complete `/v1/logs` endpoint:
+
+```toml title="$CODEX_HOME/config.toml"
+[otel]
+log_user_prompt = false
+exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "json" } }
+```
+
+If you override `cli_env.CODEX_HOME`, put this configuration in that directory. The endpoint is the complete logs URL, not merely the OTLP host and port.
+
+Deep tracing injects `TRACEPARENT` and `promptfoo.trace_id` / `promptfoo.parent_span_id` resource attributes into the Codex CLI process so log records remain linked even when Codex does not attach inline trace context. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span. Standard OpenTelemetry environment variables are also injected, but they do not replace Codex's `[otel]` exporter configuration.
 
 :::warning
 
@@ -564,17 +620,23 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                          | Supported Models                                                                                     |
-| --------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `minimal` | Minimal reasoning overhead           | gpt-5.5, gpt-5.4, gpt-5.2                                                                            |
-| `low`     | Light reasoning, faster responses    | All models                                                                                           |
-| `medium`  | Balanced (default)                   | All models                                                                                           |
-| `high`    | Thorough reasoning for complex tasks | All models                                                                                           |
-| `xhigh`   | Maximum reasoning depth              | gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
+| Level     | Description                                     | Supported Models                                                                                              |
+| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                     |
+| `low`     | Light reasoning, faster responses               | All models                                                                                                    |
+| `medium`  | Balanced (default)                              | All models                                                                                                    |
+| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                    |
+| `xhigh`   | Extra-high reasoning depth                      | gpt-5.6, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
+| `max`     | Deepest single-agent reasoning                  | gpt-5.6-sol                                                                                                   |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-5.6-sol                                                                                                   |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
-For GPT-5.5 API requests, use `none`, `low`, `medium`, `high`, or `xhigh` reasoning where the runtime exposes those values. The current Codex SDK type still exposes `minimal`, `low`, `medium`, `high`, and `xhigh`.
+`max` and `ultra` are public GPT-5.6 preview options. `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value.
+
+:::note `max`/`ultra` depend on the Codex runtime catalog
+`max` and `ultra` only take effect when the installed Codex runtime recognizes the selected GPT-5.6 model for your account. If the bundled Codex model catalog does not include GPT-5.6, Codex **silently falls back to its default reasoning** — the value is ignored and **no error is raised**, so an eval may run at a lower reasoning level than requested. Confirm the effective reasoning with request tracing. For `max`, the [Responses API](/docs/providers/openai#gpt-56-limited-preview) path (`openai:responses:gpt-5.6-sol`) applies it directly and is the more reliable option.
+:::
 
 ## Additional Directories
 
@@ -906,6 +968,7 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 - [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) - Evaluate local Codex skills with `skill-used` and traced skill evidence
 - [Thread persistence](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/thread-persistence) - Reuse one prompt-template thread across multiple tests
 - [Sandbox enforcement](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/sandbox) - Verify `read-only` mode blocks writes in a sample workspace
+- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex against OpenAI frontier models (gpt-5.5 / gpt-5.4) on Amazon Bedrock
 - [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ### Verified end-to-end example runs

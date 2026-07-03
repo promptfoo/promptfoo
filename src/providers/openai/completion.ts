@@ -79,8 +79,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
+            ...this.getOpenAiRequestHeaders(),
           },
           body: JSON.stringify(body),
         },

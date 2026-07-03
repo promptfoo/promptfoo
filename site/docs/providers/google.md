@@ -285,8 +285,9 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release
+- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently resolves to `gemini-3.1-pro-preview`, same pricing)
+- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently resolves to `gemini-3.5-flash`, same pricing)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently resolves to `gemini-3.1-flash-lite`, same pricing)
 
 ### Embedding Models
 
@@ -294,6 +295,7 @@ Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to
 
 - `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
 - `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
+- `google:embedding:gemini-embedding-2-preview` - Preview alias for Gemini Embedding 2 ($0.20/1M input tokens)
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
@@ -309,9 +311,13 @@ Imagen models are available through both **Google AI Studio** and **Vertex AI**.
 
 #### Imagen 4 Models (Available in both Google AI Studio and Vertex AI)
 
-- `google:image:imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
-- `google:image:imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)
-- `google:image:imagen-4.0-fast-generate-preview-06-06` - Fast generation ($0.02/image)
+- `google:image:imagen-4.0-ultra-generate-001` - Ultra quality ($0.06/image)
+- `google:image:imagen-4.0-generate-001` - Standard quality ($0.04/image)
+- `google:image:imagen-4.0-fast-generate-001` - Fast generation ($0.02/image)
+
+:::warning
+Google has deprecated the Imagen 4 models with an August 17, 2026 shutdown and recommends [`gemini-3.1-flash-image`](#gemini-native-image-generation-models) as the replacement. The earlier `imagen-4.0-*-preview-06-06` ids are already shut down.
+:::
 
 #### Imagen 3 Models (Vertex AI only)
 
@@ -364,18 +370,21 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
-- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only; no Google Search grounding)
+- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K, more at higher resolutions)
+- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K, ~$0.24 at 4K)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
+
+Use the GA ids above; Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on June 25, 2026. Nano Banana 2 Lite never had a `-preview` alias.
 
 Configuration options:
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image-preview
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
-      imageSize: '2K' # 512px (3.1 only), 1K, 2K, 4K
+      imageSize: '2K' # 512px, 1K, 2K, 4K on this model; flash-lite is 1K only, pro is 1K/2K/4K
       temperature: 0.7
 ```
 
@@ -383,16 +392,16 @@ Key differences from Imagen:
 
 - Uses same namespace as Gemini chat (`google:model-name`)
 - More aspect ratio options (includes 1:4, 1:8, 2:3, 3:2, 4:1, 4:5, 5:4, 8:1, 21:9)
-- Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
+- Resolution control via `imageSize`: `512px`/`1K`/`2K`/`4K` on `gemini-3.1-flash-image`, `1K`/`2K`/`4K` on `gemini-3-pro-image`; `gemini-3.1-flash-lite-image` is `1K` only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
-- Supports Google Search grounding via `tools`
+- Supports Google Search grounding via `tools` (on `gemini-3.1-flash-image` and `gemini-3-pro-image`; **not** `gemini-3.1-flash-lite-image`)
 
-Google Search grounding lets the model use real-time search results to inform image generation:
+Google Search grounding lets the model use real-time search results to inform image generation. It is supported by `gemini-3.1-flash-image` and `gemini-3-pro-image`, but not by Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`):
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image-preview
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9'
       tools:
@@ -548,6 +557,8 @@ promptfoo eval --no-cache
 ```
 
 See the [Google Video example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configurations.
+
+<a id="gemini-20-flash"></a>
 
 ### Basic Configuration
 
@@ -1153,13 +1164,18 @@ Other configuration options are available, such as setting proactive audio, sett
 Try the examples:
 
 ```sh
-# Basic text-only example
+# Initialize the basic text-only and function calling/tools examples
 promptfoo init --example google-live
+cd google-live
+
+# Basic text-only example
+promptfoo eval -c promptfooconfig.yaml -j 3
 
 # Function calling and tools example
-promptfoo init --example google-live
+promptfoo eval -c promptfooconfig.tools.yaml -j 3
 
 # Audio generation example
+cd ..
 promptfoo init --example google-live-audio
 ```
 
