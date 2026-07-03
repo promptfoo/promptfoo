@@ -298,6 +298,12 @@ providers:
 
 The response transformer maps Model Armor's filter results to Promptfoo's guardrails format. See [`examples/provider-model-armor/transforms/sanitize-response.mjs`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-model-armor/transforms/sanitize-response.mjs) for the implementation.
 
+Both sanitize endpoints return the same `sanitizationResult` shape, so the finding direction cannot be inferred from the payload. The default export attributes findings to `flaggedInput` for `sanitizeUserPrompt`; when calling `sanitizeModelResponse`, point at the response-side export so findings attribute to `flaggedOutput`:
+
+```yaml
+transformResponse: file://transforms/sanitize-response.mjs:transformModelArmorModelResponse
+```
+
 ### Response Format
 
 The sanitization API returns detailed filter results and a separate execution status:

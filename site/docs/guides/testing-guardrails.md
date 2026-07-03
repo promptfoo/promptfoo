@@ -323,7 +323,7 @@ redteam:
   numTests: 10
 ```
 
-`guardrails-eval` is a collection of vulnerability plugins, not a provider integration or assertion. The companion `purpose: redteam` assertion changes final aggregation: after graders run, a reported guardrail block makes the overall test pass. When the target is not flagged, the generated vulnerability grader decides the result.
+`guardrails-eval` is a collection of vulnerability plugins, not a provider integration or assertion. The companion `purpose: redteam` assertion changes final aggregation: a `flagged: true` response force-passes the whole test, overriding the vulnerability grader and every other assertion. Only enable it when `flagged: true` proves the request was actually blocked — a detect-only signal that still returns unsafe output would hide the bypass. See the [`purpose: redteam` override](/docs/configuration/expected-outputs/guardrails#red-team-configuration) for details. When the target is not flagged, the generated vulnerability grader decides the result.
 
 Run the red team with:
 
