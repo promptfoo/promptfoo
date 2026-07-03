@@ -3,7 +3,7 @@ import path from 'path';
 
 import Ajv from 'ajv';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -358,10 +358,22 @@ describe('TestCaseSchema options (merged schema properties)', () => {
       options: {
         disableVarExpansion: true,
         disableConversationVar: true,
+        repeat: 3,
         runSerially: true,
       },
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('should reject invalid per-test repeat %s', (repeat) => {
+    expect(TestCaseSchema.safeParse({ options: { repeat } }).success).toBe(false);
   });
 
   it('should validate options combining properties from ALL merged schemas', () => {

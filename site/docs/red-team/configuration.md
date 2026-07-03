@@ -601,7 +601,7 @@ The severity levels affect:
 - Issue prioritization in vulnerability tables
 - Dashboard statistics and metrics
 
-See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants.ts#L553) for a list of default severity levels.
+See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants/metadata.ts#L504) for a list of default severity levels.
 
 ### Strategies
 

@@ -10,7 +10,7 @@ export const JAVASCRIPT_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
  * @returns True if the file has a JavaScript or TypeScript extension, false otherwise.
  */
 export function isJavascriptFile(filePath: string): boolean {
-  return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`).test(filePath);
+  return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`, 'i').test(filePath);
 }
 
 /**

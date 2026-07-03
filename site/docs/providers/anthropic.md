@@ -53,8 +53,11 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description            |
 | -------------------------------------------------------------------------- | ---------------------- |
+| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
+| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
 | `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
 | `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
+| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
 | `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
@@ -76,8 +79,11 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude Fable 5    | claude-fable-5                                        | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
+| Claude Mythos 5   | claude-mythos-5                                       | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
 | Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
+| Claude Sonnet 5   | claude-sonnet-5                                       | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
@@ -516,6 +522,39 @@ tests:
   - vars:
       pdf_base64: file://document.pdf
 ```
+
+### Claude Fable 5 and Mythos 5 notes
+
+Fable 5 and Mythos 5 use always-on adaptive thinking. Promptfoo omits unsupported
+`temperature`, `top_p`, and `top_k` values, converts legacy
+`thinking: { type: 'enabled', budget_tokens: N }` configs to adaptive thinking, and
+omits `thinking: { type: 'disabled' }` because thinking cannot be disabled.
+Set `thinking: { type: 'adaptive', display: 'summarized' }` to include a readable
+thinking summary; the default `display: 'omitted'` returns an empty thinking block,
+which Promptfoo excludes from the output.
+
+Both models use a 1M-token context window, support up to 128K output tokens, and are
+priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
+access is limited through Project Glasswing and may require provider approval. Both
+model IDs are pinned; Anthropic does not publish `-latest` aliases for them.
+
+### Claude Sonnet 5 notes
+
+Sonnet 5 is the most agentic Sonnet model, with a 1M-token context window and support
+for [effort levels](#effort-level) (`low` through `xhigh`). Unlike Sonnet 4.5/4.6 —
+but like the Opus 4.7/4.8 and Fable 5 generation — it deprecates manual sampling
+controls at the model level:
+
+- **Sampling controls are managed for you.** Sonnet 5 rejects `temperature`, `top_p`,
+  and `top_k` with a 400; promptfoo omits all three from every request (including its
+  built-in `temperature: 0` default). Setting any of them in config or
+  `ANTHROPIC_TEMPERATURE` logs a one-time heads-up. This suppression also applies when
+  you reach Sonnet 5 through AWS Bedrock, GCP Vertex, or Azure AI Foundry.
+- **Manual thinking budgets convert to adaptive.** A legacy
+  `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
+  `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
+
+Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set an explicit `cost` in your provider config if you want to track the introductory rate.
 
 ### Claude Opus 4.8 notes
 
