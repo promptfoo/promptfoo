@@ -622,7 +622,7 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
       {
         path: /\/results\/test-eval-123\/rows\//,
         repeat: true,
-        response: (path) => {
+        response: (path: string) => {
           const idMatch = path.match(/resultId=([^&]+)/);
           const id = idMatch ? decodeURIComponent(idMatch[1]) : path;
           return { data: { ...makeResult(id), response: { output: `full ${id}` } } };
@@ -675,7 +675,7 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
       {
         path: /\/results\/test-eval-123\/rows\//,
         repeat: true,
-        response: (_path, options) => {
+        response: (_path: string, options: RequestInit | undefined) => {
           if (options?.signal) {
             capturedSignals.push(options.signal);
           }
