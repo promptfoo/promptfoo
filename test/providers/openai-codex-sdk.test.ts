@@ -2420,6 +2420,7 @@ describe('OpenAICodexSDKProvider', () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
             codex_path_override: '/custom/path/to/codex',
+            cli_env: { LD_LIBRARY_PATH: '/custom/lib' },
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
@@ -2434,6 +2435,7 @@ describe('OpenAICodexSDKProvider', () => {
         const preflightEnv = mockCompatibilityPreflight.mock.calls[0][0].env;
         expect(preflightEnv).not.toHaveProperty('CODEX_API_KEY');
         expect(preflightEnv).not.toHaveProperty('OPENAI_API_KEY');
+        expect(preflightEnv).toHaveProperty('LD_LIBRARY_PATH', '/custom/lib');
         expect(MockCodex).toHaveBeenCalledWith(
           expect.objectContaining({
             env: expect.any(Object),
@@ -2442,10 +2444,56 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should skip compatibility preflight without a custom binary', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
+      });
+
+      it('should allow an explicit custom-binary version-check opt-out', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            codex_path_override: '/custom/path/to/codex',
+            skip_codex_version_check: true,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
+        expect(MockCodex).toHaveBeenCalled();
+      });
+
+      it('should abort promptly while a shared compatibility preflight continues', async () => {
+        const preflight = createDeferred<void>();
+        mockCompatibilityPreflight.mockReturnValue(preflight.promise);
+        const abortController = new AbortController();
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const resultPromise = provider.callApi('Test prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+        abortController.abort();
+
+        await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        expect(MockCodex).not.toHaveBeenCalled();
+        preflight.resolve(undefined);
+      });
+
       it('should reject an incompatible SDK and CLI before starting a Codex turn', async () => {
         mockCompatibilityPreflight.mockRejectedValue(
           new Error(
-            '@openai/codex-sdk 0.130.0 supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+            '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
           ),
         );
 
@@ -2457,7 +2505,7 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain(
-          '@openai/codex-sdk 0.130.0 supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+          '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
         );
         expect(MockCodex).not.toHaveBeenCalled();
         expect(mockStartThread).not.toHaveBeenCalled();

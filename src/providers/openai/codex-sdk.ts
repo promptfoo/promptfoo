@@ -270,6 +270,11 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
+   * Skip the custom binary's exact SDK/CLI version compatibility check.
+   */
+  skip_codex_version_check?: boolean;
+
+  /**
    * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
    * provider's model id instead (e.g., 'openai.gpt-5.5' for Amazon Bedrock).
@@ -410,6 +415,7 @@ const OpenAICodexSDKConfigShape = {
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
+  skip_codex_version_check: z.boolean().optional(),
   model: z.string().min(1).optional(),
   model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
@@ -677,14 +683,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   apiKey?: string;
 
   private providerId = 'openai:codex-sdk';
-  private codexModule?: any;
-  private codexSdkEntryPoint?: string;
+  private codexSdk?: { module: any; entryPoint: string };
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
   private threadRunQueues: Map<string, Promise<void>> = new Map();
   private deepTracingWarningShown = false; // Show warning once per instance
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
+  private compatibilitySkipWarningShown = false;
 
   constructor(
     options: {
@@ -2260,23 +2266,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     localInstance: any;
     useLocalInstance: boolean;
   }> {
-    if (!this.codexModule) {
-      const loadedSdk = await loadCodexSDK();
-      this.codexModule = loadedSdk.module;
-      this.codexSdkEntryPoint = loadedSdk.entryPoint;
+    if (!this.codexSdk) {
+      this.codexSdk = await loadCodexSDK();
     }
+    const codexSdk = this.codexSdk;
 
-    await this.ensureCodexCompatibility(env, resolvedConfig);
-    if (abortSignal?.aborted) {
-      throw this.createAbortError('Codex call aborted during compatibility check');
-    }
+    await this.ensureCodexCompatibility(env, resolvedConfig, codexSdk.entryPoint, abortSignal);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
     const instanceKey = this.generateInstanceKey(stableEnv, resolvedConfig);
     if (resolvedConfig.deep_tracing) {
       this.warnOnceForDeepTracingThreadOptions(resolvedConfig);
-      const localInstance = new this.codexModule.Codex(
+      const localInstance = new codexSdk.module.Codex(
         this.buildCodexOptions(env, resolvedConfig, apiKey),
       );
       return {
@@ -2289,7 +2291,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     let activeInstance = this.codexInstances.get(instanceKey);
     if (!activeInstance) {
-      activeInstance = new this.codexModule.Codex(
+      activeInstance = new codexSdk.module.Codex(
         this.buildCodexOptions(env, resolvedConfig, apiKey),
       );
       this.codexInstances.set(instanceKey, activeInstance);
@@ -2306,29 +2308,57 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private async ensureCodexCompatibility(
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
+    sdkEntryPoint: string,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     const codexPathOverride = resolvedConfig.codex_path_override;
     if (!codexPathOverride) {
       return;
     }
-    if (!this.codexSdkEntryPoint) {
-      throw new Error('Codex SDK entry point is unavailable for compatibility check');
+    if (resolvedConfig.skip_codex_version_check) {
+      if (!this.compatibilitySkipWarningShown) {
+        logger.warn(
+          '[CodexSDK] Skipping custom Codex binary version compatibility check by explicit configuration.',
+          { codexPathOverride },
+        );
+        this.compatibilitySkipWarningShown = true;
+      }
+      return;
     }
 
     // The SDK's direct CLI dependency is its event-schema compatibility contract. The bundled
     // CLI already satisfies it, so only a custom override needs a version probe.
-    const preflightEnv = getMinimalProcessEnv();
-    for (const key of MINIMAL_CLI_ENV_KEYS) {
-      if (env[key]) {
-        preflightEnv[key] = env[key];
-      }
-    }
+    const preflightEnv = { ...env };
+    delete preflightEnv.CODEX_API_KEY;
+    delete preflightEnv.OPENAI_API_KEY;
+    delete preflightEnv.TRACEPARENT;
+    delete preflightEnv.OTEL_RESOURCE_ATTRIBUTES;
 
-    await checkCodexCliCompatibility({
-      sdkEntryPoint: this.codexSdkEntryPoint,
+    const compatibilityCheck = checkCodexCliCompatibility({
+      sdkEntryPoint,
       codexPathOverride,
       env: preflightEnv,
     });
+    if (!abortSignal) {
+      await compatibilityCheck;
+      return;
+    }
+    if (abortSignal.aborted) {
+      throw this.createAbortError('Codex compatibility check aborted');
+    }
+
+    let onAbort: (() => void) | undefined;
+    const abortPromise = new Promise<void>((_, reject) => {
+      onAbort = () => reject(this.createAbortError('Codex compatibility check aborted'));
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      await Promise.race([compatibilityCheck, abortPromise]);
+    } finally {
+      if (onAbort) {
+        abortSignal.removeEventListener('abort', onAbort);
+      }
+    }
   }
 
   private warnOnceForDeepTracingThreadOptions(resolvedConfig: OpenAICodexSDKConfig): void {
