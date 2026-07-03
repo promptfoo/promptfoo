@@ -1,9 +1,4 @@
-import {
-  createMockResponse,
-  mockCallApiResponse,
-  mockCallApiRoutes,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
+import { mockCallApiResponse, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
@@ -623,13 +618,17 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
     const user = userEvent.setup();
     // Six rows exceed the 5-entry LRU bound, so the oldest (row-0) is evicted.
     const failures = Array.from({ length: 6 }, (_, i) => makeFailure(`row-${i}`));
-    vi.mocked(callApi).mockImplementation(async (path: string) => {
-      const idMatch = path.match(/resultId=([^&]+)/);
-      const id = idMatch ? decodeURIComponent(idMatch[1]) : path;
-      return createMockResponse({
-        data: { ...makeResult(id), response: { output: `full ${id}` } },
-      });
-    });
+    mockCallApiRoutes([
+      {
+        path: /\/results\/test-eval-123\/rows\//,
+        repeat: true,
+        response: (path) => {
+          const idMatch = path.match(/resultId=([^&]+)/);
+          const id = idMatch ? decodeURIComponent(idMatch[1]) : path;
+          return { data: { ...makeResult(id), response: { output: `full ${id}` } } };
+        },
+      },
+    ]);
 
     renderWithProviders(
       <RiskCategoryDrawer
@@ -646,14 +645,14 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
 
     for (let i = 0; i < 6; i++) {
       await clickDetails(user, i);
-      await waitFor(() => expect(vi.mocked(callApi).mock.calls.length).toBe(i + 1));
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(i + 1));
       await waitFor(() =>
         expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
           expect.objectContaining({ open: true, output: `full row-${i}` }),
         ),
       );
     }
-    expect(vi.mocked(callApi).mock.calls.length).toBe(6);
+    expect(callApi).toHaveBeenCalledTimes(6);
 
     // row-2 is still cached (rows 1..5 retained) -> no additional fetch.
     await clickDetails(user, 2);
@@ -662,23 +661,28 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
         expect.objectContaining({ open: true, output: 'full row-2' }),
       ),
     );
-    expect(vi.mocked(callApi).mock.calls.length).toBe(6);
+    expect(callApi).toHaveBeenCalledTimes(6);
 
     // row-0 was evicted by the LRU bound -> it must be refetched.
     await clickDetails(user, 0);
-    await waitFor(() => expect(vi.mocked(callApi).mock.calls.length).toBe(7));
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(7));
   });
 
-  it('aborts an in-flight row-detail download when the drawer closes', async () => {
+  it('aborts a row-detail download signal when the drawer closes', async () => {
     const user = userEvent.setup();
     const capturedSignals: AbortSignal[] = [];
-    vi.mocked(callApi).mockImplementation(async (_path: string, options?: RequestInit) => {
-      if (options?.signal) {
-        capturedSignals.push(options.signal);
-      }
-      // Never resolves: the request stays in-flight until aborted.
-      return new Promise<Response>(() => {});
-    });
+    mockCallApiRoutes([
+      {
+        path: /\/results\/test-eval-123\/rows\//,
+        repeat: true,
+        response: (_path, options) => {
+          if (options?.signal) {
+            capturedSignals.push(options.signal);
+          }
+          return { data: makeResult('row-a') };
+        },
+      },
+    ]);
 
     const props = {
       open: true,
