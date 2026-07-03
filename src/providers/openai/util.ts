@@ -413,6 +413,28 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
 ];
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
+  // GPT-5.6 limited-preview models
+  {
+    id: 'gpt-5.6-sol',
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-5.6-terra',
+    cost: {
+      input: 2.5 / 1e6,
+      output: 15 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    cost: {
+      input: 1 / 1e6,
+      output: 6 / 1e6,
+    },
+  },
   ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
     id: model,
     cost: {

@@ -238,9 +238,25 @@ tests:
 
 ## Adding a New Provider
 
-Providers are defined in TypeScript. We also provide language bindings for Python and Go. To contribute a new provider:
+Providers are defined in TypeScript. We also provide language bindings for Python and Go.
 
-1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
+Before writing code, check whether the service already works through the `openai` provider. For an OpenAI-compatible endpoint, set `apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL`. If that is all the service needs, contribute docs or an example that uses the generic path; do not add a new provider prefix or registry entry.
+
+A _dedicated provider_ adds its own `id:` prefix and registry entry. Promptfoo maintains that code, and a dedicated name signals a baseline of trust to users. To keep the registry useful, dedicated providers must meet the following bar.
+
+### Provider eligibility
+
+- **Legitimate model access.** The provider must serve models it owns, models its users are licensed to run, or models it can access through a first-party API, partner agreement, or reseller agreement. We do not accept unauthorized relays that resell or proxy another provider's models. If you resell third-party models, be ready to confirm that you are permitted to do so.
+- **Accountable ownership.** A hosted service must have an identifiable operator, a maintenance contact, and its own terms of service and privacy policy. For a self-hosted open-source project, established maintainers and a clear maintenance or security contact satisfy this requirement. Anonymous services with no identifiable owner are not a good fit.
+- **Evidence it will last.** We look for a practical signal that the provider will be maintained, such as funding, paying customers, an established track record, or substantial _organic_ adoption (real usage, not inflated stars or followers). Brand-new services may be asked to wait or start with the generic `openai` path.
+- **Clear data handling.** Hosted services must document whether they log prompt or response content, how long they retain it, and whether they use it for training. Self-hosted projects must document whether they send data outside the user's deployment and what telemetry they collect.
+- **Value beyond the generic path.** A dedicated provider should add behavior that would otherwise require provider-specific setup or code, such as non-OpenAI authentication, required headers, custom routing, or provider-specific endpoints and response handling. A base URL and API-key environment variable alone are not enough.
+
+We review aggregators, gateways, and resellers case by case against this same bar. Meeting these criteria doesn't guarantee a merge, and we may decline or later remove a provider that stops meeting them.
+
+To contribute a dedicated provider:
+
+1. Confirm it meets the eligibility criteria above and doesn't already exist in Promptfoo.
 
 2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as an optional dependency.
 
@@ -248,7 +264,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 4. Document your provider in `site/docs/providers/yourProviderName.md`, including a description, setup instructions, configuration options, and usage examples. You can also add examples to the `examples/` directory. Consider writing a guide comparing your provider to others or highlighting unique features or benefits.
 
-5. Update `src/providers/index.ts` and `site/docs/providers/index.md` to include your new provider. Update `src/envars.ts` to include any new environment variables your provider may need.
+5. Update `src/providers/registry.ts` and `site/docs/providers/index.md` to include your new provider. Update `src/envars.ts` to include any new environment variables your provider may need.
 
 6. Ensure all tests pass (`npm test`) and fix any linting issues (`npm run lint`).
 

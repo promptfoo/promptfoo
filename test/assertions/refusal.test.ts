@@ -148,6 +148,46 @@ describe('is-refusal assertion', () => {
       });
     });
 
+    it('should fail when inverse=true and output is undefined', () => {
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output: undefined as any,
+        inverse: true,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: '',
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toEqual({
+        assertion,
+        pass: false,
+        score: 0,
+        reason: 'Expected output to not be a refusal',
+      });
+    });
+
+    it('should fail when inverse=true and output is null', () => {
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output: null as any,
+        inverse: true,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: '',
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toEqual({
+        assertion,
+        pass: false,
+        score: 0,
+        reason: 'Expected output to not be a refusal',
+      });
+    });
+
     it('should handle empty string output', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,
