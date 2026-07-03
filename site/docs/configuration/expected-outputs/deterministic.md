@@ -797,6 +797,8 @@ With the configuration above:
 
 `defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
 
+Set a default value to the wildcard string `"*"` to strip that key unconditionally, regardless of what value the tool call actually used (for example a `cursor` or `request_id`-style argument that varies on every call but should still be tolerated). This differs from `ignore` below only in that it's declared alongside the other `defaults` entries; unlike a normal `defaults` entry, `"*"` does not require the actual value to match anything. Note that this means `defaults` can't distinguish a wildcard from a tool that legitimately defaults an argument to the literal string `"*"`.
+
 :::note
 
 Stripping runs before matching in both modes, but `partial` mode already ignores extra arguments, so `defaults` is only meaningful with `mode: exact`. Keep a key in `args` _or_ `defaults`, not both: an observed value equal to its default is stripped before the `args` comparison runs, so listing the same key in both can make an otherwise-matching call fail.
