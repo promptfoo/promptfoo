@@ -11,7 +11,7 @@ import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
 import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
-import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -503,6 +503,19 @@ async function postGeneralComments(
   core.info('✅ General comments posted successfully');
 }
 
+async function postReviewBodyAsComment(
+  octokit: ReturnType<typeof github.getOctokit>,
+  context: PullRequestContext,
+  reviewBody: string,
+): Promise<void> {
+  await octokit.rest.issues.createComment({
+    owner: context.owner,
+    repo: context.repo,
+    issue_number: context.number,
+    body: reviewBody,
+  });
+}
+
 async function postFallbackComments(
   githubToken: string,
   context: PullRequestContext,
@@ -512,27 +525,70 @@ async function postFallbackComments(
 ): Promise<void> {
   core.info('📝 Server could not post comments - posting as fallback...');
 
+  const octokit = github.getOctokit(githubToken);
+  const {
+    lineComments: preparedLineComments,
+    generalComments,
+    reviewBody,
+  } = prepareComments(comments, review, minimumSeverity);
+
+  let lineComments: Comment[];
+  let invalidLineComments: Comment[];
   try {
-    const octokit = github.getOctokit(githubToken);
-    const {
-      lineComments: preparedLineComments,
-      generalComments,
-      reviewBody,
-    } = prepareComments(comments, review, minimumSeverity);
-    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+    ({ lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
       githubToken,
       context,
       preparedLineComments,
-    );
-
-    await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
-
-    core.info('✅ All comments posted to PR by action');
+    ));
   } catch (error) {
-    core.error(`Failed to post comments: ${formatError(error)}`);
-    core.warning('Comments could not be posted to PR');
+    // If the diff can't be fetched/validated, treat every prepared line comment as a
+    // general comment so no finding is dropped over a location-validation failure.
+    core.warning(`Failed to validate comment locations against the PR diff: ${formatError(error)}`);
+    lineComments = [];
+    invalidLineComments = preparedLineComments;
   }
+
+  // Comments that are always general (file-only, fileless) plus line comments whose exact
+  // location is not in the reviewed diff.
+  const generalCommentsToPost = [...generalComments, ...invalidLineComments];
+
+  // Post the inline review separately. createReview can reject the ENTIRE review — e.g. a
+  // 422 after the PR diff moved, or GitHub rejecting a single location — which would
+  // otherwise drop every line finding (and, in the old single-catch, skip the general
+  // comments too) while leaving the Action green. On failure, degrade the line findings to
+  // general comments at their original locations so nothing is silently lost.
+  let reviewFailed = false;
+  try {
+    await postReview(octokit, context, lineComments, reviewBody);
+  } catch (error) {
+    reviewFailed = true;
+    core.warning(
+      `Failed to post PR review; degrading ${lineComments.length} line finding${lineComments.length === 1 ? '' : 's'} to general comments: ${formatError(error)}`,
+    );
+    generalCommentsToPost.push(...lineComments);
+  }
+
+  try {
+    // Preserve the review summary too when the review write failed, so it is not lost.
+    if (reviewFailed && reviewBody) {
+      await postReviewBodyAsComment(octokit, context, reviewBody);
+    }
+    await postGeneralComments(octokit, context, generalCommentsToPost);
+  } catch (error) {
+    // The general-comment fallback is the last channel for these findings. If it also
+    // fails, fail the Action rather than reporting a green scan with findings absent.
+    core.error(`Failed to post comments: ${formatError(error)}`);
+    core.setFailed(
+      `Code scan found findings but they could not be posted to the PR: ${formatError(error)}`,
+    );
+    return;
+  }
+
+  core.info(
+    reviewFailed
+      ? '✅ Findings posted as general comments after the PR review could not be created'
+      : '✅ All comments posted to PR by action',
+  );
 }
 
 // The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
@@ -676,14 +732,13 @@ async function handleScanResponse(
   context: PullRequestContext,
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
-  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
   const hasPrFindings = hasPrPostableFindings(comments);
 
-  // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
-  // responses still need processing when a finding can be surfaced through SARIF or PR
-  // comments, because those output channels intentionally support different locations.
-  if (skipReason && !hasSarifFindings && !hasPrFindings) {
+  // A skipped scan is not a clean scan. SARIF is withheld entirely for any response
+  // carrying a skipReason (see below), so a skip is only worth processing when a finding
+  // can still be surfaced through PR comments. Bail out otherwise so we never imply that
+  // authorization-gated work ran.
+  if (skipReason && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
@@ -699,8 +754,11 @@ async function handleScanResponse(
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
-  if (!skipReason || hasSarifFindings) {
+  // Withhold SARIF for ANY response carrying a skipReason. A partial SARIF run (even one
+  // location-backed finding) uploaded under the same Code Scanning category can be treated
+  // as authoritative and silently close prior real alerts that are merely absent from this
+  // incomplete scan. Surviving findings are still surfaced through PR comments below.
+  if (!skipReason) {
     emitConfiguredSarifOutput(scanResponse, inputs);
   }
 

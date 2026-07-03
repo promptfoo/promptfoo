@@ -839,7 +839,7 @@ describe('code-scan-action main', () => {
       );
     });
 
-    it('posts line-level mixed-skip findings as fallback comments and writes SARIF', async () => {
+    it('posts line-level mixed-skip findings as fallback comments but withholds SARIF', async () => {
       const { createComment, createReview } = mockFallbackPosting();
       mockPromptfooScanResponse({
         success: true,
@@ -875,8 +875,10 @@ describe('code-scan-action main', () => {
         }),
       );
       expect(createComment).not.toHaveBeenCalled();
-      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
-      expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+      // A skipReason means the scan did not complete: withhold SARIF entirely so a partial
+      // run cannot close prior Code Scanning alerts under the same category.
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
     it('routes mixed-skip findings that cannot be placed in the diff to general comments', async () => {
@@ -916,7 +918,7 @@ describe('code-scan-action main', () => {
       );
     });
 
-    it('posts file-only mixed-skip findings as general fallback comments and writes SARIF', async () => {
+    it('posts file-only mixed-skip findings as general fallback comments but withholds SARIF', async () => {
       const { createComment, createReview } = mockFallbackPosting();
       mockPromptfooScanResponse({
         success: true,
@@ -944,8 +946,9 @@ describe('code-scan-action main', () => {
           body: expect.stringContaining('**src/file-only.ts**'),
         }),
       );
-      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
-      expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+      // skipReason present: findings still reach the PR, but no SARIF is written.
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
     it('posts fileless mixed-skip findings as general fallback comments without empty SARIF', async () => {
@@ -1127,6 +1130,105 @@ describe('code-scan-action main', () => {
       });
 
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('degrades line findings to general comments when the PR review write fails', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      // createReview can reject the whole review (e.g. GitHub 422 after the PR diff moves).
+      createReview.mockRejectedValue(new Error('GitHub API: 422 Unprocessable Entity'));
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'User input reaches the model prompt without sanitization.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      // The rejected review must not silently drop the finding: it is re-posted as a general
+      // comment that preserves the original file:line location.
+      expect(createReview).toHaveBeenCalled();
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to post PR review'),
+      );
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/handler.ts:12**'),
+        }),
+      );
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('fails the Action when both the PR review and the general-comment fallback fail', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      createReview.mockRejectedValue(new Error('GitHub API: 422 Unprocessable Entity'));
+      createComment.mockRejectedValue(new Error('GitHub API: 403 Forbidden'));
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'User input reaches the model prompt without sanitization.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalled();
+      });
+      expect(mocks.core.setFailed).toHaveBeenCalledWith(
+        expect.stringContaining('could not be posted to the PR'),
+      );
+    });
+
+    it('degrades all line findings to general comments when diff validation fails', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      // Fetching/validating the diff throws; every prepared line comment must still be
+      // surfaced as a general comment rather than dropped.
+      mocks.actionGithub.partitionReviewCommentsByDiff.mockRejectedValue(
+        new Error('GitHub API: 500 fetching diff'),
+      );
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'User input reaches the model prompt without sanitization.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/handler.ts:12**'),
+        }),
+      );
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
   });
