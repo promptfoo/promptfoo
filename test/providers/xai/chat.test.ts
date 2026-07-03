@@ -707,27 +707,29 @@ describe('xAI Chat Provider', () => {
       }
     });
 
-    it('uses higher-context pricing for grok-build-0.1 and its aliases at 200k tokens', () => {
+    it('switches grok-build-0.1 and its aliases to higher-context pricing above 200k tokens', () => {
       for (const modelName of [
         'grok-build-0.1',
         'grok-code-fast-1',
         'grok-code-fast',
         'grok-code-fast-1-0825',
       ]) {
-        expect(calculateXAICost(modelName, {}, 199_999, 1_000)).toBeCloseTo(
-          (199_999 * 1 + 1_000 * 2) / 1e6,
+        // Exactly at the threshold stays on the standard tier (exclusive >).
+        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
+          (200_000 * 1 + 1_000 * 2) / 1e6,
           10,
         );
-        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
-          (200_000 * 2 + 1_000 * 4) / 1e6,
+        // One token over switches the whole request to the higher tier.
+        expect(calculateXAICost(modelName, {}, 200_001, 1_000)).toBeCloseTo(
+          (200_001 * 2 + 1_000 * 4) / 1e6,
           10,
         );
       }
     });
 
     it('uses higher-context cache-read pricing for grok-build-0.1 cached prompt tokens', () => {
-      expect(calculateXAICost('grok-build-0.1', {}, 200_000, 1_000, 0, 100_000)).toBeCloseTo(
-        (100_000 * 2 + 100_000 * 0.4 + 1_000 * 4) / 1e6,
+      expect(calculateXAICost('grok-build-0.1', {}, 200_001, 1_000, 0, 100_000)).toBeCloseTo(
+        (100_001 * 2 + 100_000 * 0.4 + 1_000 * 4) / 1e6,
         10,
       );
     });

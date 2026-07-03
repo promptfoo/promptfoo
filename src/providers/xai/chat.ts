@@ -95,6 +95,12 @@ type XAIModelCost = {
   };
 };
 
+type XAIModel = {
+  id: string;
+  cost: XAIModelCost;
+  aliases?: string[];
+};
+
 type XAIConfig = {
   region?: string;
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
@@ -113,7 +119,7 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 // Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
 // reports per-token prices in "ticks" (1 tick = $1e-10). The same scale is used
 // by `usage.cost_in_usd_ticks` on chat/responses results.
-export const XAI_CHAT_MODELS = [
+export const XAI_CHAT_MODELS: XAIModel[] = [
   // Grok 4.20 Models
   {
     id: 'grok-4.20-0309-reasoning',
@@ -526,8 +532,10 @@ export function calculateXAICost(
   }
 
   const inputCostOverride = config.inputCost ?? config.cost;
+  // xAI charges the higher tier for requests that "exceed" the threshold, so the
+  // switch is exclusive (>), matching the minimax/azure/google tiered-cost paths.
   const modelCost: XAIModelCost =
-    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
+    model.cost.longContext && promptTokens > model.cost.longContext.threshold
       ? model.cost.longContext
       : model.cost;
   const inputCost = inputCostOverride ?? modelCost.input;

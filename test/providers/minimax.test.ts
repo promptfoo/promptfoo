@@ -38,6 +38,19 @@ describe('calculateMiniMaxCost', () => {
     expect(cost).toBeCloseTo(2.76); // (0.6 * 0.5 + 0.12 * 0.5 + 2.4)
   });
 
+  it('should switch MiniMax-M3 to long-context pricing only above the 512k threshold', () => {
+    // Exactly at the threshold stays on the standard tier (exclusive >).
+    expect(calculateMiniMaxCost('MiniMax-M3', {}, 512_000, 1_000_000)).toBeCloseTo(
+      (0.3 * 512_000 + 1.2 * 1_000_000) / 1e6,
+      10,
+    );
+    // One token over switches the whole request to the long-context tier.
+    expect(calculateMiniMaxCost('MiniMax-M3', {}, 512_001, 1_000_000)).toBeCloseTo(
+      (0.6 * 512_001 + 2.4 * 1_000_000) / 1e6,
+      10,
+    );
+  });
+
   it('should calculate cost without cache for MiniMax-M2.7', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000);
     expect(cost).toBeCloseTo(1.5); // (0.3 + 1.2)

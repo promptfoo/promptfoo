@@ -44,6 +44,13 @@ export const AZURE_VIDEO_DURATIONS = [5, 10, 15, 20] as const;
  */
 export const AZURE_SORA_COST_PER_SECOND = 0.1;
 
+/**
+ * Prompt-token count above which GPT-5.x models switch to their long-context
+ * pricing tier. Matches OpenAI's own threshold (see `GPT_5_LONG_CONTEXT_THRESHOLD`
+ * in `src/providers/openai/util.ts`).
+ */
+const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+
 export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // GPT-5 Series (Latest Flagship)
@@ -70,7 +77,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 2.5 / 1000000,
       output: 15 / 1000000,
-      longContext: { threshold: 272_000, input: 5 / 1000000, output: 22.5 / 1000000 },
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
     },
   },
   {
@@ -78,7 +89,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 2.5 / 1000000,
       output: 15 / 1000000,
-      longContext: { threshold: 272_000, input: 5 / 1000000, output: 22.5 / 1000000 },
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
     },
   },
   {
@@ -86,7 +101,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 30 / 1000000,
       output: 180 / 1000000,
-      longContext: { threshold: 272_000, input: 60 / 1000000, output: 270 / 1000000 },
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+      },
     },
   },
   {
@@ -94,7 +113,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 30 / 1000000,
       output: 180 / 1000000,
-      longContext: { threshold: 272_000, input: 60 / 1000000, output: 270 / 1000000 },
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+      },
     },
   },
   {
@@ -114,15 +137,31 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 0.2 / 1000000, output: 1.25 / 1000000 },
   },
   // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
-  // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 uses the short-context
-  // Global Standard tier (long-context is 10/45). gpt-5.2/5.3 chat and codex share 1.75/14.
+  // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 long-context is 10/45
+  // above the threshold. gpt-5.2/5.3 chat and codex share 1.75/14.
   {
     id: 'gpt-5.5',
-    cost: { input: 5 / 1000000, output: 30 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.5-2026-04-23',
-    cost: { input: 5 / 1000000, output: 30 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.2',

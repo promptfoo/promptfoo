@@ -47,8 +47,23 @@ describe('calculateAzureCost', () => {
   });
 
   it('uses long-context pricing for GPT-5.4 pro above the 272k threshold', () => {
+    expect(calculateAzureCost('gpt-5.4-pro', {}, 272_000, 1_000)).toBeCloseTo(
+      (272_000 * 30 + 1_000 * 180) / 1e6,
+      12,
+    );
     expect(calculateAzureCost('gpt-5.4-pro', {}, 272_001, 1_000)).toBeCloseTo(
       (272_001 * 60 + 1_000 * 270) / 1e6,
+      12,
+    );
+  });
+
+  it('uses long-context pricing for GPT-5.5 above the 272k threshold', () => {
+    expect(calculateAzureCost('gpt-5.5', {}, 272_000, 1_000)).toBeCloseTo(
+      (272_000 * 5 + 1_000 * 30) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost('gpt-5.5', {}, 272_001, 1_000)).toBeCloseTo(
+      (272_001 * 10 + 1_000 * 45) / 1e6,
       12,
     );
   });
@@ -260,8 +275,11 @@ describe('AZURE_MODELS cost coverage', () => {
     expect(calculateAzureCost(id, {}, 1000, 1000)).toBeGreaterThan(0);
   });
 
-  // Exact per-1M input/output rates for entries added/corrected from the Azure Retail Prices API.
-  // Probing input and output separately catches a swapped input/output or a transcription typo.
+  // Exact standard-tier per-1M input/output rates for entries added/corrected from the Azure
+  // Retail Prices API. Probing input and output separately catches a swapped input/output or a
+  // transcription typo. Input is probed at 100k tokens — below every long-context threshold —
+  // so tiered models (gpt-5.4-pro, gpt-5.5) assert their standard input rate here, while the
+  // long-context tiers are pinned by the dedicated boundary tests above.
   it.each([
     ['gpt-5.5', 5, 30],
     ['gpt-5.2', 1.75, 14],
@@ -276,7 +294,7 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.1-chat', 1.25, 10],
     ['gpt-5.1-codex', 1.25, 10],
     ['gpt-5.1-codex-mini', 0.25, 2],
-    ['gpt-5.4-pro', 60, 180],
+    ['gpt-5.4-pro', 30, 180],
     ['gpt-5.4-mini', 0.75, 4.5],
     ['gpt-5.4-nano', 0.2, 1.25],
     ['o3', 2, 8],
@@ -294,7 +312,7 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-oss-120b', 0.15, 0.6],
     ['Phi-3-medium-4k-instruct', 0.17, 0.68],
   ])('prices %s at exactly %d in / %d out per 1M', (id, inputPerM, outputPerM) => {
-    expect(calculateAzureCost(id, {}, 1_000_000, 0)).toBeCloseTo(inputPerM as number, 9);
+    expect(calculateAzureCost(id, {}, 100_000, 0)).toBeCloseTo((inputPerM as number) / 10, 9);
     expect(calculateAzureCost(id, {}, 0, 1_000_000)).toBeCloseTo(outputPerM as number, 9);
   });
 });
