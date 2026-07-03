@@ -19,5 +19,6 @@ describe('loadYaml', () => {
       ['b', 2],
     ]);
     expect(loadYaml('!!set {a: null, b: null}')).toEqual({ a: null, b: null });
+    expect(() => loadYaml('!!set {a: not-null}')).toThrow(/cannot resolve a set item/);
   });
 });

@@ -1,34 +1,17 @@
 import * as yaml from 'js-yaml';
 
-type LegacyYamlSet = Record<string, null>;
+type LegacyYamlSet = Record<string, unknown>;
 
 const legacySetTag = yaml.defineMappingTag<LegacyYamlSet>('tag:yaml.org,2002:set', {
-  create: () => ({}),
-  identify: () => false,
-  represent: (data) => new Map(Object.keys(data).map((key) => [key, null])),
+  ...yaml.legacyMapTag,
+  identify: yaml.setTag.identify,
+  represent: yaml.setTag.represent,
   addPair: (container, key, value) => {
     if (value !== null) {
       return 'cannot resolve a set item';
     }
-    if (key !== null && typeof key === 'object') {
-      return 'object-based set does not support complex keys';
-    }
-    const normalizedKey = String(key);
-    if (normalizedKey === '__proto__') {
-      Object.defineProperty(container, normalizedKey, {
-        value: null,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    } else {
-      container[normalizedKey] = null;
-    }
-    return '';
+    return yaml.legacyMapTag.addPair(container, key, null);
   },
-  has: (container, key) => Object.prototype.hasOwnProperty.call(container, String(key)),
-  keys: (container) => Object.keys(container),
-  get: (container, key) => container[String(key)],
 });
 
 /**

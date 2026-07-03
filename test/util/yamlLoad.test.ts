@@ -31,6 +31,7 @@ describe('loadYaml', () => {
       ['b', 2],
     ]);
     expect(loadYaml('!!set {a: null, b: null}')).toEqual({ a: null, b: null });
+    expect(() => loadYaml('!!set {a: not-null}')).toThrow(/cannot resolve a set item/);
   });
 
   it('returns undefined for empty input like js-yaml v4', () => {
