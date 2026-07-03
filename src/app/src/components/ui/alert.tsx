@@ -42,6 +42,8 @@ function Alert({
   ...props
 }: AlertProps) {
   return (
+    // `role="alert"` is the default. Keep `{...props}` spread last so callers can override `role`
+    // (e.g. UpdateBanner passes role="group" and owns the live region on an inner element).
     <div ref={ref} role="alert" className={cn(alertVariants({ variant }), className)} {...props}>
       {props.children}
       {onDismiss && (

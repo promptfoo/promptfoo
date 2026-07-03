@@ -319,6 +319,33 @@ describe('ClaudeCodeSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it('should not warn about comma-separated fallback models that are all known', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022' },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn only about the unknown entries in a comma-separated fallback list', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022,unknown-fallback' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
+      );
+
+      warnSpy.mockRestore();
+    });
+
     it('should not warn about Claude Agent SDK model aliases', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
 
@@ -1087,7 +1114,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
     });
 
-    describe('assistant errors and api_error_status (SDK >= 0.3.144)', () => {
+    describe('assistant errors and api_error_status', () => {
       const buildAssistantMessage = (
         error: SDKAssistantMessageError | undefined,
         opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
@@ -1214,14 +1241,17 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata).not.toHaveProperty('assistantErrors');
       });
 
-      it('annotates error result message with the last assistant error code', async () => {
-        // Verifies the model_not_found path the SDK formalized in 0.3.144 is
-        // promoted from a dropped detail to part of the error string and
-        // metadata, so consumers can distinguish it from an unrelated turn-
-        // limit failure that happens to share the same `subtype`.
+      it.each([
+        'model_not_found',
+        'overloaded',
+      ] as const)('annotates error result messages with the %s assistant error code', async (assistantError) => {
+        // The SDK formalized model_not_found in 0.3.144 and overloaded in
+        // 0.3.161. Both should be promoted from a dropped detail to the error
+        // string and metadata so consumers can distinguish the upstream cause
+        // from the generic terminal subtype.
         mockQuery.mockReturnValue(
           createMockQuery([
-            buildAssistantMessage('model_not_found', {
+            buildAssistantMessage(assistantError, {
               uuid: '33333333-3333-3333-3333-333333333333',
             }),
             {
@@ -1248,11 +1278,11 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe(
-          'Claude Agent SDK call failed: error_during_execution (model_not_found)',
+          `Claude Agent SDK call failed: error_during_execution (${assistantError})`,
         );
         expect(result.metadata?.assistantErrors).toEqual([
           {
-            error: 'model_not_found',
+            error: assistantError,
             uuid: '33333333-3333-3333-3333-333333333333',
             parentToolUseId: null,
           },

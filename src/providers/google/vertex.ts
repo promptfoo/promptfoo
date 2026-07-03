@@ -13,10 +13,14 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import { loadYaml } from '../../util/yamlLoad';
 import {
+  applyClaudeRegionalPremium,
   calculateAnthropicCost,
   getTokenUsage,
+  isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -263,8 +267,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
       try {
-        const yaml = await import('js-yaml');
-        const parsed = yaml.default.load(prompt);
+        const parsed = loadYaml(prompt);
         normalizedPrompt = JSON.stringify(parsed);
       } catch (err) {
         return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
@@ -292,14 +295,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
-    const thinkingConfig: ClaudeThinkingConfig | undefined =
-      samplingParamsDeprecated && requestedThinkingConfig?.type === 'enabled'
-        ? { type: 'adaptive' }
-        : requestedThinkingConfig;
+    const thinkingConfig: ClaudeThinkingConfig | undefined = normalizeClaudeThinkingConfig(
+      this.modelName,
+      requestedThinkingConfig,
+    );
     const isThinkingEnabled =
-      thinkingConfig?.type === 'enabled' || thinkingConfig?.type === 'adaptive';
+      alwaysOnAdaptiveThinking ||
+      thinkingConfig?.type === 'enabled' ||
+      thinkingConfig?.type === 'adaptive';
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
@@ -314,7 +320,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       maxTokens = thinkingConfig.budget_tokens + 1024;
     }
 
-    // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+    // Newer Claude models deprecate manual sampling controls at the model
     // level — the underlying Anthropic API returns 400 for any request that
     // pins `temperature`, `top_p`, or `top_k`. Vertex forwards the request body
     // verbatim to rawPredict, so suppress all three here too.
@@ -414,13 +420,19 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
+      // Regional and multi-region Vertex endpoints bill Claude 4.5+ models at a premium
+      // over the global endpoint (see isClaudeRegionalPremiumModel).
+      const pricingConfig =
+        this.getRegion() === 'global'
+          ? this.config
+          : applyClaudeRegionalPremium(normalizedModelName, this.config);
       const response = {
         cached: false,
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
           normalizedModelName,
-          this.config,
+          pricingConfig,
           data.usage?.input_tokens,
           data.usage?.output_tokens,
         ),

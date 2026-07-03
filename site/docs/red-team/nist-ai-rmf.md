@@ -58,7 +58,7 @@ redteam:
     - nist:ai:measure
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or target specific measures:
@@ -91,7 +91,7 @@ redteam:
     - harmful:misinformation-disinformation
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or use the NIST shorthand:
@@ -162,7 +162,7 @@ redteam:
     - harmful:misinformation-disinformation
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or use the NIST shorthand:
@@ -209,7 +209,7 @@ redteam:
     - sql-injection
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or use the NIST shorthand:
@@ -322,7 +322,7 @@ redteam:
     - harmful:misinformation-disinformation
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or use the NIST shorthand:
@@ -368,7 +368,7 @@ redteam:
     - nist:ai:measure
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 This configuration tests your AI system against all NIST AI RMF measurement criteria, providing comprehensive risk assessment aligned with federal AI guidelines.
@@ -392,7 +392,7 @@ redteam:
     - gdpr
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## Best Practices for NIST AI RMF Compliance

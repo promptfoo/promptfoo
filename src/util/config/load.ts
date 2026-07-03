@@ -6,7 +6,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -29,6 +28,7 @@ import {
   type Scenario,
   type TestCase,
   type TestSuite,
+  type TestSuiteConfig,
   TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
@@ -46,6 +46,7 @@ import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
@@ -329,7 +330,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
+    const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
@@ -740,6 +741,7 @@ export async function resolveConfigs(
   config: Partial<UnifiedConfig>;
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
+  selectedProviderConfigs?: TestSuiteConfig['providers'];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -1044,6 +1046,7 @@ export async function resolveConfigs(
   );
 
   cliState.config = config;
+  cliState.selectedProviderConfigs = filteredProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
   // Resolve relative envPath(s) against the config file directory
@@ -1066,5 +1069,6 @@ export async function resolveConfigs(
     testSuite,
     basePath,
     commandLineOptions,
+    selectedProviderConfigs: filteredProviderConfigs,
   };
 }

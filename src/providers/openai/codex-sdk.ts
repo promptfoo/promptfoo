@@ -15,6 +15,8 @@ import {
   type GenAISpanResult,
   getTraceparent,
   openTurnSpan,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -42,6 +44,41 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+
+function appendPromptfooResourceAttrs(
+  existing: string | undefined,
+  traceId: string,
+  parentSpanId: string,
+): string {
+  const traceKey = PROMPTFOO_RESOURCE_ATTR_TRACE_ID;
+  const parentSpanKey = PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID;
+  const incoming = `${traceKey}=${traceId},${parentSpanKey}=${parentSpanId}`;
+  if (!existing) {
+    return incoming;
+  }
+  const cleaned = existing
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter(
+      (pair) =>
+        pair.length > 0 &&
+        !pair.startsWith(`${traceKey}=`) &&
+        !pair.startsWith(`${parentSpanKey}=`),
+    )
+    .join(',');
+  return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
+}
+
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
+
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  if (!traceparent) {
+    return false;
+  }
+  const [, traceId, spanId] = traceparent.split('-');
+  return Boolean(traceId && spanId && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID);
+}
 
 /**
  * OpenAI Codex SDK Provider
@@ -77,6 +114,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-5.6-sol: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-5.6-terra / gpt-5.6-luna: runtime-dependent preview levels
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
@@ -94,8 +133,10 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'max': Deepest single-agent reasoning for GPT-5.6 Sol
+ * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol
  */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Web search modes controlling how the agent accesses the web.
@@ -371,7 +412,9 @@ const OpenAICodexSDKConfigShape = {
   model: z.string().min(1).optional(),
   model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+  model_reasoning_effort: z
+    .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    .optional(),
   network_access_enabled: z.boolean().optional(),
   web_search_enabled: z.boolean().optional(),
   web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
@@ -597,6 +640,10 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.6 limited-preview models
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-pro',
@@ -791,6 +838,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         sortedEnv.TRACEPARENT = traceparent;
+        const [, tpTraceId, tpSpanId] = traceparent.split('-');
+        if (tpTraceId && tpSpanId) {
+          sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+            sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
+            tpTraceId,
+            tpSpanId,
+          );
+        }
       }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - CLI will start own trace)',
@@ -2082,7 +2137,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
-    const currentTraceparent = getTraceparent();
+    const activeTraceparent = getTraceparent();
+    const currentTraceparent = isValidTraceparent(activeTraceparent)
+      ? activeTraceparent
+      : context?.traceparent;
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();

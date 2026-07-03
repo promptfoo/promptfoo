@@ -353,6 +353,66 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 
+    // Regression coverage: Mistral silently repoints `*-latest`/bare aliases to newer
+    // models. These lock the hardcoded pricing to whatever the alias resolves to today.
+    it.each([
+      // [model, input price/M, output price/M, expected cost for 400 in / 600 out]
+      // mistral-small-latest -> Mistral Small 4 (mistral-small-2603): $0.15/$0.60
+      ['mistral-small-latest', 0.00042],
+      // magistral-small-latest folded into Mistral Small 4: $0.15/$0.60
+      ['magistral-small-latest', 0.00042],
+      // mistral-medium-latest + bare mistral-medium -> Mistral Medium 3.5: $1.50/$7.50
+      ['mistral-medium-latest', 0.0051],
+      ['mistral-medium', 0.0051],
+      // mistral-medium-2604 is the canonical dated ID for Mistral Medium 3.5
+      ['mistral-medium-2604', 0.0051],
+      // version aliases that also resolve to Mistral Medium 3.5
+      ['mistral-medium-3-5', 0.0051],
+      // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
+      ['mistral-code-latest', 0.00066],
+      // Devstral 2 agent alias: $0.40/$2.00
+      ['mistral-code-agent-latest', 0.00136],
+    ])('tracks current pricing for %s', async (model, expectedCost) => {
+      const provider = new MistralChatCompletionProvider(model);
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'ok' } }],
+          usage: { total_tokens: 1000, prompt_tokens: 400, completion_tokens: 600 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test alias pricing');
+      expect(result.cost).toBeCloseTo(expectedCost, 6);
+    });
+
+    it('forwards prompt_cache_key in the request body', async () => {
+      const provider = new MistralChatCompletionProvider('mistral-large-latest', {
+        config: { prompt_cache_key: 'shared-prefix-1' },
+      });
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'ok' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt cache key');
+
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      const body = JSON.parse(requestInit?.body as string);
+      expect(body.prompt_cache_key).toBe('shared-prefix-1');
+    });
+
     it('should use cache when enabled', async () => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       vi.mocked(getCache).mockReturnValue({
@@ -923,6 +983,41 @@ describe('Mistral', () => {
     it('should create a provider with default options', () => {
       expect(provider.modelName).toBe('mistral-embed');
       expect(provider.config).toEqual({});
+    });
+
+    it('should support non-default embedding models such as codestral-embed', async () => {
+      const codestralProvider = new MistralEmbeddingProvider({ modelName: 'codestral-embed' });
+      vi.spyOn(codestralProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      expect(codestralProvider.modelName).toBe('codestral-embed');
+      expect(codestralProvider.id()).toBe('mistral:embedding:codestral-embed');
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          model: 'codestral-embed',
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 1000, prompt_tokens: 1000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await codestralProvider.callEmbeddingApi('Test code');
+
+      // Request sends the codestral-embed model
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      const body = JSON.parse(requestInit?.body as string);
+      expect(body.model).toBe('codestral-embed');
+      // Codestral Embed input pricing is $0.15/1M: 1000 tokens => 0.00015
+      expect(result.cost).toBeCloseTo(0.00015, 6);
+    });
+
+    it('should warn on an unknown embedding model', () => {
+      const unknownProvider = new MistralEmbeddingProvider({ modelName: 'not-a-real-embed' });
+      expect(unknownProvider.modelName).toBe('not-a-real-embed');
+      expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+        expect.stringContaining('Using unknown Mistral embedding model'),
+      );
     });
 
     it('should call Mistral Embedding API and return embedding with correct structure', async () => {
