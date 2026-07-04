@@ -621,7 +621,8 @@ function buildCodexRateLimitResponse(
 ): ProviderResponse | undefined {
   const errorRecord = getRecord(error);
   const normalizedError = getCodexProviderError(error);
-  const status = normalizedError?.httpStatusCode;
+  const status =
+    normalizedError?.httpStatusCode ?? (normalizedError?.code === 429 ? 429 : undefined);
   const rawCode =
     typeof normalizedError?.code === 'string' ? normalizedError.code.toLowerCase() : undefined;
   const structuredCode = CODEX_RATE_LIMIT_CODES.find((knownCode) => knownCode === rawCode);
@@ -2428,6 +2429,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...response,
       metadata: {
         ...response.metadata,
+        rateLimitKind: response.metadata?.rateLimitKind ?? 'not_rate_limit',
         ...this.buildCodexResponseMetadata(streamingError?.state.items ?? [], skillRootPrefixes, {
           providerError,
           droppedEvents: streamingError?.state.droppedEvents,

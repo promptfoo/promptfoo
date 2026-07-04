@@ -41,6 +41,9 @@ export function isProviderResponseRateLimited(
   if (result?.metadata?.rateLimitKind === 'rate_limit') {
     return true;
   }
+  if (result?.metadata?.rateLimitKind === 'not_rate_limit') {
+    return false;
+  }
   if (isHttpRateLimitError(error)) {
     return error.kind !== 'quota';
   }
@@ -60,12 +63,6 @@ export function isProviderResponseRateLimited(
   if (result?.metadata?.http?.status === 429) {
     return true;
   }
-  // Codex providers classify terminal stream errors before returning a response.
-  // Do not reinterpret other execution-health diagnostic prose here.
-  if (result?.metadata?.executionHealth) {
-    return false;
-  }
-
   return Boolean(
     // Check error field in response
     result?.error?.includes?.('429') ||

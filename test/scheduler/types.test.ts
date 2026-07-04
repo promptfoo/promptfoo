@@ -78,10 +78,22 @@ describe('isProviderResponseRateLimited', () => {
             droppedEvents: [],
             sandboxFailure: false,
           },
+          rateLimitKind: 'not_rate_limit',
         },
       };
 
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
+
+    it('should not let an unrelated executionHealth shape disable generic provider retries', () => {
+      const result: ProviderResponse = {
+        error: 'HTTP 429: Too Many Requests',
+        metadata: {
+          executionHealth: { status: 'degraded' } as any,
+        },
+      };
+
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
   });
 

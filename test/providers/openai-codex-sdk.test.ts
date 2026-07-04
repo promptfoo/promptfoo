@@ -7,7 +7,12 @@ import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
+import {
+  getCodexProviderError,
+  isCodexSandboxError,
+} from '../../src/providers/openai/codexExecutionHealth';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -164,6 +169,35 @@ describe('OpenAICodexSDKProvider', () => {
     restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
     restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
+  });
+
+  describe('structured execution-health errors', () => {
+    it.each([
+      { status: 429 },
+      { code: 'rate_limit_exceeded' },
+      { kind: 'sandbox_error' },
+    ])('should ignore unrelated nested data payloads: %j', (data) => {
+      const error = { message: 'tool failed', data };
+
+      expect(getCodexProviderError(error)).toBeUndefined();
+      expect(isCodexSandboxError(error)).toBe(false);
+    });
+
+    it('should accept an explicitly tagged nested Codex error envelope', () => {
+      const error = {
+        message: 'request failed',
+        data: {
+          codex_error_info: { type: 'SandboxError' },
+          code: 'sandbox_error',
+        },
+      };
+
+      expect(getCodexProviderError(error)).toEqual({
+        code: 'sandbox_error',
+        kind: 'SandboxError',
+      });
+      expect(isCodexSandboxError(error)).toBe(true);
+    });
   });
 
   describe('constructor', () => {
@@ -571,6 +605,27 @@ describe('OpenAICodexSDKProvider', () => {
             providerError: { code: 'rate_limit_exceeded', httpStatusCode: 429 },
           },
         });
+      });
+
+      it('should classify a numeric provider code 429 without relying on prose', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('request rejected'), {
+            code: 429,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toMatchObject({
+          rateLimitKind: 'rate_limit',
+          http: { status: 429 },
+          executionHealth: { providerError: { code: 429 } },
+        });
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
       });
 
       it('should use a one-minute retry delay for TPM throttles without an SDK reset hint', async () => {

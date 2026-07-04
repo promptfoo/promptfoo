@@ -34,9 +34,21 @@ function getErrorRecords(error: unknown): Record<string, unknown>[] {
   if (!root) {
     return [];
   }
-  return [root, asRecord(root.data), asRecord(root.cause)].filter(
-    (value): value is Record<string, unknown> => value !== undefined,
-  );
+  const data = asRecord(root.data);
+  const cause = asRecord(root.cause);
+  const hasCodexEnvelope = (record: Record<string, unknown>) =>
+    record.codexErrorInfo !== undefined || record.codex_error_info !== undefined;
+  const isErrorCause =
+    root.cause instanceof Error ||
+    (cause !== undefined &&
+      (typeof cause.message === 'string' ||
+        (typeof cause.name === 'string' && cause.name.toLowerCase().endsWith('error'))));
+
+  return [
+    root,
+    ...(data && hasCodexEnvelope(data) ? [data] : []),
+    ...(cause && isErrorCause ? [cause] : []),
+  ];
 }
 
 /** Extract only protocol fields. Error prose is deliberately ignored. */
