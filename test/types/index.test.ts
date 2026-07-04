@@ -7,6 +7,7 @@ import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  AssertionOrSetSchema,
   AssertionSchema,
   AssertionSetSchema,
   BaseAssertionTypesSchema,
@@ -102,22 +103,44 @@ describe('AssertionSchema', () => {
     'select-lowest-cost',
     'select-lowest-latency',
   ] as const)('validates the onlyPassing option for %s', (type) => {
-    expect(AssertionSchema.safeParse({ type }).success).toBe(true);
-    expect(AssertionSchema.safeParse({ type, value: { onlyPassing: false } }).success).toBe(true);
-    expect(AssertionSchema.safeParse({ type, value: { onlyPassing: 'yes' } }).success).toBe(false);
-    expect(AssertionSchema.safeParse({ type, value: { onlyPasng: true } }).success).toBe(false);
-    expect(AssertionSchema.safeParse({ type, value: true }).success).toBe(false);
+    expect(AssertionOrSetSchema.safeParse({ type }).success).toBe(true);
+    expect(AssertionOrSetSchema.safeParse({ type, value: { onlyPassing: false } }).success).toBe(
+      true,
+    );
+    expect(AssertionOrSetSchema.safeParse({ type, value: { onlyPassing: 'yes' } }).success).toBe(
+      false,
+    );
+    expect(AssertionOrSetSchema.safeParse({ type, value: { onlyPasng: true } }).success).toBe(
+      false,
+    );
+    expect(AssertionOrSetSchema.safeParse({ type, value: true }).success).toBe(false);
   });
 
   it.each([
     'select-lowest-cost',
     'select-lowest-latency',
   ] as const)('rejects nested %s assertions', (type) => {
-    const result = AssertionSetSchema.safeParse({
+    const result = AssertionOrSetSchema.safeParse({
       type: 'assert-set',
       assert: [{ type }],
     });
     expect(result.success).toBe(false);
+  });
+
+  it('keeps AssertionSchema compatible with object composition APIs', () => {
+    expect(AssertionSchema.shape).toBeDefined();
+    expect(() => AssertionSchema.extend({ extensionField: z.string().optional() })).not.toThrow();
+    expect(() => AssertionSchema.pick({ type: true })).not.toThrow();
+    expect(() => AssertionSchema.omit({ type: true })).not.toThrow();
+  });
+
+  it('keeps AssertionSetSchema compatible with object composition APIs', () => {
+    expect(AssertionSetSchema.shape).toBeDefined();
+    expect(() =>
+      AssertionSetSchema.extend({ extensionField: z.string().optional() }),
+    ).not.toThrow();
+    expect(() => AssertionSetSchema.pick({ type: true })).not.toThrow();
+    expect(() => AssertionSetSchema.omit({ type: true })).not.toThrow();
   });
 });
 

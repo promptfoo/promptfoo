@@ -1,5 +1,6 @@
 import { SELECT_BEST_PROMPT } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import { ResultFailureReason } from '../types/index';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
@@ -22,6 +23,7 @@ export type MetricSelectorAssertionType = (typeof METRIC_SELECTOR_ASSERTION_TYPE
 
 type MetricSelectorCandidate = {
   error?: string | null;
+  failureReason?: number;
   latencyMs?: number;
   promptIdx: number;
   response?: { cached?: boolean; cost?: number };
@@ -49,6 +51,12 @@ export function isMetricSelectorAssertionType(
 
 const isValidMetric = (value: number | undefined) =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+function formatPromptIndexes(indexes: number[]): string {
+  const shown = indexes.slice(0, 20);
+  const remaining = indexes.length - shown.length;
+  return `${shown.join(', ')}${remaining > 0 ? `, and ${remaining} more` : ''}`;
+}
 
 export async function selectMetric(
   results: MetricSelectorCandidate[],
@@ -79,13 +87,20 @@ export async function selectMetric(
       : undefined;
   const onlyPassing = configuredOnlyPassing ?? definition.defaultOnlyPassing;
   const eligible = results.flatMap((result, index) =>
-    !result.error && result.response && (!onlyPassing || result.success) ? [index] : [],
+    result.failureReason !== ResultFailureReason.ERROR &&
+    result.response &&
+    (!onlyPassing || result.success)
+      ? [index]
+      : [],
   );
 
   if (eligible.length === 0) {
     if (
       onlyPassing &&
-      results.some((result) => !result.error && result.response && !result.success)
+      results.some(
+        (result) =>
+          result.failureReason !== ResultFailureReason.ERROR && result.response && !result.success,
+      )
     ) {
       return failAll(
         `${assertion.type} requires at least one eligible output; all outputs failed other assertions`,
@@ -99,14 +114,14 @@ export async function selectMetric(
   const cached = eligible.filter((index) => results[index].response?.cached);
   if (cached.length > 0) {
     return failAll(
-      `${assertion.type} does not support cached eligible outputs (prompt indexes: ${cached.map((index) => results[index].promptIdx).join(', ')}). Rerun the eval with --no-cache`,
+      `${assertion.type} does not support cached eligible outputs (prompt indexes: ${formatPromptIndexes(cached.map((index) => results[index].promptIdx))}). Rerun the eval with --no-cache`,
     );
   }
 
   const invalid = eligible.filter((index) => !isValidMetric(values[index]));
   if (invalid.length > 0) {
     return failAll(
-      `${assertion.type} requires every eligible output to report a finite, non-negative ${definition.label}; missing or invalid ${definition.label} for prompt indexes: ${invalid.map((index) => results[index].promptIdx).join(', ')}`,
+      `${assertion.type} requires every eligible output to report a finite, non-negative ${definition.label}; missing or invalid ${definition.label} for prompt indexes: ${formatPromptIndexes(invalid.map((index) => results[index].promptIdx))}`,
     );
   }
 
@@ -121,7 +136,7 @@ export async function selectMetric(
   }
 
   return results.map((_result, index) => {
-    if (results[index].error || !results[index].response) {
+    if (results[index].failureReason === ResultFailureReason.ERROR || !results[index].response) {
       return {
         pass: false,
         score: 0,

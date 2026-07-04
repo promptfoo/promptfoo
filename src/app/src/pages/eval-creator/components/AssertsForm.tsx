@@ -103,6 +103,11 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-contains-all',
 ]);
 
+const METRIC_SELECTOR_TYPES = new Set<AssertionType>([
+  'select-lowest-cost',
+  'select-lowest-latency',
+]);
+
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -171,9 +176,17 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                 <Select
                   value={assert.type}
                   onValueChange={(newValue) => {
-                    const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
-                    );
+                    const newType = newValue as AssertionType;
+                    const newAsserts = asserts.map((a, i) => {
+                      if (i !== index) {
+                        return a;
+                      }
+                      if (METRIC_SELECTOR_TYPES.has(newType)) {
+                        const { value: _value, ...assertionWithoutValue } = a;
+                        return { ...assertionWithoutValue, type: newType };
+                      }
+                      return { ...a, type: newType };
+                    });
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
                   }}
@@ -192,43 +205,45 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                 </Select>
 
                 {/* Value textarea */}
-                <div className="space-y-2">
-                  <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-                    Value
-                  </Label>
-                  <Textarea
-                    id={`assert-value-${index}`}
-                    placeholder="Enter expected value or criteria..."
-                    value={
-                      typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : ''
-                    }
-                    onChange={(e) => {
-                      const newValue = e.target.value;
-                      const newAsserts = asserts.map((a, i) =>
-                        i === index ? { ...a, value: newValue } : a,
-                      );
-                      setAsserts(newAsserts);
-                      onAdd(newAsserts);
-                    }}
-                    className="min-h-20 resize-y"
-                  />
-                  {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
-                    <p className="text-xs text-muted-foreground">
-                      Separate values with commas, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
-                    </p>
-                  )}
-                  {(assert.type === 'regex' || assert.type === 'not-regex') && (
-                    <p className="text-xs text-muted-foreground">
-                      Enter a regular expression pattern, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
-                    </p>
-                  )}
-                </div>
+                {!METRIC_SELECTOR_TYPES.has(assert.type) && (
+                  <div className="space-y-2">
+                    <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+                      Value
+                    </Label>
+                    <Textarea
+                      id={`assert-value-${index}`}
+                      placeholder="Enter expected value or criteria..."
+                      value={
+                        typeof assert.value === 'string'
+                          ? assert.value
+                          : typeof assert.value === 'number'
+                            ? String(assert.value)
+                            : ''
+                      }
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: newValue } : a,
+                        );
+                        setAsserts(newAsserts);
+                        onAdd(newAsserts);
+                      }}
+                      className="min-h-20 resize-y"
+                    />
+                    {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
+                      <p className="text-xs text-muted-foreground">
+                        Separate values with commas, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
+                      </p>
+                    )}
+                    {(assert.type === 'regex' || assert.type === 'not-regex') && (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a regular expression pattern, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           ))}

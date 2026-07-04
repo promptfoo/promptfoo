@@ -1909,14 +1909,21 @@ function mergeSelectBestGradingResult(
 function mergeDeterministicComparisonGradingResult(
   result: EvaluationStoreResult,
   gradingResult: GradingResult,
-) {
-  const existingComponentResults = result.gradingResult?.componentResults || [];
+): boolean {
+  const assertionType = gradingResult.assertion?.type;
+  const allComponentResults = result.gradingResult?.componentResults || [];
+  const alreadyFinalized = allComponentResults.some(
+    (component) => component.assertion?.type === assertionType,
+  );
+  const existingComponentResults = allComponentResults.filter(
+    (component) => component.assertion?.type !== assertionType,
+  );
   const existingGradingResult = result.gradingResult;
   const comparisonPassed = gradingResult.pass;
   const previousPass = existingGradingResult?.pass ?? result.success;
   const nextPass = previousPass && comparisonPassed;
   const shouldApplyComparisonScore =
-    previousPass && (!comparisonPassed || existingComponentResults.length === 0);
+    !comparisonPassed || (previousPass && existingComponentResults.length === 0);
   const newScore = shouldApplyComparisonScore
     ? gradingResult.score
     : (existingGradingResult?.score ?? result.score);
@@ -1940,6 +1947,7 @@ function mergeDeterministicComparisonGradingResult(
 
   result.success = nextPass;
   result.score = newScore;
+  return alreadyFinalized;
 }
 
 function ensureDefaultTestForExtensions(testSuite: TestSuite) {
@@ -4399,7 +4407,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }) {
     const wasSuccess = result.success;
     const wasScore = result.score;
-    mergeDeterministicComparisonGradingResult(result, gradingResult);
+    const alreadyFinalized = mergeDeterministicComparisonGradingResult(result, gradingResult);
+    if (alreadyFinalized) {
+      this.trackFinalJsonlResult(result);
+      if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+        await this.store.saveResult(result);
+      }
+      return;
+    }
     await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 

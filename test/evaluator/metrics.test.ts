@@ -3,6 +3,7 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
@@ -413,6 +414,41 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(summary.stats.errors).toBe(0);
   });
 
+  it('should zero a max-score loser that already had a partial failing score', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('partial-score-provider'),
+      callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('winner'), toPrompt('loser')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              value: (output: string) =>
+                output === 'winner'
+                  ? { pass: true, score: 1, reason: 'winner' }
+                  : { pass: false, score: 0.5, reason: 'partial failure' },
+            },
+            { type: 'max-score' },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = (await evalRecord.toEvaluateSummary()).results.sort(
+      (a, b) => a.promptIdx - b.promptIdx,
+    );
+
+    expect(results[0]).toMatchObject({ success: true, score: 1 });
+    expect(results[1]).toMatchObject({ success: false, score: 0 });
+    expect(evalRecord.prompts[1]?.metrics?.score).toBe(0);
+  });
+
   it('should select the lowest-cost output that passed the regular assertions', async () => {
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('cost-selection-provider'),
@@ -454,6 +490,52 @@ describeEvaluator('evaluator metrics and scoring', () => {
       ]),
     );
     expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+  });
+
+  it('should keep assertion-failed outputs eligible when onlyPassing is false', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('all-output-cost-selection-provider'),
+      callApi: vi.fn(async (prompt: string) =>
+        prompt.includes('Cheap')
+          ? { output: 'incorrect', cost: 0.001 }
+          : { output: 'hello world', cost: 0.01 },
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Cheap prompt'), toPrompt('Valid prompt')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'select-lowest-cost', value: { onlyPassing: false } },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = (await evalRecord.toEvaluateSummary()).results.sort(
+      (a, b) => a.promptIdx - b.promptIdx,
+    );
+
+    expect(results[0].gradingResult?.componentResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pass: true,
+          assertion: expect.objectContaining({ type: 'select-lowest-cost' }),
+        }),
+      ]),
+    );
+    expect(results[1].gradingResult?.componentResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pass: false,
+          assertion: expect.objectContaining({ type: 'select-lowest-cost' }),
+        }),
+      ]),
+    );
   });
 
   it('should apply select-lowest-latency to overall pass/fail and stats', async () => {
@@ -519,6 +601,47 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(evalRecord.prompts[0]?.metrics?.score).toBe(1);
     expect(evalRecord.prompts[1]?.metrics?.score).toBe(0);
     expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+  });
+
+  it('should not duplicate metric-selector grading when resuming a completed eval', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('resume-cost-selection-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: prompt,
+        cost: prompt.includes('Cheap') ? 0.001 : 0.01,
+      })),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Cheap prompt'), toPrompt('Expensive prompt')],
+      tests: [{ assert: [{ type: 'select-lowest-cost' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const before = await evalRecord.toEvaluateSummary();
+    const beforeCounts = evalRecord.prompts.map((prompt) => ({
+      pass: prompt.metrics?.assertPassCount,
+      fail: prompt.metrics?.assertFailCount,
+    }));
+
+    const originalResume = cliState.resume;
+    try {
+      cliState.resume = true;
+      await evaluate(testSuite, evalRecord, {});
+    } finally {
+      cliState.resume = originalResume;
+    }
+
+    const after = await evalRecord.toEvaluateSummary();
+    expect(
+      evalRecord.prompts.map((prompt) => ({
+        pass: prompt.metrics?.assertPassCount,
+        fail: prompt.metrics?.assertFailCount,
+      })),
+    ).toEqual(beforeCounts);
+    expect(after.results.map((result) => result.gradingResult?.componentResults?.length)).toEqual(
+      before.results.map((result) => result.gradingResult?.componentResults?.length),
+    );
   });
 
   it('should apply select-best to overall pass/fail and stats', async () => {

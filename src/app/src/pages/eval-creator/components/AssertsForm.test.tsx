@@ -117,6 +117,18 @@ describe('AssertsForm', () => {
     expect(options.some((option) => option.textContent === 'select-lowest-latency')).toBe(true);
   });
 
+  it('removes stale values when switching to a metric selector', async () => {
+    initialValues = [{ type: 'equals', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+    const option = await screen.findByRole('option', { name: 'select-lowest-cost' });
+    await userEvent.click(option);
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'select-lowest-cost' }]);
+    expect(screen.queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
+  });
+
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {
     const user = userEvent.setup();
     initialValues = [

@@ -698,71 +698,79 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
-export const AssertionSetSchema = z
-  .object({
-    type: z.literal('assert-set'),
-    // Sub assertions to be run for this assertion set
-    assert: z.array(z.lazy(() => AssertionSchema)),
-    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-    weight: z.number().optional(),
-    // Tag this assertion result as a named metric
-    metric: z.string().optional(),
-    // The required score for this assert set. If not provided, the test case is graded pass/fail.
-    threshold: z.number().optional(),
+export const AssertionSetSchema = z.object({
+  type: z.literal('assert-set'),
+  // Sub assertions to be run for this assertion set
+  assert: z.array(z.lazy(() => AssertionSchema)),
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight: z.number().optional(),
+  // Tag this assertion result as a named metric
+  metric: z.string().optional(),
+  // The required score for this assert set. If not provided, the test case is graded pass/fail.
+  threshold: z.number().optional(),
 
-    // An external mapping of arbitrary strings to values that is defined
-    // for every assertion in the set and passed into each assert
-    config: z.record(z.string(), z.any()).optional(),
-  })
-  .superRefine((assertionSet, ctx) => {
-    assertionSet.assert.forEach((assertion, index) => {
-      if (assertion.type === 'select-lowest-cost' || assertion.type === 'select-lowest-latency') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `${assertion.type} must be a top-level assertion`,
-          path: ['assert', index, 'type'],
-        });
-      }
-    });
-  });
+  // An external mapping of arbitrary strings to values that is defined
+  // for every assertion in the set and passed into each assert
+  config: z.record(z.string(), z.any()).optional(),
+});
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z
-  .object({
-    // Type of assertion
-    type: AssertionTypeSchema,
+export const AssertionSchema = z.object({
+  // Type of assertion
+  type: AssertionTypeSchema,
 
-    // The expected value, if applicable
-    value: z.custom<AssertionValue>().optional(),
+  // The expected value, if applicable
+  value: z.custom<AssertionValue>().optional(),
 
-    // An external mapping of arbitrary strings to values that is passed
-    // to the assertion for custom asserts
-    config: z.record(z.string(), z.any()).optional(),
+  // An external mapping of arbitrary strings to values that is passed
+  // to the assertion for custom asserts
+  config: z.record(z.string(), z.any()).optional(),
 
-    // The threshold value, only applicable for similarity (cosine distance)
-    threshold: z.number().optional(),
+  // The threshold value, only applicable for similarity (cosine distance)
+  threshold: z.number().optional(),
 
-    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-    weight: z.number().optional(),
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight: z.number().optional(),
 
-    // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
-    provider: z.custom<GradingConfig['provider']>().optional(),
+  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
+  provider: z.custom<GradingConfig['provider']>().optional(),
 
-    // Override the grading rubric
-    rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
+  // Override the grading rubric
+  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
-    // Tag this assertion result as a named metric
-    metric: z.string().optional(),
+  // Tag this assertion result as a named metric
+  metric: z.string().optional(),
 
-    // Process the output before running the assertion
-    transform: StringOrFunctionSchema.optional(),
+  // Process the output before running the assertion
+  transform: StringOrFunctionSchema.optional(),
 
-    // Extract context from the output using a transform
-    contextTransform: StringOrFunctionSchema.optional(),
-  })
+  // Extract context from the output using a transform
+  contextTransform: StringOrFunctionSchema.optional(),
+});
+
+export type Assertion = z.infer<typeof AssertionSchema>;
+
+/**
+ * Schema for validating individual assertions (regular or assert-set).
+ * Used for runtime validation of user-provided config.
+ */
+export const AssertionOrSetSchema = z
+  .union([AssertionSetSchema, AssertionSchema])
   .superRefine((assertion, ctx) => {
+    if (assertion.type === 'assert-set') {
+      assertion.assert.forEach((nested, index) => {
+        if (nested.type === 'select-lowest-cost' || nested.type === 'select-lowest-latency') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${nested.type} must be a top-level assertion`,
+            path: ['assert', index, 'type'],
+          });
+        }
+      });
+      return;
+    }
     if (assertion.type !== 'select-lowest-cost' && assertion.type !== 'select-lowest-latency') {
       return;
     }
@@ -781,14 +789,6 @@ export const AssertionSchema = z
       });
     }
   });
-
-export type Assertion = z.infer<typeof AssertionSchema>;
-
-/**
- * Schema for validating individual assertions (regular or assert-set).
- * Used for runtime validation of user-provided config.
- */
-export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
