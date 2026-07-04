@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -1029,6 +1030,47 @@ describe('shared redteam provider utilities', () => {
         'blocking-question-analysis',
         BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
       );
+    });
+
+    it('returns a fixed diagnostic for provider errors without child content', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      vi.spyOn(PromptfooChatCompletionProvider.prototype, 'callApi').mockResolvedValue({
+        output: '',
+        error: 'PRIVATE_PROVIDER_ERROR',
+      });
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'private response',
+        goal: 'private goal',
+      });
+
+      expect(result).toEqual({
+        success: false,
+        diagnostic: { component: 'unblocking', stage: 'provider', outcome: 'degraded' },
+      });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE');
+    });
+
+    it('returns a fixed diagnostic for thrown flow errors without child content', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      vi.spyOn(PromptfooChatCompletionProvider.prototype, 'callApi').mockRejectedValue(
+        new Error('PRIVATE_FLOW_ERROR'),
+      );
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'private response',
+        goal: 'private goal',
+      });
+
+      expect(result).toEqual({
+        success: false,
+        diagnostic: { component: 'unblocking', stage: 'flow', outcome: 'degraded' },
+      });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE');
     });
   });
 

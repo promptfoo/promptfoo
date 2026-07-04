@@ -484,6 +484,10 @@ export default class GoatProvider implements ApiProvider {
             targetId: this.config.targetId,
           });
 
+          if (unblockingResult.diagnostic) {
+            log.warn('[GOAT] Child operation degraded', { ...unblockingResult.diagnostic });
+          }
+
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             log.debug('[GOAT] Sending unblocking response', {
               turn,
@@ -517,6 +521,12 @@ export default class GoatProvider implements ApiProvider {
                   errorLength: getStringLength(transformResult.error),
                 });
                 continue; // Skip unblocking attempt
+              }
+              for (const diagnostic of transformResult.diagnostics ?? []) {
+                log.warn('[GOAT] Child operation degraded', {
+                  ...diagnostic,
+                  operation: 'unblocking-transform',
+                });
               }
               // For audio/image transforms, send the transformed content directly
               unblockingTargetPrompt = transformResult.prompt;

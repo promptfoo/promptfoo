@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import logger from '../../logger';
+import logger, { bindRedactedLogToken, captureRedactedLogToken } from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -1922,19 +1922,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private installPersistentConnectionLifecycleHandlers(ws: WebSocket): void {
     this.persistentConnectionLifecycleCleanup?.();
 
-    const onIdleError = (error: Error) => {
+    const onIdleError = bindRedactedLogToken(undefined, (error: Error) => {
       logger.error(`Persistent WebSocket error while idle: ${error}`);
       if (this.persistentConnection === ws) {
         this.tearDownPersistentConnection(`idle socket error: ${error.message}`);
       }
-    };
-    const onIdleClose = (code: number, reason: Buffer) => {
+    });
+    const onIdleClose = bindRedactedLogToken(undefined, (code: number, reason: Buffer) => {
       const message = formatCloseMessage('Persistent WebSocket closed while idle', code, reason);
       logger.debug(message);
       if (this.persistentConnection === ws) {
         this.tearDownPersistentConnection(`idle socket close: code=${code}`);
       }
-    };
+    });
 
     ws.on('error', onIdleError);
     ws.on('close', onIdleClose);
@@ -2069,6 +2069,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     resolve: (value: RealtimeResponse) => void,
     reject: (reason: Error) => void,
   ): Promise<void> {
+    const redactedLogToken = captureRedactedLogToken();
     // Reset audio state at the start of each request
     this.resetAudioState();
     const promptContent = this.normalizeRealtimePromptContent(prompt);
@@ -2243,7 +2244,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
     };
 
-    const messageHandler = async (data: Buffer) => {
+    const messageHandler = bindRedactedLogToken(redactedLogToken, async (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString()) as WebSocketMessage;
         resetRequestTimeout();
@@ -2432,13 +2433,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }
         reject(new Error(`Error processing WebSocket message: ${error}`));
       }
-    };
+    });
 
     // Add message handler for this request
     if (this.persistentConnection) {
       const conn = this.persistentConnection;
       conn.on('message', messageHandler);
-      const onSocketError = (error: Error) => {
+      const onSocketError = bindRedactedLogToken(redactedLogToken, (error: Error) => {
         logger.error(`WebSocket error: ${error}`);
         clearTimeout(requestTimeout);
         this.resetAudioState();
@@ -2446,21 +2447,24 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           this.tearDownPersistentConnection(`socket error: ${error.message}`);
         }
         reject(error);
-      };
+      });
       // Without a 'close' listener here, an unexpected disconnect mid-turn
       // would leave the caller's promise pending until the request timeout
       // fires; worse, connectionReady stays cached and subsequent turns
       // would skip reconnection.
-      const onSocketClose = (code: number, reason: Buffer) => {
-        const message = formatCloseMessage('Persistent WebSocket closed mid-turn', code, reason);
-        logger.debug(message);
-        clearTimeout(requestTimeout);
-        this.resetAudioState();
-        if (this.persistentConnection === conn) {
-          this.tearDownPersistentConnection(`socket close mid-turn: code=${code}`);
-        }
-        reject(new Error(message));
-      };
+      const onSocketClose = bindRedactedLogToken(
+        redactedLogToken,
+        (code: number, reason: Buffer) => {
+          const message = formatCloseMessage('Persistent WebSocket closed mid-turn', code, reason);
+          logger.debug(message);
+          clearTimeout(requestTimeout);
+          this.resetAudioState();
+          if (this.persistentConnection === conn) {
+            this.tearDownPersistentConnection(`socket close mid-turn: code=${code}`);
+          }
+          reject(new Error(message));
+        },
+      );
       conn.once('error', onSocketError);
       conn.once('close', onSocketClose);
 

@@ -1462,21 +1462,42 @@ describe('logger', () => {
       expect(JSON.stringify(customLogger.warn.mock.calls)).not.toContain('PRIVATE_');
     });
 
-    it('should revoke a completed scope for persistent async descendants', async () => {
+    it('should keep late operation-owned descendants redacted after completion', async () => {
       logger.setStructuredLogging(true);
-      let logFromPersistentResource!: () => void;
+      let resolveLateLog!: () => void;
+      const lateLog = new Promise<void>((resolve) => {
+        resolveLateLog = resolve;
+      });
 
       await logger.runWithRedactedLogging('completed-run', async () => {
-        await new Promise<void>((resolve) => {
-          setImmediate(() => {
-            logFromPersistentResource = () =>
-              logger.default.info('NORMAL_REUSED_RESOURCE_LOG', { connectionReused: true });
-            resolve();
-          });
+        setImmediate(() => {
+          logger.default.info('PRIVATE_LATE_GOAT_PAYLOAD', { response: 'PRIVATE_RESPONSE' });
+          resolveLateLog();
         });
       });
 
-      logFromPersistentResource();
+      await lateLog;
+
+      expect(customLogger.info).toHaveBeenCalledWith({
+        message: '[Sensitive operation] Diagnostic content suppressed',
+        goatRunId: 'completed-run',
+        level: 'info',
+        contentSuppressed: true,
+      });
+      expect(JSON.stringify(customLogger.info.mock.calls)).not.toContain('PRIVATE');
+    });
+
+    it('should clear a completed scope for unrelated shared-resource reuse', async () => {
+      logger.setStructuredLogging(true);
+      let logFromReusedResource!: () => void;
+
+      await logger.runWithRedactedLogging('completed-run', async () => {
+        logFromReusedResource = logger.bindRedactedLogToken(undefined, () =>
+          logger.default.info('NORMAL_REUSED_RESOURCE_LOG', { connectionReused: true }),
+        );
+      });
+
+      logFromReusedResource();
 
       expect(customLogger.info).toHaveBeenCalledWith({
         message: 'NORMAL_REUSED_RESOURCE_LOG',

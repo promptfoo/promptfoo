@@ -4,11 +4,14 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import logger from '../../../src/logger';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { isRemoteMaterializationUpgradeError } from '../../../src/redteam/remoteMaterialization';
 import { Strategies } from '../../../src/redteam/strategies';
+import { checkServerFeatureSupport } from '../../../src/util/server';
 import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   ApiProvider,
@@ -821,6 +824,92 @@ describe('RedteamGoatProvider', () => {
         component: 'indirect-web-pwn',
         stage: 'update-page',
         outcome: 'degraded',
+      }),
+    );
+    expect(serializeLogCalls(warnSpy)).not.toContain(sensitiveLogMarker);
+  });
+
+  it('should retain a fixed unblocking provider-error outcome without child content', async () => {
+    const previousUnblocking = process.env.PROMPTFOO_ENABLE_UNBLOCKING;
+    mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.spyOn(PromptfooChatCompletionProvider.prototype, 'callApi').mockResolvedValue({
+      output: '',
+      error: sensitive('unblocking-provider-error'),
+    });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+
+    try {
+      await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+    } finally {
+      if (previousUnblocking === undefined) {
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: undefined });
+      } else {
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: previousUnblocking });
+      }
+    }
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GOAT] Child operation degraded',
+      expect.objectContaining({
+        component: 'unblocking',
+        stage: 'provider',
+        outcome: 'degraded',
+      }),
+    );
+    expect(serializeLogCalls(warnSpy)).not.toContain(sensitiveLogMarker);
+  });
+
+  it('should retain fixed diagnostics from unblocking prompt transforms', async () => {
+    const previousUnblocking = process.env.PROMPTFOO_ENABLE_UNBLOCKING;
+    mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+    vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.spyOn(PromptfooChatCompletionProvider.prototype, 'callApi').mockResolvedValue({
+      output: { isBlocking: true, unblockingAnswer: 'safe answer' },
+    });
+    const base64Strategy = Strategies.find((strategy) => strategy.id === 'base64');
+    expect(base64Strategy).toBeDefined();
+    vi.spyOn(base64Strategy!, 'action').mockImplementation(async (testCases) =>
+      testCases.map((testCase) => ({
+        ...testCase,
+        metadata: {
+          ...testCase.metadata,
+          runtimeTransformDiagnostics: [
+            {
+              component: 'indirect-web-pwn',
+              stage: 'update-page',
+              outcome: 'degraded',
+              childContent: sensitive('unblocking-transform'),
+            },
+          ],
+        },
+      })),
+    );
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      _perTurnLayers: ['base64'],
+    });
+
+    try {
+      await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+    } finally {
+      if (previousUnblocking === undefined) {
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: undefined });
+      } else {
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: previousUnblocking });
+      }
+    }
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GOAT] Child operation degraded',
+      expect.objectContaining({
+        component: 'indirect-web-pwn',
+        stage: 'update-page',
+        outcome: 'degraded',
+        operation: 'unblocking-transform',
       }),
     );
     expect(serializeLogCalls(warnSpy)).not.toContain(sensitiveLogMarker);

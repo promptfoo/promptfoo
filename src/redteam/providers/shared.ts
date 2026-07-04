@@ -633,6 +633,11 @@ export async function tryUnblocking({
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
+  diagnostic?: {
+    component: 'unblocking';
+    stage: 'provider' | 'flow';
+    outcome: 'degraded';
+  };
 }> {
   try {
     // Unblocking is disabled by default, enable via environment variable
@@ -692,7 +697,10 @@ export async function tryUnblocking({
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false };
+      return {
+        success: false,
+        diagnostic: { component: 'unblocking', stage: 'provider', outcome: 'degraded' },
+      };
     }
 
     const parsed = response.output as any;
@@ -718,7 +726,10 @@ export async function tryUnblocking({
       throw error;
     }
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
-    return { success: false };
+    return {
+      success: false,
+      diagnostic: { component: 'unblocking', stage: 'flow', outcome: 'degraded' },
+    };
   }
 }
 

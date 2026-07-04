@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
-import logger from '../../../src/logger';
+import logger, { bindRedactedLogToken, captureRedactedLogToken } from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -16,6 +16,8 @@ const MockWebSocket = WebSocket as Mocked<typeof WebSocket>;
 // Mock logger
 vi.mock('../../../src/logger', () => ({
   __esModule: true,
+  bindRedactedLogToken: vi.fn((_token, callback) => callback),
+  captureRedactedLogToken: vi.fn(() => undefined),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -2299,6 +2301,30 @@ describe('OpenAI Realtime Provider', () => {
           (event) => event.type === 'conversation.item.create',
         ),
       ).toHaveLength(2);
+
+      provider.cleanup();
+    });
+
+    it('binds persistent turn handlers to the captured redaction token', async () => {
+      const token = { goatRunId: 'goat-turn' };
+      vi.mocked(captureRedactedLogToken).mockReturnValue(token);
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+      const persistentConnection = createPersistentMockWebSocket(provider);
+      provider.persistentConnection = persistentConnection;
+
+      const turn = provider.callApi('private turn', {
+        test: { metadata: { conversationId: 'redacted-turn' } },
+      } as any);
+      await flushMicrotasks();
+
+      expect(bindRedactedLogToken).toHaveBeenCalledWith(token, expect.any(Function));
+      const handler = lastMessageHandler();
+      emitUserItem(handler, 'redacted-item');
+      emitOutputTextDone(handler, 'done');
+      emitResponseDone(handler);
+      await expect(turn).resolves.toMatchObject({ output: 'done' });
 
       provider.cleanup();
     });
