@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 
 /**
@@ -65,10 +66,21 @@ export const CLAUDE_CODE_USER_AGENT = 'claude-cli/1.0.0 (external, promptfoo)';
 export const CLAUDE_CODE_X_APP = 'cli';
 
 const CLAUDE_CODE_KEYCHAIN_SERVICE = 'Claude Code-credentials';
-const CLAUDE_CODE_CREDENTIALS_FILE = path.join('.claude', '.credentials.json');
+const CLAUDE_CODE_CREDENTIALS_FILENAME = '.credentials.json';
+
+/**
+ * Resolves the directory Claude Code stores its config (including
+ * `.credentials.json`) in. Honors `CLAUDE_CONFIG_DIR`, the same environment
+ * variable the Claude Code CLI itself uses to relocate `~/.claude`, so
+ * Promptfoo finds the credential file when a user has customized their
+ * Claude Code config location.
+ */
+function resolveConfigDir(): string {
+  return getEnvString('CLAUDE_CONFIG_DIR') || path.join(os.homedir(), '.claude');
+}
 
 function resolveCredentialsPath(): string {
-  return path.join(os.homedir(), CLAUDE_CODE_CREDENTIALS_FILE);
+  return path.join(resolveConfigDir(), CLAUDE_CODE_CREDENTIALS_FILENAME);
 }
 
 /**
@@ -210,10 +222,14 @@ function readFromFile(): ClaudeCodeOAuthCredential | null {
  *
  * Resolution order:
  * 1. macOS keychain (`security find-generic-password -s "Claude Code-credentials"`)
- *    — only attempted on darwin.
+ *    — only attempted on darwin. `CLAUDE_CONFIG_DIR` does not affect this
+ *    step; macOS Claude Code always stores credentials in the keychain.
  * 2. `$HOME/.claude/.credentials.json` — the Linux/Windows default used by
  *    Claude Code, and a fallback on macOS when the keychain entry is missing.
  *    On Windows this resolves to `%USERPROFILE%\.claude\.credentials.json`.
+ *    Set `CLAUDE_CONFIG_DIR` to read from a different directory instead —
+ *    the same environment variable the Claude Code CLI itself uses to
+ *    relocate `~/.claude`.
  *
  * Returns `null` when no credential is available. Callers should check
  * {@link isCredentialExpired} on a non-null return before using it — this

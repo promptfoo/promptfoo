@@ -1,5 +1,8 @@
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
+import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
   execFileSync: vi.fn(),
@@ -35,6 +38,7 @@ import {
 
 describe('claudeCodeAuth', () => {
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  let restoreEnv: (() => void) | undefined;
 
   function setPlatform(platform: NodeJS.Platform) {
     Object.defineProperty(process, 'platform', { value: platform, configurable: true });
@@ -51,6 +55,8 @@ describe('claudeCodeAuth', () => {
 
   afterEach(() => {
     Object.defineProperty(process, 'platform', originalPlatform);
+    restoreEnv?.();
+    restoreEnv = undefined;
   });
 
   describe('constants', () => {
@@ -100,6 +106,7 @@ describe('claudeCodeAuth', () => {
 
     it('falls back to ~/.claude/.credentials.json when the keychain lookup fails', () => {
       setPlatform('darwin');
+      restoreEnv = mockProcessEnv({ CLAUDE_CONFIG_DIR: undefined });
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       mocks.execFileSync.mockImplementation(() => {
         throw new Error('user denied keychain access');
@@ -191,6 +198,37 @@ describe('claudeCodeAuth', () => {
       expect(credential?.accessToken).toBe('sk-ant-oat-linux');
       expect(credential?.expiresAt).toBe(1_900_000_000_000);
       expect(mocks.execFileSync).not.toHaveBeenCalled();
+    });
+
+    it('reads from CLAUDE_CONFIG_DIR instead of ~/.claude when set', () => {
+      setPlatform('linux');
+      restoreEnv = mockProcessEnv({ CLAUDE_CONFIG_DIR: '/custom/claude-config' });
+      mocks.existsSync.mockReturnValue(true);
+      mocks.readFileSync.mockReturnValue(
+        JSON.stringify({
+          claudeAiOauth: { accessToken: 'sk-ant-oat-custom-dir' },
+        }),
+      );
+
+      const credential = loadClaudeCodeCredential();
+
+      expect(credential?.accessToken).toBe('sk-ant-oat-custom-dir');
+      expect(mocks.readFileSync).toHaveBeenCalledWith(
+        path.join('/custom/claude-config', '.credentials.json'),
+        'utf-8',
+      );
+    });
+
+    it('falls back to ~/.claude/.credentials.json when CLAUDE_CONFIG_DIR is unset', () => {
+      setPlatform('linux');
+      restoreEnv = mockProcessEnv({ CLAUDE_CONFIG_DIR: undefined });
+      mocks.existsSync.mockReturnValue(false);
+
+      loadClaudeCodeCredential();
+
+      expect(mocks.existsSync).toHaveBeenCalledWith(
+        expect.stringMatching(/[/\\]\.claude[/\\]\.credentials\.json$/),
+      );
     });
 
     it('returns null silently when the credentials file is missing', () => {
