@@ -86,7 +86,7 @@ describe('useStrategyTestGeneration', () => {
             id: 'policy',
             config: {
               policy: {
-                id: 'refund-policy',
+                id: 'abcdef123456',
                 name: 'Refund Policy',
                 text: 'Do not promise refunds without approval.',
               },
@@ -113,7 +113,7 @@ describe('useStrategyTestGeneration', () => {
         id: 'policy',
         config: {
           policy: {
-            id: 'refund-policy',
+            id: 'abcdef123456',
             name: 'Refund Policy',
             text: 'Do not promise refunds without approval.',
           },

@@ -10,8 +10,11 @@
  */
 
 import { ALL_PLUGINS, type Plugin, type Strategy } from '@promptfoo/redteam/constants';
-import { isValidPolicyObject } from '@promptfoo/redteam/plugins/policy/utils';
-import type { PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
+import {
+  type PluginConfig,
+  PluginConfigSchema,
+  type StrategyConfig,
+} from '@promptfoo/redteam/types';
 
 import type { Config } from '../types';
 
@@ -45,7 +48,11 @@ function hasUsablePolicy(config: PluginConfig): boolean {
   if (typeof policy === 'string') {
     return policy.trim().length > 0;
   }
-  return Boolean(policy && isValidPolicyObject(policy) && policy.text?.trim());
+  return Boolean(policy && policy.text?.trim());
+}
+
+function isValidTestGenerationPlugin(id: string, config: PluginConfig): boolean {
+  return ALL_PLUGINS.includes(id as Plugin) && PluginConfigSchema.safeParse(config).success;
 }
 
 export function normalizeTestGenerationPlugins(
@@ -53,7 +60,7 @@ export function normalizeTestGenerationPlugins(
 ): TargetPlugin[] {
   const plugins = (configuredPlugins ?? []).flatMap<TargetPlugin>((configuredPlugin) => {
     if (typeof configuredPlugin === 'string') {
-      if (configuredPlugin === 'policy' || !ALL_PLUGINS.includes(configuredPlugin as Plugin)) {
+      if (configuredPlugin === 'policy' || !isValidTestGenerationPlugin(configuredPlugin, {})) {
         return [];
       }
       return [{ id: configuredPlugin as Plugin, config: {}, isStatic: true }];
@@ -61,7 +68,12 @@ export function normalizeTestGenerationPlugins(
     if (
       !configuredPlugin ||
       typeof configuredPlugin.id !== 'string' ||
-      !ALL_PLUGINS.includes(configuredPlugin.id as Plugin)
+      !isValidTestGenerationPlugin(
+        configuredPlugin.id,
+        configuredPlugin.config && typeof configuredPlugin.config === 'object'
+          ? configuredPlugin.config
+          : {},
+      )
     ) {
       return [];
     }
