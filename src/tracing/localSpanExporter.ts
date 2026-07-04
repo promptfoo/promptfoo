@@ -138,6 +138,11 @@ export class LocalSpanExporter implements SpanExporter {
       startTime: startTimeMs,
       endTime: endTimeMs,
       attributes: this.convertAttributes(span.attributes),
+      events: span.events.map((event) => ({
+        name: event.name,
+        timestamp: event.time[0] * 1e3 + event.time[1] / 1e6,
+        attributes: this.convertAttributes(event.attributes ?? {}),
+      })),
       statusCode: span.status.code,
       statusMessage: span.status.message,
     };
