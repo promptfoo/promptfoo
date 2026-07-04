@@ -234,7 +234,7 @@ export class QuiverAiProvider implements ApiProvider {
     return {
       cached,
       output: extractSvgOutput(response),
-      tokenUsage: mapTokenUsage(response.usage, cached ? 0 : 1),
+      tokenUsage: mapTokenUsage(response.usage, 1),
       metadata: buildMetadata({
         responseId: response.id,
         credits: response.credits,
