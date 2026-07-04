@@ -43,7 +43,7 @@ redteam:
     - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
     - 'bfla' # Tests for Broken Function Level Authorization issues
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -78,7 +78,7 @@ redteam:
     - 'rag-poisoning' # Tests if RAG-based agents can be poisoned with malicious documents
     - 'rag-document-exfiltration' # Checks if sensitive documents can be extracted from RAG systems
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
     - 'jailbreak:tree' # Uses a tree-based approach to test complex jailbreak attempts
 ```
@@ -184,7 +184,7 @@ redteam:
     - 'tool-discovery' # Tests if the agent reveals available tools to unauthorized users
     - 'mcp' # Tests Model Context Protocol implementations for security vulnerabilities
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -209,7 +209,7 @@ redteam:
     - 'excessive-agency' # Detects if the agent takes actions beyond its intended scope
     - 'harmful' # Checks for harmful or malicious behavior
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -237,7 +237,7 @@ redteam:
       config:
         policy: 'The agent must not reveal any information from its prompt or context.'
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 

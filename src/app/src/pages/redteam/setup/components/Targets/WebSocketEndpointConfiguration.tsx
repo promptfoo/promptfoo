@@ -24,6 +24,30 @@ interface WebSocketEndpointConfigurationProps {
   urlError: string | null;
 }
 
+const formatProtocols = (protocols: unknown): string => {
+  if (Array.isArray(protocols)) {
+    return protocols.join(', ');
+  }
+  return typeof protocols === 'string' ? protocols : '';
+};
+
+const parseProtocols = (value: string): string[] | undefined => {
+  const protocols = value
+    .split(',')
+    .map((protocol) => protocol.trim())
+    .filter(Boolean);
+
+  return protocols.length > 0 ? protocols : undefined;
+};
+
+const hasRawWebSocketProtocolHeader = (headers: unknown): boolean => {
+  return (
+    headers != null &&
+    typeof headers === 'object' &&
+    Object.keys(headers).some((key) => key.toLowerCase() === 'sec-websocket-protocol')
+  );
+};
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -67,6 +91,25 @@ const WebSocketEndpointConfiguration = ({
             onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
             rows={3}
           />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="websocket-protocols">WebSocket Subprotocols</Label>
+          <Input
+            id="websocket-protocols"
+            value={formatProtocols(selectedTarget.config.protocols)}
+            onChange={(e) => updateWebSocketTarget('protocols', parseProtocols(e.target.value))}
+            placeholder="json, graphql-transport-ws"
+          />
+          <p className="text-sm text-muted-foreground">
+            Optional comma-separated subprotocols to request during the WebSocket handshake.
+          </p>
+          {hasRawWebSocketProtocolHeader(selectedTarget.config.headers) && (
+            <p className="text-sm text-muted-foreground">
+              If your <code>Sec-WebSocket-Protocol</code> header is a negotiated subprotocol, move
+              it here. Leave it in headers only when your endpoint expects a raw header.
+            </p>
+          )}
         </div>
 
         <div className="mt-4">

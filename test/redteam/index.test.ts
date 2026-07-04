@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
-import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
@@ -24,6 +23,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
+import { loadYaml } from '../../src/util/yamlLoad';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
 
 import type { Inputs } from '../../src/types/shared';
@@ -1971,7 +1971,7 @@ describe('synthesize', () => {
 });
 
 vi.mock('fs');
-vi.mock('js-yaml');
+vi.mock('../../src/util/yamlLoad');
 
 describe('resolvePluginConfig', () => {
   beforeEach(() => {
@@ -2012,7 +2012,7 @@ describe('resolvePluginConfig', () => {
     const yamlContent = { nested: 'value' };
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockImplementation(function () {
+    vi.mocked(loadYaml).mockImplementation(function () {
       return yamlContent;
     });
 
@@ -2021,7 +2021,7 @@ describe('resolvePluginConfig', () => {
     expect(result).toEqual({ key: yamlContent });
     expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
     expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(loadYaml).toHaveBeenCalledWith('yaml content');
   });
 
   it('should resolve JSON file references', () => {
@@ -2072,7 +2072,7 @@ describe('resolvePluginConfig', () => {
       .mockReturnValueOnce('yaml content')
       .mockReturnValueOnce(JSON.stringify(jsonContent))
       .mockReturnValueOnce(txtContent);
-    vi.mocked(yaml.load).mockImplementation(function () {
+    vi.mocked(loadYaml).mockImplementation(function () {
       return yamlContent;
     });
 

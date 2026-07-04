@@ -58,6 +58,9 @@ export interface SystemRiskScore extends RiskScore {
 const STRATEGY_METADATA: Record<string, StrategyMetadata> = {
   layer: { humanExploitable: true, humanComplexity: 'medium' },
   basic: { humanExploitable: true, humanComplexity: 'low' },
+  // 'prompt-injection' is the deprecated alias of 'jailbreak-templates'; keep
+  // both keys so results recorded under either id score identically.
+  'jailbreak-templates': { humanExploitable: true, humanComplexity: 'low' },
   'prompt-injection': { humanExploitable: true, humanComplexity: 'low' },
   jailbreak: { humanExploitable: true, humanComplexity: 'medium' },
   'jailbreak:composite': { humanExploitable: true, humanComplexity: 'medium' },
