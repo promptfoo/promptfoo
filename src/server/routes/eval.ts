@@ -12,8 +12,6 @@ import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
-  getEvalTableOutputPromptLocationsBySize,
-  getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
@@ -26,6 +24,7 @@ import { shouldShareResults } from '../../util/sharing';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
+import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
 import type {
@@ -50,83 +49,14 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
     return;
   }
 
-  try {
-    res.json(parsedPayload);
-  } catch (error) {
-    if (!(error instanceof RangeError)) {
-      throw error;
-    }
-
-    logger.warn('[GET /:id/table] Response too large, stripping per-cell prompts by size', {
-      evalId,
-    });
-
-    const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
-    if (promptLocations.length === 0) {
-      logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
-        evalId,
-      });
-      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
-      return;
-    }
-
-    const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
-      const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
-        parsedPayload,
-        promptLocations,
-        promptCountToStrip,
-      );
-      try {
-        const responseBody = JSON.stringify(responseWithoutPrompts);
-        invariant(typeof responseBody === 'string', 'Eval table response must serialize to JSON');
-        return responseBody;
-      } catch (retryError) {
-        if (!(retryError instanceof RangeError)) {
-          throw retryError;
-        }
-        return null;
-      }
-    };
-
-    let lowerBound = 0;
-    let upperBound = 1;
-    let responseBody: string | null = null;
-
-    while (upperBound < promptLocations.length) {
-      responseBody = tryStringifyWithStrippedPrompts(upperBound);
-      if (responseBody) {
-        break;
-      }
-      lowerBound = upperBound;
-      upperBound *= 2;
-    }
-
-    if (!responseBody) {
-      upperBound = promptLocations.length;
-      responseBody = tryStringifyWithStrippedPrompts(upperBound);
-    }
-
-    if (responseBody) {
-      while (upperBound - lowerBound > 1) {
-        const midPoint = lowerBound + Math.floor((upperBound - lowerBound) / 2);
-        const midpointResponseBody = tryStringifyWithStrippedPrompts(midPoint);
-        if (midpointResponseBody) {
-          upperBound = midPoint;
-          responseBody = midpointResponseBody;
-        } else {
-          lowerBound = midPoint;
-        }
-      }
-
-      res.type('json').send(responseBody);
-      return;
-    }
-
-    logger.error('[GET /:id/table] Response still too large after stripping prompts', {
-      evalId,
-    });
-    res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
-  }
+  // Send the full, contract-shaped table. If it exceeds V8's maximum JSON string
+  // length (issue #7649), sendJsonResponse returns HTTP 413 instead of throwing
+  // an unhandled RangeError — without trimming/corrupting the response body.
+  sendJsonResponse(res, parsedPayload, {
+    evalId,
+    logger,
+    tooLargeMessage: 'Eval too large to display. Try reducing the page size.',
+  });
 }
 
 evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
@@ -420,8 +350,15 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
-    setDownloadHeaders(res, `${id}.json`, 'application/json');
-    res.json(jsonData);
+    // Guard the export against the same RangeError as the table response
+    // (issue #7649). Download headers are only set once serialization succeeds,
+    // so an oversized export returns a plain 413 rather than a truncated file.
+    sendJsonResponse(res, jsonData, {
+      beforeSend: () => setDownloadHeaders(res, `${id}.json`, 'application/json'),
+      evalId: id,
+      logger,
+      tooLargeMessage: 'Eval JSON export is too large to serialize.',
+    });
     return;
   }
 
