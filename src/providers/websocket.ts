@@ -23,11 +23,44 @@ const nunjucks = getNunjucksEngine();
 
 export const processResult = normalizeResponseTransformResult;
 
+function normalizeWebSocketProtocols(protocols: string | string[] | undefined): string[] {
+  if (!protocols) {
+    return [];
+  }
+
+  const values = Array.isArray(protocols) ? protocols : [protocols];
+  return values
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function getWebSocketErrorMessage(err: WebSocket.ErrorEvent | Error | unknown): string {
+  const error =
+    err && typeof err === 'object' && 'error' in err ? (err as WebSocket.ErrorEvent).error : err;
+
+  if (typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean') {
+    return String(error);
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+
+  const serialized = safeJsonStringify(error);
+  return serialized && serialized !== '{}' ? serialized : 'unknown WebSocket error';
+}
+
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
 
   timeoutMs?: number;
+  protocols?: string | string[];
   transformResponse?: string | Function;
   streamResponse?: (
     accumulator: ProviderResponse,
@@ -214,10 +247,14 @@ export class WebSocketProvider implements ApiProvider {
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
+      const protocols = normalizeWebSocketProtocols(this.config.protocols);
       if (this.config.headers) {
         wsOptions.headers = this.config.headers;
       }
-      const ws = new WebSocket(this.url, wsOptions);
+      const ws =
+        protocols.length > 0
+          ? new WebSocket(this.url, protocols, wsOptions)
+          : new WebSocket(this.url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
         logger.error(`[WebSocket Provider] Request timed out`);
@@ -292,8 +329,9 @@ export class WebSocketProvider implements ApiProvider {
       ws.onerror = (err) => {
         clearTimeout(timeout);
         ws.close();
-        logger.error(`[WebSocket Provider] Error:${JSON.stringify(err)}`);
-        reject(new Error(`WebSocket error: ${JSON.stringify(err)}`));
+        const errorMessage = getWebSocketErrorMessage(err);
+        logger.error(`[WebSocket Provider] Error: ${errorMessage}`);
+        reject(new Error(`WebSocket error: ${errorMessage}`));
       };
 
       ws.onopen = () => {

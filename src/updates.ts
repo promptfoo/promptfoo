@@ -6,6 +6,14 @@ import semverGt from 'semver/functions/gt.js';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
+import { isUpdateBlockedByRuntime } from './runtimeCompatibility';
+import {
+  NODE_20_SUPPORT_END_DATE_LABEL,
+  NODE_MINIMUM_UPGRADE_VERSION,
+  NODE_RECOMMENDED_VERSION_LABEL,
+  NODE_RUNTIME_UPGRADE_GUIDE_URL,
+} from './types/runtimeCompatibility';
+import { getUpdateCommands } from './updates/updateCommands';
 import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
@@ -25,7 +33,13 @@ export async function getLatestVersion() {
   return data.latestVersion;
 }
 
-export async function checkForUpdates(): Promise<boolean> {
+interface CheckForUpdatesOptions {
+  currentNodeVersion?: string;
+  now?: Date;
+  suppressRuntimeBlockedWarning?: boolean;
+}
+
+export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Promise<boolean> {
   if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
     return false;
   }
@@ -38,15 +52,50 @@ export async function checkForUpdates(): Promise<boolean> {
   }
   if (semverGt(latestVersion, VERSION)) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
+    const updateCommands = getUpdateCommands({
+      isContainer: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+      isOfficialDockerImage: getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
+      // Preserve the existing npx-first CLI guidance while sharing Docker command policy.
+      isNpx: true,
+    });
+    if (
+      isUpdateBlockedByRuntime(
+        updateCommands.commandType,
+        options.currentNodeVersion ?? process.version,
+        options.now ?? new Date(),
+      )
+    ) {
+      if (options.suppressRuntimeBlockedWarning) {
+        return true;
+      }
+      const blockedUpdateInstruction = updateCommands.isCustomContainer
+        ? `Update the Promptfoo source, dependency, or parent image and use Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION_LABEL} recommended), then rebuild and redeploy the container.`
+        : `Upgrade to Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION_LABEL} recommended), then update promptfoo.`;
+      logger.warn(
+        `\n${border}
+${chalk.yellow('⚠️')} A newer version of promptfoo is available, but Node.js 20 support ended ${NODE_20_SUPPORT_END_DATE_LABEL}.
+
+${blockedUpdateInstruction}
+Upgrade guide: ${NODE_RUNTIME_UPGRADE_GUIDE_URL}
+${border}\n`,
+      );
+      return true;
+    }
+
+    const updateInstruction = updateCommands.isCustomContainer
+      ? 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.'
+      : updateCommands.commandType === 'docker'
+        ? `Run ${chalk.green(updateCommands.primary)}. If this is a derived image, update its Promptfoo base and rebuild it. Then redeploy the container.`
+        : `Please run ${chalk.green(updateCommands.primary)}${
+            updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
+          } to update.`;
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(
         VERSION,
       )} is lower than the latest available version ${chalk.green(latestVersion)}.
 
-Please run ${chalk.green('npx promptfoo@latest')} or ${chalk.green(
-        'npm install -g promptfoo@latest',
-      )} to update.
+${updateInstruction}
 ${border}\n`,
     );
     return true;

@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-5.6 limited-preview Responses API comparison
+prompts:
+  - |
+    Solve this planning problem and explain the tradeoffs clearly:
+    {{problem}}
+
+providers:
+  - id: openai:responses:gpt-5.6-sol
+    label: gpt-5.6-sol-max-reasoning
+    config:
+      max_output_tokens: 8192
+      reasoning:
+        effort: 'max'
+
+  - id: openai:responses:gpt-5.6-terra
+    label: gpt-5.6-terra-medium-reasoning
+    config:
+      max_output_tokens: 4096
+      reasoning:
+        effort: 'medium'
+
+  - id: openai:responses:gpt-5.6-luna
+    label: gpt-5.6-luna-low-reasoning
+    config:
+      max_output_tokens: 2048
+      reasoning:
+        effort: 'low'
+
+tests:
+  - vars:
+      problem: 'Plan a two-week launch for a small product team, including discovery, implementation, QA, and release readiness.'
+    assert:
+      - type: icontains
+        value: QA
+      - type: icontains-any
+        value:
+          - launch
+          - release
