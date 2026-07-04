@@ -1,9 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  DEFAULT_TOO_LARGE_MESSAGE,
-  isJsonSerializationLimitError,
-  sendJsonResponse,
-} from '../../../src/server/utils/safeJsonResponse';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sendJsonResponse } from '../../../src/server/utils/safeJsonResponse';
 import type { Response } from 'express';
 
 function createMockResponse() {
@@ -23,6 +19,11 @@ function createMockResponse() {
       this.body = value;
       return this;
     }),
+    json: vi.fn(function json(this: typeof res, value: unknown) {
+      this.contentType = 'application/json';
+      this.body = JSON.stringify(value);
+      return this;
+    }),
   };
   return res;
 }
@@ -40,38 +41,13 @@ function oversizedPayload(message = 'Invalid string length') {
   };
 }
 
-describe('isJsonSerializationLimitError', () => {
-  it('matches the oversized-string RangeError variants', () => {
-    expect(isJsonSerializationLimitError(new RangeError('Invalid string length'))).toBe(true);
-    expect(
-      isJsonSerializationLimitError(
-        new RangeError('Cannot create a string longer than 0x1fffffe8 characters'),
-      ),
-    ).toBe(true);
-    expect(isJsonSerializationLimitError(new RangeError('ERR_STRING_TOO_LONG'))).toBe(true);
-  });
-
-  it('matches the max call-stack RangeError', () => {
-    expect(isJsonSerializationLimitError(new RangeError('Maximum call stack size exceeded'))).toBe(
-      true,
-    );
-  });
-
-  it('does not match unrelated errors', () => {
-    // Circular-reference serialization failures are TypeErrors, not RangeErrors.
-    expect(
-      isJsonSerializationLimitError(new TypeError('Converting circular structure to JSON')),
-    ).toBe(false);
-    expect(isJsonSerializationLimitError(new RangeError('some other range error'))).toBe(false);
-    // A non-RangeError with a matching message must not match.
-    expect(isJsonSerializationLimitError(new Error('Invalid string length'))).toBe(false);
-    expect(isJsonSerializationLimitError('Invalid string length')).toBe(false);
-    expect(isJsonSerializationLimitError(undefined)).toBe(false);
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.resetAllMocks();
 });
 
 describe('sendJsonResponse', () => {
-  it('sends the full payload byte-for-byte identical to res.json for normal payloads', () => {
+  it('serializes normal payloads without modification', () => {
     const res = createMockResponse();
     const payload = {
       table: { head: { prompts: ['p'], vars: ['v'] }, body: [{ outputs: [{ prompt: 'hi' }] }] },
@@ -81,8 +57,6 @@ describe('sendJsonResponse', () => {
 
     sendJsonResponse(res as unknown as Response, payload);
 
-    // Contract preservation: identical serialization to `res.json(payload)`,
-    // which uses `JSON.stringify(payload)` with Express's default settings.
     expect(res.send).toHaveBeenCalledTimes(1);
     expect(res.body).toBe(JSON.stringify(payload));
     expect(res.contentType).toBe('application/json');
@@ -104,6 +78,16 @@ describe('sendJsonResponse', () => {
 
     expect(beforeSend).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(['beforeSend', 'send']);
+  });
+
+  it('preserves JSON.stringify semantics for an undefined payload', () => {
+    const res = createMockResponse();
+
+    sendJsonResponse(res as unknown as Response, undefined);
+
+    expect(res.send).toHaveBeenCalledWith(undefined);
+    expect(res.contentType).toBe('application/json');
+    expect(res.statusCode).toBe(200);
   });
 
   it('returns HTTP 413 with a clear error instead of throwing for oversized payloads (#7649)', () => {
@@ -128,18 +112,19 @@ describe('sendJsonResponse', () => {
     expect(beforeSend).not.toHaveBeenCalled();
   });
 
-  it('degrades a max call-stack RangeError to 413 as well', () => {
+  it.each([
+    'Cannot create a string longer than 0x1fffffe8 characters',
+    'ERR_STRING_TOO_LONG',
+    'Maximum call stack size exceeded',
+  ])('returns 413 for the V8 serialization-limit message %s', (message) => {
     const res = createMockResponse();
 
     expect(() =>
-      sendJsonResponse(
-        res as unknown as Response,
-        oversizedPayload('Maximum call stack size exceeded'),
-      ),
+      sendJsonResponse(res as unknown as Response, oversizedPayload(message)),
     ).not.toThrow();
 
     expect(res.statusCode).toBe(413);
-    expect(res.body).toBe(JSON.stringify({ error: DEFAULT_TOO_LARGE_MESSAGE }));
+    expect(res.body).toBe(JSON.stringify({ error: 'Response payload is too large to serialize' }));
   });
 
   it('logs a warning with the eval id when the guard fires', () => {
@@ -148,20 +133,39 @@ describe('sendJsonResponse', () => {
 
     sendJsonResponse(res as unknown as Response, oversizedPayload(), { evalId: 'eval-1', logger });
 
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn.mock.calls[0][1]).toMatchObject({ evalId: 'eval-1' });
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[sendJsonResponse] JSON serialization hit an engine limit; returning 413',
+      expect.objectContaining({ evalId: 'eval-1' }),
+    );
   });
 
-  it('rethrows errors that are not serialization-limit RangeErrors', () => {
+  it.each([
+    new Error('Invalid string length'),
+    new RangeError('some other range error'),
+    new TypeError('Converting circular structure to JSON'),
+  ])('rethrows non-limit serialization errors', (error) => {
     const res = createMockResponse();
     const payload = {
       toJSON() {
-        throw new Error('boom');
+        throw error;
       },
     };
 
-    expect(() => sendJsonResponse(res as unknown as Response, payload)).toThrow('boom');
+    expect(() => sendJsonResponse(res as unknown as Response, payload)).toThrow(error);
     expect(res.send).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(200);
+  });
+
+  it('rethrows native BigInt and circular-reference serialization errors', () => {
+    const bigintResponse = createMockResponse();
+    expect(() => sendJsonResponse(bigintResponse as unknown as Response, 1n)).toThrow(TypeError);
+
+    const circularResponse = createMockResponse();
+    const circularPayload: { self?: unknown } = {};
+    circularPayload.self = circularPayload;
+    expect(() =>
+      sendJsonResponse(circularResponse as unknown as Response, circularPayload),
+    ).toThrow(TypeError);
   });
 });
