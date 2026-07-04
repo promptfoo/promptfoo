@@ -1915,11 +1915,11 @@ function mergeDeterministicComparisonGradingResult(
   const comparisonPassed = gradingResult.pass;
   const previousPass = existingGradingResult?.pass ?? result.success;
   const nextPass = previousPass && comparisonPassed;
-  const newScore = comparisonPassed
-    ? existingComponentResults.length === 0
-      ? gradingResult.score
-      : (existingGradingResult?.score ?? result.score)
-    : gradingResult.score;
+  const shouldApplyComparisonScore =
+    previousPass && (!comparisonPassed || existingComponentResults.length === 0);
+  const newScore = shouldApplyComparisonScore
+    ? gradingResult.score
+    : (existingGradingResult?.score ?? result.score);
 
   result.gradingResult = {
     ...(existingGradingResult || {}),
@@ -2700,9 +2700,12 @@ function trackMetricSelectorRows(
   assertions: AssertionOrSet[] | undefined,
   testIdx: number,
 ) {
-  const selectors = assertions?.filter((assertion) =>
+  if (!assertions?.some((assertion) => isMetricSelectorAssertionType(assertion.type))) {
+    return;
+  }
+  const selectors = assertions.filter((assertion): assertion is Assertion =>
     isMetricSelectorAssertionType(assertion.type),
-  ) as Assertion[] | undefined;
+  );
   if (selectors?.length) {
     rows.set(testIdx, selectors);
   }
@@ -4025,20 +4028,34 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     runEvalOptions: RunEvalOptions[];
   }) {
     let compareCount = 0;
-    for (const [testIdx, assertions] of metricSelectorRows) {
+    for (const [testIdx] of metricSelectorRows) {
       const results = await this.getResultsToCompare(testIdx);
       if (results.length === 0) {
         logger.warn(`Expected results to be found for test index ${testIdx}`);
         continue;
       }
 
+      const assertions = results[0].testCase.assert?.filter((assertion): assertion is Assertion =>
+        isMetricSelectorAssertionType(assertion.type),
+      );
+      if (!assertions?.length) {
+        continue;
+      }
+      if (assertions.length > 1) {
+        logger.warn(
+          `Test index ${testIdx} combines metric selectors; comparison verdicts are applied with AND semantics`,
+          { selectors: assertions.map((assertion) => assertion.type) },
+        );
+      }
+
       // Calculate all selectors before applying any so they share the same eligibility state.
-      const pending = await Promise.all(
-        assertions.map(async (assertion) => ({
+      const pending = [];
+      for (const assertion of assertions) {
+        pending.push({
           assertion,
           gradingResults: await selectMetric(results, assertion),
-        })),
-      );
+        });
+      }
 
       for (const { assertion, gradingResults } of pending) {
         compareCount++;

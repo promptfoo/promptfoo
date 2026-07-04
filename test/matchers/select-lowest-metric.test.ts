@@ -79,6 +79,33 @@ describe('selectMetric', () => {
     expect(grading.map(({ pass }) => pass)).toEqual([false, true]);
   });
 
+  it('honors onlyPassing false for latency', async () => {
+    const grading = await selectMetric(
+      [
+        result({ promptIdx: 0, latencyMs: 25, success: false }),
+        result({ promptIdx: 1, latencyMs: 100 }),
+      ],
+      { type: 'select-lowest-latency', value: { onlyPassing: false } },
+    );
+
+    expect(grading.map(({ pass }) => pass)).toEqual([true, false]);
+  });
+
+  it('excludes provider errors without invalidating healthy outputs', async () => {
+    const failed = {
+      ...result({ promptIdx: 0, cost: 0.001 }),
+      error: 'provider failed',
+      response: undefined,
+    };
+    const grading = await selectMetric(
+      [failed, result({ promptIdx: 1, cost: 0.1 })],
+      costAssertion,
+    );
+
+    expect(grading.map(({ pass }) => pass)).toEqual([false, true]);
+    expect(grading[0].reason).toContain('did not produce an output');
+  });
+
   it.each([
     [costAssertion, result({ promptIdx: 0, cost: 0, cached: true })],
     [latencyAssertion, result({ promptIdx: 0, latencyMs: 1, cached: true })],
@@ -120,9 +147,13 @@ describe('selectMetric', () => {
   it.each([
     costAssertion,
     latencyAssertion,
-  ])('requires at least two outputs for $type', async (assertion) => {
-    await expect(selectMetric([result({ promptIdx: 0, cost: 0.1 })], assertion)).rejects.toThrow(
-      'at least two outputs',
-    );
+  ])('fails gracefully with fewer than two outputs for $type', async (assertion) => {
+    const grading = await selectMetric([result({ promptIdx: 0, cost: 0.1 })], assertion);
+    expect(grading).toEqual([
+      expect.objectContaining({
+        pass: false,
+        reason: expect.stringContaining('at least two outputs'),
+      }),
+    ]);
   });
 });

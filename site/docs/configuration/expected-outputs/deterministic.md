@@ -317,7 +317,7 @@ assert:
       onlyPassing: true
 ```
 
-With `onlyPassing`, the selector fails all outputs if none pass the other assertions. Run with `promptfoo eval --no-cache`; cached outputs and missing or invalid costs fail the comparison. Ties are resolved by prompt order.
+With `onlyPassing`, the selector fails all outputs if none pass the other assertions. Provider errors are excluded from the comparison. Run with `promptfoo eval --no-cache`; a cached eligible output or an eligible output with missing or invalid cost fails the entire comparison. Ties are resolved by prompt order.
 
 ### Equality
 
@@ -951,7 +951,7 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 ### Select-Lowest-Latency
 
-`select-lowest-latency` passes only the fastest output that passed the other assertions. It requires at least two outputs.
+`select-lowest-latency` passes only the fastest output that passed the other assertions. It requires at least two outputs. To include outputs that failed another assertion, set `value.onlyPassing` to `false`.
 
 ```yaml
 assert:
@@ -961,6 +961,8 @@ assert:
 ```
 
 If no output passes the other assertions, the selector fails all outputs. Run with `promptfoo eval --no-cache`; cached outputs and missing or invalid latency fail the comparison. Ties are resolved by prompt order.
+
+Metric selectors run after regular assertions and before `select-best` and `max-score`. If you add multiple metric selectors to one test, their verdicts use AND semantics: an output must win every selector to pass. When different outputs win, all outputs fail and Promptfoo logs a warning.
 
 ### Levenshtein distance
 

@@ -339,7 +339,7 @@ function hasMaxScoreWithoutScoringAssertion(
     return (
       containsComparisonAssertion(assertions, 'max-score') &&
       !assertions.some(
-        (assertion) => assertion.type !== 'select-best' && assertion.type !== 'max-score',
+        (assertion) => !assertion.type.startsWith('select-') && assertion.type !== 'max-score',
       )
     );
   });

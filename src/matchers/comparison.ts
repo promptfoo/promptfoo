@@ -21,6 +21,7 @@ export const METRIC_SELECTOR_ASSERTION_TYPES = [
 export type MetricSelectorAssertionType = (typeof METRIC_SELECTOR_ASSERTION_TYPES)[number];
 
 type MetricSelectorCandidate = {
+  error?: string | null;
   latencyMs?: number;
   promptIdx: number;
   response?: { cached?: boolean; cost?: number };
@@ -29,12 +30,12 @@ type MetricSelectorCandidate = {
 
 const selectorDefinitions = {
   'select-lowest-cost': {
-    direction: 'min',
+    defaultOnlyPassing: false,
     label: 'cost',
     value: (result: MetricSelectorCandidate) => result.response?.cost,
   },
   'select-lowest-latency': {
-    direction: 'min',
+    defaultOnlyPassing: true,
     label: 'latency',
     value: (result: MetricSelectorCandidate) => result.latencyMs,
   },
@@ -57,32 +58,41 @@ export async function selectMetric(
     isMetricSelectorAssertionType(assertion.type),
     `Unsupported selector: ${assertion.type}`,
   );
-  invariant(
-    results.length >= 2,
-    `${assertion.type} assertion must have at least two outputs to compare between`,
-  );
-
-  const definition = selectorDefinitions[assertion.type];
-  const values = results.map(definition.value);
-  const onlyPassing =
-    assertion.type === 'select-lowest-latency' ||
-    (assertion.value !== null &&
-      typeof assertion.value === 'object' &&
-      'onlyPassing' in assertion.value &&
-      assertion.value.onlyPassing === true);
   const failAll = (reason: string) =>
     results.map(() => ({
       pass: false,
       score: 0,
       reason,
     }));
+  if (results.length < 2) {
+    return failAll(`${assertion.type} requires at least two outputs to compare between`);
+  }
+
+  const definition = selectorDefinitions[assertion.type];
+  const values = results.map(definition.value);
+  const configuredOnlyPassing =
+    assertion.value !== null &&
+    typeof assertion.value === 'object' &&
+    'onlyPassing' in assertion.value &&
+    typeof assertion.value.onlyPassing === 'boolean'
+      ? assertion.value.onlyPassing
+      : undefined;
+  const onlyPassing = configuredOnlyPassing ?? definition.defaultOnlyPassing;
   const eligible = results.flatMap((result, index) =>
-    !onlyPassing || result.success ? [index] : [],
+    !result.error && result.response && (!onlyPassing || result.success) ? [index] : [],
   );
 
   if (eligible.length === 0) {
+    if (
+      onlyPassing &&
+      results.some((result) => !result.error && result.response && !result.success)
+    ) {
+      return failAll(
+        `${assertion.type} requires at least one eligible output; all outputs failed other assertions`,
+      );
+    }
     return failAll(
-      `${assertion.type} requires at least one eligible output; all outputs failed other assertions`,
+      `${assertion.type} requires at least one eligible output; no output produced a usable metric`,
     );
   }
 
@@ -104,14 +114,20 @@ export async function selectMetric(
   for (const index of eligible.slice(1)) {
     const value = values[index]!;
     const winnerValue = values[winner]!;
-    const better = definition.direction === 'min' ? value < winnerValue : value > winnerValue;
+    const better = value < winnerValue;
     if (better || (value === winnerValue && results[index].promptIdx < results[winner].promptIdx)) {
       winner = index;
     }
   }
 
-  const objective = definition.direction === 'min' ? 'lowest' : 'highest';
   return results.map((_result, index) => {
+    if (results[index].error || !results[index].response) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Not eligible for ${assertion.type} because the provider did not produce an output`,
+      };
+    }
     if (onlyPassing && !results[index].success) {
       return {
         pass: false,
@@ -124,8 +140,8 @@ export async function selectMetric(
       pass: selected,
       score: selected ? 1 : 0,
       reason: selected
-        ? `Selected as ${objective} ${definition.label} output (${definition.label}: ${values[index]})`
-        : `Not selected (${definition.label}: ${values[index]}, ${objective}: ${values[winner]})`,
+        ? `Selected as lowest ${definition.label} output (${definition.label}: ${values[index]})`
+        : `Not selected (${definition.label}: ${values[index]}, lowest: ${values[winner]})`,
     };
   });
 }
@@ -229,23 +245,22 @@ export async function selectMaxScore(
       typeof value === 'object' && 'threshold' in value ? (value.threshold as number) : undefined,
   };
 
-  // Calculate aggregate score for each output
-  const scores = resultsWithGradingResults.map((result, index) => {
-    // Get component results from gradingResult if available
-    const componentResults = result.gradingResult?.componentResults || [];
-
-    // Selection assertions are evaluated separately and must not contribute to max-score.
-    const relevantResults = componentResults.filter(
+  const relevantResultsByOutput = resultsWithGradingResults.map((result) =>
+    (result.gradingResult?.componentResults || []).filter(
       (r: GradingResult) =>
         r.assertion && r.assertion.type !== 'max-score' && !r.assertion.type.startsWith('select-'),
-    );
-
-    if (relevantResults.length === 0) {
-      throw new Error(
+    ),
+  );
+  if (relevantResultsByOutput.some((results) => results.length === 0)) {
+    return outputs.map(() =>
+      fail(
         'max-score requires at least one other assertion (besides max-score or select-* assertions) to aggregate scores from',
-      );
-    }
+      ),
+    );
+  }
 
+  // Calculate aggregate score for each output
+  const scores = relevantResultsByOutput.map((relevantResults, index) => {
     // Calculate weighted scores for each assertion
     let totalWeightedScore = 0;
     let totalWeight = 0;

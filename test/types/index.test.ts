@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   AssertionSchema,
+  AssertionSetSchema,
   BaseAssertionTypesSchema,
   CommandLineOptionsSchema,
   GradingConfigSchema,
@@ -95,6 +96,28 @@ describe('AssertionSchema', () => {
 
     const result = AssertionSchema.safeParse(arrayAssertion);
     expect(result.success).toBe(true);
+  });
+
+  it.each([
+    'select-lowest-cost',
+    'select-lowest-latency',
+  ] as const)('validates the onlyPassing option for %s', (type) => {
+    expect(AssertionSchema.safeParse({ type }).success).toBe(true);
+    expect(AssertionSchema.safeParse({ type, value: { onlyPassing: false } }).success).toBe(true);
+    expect(AssertionSchema.safeParse({ type, value: { onlyPassing: 'yes' } }).success).toBe(false);
+    expect(AssertionSchema.safeParse({ type, value: { onlyPasng: true } }).success).toBe(false);
+    expect(AssertionSchema.safeParse({ type, value: true }).success).toBe(false);
+  });
+
+  it.each([
+    'select-lowest-cost',
+    'select-lowest-latency',
+  ] as const)('rejects nested %s assertions', (type) => {
+    const result = AssertionSetSchema.safeParse({
+      type: 'assert-set',
+      assert: [{ type }],
+    });
+    expect(result.success).toBe(false);
   });
 });
 

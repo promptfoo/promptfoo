@@ -892,6 +892,20 @@ describe('setupReadiness', () => {
         message: 'Choose highest score needs at least one other assertion to score each output.',
         stepId: 3,
       });
+
+      const selectorIsNotScoring = getSetupReadiness({
+        ...multipleOutputsConfig,
+        tests: [
+          {
+            assert: [{ type: 'select-lowest-cost' as const }, { type: 'max-score' as const }],
+          },
+        ],
+      });
+      expect(selectorIsNotScoring.issues).toContainEqual({
+        id: 'comparisonScoring',
+        message: 'Choose highest score needs at least one other assertion to score each output.',
+        stepId: 3,
+      });
     });
 
     it('ignores comparison assertions nested in an assert-set, matching the runtime', () => {

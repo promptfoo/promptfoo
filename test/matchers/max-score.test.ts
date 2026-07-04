@@ -113,7 +113,7 @@ describe('selectMaxScore', () => {
     );
   });
 
-  it('should throw when no scoring assertions exist', async () => {
+  it('should fail gracefully when no scoring assertions exist', async () => {
     const outputs = ['Output 0', 'Output 1'];
     const results = [
       {
@@ -145,8 +145,11 @@ describe('selectMaxScore', () => {
       },
     ];
 
-    await expect(selectMaxScore(outputs, results, mockAssertion)).rejects.toThrow(
-      'max-score requires at least one other assertion (besides max-score or select-* assertions) to aggregate scores from',
+    const grading = await selectMaxScore(outputs, results, mockAssertion);
+    expect(grading).toHaveLength(2);
+    expect(grading.every(({ pass }) => !pass)).toBe(true);
+    expect(grading[0].reason).toContain(
+      'max-score requires at least one other assertion (besides max-score or select-* assertions)',
     );
   });
 

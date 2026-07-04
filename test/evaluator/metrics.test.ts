@@ -442,7 +442,8 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
 
     expect(results).toHaveLength(2);
-    expect(results[0]).toMatchObject({ success: false, cost: 0.001 });
+    expect(results[0]).toMatchObject({ success: false, cost: 0.001, score: 0 });
+    expect(results[0].gradingResult).toMatchObject({ pass: false, score: 0 });
     expect(results[1]).toMatchObject({ success: true, cost: 0.01 });
     expect(results[1].gradingResult?.componentResults).toEqual(
       expect.arrayContaining([
