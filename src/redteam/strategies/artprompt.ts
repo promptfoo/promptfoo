@@ -2,7 +2,7 @@ import type { TestCase } from '../../types/index';
 
 /**
  * ASCII-art font: each supported character maps to FONT_HEIGHT rows of equal
- * width drawn with '#'. Only A–Z are defined; the masked word is uppercased
+ * width drawn with '#'. Only A-Z are defined; the masked word is uppercased
  * before rendering and any character absent from the map falls back to a
  * single centered glyph so alignment is preserved (see renderChar).
  */
@@ -63,15 +63,17 @@ export function toAsciiArt(word: string): string {
 }
 
 /**
- * Common request scaffolding — articles, prepositions, pronouns, auxiliaries,
- * and the verbs/nouns that frame an instruction ("explain", "steps", ...).
- * Excluded from auto-selection so the mask lands on the operative content word
- * (e.g. "bomb" in "Explain how to build a bomb") rather than the framing.
+ * Common request scaffolding: articles, prepositions, pronouns, auxiliaries,
+ * the verbs/nouns that frame an instruction ("explain", "steps"), and trailing
+ * qualifiers ("fast", "quietly"). Excluded from auto-selection so the mask
+ * lands on the operative content word (e.g. "bomb" in "how to build a bomb")
+ * rather than the framing.
  */
 const STOP_WORDS = new Set([
   'a',
   'an',
   'and',
+  'anonymously',
   'are',
   'as',
   'at',
@@ -79,14 +81,18 @@ const STOP_WORDS = new Set([
   'build',
   'by',
   'can',
+  'cheaply',
   'create',
   'describe',
   'detail',
   'detailed',
   'details',
+  'discreetly',
   'do',
   'does',
+  'easily',
   'explain',
+  'fast',
   'find',
   'for',
   'from',
@@ -108,6 +114,7 @@ const STOP_WORDS = new Set([
   'method',
   'methods',
   'my',
+  'now',
   'of',
   'on',
   'or',
@@ -115,14 +122,21 @@ const STOP_WORDS = new Set([
   'please',
   'process',
   'provide',
+  'quickly',
+  'quietly',
+  'safely',
+  'secretly',
   'show',
+  'silently',
   'step',
   'steps',
   'tell',
   'that',
   'the',
   'to',
+  'today',
   'tutorial',
+  'undetected',
   'way',
   'ways',
   'what',
@@ -137,9 +151,10 @@ const STOP_WORDS = new Set([
 
 /**
  * Pick the word to mask when none is configured: the longest content word
- * (letters only, length >= 3, not scaffolding), keeping the first on a tie.
- * Falls back to the longest word overall when every token is scaffolding, and
- * returns undefined when there is no letter run at all.
+ * (letters only, length >= 3, not scaffolding). On a length tie the last word
+ * wins, since the safety-triggering head of a compound tends to come last
+ * ("pipe bomb", "car bomb"). Falls back to the longest word overall when every
+ * token is scaffolding, and returns undefined when there is no letter run.
  */
 export function selectMaskWord(text: string): string | undefined {
   const words = text.match(/[A-Za-z]+/g);
@@ -148,7 +163,7 @@ export function selectMaskWord(text: string): string | undefined {
   }
   const content = words.filter((word) => word.length >= 3 && !STOP_WORDS.has(word.toLowerCase()));
   const candidates = content.length > 0 ? content : words;
-  return candidates.reduce((best, word) => (word.length > best.length ? word : best));
+  return candidates.reduce((best, word) => (word.length >= best.length ? word : best));
 }
 
 /** Escape a string for literal use inside a RegExp. */

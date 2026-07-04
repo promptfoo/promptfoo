@@ -297,7 +297,7 @@ export const strategies: Strategy[] = [
     longDescription:
       'Masks a sensitive word as ASCII art so token-level safety filters miss it while the model still reconstructs the request (Jiang et al., ACL 2024)',
     cost: 'Low',
-    asrIncrease: '30-50%',
+    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/artprompt/',
   },
   {

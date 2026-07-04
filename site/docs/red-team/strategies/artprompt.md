@@ -23,11 +23,13 @@ The strategy implements the attack from [Jiang et al., "ArtPrompt: ASCII Art-bas
 
 ## Why It Works
 
-- Safety alignment is trained on the semantics of tokenized words, not on the visual shapes ASCII art forms.
-- Masking the single most safety-triggering word removes the tokens that classifiers key on.
-- Instruction-following models are good enough at pattern recognition to recover the word from the art, so the harmful intent survives even though the literal word does not.
+The paper argues the attack works because:
 
-The paper reports that this bypasses safety measures on GPT-3.5, GPT-4, Claude, Gemini, and Llama2 across benchmarks such as AdvBench.
+- Safety alignment is trained on the semantics of tokenized words, not on the visual shapes ASCII art forms.
+- Masking the most safety-triggering word removes the tokens that content classifiers key on.
+- Instruction-following models can often recover the word from the art, so the harmful intent may survive even though the literal word does not.
+
+According to the authors, ArtPrompt is able to induce unsafe behavior from all five models they evaluated (GPT-3.5, GPT-4, Gemini, Claude, and Llama2), and they report that it compares favorably against the other jailbreaks in their study. Effectiveness in practice varies by model and prompt, so treat these as reported results rather than guarantees; measure the actual attack success rate for your target with Promptfoo's graders.
 
 ## Implementation
 
@@ -38,7 +40,7 @@ strategies:
   - artprompt
 ```
 
-By default the strategy masks the most significant content word — the longest word after skipping common instruction scaffolding like `how`, `make`, or `steps` — so the mask lands on the operative word (e.g. `bomb`) rather than the framing. To force a specific word, pass `word`:
+By default the strategy masks the most significant content word. It picks the longest word after skipping common instruction scaffolding like `how`, `make`, or `steps`, and on a length tie it prefers the last word (the safety-triggering head of a compound like `pipe bomb` usually comes last). To force a specific word, pass `word`:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
