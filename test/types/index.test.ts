@@ -3,7 +3,7 @@ import path from 'path';
 
 import Ajv from 'ajv';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {

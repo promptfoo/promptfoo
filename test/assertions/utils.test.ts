@@ -117,8 +117,11 @@ describe('coerceString', () => {
 describe('getGraderVars', () => {
   it.each([
     ['agent-rubric', ['output', 'rubric']],
+    ['conversation-relevance', ['messages']],
     ['factuality', ['input', 'ideal', 'completion']],
     ['llm-rubric', ['output', 'rubric']],
+    ['not-llm-rubric', ['output', 'rubric']],
+    ['not-factuality', ['input', 'ideal', 'completion']],
     ['model-graded-closedqa', ['input', 'criteria', 'completion']],
     ['model-graded-factuality', ['input', 'ideal', 'completion']],
     ['context-faithfulness', ['question', 'answer', 'context', 'statements']],

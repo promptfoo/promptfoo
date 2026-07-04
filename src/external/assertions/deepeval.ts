@@ -1,6 +1,7 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 
+import { getGraderVars } from '../../assertions/utils';
 import { callProviderWithContext, getAndCheckProvider } from '../../matchers/providers';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
@@ -51,7 +52,7 @@ export const handleConversationRelevance = async ({
     const result = await matchesConversationRelevance(
       windowMessages,
       1.0, // Use 1.0 threshold for individual windows
-      test.vars,
+      getGraderVars(assertion, test.vars),
       test.options,
       providerCallContext,
     );

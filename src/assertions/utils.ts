@@ -1,23 +1,28 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase, type VarValue } from '../types/index';
+import logger from '../logger';
+import { type Assertion, type AssertionType, type TestCase, type VarValue } from '../types/index';
+import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
 
-const GRADER_BUILTIN_VARS: Readonly<Record<string, ReadonlySet<string>>> = {
-  'agent-rubric': new Set(['output', 'rubric']),
+const OUTPUT_RUBRIC_VARS = new Set(['output', 'rubric']);
+const FACTUALITY_VARS = new Set(['input', 'ideal', 'completion']);
+
+const GRADER_BUILTIN_VARS: Partial<Record<AssertionType, ReadonlySet<string>>> = {
+  'agent-rubric': OUTPUT_RUBRIC_VARS,
+  'conversation-relevance': new Set(['messages']),
   'context-faithfulness': new Set(['question', 'answer', 'context', 'statements']),
   'context-recall': new Set(['context', 'groundTruth']),
-  factuality: new Set(['input', 'ideal', 'completion']),
-  'llm-rubric': new Set(['output', 'rubric']),
+  factuality: FACTUALITY_VARS,
+  'llm-rubric': OUTPUT_RUBRIC_VARS,
   'model-graded-closedqa': new Set(['input', 'criteria', 'completion']),
-  'model-graded-factuality': new Set(['input', 'ideal', 'completion']),
-  'search-rubric': new Set(['output', 'rubric']),
+  'model-graded-factuality': FACTUALITY_VARS,
+  'search-rubric': OUTPUT_RUBRIC_VARS,
   'select-best': new Set(['criteria', 'outputs']),
   'trajectory:goal-success': new Set(['goal', 'output', 'trajectory']),
 };
@@ -67,7 +72,19 @@ export function getGraderVars(
     return {};
   }
 
-  const builtins = GRADER_BUILTIN_VARS[assertion.type];
+  const baseType = (
+    assertion.type.startsWith('not-') ? assertion.type.slice('not-'.length) : assertion.type
+  ) as AssertionType;
+  const builtins = GRADER_BUILTIN_VARS[baseType];
+  const missingNames = assertion.graderVars.filter(
+    (name) => !Object.prototype.hasOwnProperty.call(vars, name),
+  );
+  if (missingNames.length > 0) {
+    logger.debug('graderVars names were not present in test vars', {
+      assertionType: assertion.type,
+      names: missingNames,
+    });
+  }
   return Object.fromEntries(
     assertion.graderVars
       .filter((name) => !builtins?.has(name) && Object.prototype.hasOwnProperty.call(vars, name))
@@ -101,7 +118,7 @@ export function processFileReference(fileRef: string): object | string {
   const fileContent = fs.readFileSync(filePath, 'utf8');
   const extension = path.extname(filePath);
   if (['.json', '.yaml', '.yml'].includes(extension)) {
-    return yaml.load(fileContent) as object;
+    return loadYaml(fileContent) as object;
   } else if (extension === '.txt') {
     return fileContent.trim();
   } else {

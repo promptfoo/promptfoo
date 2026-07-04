@@ -71,6 +71,50 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(update).toHaveBeenCalledWith('messageTemplate', 'Hey {{name}}');
   });
 
+  it('updates WebSocket subprotocols as a string array', async () => {
+    const user = userEvent.setup();
+    const update = vi.fn();
+
+    renderWithProviders(
+      <WebSocketEndpointConfiguration
+        selectedTarget={baseProvider}
+        updateWebSocketTarget={update}
+        urlError={null}
+      />,
+    );
+
+    const protocolsField = screen.getByLabelText('WebSocket Subprotocols');
+    await user.click(protocolsField);
+    await user.paste('json, graphql-transport-ws');
+
+    expect(update).toHaveBeenCalledWith('protocols', ['json', 'graphql-transport-ws']);
+  });
+
+  it('preserves raw Sec-WebSocket-Protocol headers and shows migration guidance', () => {
+    const update = vi.fn();
+    const providerWithHeader: ProviderOptions = {
+      ...baseProvider,
+      config: {
+        ...baseProvider.config,
+        headers: {
+          'Sec-WebSocket-Protocol': 'Bearer token-with-space',
+        },
+      },
+    };
+
+    renderWithProviders(
+      <WebSocketEndpointConfiguration
+        selectedTarget={providerWithHeader}
+        updateWebSocketTarget={update}
+        urlError={null}
+      />,
+    );
+
+    expect(screen.getByText(/move it here/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('WebSocket Subprotocols')).toHaveValue('');
+    expect(update).not.toHaveBeenCalledWith('headers', expect.anything());
+  });
+
   it('calls updateWebSocketTarget on Response Transform change', async () => {
     const user = userEvent.setup();
     const update = vi.fn();

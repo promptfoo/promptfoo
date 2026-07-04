@@ -71,7 +71,7 @@ Keep grader workspaces read-only whenever possible. If you enable write access, 
 
 ## Results and configuration
 
-`agent-rubric` uses the same `{ reason, pass, score }` result and `threshold`, `rubricPrompt`, and `not-` semantics as `llm-rubric`:
+`agent-rubric` uses the same `{ reason, pass, score }` result and `threshold`, `rubricPrompt`, `graderVars`, and `not-` semantics as `llm-rubric`:
 
 ```yaml
 assert:
