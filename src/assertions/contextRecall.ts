@@ -1,7 +1,9 @@
 import { matchesContextRecall } from '../matchers/rag';
-import { type AssertionParams, type GradingResult, getGraderVars } from '../types/index';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { getGraderVars } from './utils';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Handles context-recall assertions by evaluating whether the provided context

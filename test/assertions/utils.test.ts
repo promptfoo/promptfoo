@@ -5,18 +5,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coerceString,
   getFinalTest,
+  getGraderVars,
   loadFromJavaScriptFile,
   processFileReference,
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import {
-  type ApiProvider,
-  type Assertion,
-  getGraderVars,
-  type TestCase,
-} from '../../src/types/index';
 import { createMockProvider as createFactoryProvider } from '../factories/provider';
+
+import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 vi.mock('fs');
 vi.mock('path');

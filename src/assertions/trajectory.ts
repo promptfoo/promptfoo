@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
-import { type AssertionParams, type GradingResult, getGraderVars } from '../types/index';
 import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
@@ -12,6 +11,9 @@ import {
   summarizeTrajectoryForJudge,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
+import { getGraderVars } from './utils';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 interface TrajectoryCountValue extends TrajectoryStepMatcher {
   max?: number;

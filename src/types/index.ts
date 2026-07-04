@@ -745,52 +745,6 @@ export const AssertionSchema = z.object({
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 
-const OUTPUT_RUBRIC_VARS = new Set(['output', 'rubric']);
-const FACTUALITY_VARS = new Set(['input', 'ideal', 'completion']);
-
-const GRADER_BUILTIN_VARS: Partial<Record<AssertionType, ReadonlySet<string>>> = {
-  'agent-rubric': OUTPUT_RUBRIC_VARS,
-  'conversation-relevance': new Set(['messages']),
-  'context-faithfulness': new Set(['question', 'answer', 'context', 'statements']),
-  'context-recall': new Set(['context', 'groundTruth']),
-  factuality: FACTUALITY_VARS,
-  'llm-rubric': OUTPUT_RUBRIC_VARS,
-  'model-graded-closedqa': new Set(['input', 'criteria', 'completion']),
-  'model-graded-factuality': FACTUALITY_VARS,
-  'search-rubric': OUTPUT_RUBRIC_VARS,
-  'select-best': new Set(['criteria', 'outputs']),
-  'trajectory:goal-success': new Set(['goal', 'output', 'trajectory']),
-};
-
-/**
- * Projects test variables before they are passed to a model grader.
- *
- * Assertion values are rendered before this projection is applied, so a value
- * that explicitly references a test variable still includes it in the rubric.
- */
-export function getGraderVars(
-  assertion: Assertion,
-  vars: Record<string, VarValue> | undefined,
-): Record<string, VarValue> | undefined {
-  if (assertion.graderVars === undefined) {
-    return vars;
-  }
-
-  if (!vars) {
-    return {};
-  }
-
-  const baseType = (
-    assertion.type.startsWith('not-') ? assertion.type.slice('not-'.length) : assertion.type
-  ) as AssertionType;
-  const builtins = GRADER_BUILTIN_VARS[baseType];
-  return Object.fromEntries(
-    assertion.graderVars
-      .filter((name) => !builtins?.has(name) && Object.prototype.hasOwnProperty.call(vars, name))
-      .map((name) => [name, vars[name]]),
-  );
-}
-
 /**
  * Schema for validating individual assertions (regular or assert-set).
  * Used for runtime validation of user-provided config.

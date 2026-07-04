@@ -31,7 +31,6 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
-  getGraderVars,
   type TraceData,
   type VarValue,
 } from '../types/index';
@@ -98,7 +97,13 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  getGraderVars,
+  loadFromJavaScriptFile,
+  processFileReference,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
