@@ -221,6 +221,16 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 32 + 100 * 64) / 1e6, 6);
   });
 
+  it('should calculate cost correctly with audio tokens for gpt-audio (repriced to $32/$64)', () => {
+    const cost = calculateOpenAICost('gpt-audio', {}, 1000, 500, 200, 100);
+    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 32 + 100 * 64) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for the chat-latest alias', () => {
+    const cost = calculateOpenAICost('chat-latest', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 5 + 500 * 30) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-audio-mini-2025-12-15', () => {
     const cost = calculateOpenAICost('gpt-audio-mini-2025-12-15', {}, 1000, 500, 200, 100);
     expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6, 6);
@@ -284,6 +294,15 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for gpt-5.5', () => {
     const cost = calculateOpenAICost('gpt-5.5', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 5 + 500 * 30) / 1e6, 6);
+  });
+
+  it.each([
+    ['gpt-5.6-sol', 5, 30],
+    ['gpt-5.6-terra', 2.5, 15],
+    ['gpt-5.6-luna', 1, 6],
+  ])('should calculate cost correctly for %s', (model, inputRate, outputRate) => {
+    const cost = calculateOpenAICost(model, {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * inputRate + 500 * outputRate) / 1e6, 6);
   });
 
   it('should calculate long-context cost correctly for gpt-5.5', () => {
@@ -386,6 +405,13 @@ describe('calculateOpenAICost', () => {
       (1000 * 30 + 500 * 180) / 1e6,
       6,
     );
+  });
+
+  it('should recognize GPT-5.6 preview models as Responses-only', () => {
+    for (const model of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
+      expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    }
   });
 
   it('should keep GPT-5.4 and GPT-5.5 Pro out of Chat Completions routing', () => {

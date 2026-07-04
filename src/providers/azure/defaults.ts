@@ -44,69 +44,124 @@ export const AZURE_VIDEO_DURATIONS = [5, 10, 15, 20] as const;
  */
 export const AZURE_SORA_COST_PER_SECOND = 0.1;
 
+/**
+ * Prompt-token count above which GPT-5.x models switch to their long-context
+ * pricing tier. Matches OpenAI's own threshold (see `GPT_5_LONG_CONTEXT_THRESHOLD`
+ * in `src/providers/openai/util.ts`).
+ */
+const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+
 export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // GPT-5 Series (Latest Flagship)
-  // Note: Pricing is provisional/estimated based on relative model capabilities
+  // Global Standard rates verified against the Azure Retail Prices API (prices.azure.com, eastus2)
   // =============================================================================
   {
     id: 'gpt-5',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-2025-08-07',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-pro',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 15 / 1000000, output: 120 / 1000000 },
   },
   {
     id: 'gpt-5-pro-2025-10-06',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 15 / 1000000, output: 120 / 1000000 },
   },
   {
     id: 'gpt-5.4',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 15 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-2026-03-05',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 15 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-pro',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 30 / 1000000,
+      output: 180 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-pro-2026-03-05',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 30 / 1000000,
+      output: 180 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-mini',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.75 / 1000000, output: 4.5 / 1000000 },
   },
   {
     id: 'gpt-5.4-mini-2026-03-17',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.75 / 1000000, output: 4.5 / 1000000 },
   },
   {
     id: 'gpt-5.4-nano',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    cost: { input: 0.2 / 1000000, output: 1.25 / 1000000 },
   },
   {
     id: 'gpt-5.4-nano-2026-03-17',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    cost: { input: 0.2 / 1000000, output: 1.25 / 1000000 },
   },
   // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
-  // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 uses the short-context
-  // Global Standard tier (long-context is 10/45). gpt-5.2/5.3 chat and codex share 1.75/14.
+  // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 long-context is 10/45
+  // above the threshold. gpt-5.2/5.3 chat and codex share 1.75/14.
   {
     id: 'gpt-5.5',
-    cost: { input: 5 / 1000000, output: 30 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.5-2026-04-23',
-    cost: { input: 5 / 1000000, output: 30 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.2',
@@ -138,76 +193,76 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-5-mini',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
   {
     id: 'gpt-5-mini-2025-08-07',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
   {
     id: 'gpt-5-nano',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    cost: { input: 0.05 / 1000000, output: 0.4 / 1000000 },
   },
   {
     id: 'gpt-5-nano-2025-08-07',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    cost: { input: 0.05 / 1000000, output: 0.4 / 1000000 },
   },
   {
     id: 'gpt-5-chat',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-chat-2025-08-07',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-chat-2025-10-03',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-codex',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-codex-2025-09-15',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
 
   // =============================================================================
   // GPT-5.1 Series (Newest)
-  // Note: Pricing is provisional/estimated based on relative model capabilities
+  // Global Standard rates verified against the Azure Retail Prices API (prices.azure.com, eastus2)
   // =============================================================================
   {
     id: 'gpt-5.1',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-2025-11-13',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-chat',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-chat-2025-11-13',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex-2025-11-13',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex-mini',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex-mini-2025-11-13',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
 
   // =============================================================================
@@ -251,11 +306,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'o3',
-    cost: { input: 10 / 1000000, output: 40 / 1000000 },
+    cost: { input: 2 / 1000000, output: 8 / 1000000 },
   },
   {
     id: 'o3-2025-04-16',
-    cost: { input: 10 / 1000000, output: 40 / 1000000 },
+    cost: { input: 2 / 1000000, output: 8 / 1000000 },
   },
   {
     id: 'o3-pro',
@@ -375,11 +430,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-realtime',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 4 / 1000000, output: 16 / 1000000 },
   },
   {
     id: 'gpt-realtime-2025-08-28',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 4 / 1000000, output: 16 / 1000000 },
   },
   {
     id: 'gpt-realtime-mini',
@@ -399,11 +454,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-audio-mini',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
   },
   {
     id: 'gpt-audio-mini-2025-10-06',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
   },
 
   // =============================================================================
@@ -419,11 +474,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-4o-mini-transcribe',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 5 / 1000000 },
   },
   {
     id: 'gpt-4o-mini-transcribe-2025-03-20',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 5 / 1000000 },
   },
   {
     id: 'gpt-4o-transcribe-diarize',
@@ -435,11 +490,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-4o-mini-tts',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 0.6 / 1000000, output: 12 / 1000000 },
   },
   {
     id: 'gpt-4o-mini-tts-2025-03-20',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 0.6 / 1000000, output: 12 / 1000000 },
   },
 
   // =============================================================================
@@ -597,6 +652,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'claude-opus-4-7',
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
+  },
+  {
+    id: 'claude-sonnet-5',
+    cost: { input: 3 / 1000000, output: 15 / 1000000 },
   },
   {
     id: 'claude-sonnet-4-6',
@@ -769,7 +828,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'grok-code-fast-1',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 0.2 / 1000000, output: 1.5 / 1000000 },
   },
   // Newer Grok on Azure — Global Standard from the Azure Retail Prices API (prices.azure.com).
   // (grok-4-20 is intentionally omitted: its catalog id maps ambiguously to either the "Grok 4.2"

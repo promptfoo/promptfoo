@@ -69,6 +69,15 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 15 / 1e6,
     },
   })),
+  // `chat-latest` is the bare alias for the latest Instant model used in ChatGPT
+  // (the pricing page's "Specialized models › ChatGPT" row).
+  ...['chat-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+    },
+  })),
   ...['gpt-4.1', 'gpt-4.1-2025-04-14'].map((model) => ({
     id: model,
     cost: {
@@ -383,24 +392,15 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
     },
   })),
   // gpt-audio models
-  ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
+  ...['gpt-audio', 'gpt-audio-2025-08-28', 'gpt-audio-1.5'].map((model) => ({
     id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  })),
-  {
-    id: 'gpt-audio-1.5',
     cost: {
       input: 2.5 / 1e6,
       output: 10 / 1e6,
       audioInput: 32 / 1e6,
       audioOutput: 64 / 1e6,
     },
-  },
+  })),
   ...['gpt-audio-mini', 'gpt-audio-mini-2025-12-15', 'gpt-audio-mini-2025-10-06'].map((model) => ({
     id: model,
     cost: {
@@ -413,6 +413,28 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
 ];
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
+  // GPT-5.6 limited-preview models
+  {
+    id: 'gpt-5.6-sol',
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-5.6-terra',
+    cost: {
+      input: 2.5 / 1e6,
+      output: 15 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    cost: {
+      input: 1 / 1e6,
+      output: 6 / 1e6,
+    },
+  },
   ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
     id: model,
     cost: {
