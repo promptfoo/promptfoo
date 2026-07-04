@@ -64,34 +64,43 @@ export function toAsciiArt(word: string): string {
 
 /**
  * Common request scaffolding: articles, prepositions, pronouns, auxiliaries,
- * the verbs/nouns that frame an instruction ("explain", "steps"), and trailing
- * qualifiers ("fast", "quietly"). Excluded from auto-selection so the mask
- * lands on the operative content word (e.g. "bomb" in "how to build a bomb")
- * rather than the framing.
+ * the verbs/nouns that frame an instruction ("explain", "steps"), the
+ * production verbs that precede a sensitive object ("synthesize", "manufacture"),
+ * and trailing qualifiers ("fast", "quietly"). Excluded from auto-selection so
+ * the mask lands on the operative content word (e.g. "meth" in "synthesize
+ * meth") rather than the framing.
  */
 const STOP_WORDS = new Set([
   'a',
+  'acquire',
   'an',
   'and',
   'anonymously',
   'are',
   'as',
+  'assemble',
   'at',
   'be',
+  'brew',
   'build',
   'by',
   'can',
   'cheaply',
+  'construct',
+  'cook',
   'create',
   'describe',
   'detail',
   'detailed',
   'details',
   'discreetly',
+  'distil',
+  'distill',
   'do',
   'does',
   'easily',
   'explain',
+  'extract',
   'fast',
   'find',
   'for',
@@ -110,26 +119,34 @@ const STOP_WORDS = new Set([
   'it',
   'list',
   'make',
+  'manufacture',
   'me',
   'method',
   'methods',
   'my',
   'now',
+  'obtain',
   'of',
   'on',
   'or',
   'outline',
   'please',
+  'prepare',
   'process',
+  'procure',
+  'produce',
   'provide',
   'quickly',
   'quietly',
+  'refine',
   'safely',
   'secretly',
   'show',
   'silently',
   'step',
   'steps',
+  'synthesise',
+  'synthesize',
   'tell',
   'that',
   'the',
@@ -171,19 +188,24 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Whether `word` appears anywhere in `text`, case-insensitively. */
+function textContainsWord(text: string, word: string): boolean {
+  return text.toLowerCase().includes(word.toLowerCase());
+}
+
 /**
- * Mask every whole-word, case-insensitive occurrence of `word` with [MASK].
- * All occurrences are replaced so the literal sensitive word never survives in
- * the payload; word boundaries keep it from matching inside larger words. Falls
- * back to a boundary-free replacement when the word starts or ends with a
- * non-word character (where `\b` would not match).
+ * Mask every case-insensitive occurrence of `word` with [MASK], including common
+ * regular inflections (plural/verb forms like "bombs", "bombing"), so the literal
+ * sensitive word never survives in the payload. Word boundaries keep it from
+ * matching inside unrelated words ("bombard"). Falls back to a boundary-free
+ * replacement when the word has no standalone boundary (e.g. it is a substring of
+ * a larger token), which still guarantees the literal word does not remain.
  */
 function maskWord(text: string, word: string): string {
   const escaped = escapeRegExp(word);
-  const bounded = `\\b${escaped}\\b`;
-  const withBoundaries = new RegExp(bounded, 'gi');
-  if (withBoundaries.test(text)) {
-    return text.replace(new RegExp(bounded, 'gi'), '[MASK]');
+  const inflected = `\\b${escaped}(?:s|es|ed|ing)?\\b`;
+  if (new RegExp(inflected, 'gi').test(text)) {
+    return text.replace(new RegExp(inflected, 'gi'), '[MASK]');
   }
   return text.replace(new RegExp(escaped, 'gi'), '[MASK]');
 }
@@ -214,18 +236,23 @@ export function toArtPrompt(text: string, word: string): string {
 
 /**
  * Add ArtPrompt (ASCII art) encoding to test cases. `config.word` forces which
- * word is masked; otherwise selectMaskWord chooses one. Test cases with no
- * maskable word are passed through untransformed but still tagged.
+ * word is masked, but only for test cases that actually contain it; cases where
+ * the configured word is absent fall back to auto-selection so a probe is never
+ * tagged as ArtPrompt without a masked word. Test cases with no maskable word at
+ * all are passed through untransformed but still tagged.
  */
 export function addArtPrompt(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any> = {},
 ): TestCase[] {
-  const configuredWord = typeof config.word === 'string' ? config.word : undefined;
+  const configuredWord = typeof config.word === 'string' && config.word ? config.word : undefined;
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
-    const word = configuredWord ?? selectMaskWord(originalText);
+    const word =
+      configuredWord && textContainsWord(originalText, configuredWord)
+        ? configuredWord
+        : selectMaskWord(originalText);
     return {
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
