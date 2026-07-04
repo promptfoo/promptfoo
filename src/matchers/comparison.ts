@@ -1,6 +1,5 @@
 import { SELECT_BEST_PROMPT } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { ResultFailureReason } from '../types/index';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
@@ -51,6 +50,7 @@ export function isMetricSelectorAssertionType(
 
 const isValidMetric = (value: number | undefined) =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0;
+const RESULT_FAILURE_REASON_ERROR = 2;
 
 function formatPromptIndexes(indexes: number[]): string {
   const shown = indexes.slice(0, 20);
@@ -87,7 +87,7 @@ export async function selectMetric(
       : undefined;
   const onlyPassing = configuredOnlyPassing ?? definition.defaultOnlyPassing;
   const eligible = results.flatMap((result, index) =>
-    result.failureReason !== ResultFailureReason.ERROR &&
+    result.failureReason !== RESULT_FAILURE_REASON_ERROR &&
     result.response &&
     (!onlyPassing || result.success)
       ? [index]
@@ -99,7 +99,9 @@ export async function selectMetric(
       onlyPassing &&
       results.some(
         (result) =>
-          result.failureReason !== ResultFailureReason.ERROR && result.response && !result.success,
+          result.failureReason !== RESULT_FAILURE_REASON_ERROR &&
+          result.response &&
+          !result.success,
       )
     ) {
       return failAll(
@@ -136,7 +138,7 @@ export async function selectMetric(
   }
 
   return results.map((_result, index) => {
-    if (results[index].failureReason === ResultFailureReason.ERROR || !results[index].response) {
+    if (results[index].failureReason === RESULT_FAILURE_REASON_ERROR || !results[index].response) {
       return {
         pass: false,
         score: 0,
