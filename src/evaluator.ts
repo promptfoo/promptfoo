@@ -1909,15 +1909,33 @@ function mergeSelectBestGradingResult(
 function mergeDeterministicComparisonGradingResult(
   result: EvaluationStoreResult,
   gradingResult: GradingResult,
+  comparisonAssertionKey?: string,
+  allowLegacyTypeMatch = true,
 ): boolean {
   const assertionType = gradingResult.assertion?.type;
   const allComponentResults = result.gradingResult?.componentResults || [];
-  const alreadyFinalized = allComponentResults.some(
-    (component) => component.assertion?.type === assertionType,
-  );
+  const matchesComparisonAssertion = (component: GradingResult) => {
+    const componentKey = component.metadata?.comparisonAssertionKey;
+    if (comparisonAssertionKey) {
+      return (
+        componentKey === comparisonAssertionKey ||
+        (allowLegacyTypeMatch &&
+          componentKey === undefined &&
+          component.assertion?.type === assertionType)
+      );
+    }
+    return component.assertion?.type === assertionType;
+  };
+  const alreadyFinalized = allComponentResults.some(matchesComparisonAssertion);
   const existingComponentResults = allComponentResults.filter(
-    (component) => component.assertion?.type !== assertionType,
+    (component) => !matchesComparisonAssertion(component),
   );
+  const keyedGradingResult = comparisonAssertionKey
+    ? {
+        ...gradingResult,
+        metadata: { ...gradingResult.metadata, comparisonAssertionKey },
+      }
+    : gradingResult;
   const existingGradingResult = result.gradingResult;
   const comparisonPassed = gradingResult.pass;
   const previousPass = existingGradingResult?.pass ?? result.success;
@@ -1936,13 +1954,13 @@ function mergeDeterministicComparisonGradingResult(
       !comparisonPassed && previousPass
         ? gradingResult.reason
         : (existingGradingResult?.reason ?? ''),
-    componentResults: [...existingComponentResults, gradingResult],
+    componentResults: [...existingComponentResults, keyedGradingResult],
     namedScores: {
       ...(existingGradingResult?.namedScores || {}),
       ...gradingResult.namedScores,
     },
     tokensUsed: existingGradingResult?.tokensUsed || gradingResult.tokensUsed,
-    assertion: gradingResult.assertion,
+    assertion: keyedGradingResult.assertion,
   };
 
   result.success = nextPass;
@@ -4043,29 +4061,37 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         continue;
       }
 
-      const assertions = results[0].testCase.assert?.filter((assertion): assertion is Assertion =>
-        isMetricSelectorAssertionType(assertion.type),
-      );
+      const assertions = results[0].testCase.assert
+        ?.map((assertion, assertionIndex) => ({ assertion, assertionIndex }))
+        .filter((entry): entry is { assertion: Assertion; assertionIndex: number } =>
+          isMetricSelectorAssertionType(entry.assertion.type),
+        );
       if (!assertions?.length) {
         continue;
       }
       if (assertions.length > 1) {
         logger.warn(
           `Test index ${testIdx} combines metric selectors; comparison verdicts are applied with AND semantics`,
-          { selectors: assertions.map((assertion) => assertion.type) },
+          { selectors: assertions.map(({ assertion }) => assertion.type) },
         );
+      }
+
+      const assertionTypeCounts = new Map<string, number>();
+      for (const { assertion } of assertions) {
+        assertionTypeCounts.set(assertion.type, (assertionTypeCounts.get(assertion.type) ?? 0) + 1);
       }
 
       // Calculate all selectors before applying any so they share the same eligibility state.
       const pending = [];
-      for (const assertion of assertions) {
+      for (const { assertion, assertionIndex } of assertions) {
         pending.push({
           assertion,
+          assertionIndex,
           gradingResults: await selectMetric(results, assertion),
         });
       }
 
-      for (const { assertion, gradingResults } of pending) {
+      for (const { assertion, assertionIndex, gradingResults } of pending) {
         compareCount++;
         if (isWebUI) {
           logger.info(`Running ${assertion.type} comparison for test #${testIdx}...`);
@@ -4075,6 +4101,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           const result = results[index];
           await this.applyDeterministicComparisonGradingResult({
             gradingResult: { ...gradingResults[index], assertion },
+            comparisonAssertionKey: `${testIdx}:${assertionIndex}`,
+            allowLegacyTypeMatch: assertionTypeCounts.get(assertion.type) === 1,
             metrics: prompts[result.promptIdx]?.metrics,
             result,
           });
@@ -4397,17 +4425,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async applyDeterministicComparisonGradingResult({
+    allowLegacyTypeMatch,
+    comparisonAssertionKey,
     gradingResult,
     metrics,
     result,
   }: {
+    allowLegacyTypeMatch?: boolean;
+    comparisonAssertionKey?: string;
     gradingResult: GradingResult;
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
     const wasSuccess = result.success;
     const wasScore = result.score;
-    const alreadyFinalized = mergeDeterministicComparisonGradingResult(result, gradingResult);
+    const alreadyFinalized = mergeDeterministicComparisonGradingResult(
+      result,
+      gradingResult,
+      comparisonAssertionKey,
+      allowLegacyTypeMatch,
+    );
     if (alreadyFinalized) {
       this.trackFinalJsonlResult(result);
       if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {

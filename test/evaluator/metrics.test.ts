@@ -538,6 +538,52 @@ describeEvaluator('evaluator metrics and scoring', () => {
     );
   });
 
+  it('should finalize duplicate selector types as distinct assertion instances', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('duplicate-cost-selector-provider'),
+      callApi: vi.fn(async (prompt: string) =>
+        prompt.includes('Cheap')
+          ? { output: 'incorrect', cost: 0.001 }
+          : { output: 'hello world', cost: 0.01 },
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Cheap prompt'), toPrompt('Valid prompt')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'select-lowest-cost', value: { onlyPassing: false } },
+            { type: 'select-lowest-cost', value: { onlyPassing: true } },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = (await evalRecord.toEvaluateSummary()).results.sort(
+      (a, b) => a.promptIdx - b.promptIdx,
+    );
+
+    for (const result of results) {
+      expect(
+        result.gradingResult?.componentResults?.filter(
+          (component) => component.assertion?.type === 'select-lowest-cost',
+        ),
+      ).toHaveLength(2);
+    }
+    expect(evalRecord.prompts[0]?.metrics).toMatchObject({
+      assertPassCount: 1,
+      assertFailCount: 2,
+    });
+    expect(evalRecord.prompts[1]?.metrics).toMatchObject({
+      assertPassCount: 2,
+      assertFailCount: 1,
+    });
+  });
+
   it('should apply select-lowest-latency to overall pass/fail and stats', async () => {
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('latency-selection-provider'),
