@@ -760,6 +760,9 @@ export const AssertionOrSetSchema = z
   .union([AssertionSetSchema, AssertionSchema])
   .superRefine((assertion, ctx) => {
     if (assertion.type === 'assert-set') {
+      if (!Array.isArray(assertion.assert)) {
+        return;
+      }
       assertion.assert.forEach((nested, index) => {
         if (nested.type === 'select-lowest-cost' || nested.type === 'select-lowest-latency') {
           ctx.addIssue({
