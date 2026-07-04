@@ -68,6 +68,7 @@ const STRATEGY_METADATA: Record<string, StrategyMetadata> = {
   base64: { humanExploitable: true, humanComplexity: 'low' },
   rot13: { humanExploitable: true, humanComplexity: 'low' },
   leetspeak: { humanExploitable: true, humanComplexity: 'low' },
+  artprompt: { humanExploitable: true, humanComplexity: 'low' },
   hex: { humanExploitable: true, humanComplexity: 'low' },
   'ascii-smuggling': { humanExploitable: false, humanComplexity: 'high' },
   multilingual: { humanExploitable: true, humanComplexity: 'low' },
