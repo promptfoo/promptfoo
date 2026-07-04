@@ -2533,6 +2533,7 @@ describe('OpenAI Realtime Provider', () => {
       // tearDown must run so the next turn reconnects.
       expect(provider.persistentConnection).toBeNull();
       expect((provider as any).connectionReady).toBeNull();
+      expect((provider as any).persistentConnectionTurnLogToken).toBeUndefined();
     });
 
     it('rejects the in-flight turn and tears down state when the response times out', async () => {

@@ -1895,6 +1895,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
     this.persistentConnectionLifecycleCleanup?.();
     this.persistentConnectionLifecycleCleanup = null;
+    this.persistentConnectionTurnLogToken = undefined;
     this.persistentConnection = null;
     this.connectionReady = null;
     // Realtime item IDs are scoped to the socket session. Reusing them after a
