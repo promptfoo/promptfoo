@@ -2492,6 +2492,8 @@ describe('OpenAI Realtime Provider', () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { modalities: ['text'], maintainContext: true },
       });
+      const redactedLogToken = { goatRunId: 'mid-turn-close' };
+      vi.mocked(captureRedactedLogToken).mockReturnValue(redactedLogToken);
 
       const firstWs = {
         on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
@@ -2514,7 +2516,13 @@ describe('OpenAI Realtime Provider', () => {
       // close listener must (a) reject the in-flight turn, (b) clear cached
       // lifecycle state. Pre-fix this listener didn't exist.
       const closeHandlers = mockHandlers.close;
-      expect(closeHandlers.length).toBeGreaterThan(0);
+      expect(closeHandlers.length).toBeGreaterThan(1);
+      vi.mocked(bindRedactedLogToken).mockClear();
+      // EventEmitter invokes the persistent lifecycle listener first. It must
+      // dynamically inherit the active turn token rather than clearing it as
+      // though the socket were idle.
+      closeHandlers[0](1011, Buffer.from('server policy violation'));
+      expect(bindRedactedLogToken).toHaveBeenCalledWith(redactedLogToken, expect.any(Function));
       // The setupMessageHandlers listener is registered AFTER any
       // before-OPEN listeners; pick the last one to fire it.
       const midTurnClose = closeHandlers[closeHandlers.length - 1];

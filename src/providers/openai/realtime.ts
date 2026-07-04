@@ -1,5 +1,9 @@
 import WebSocket from 'ws';
-import logger, { bindRedactedLogToken, captureRedactedLogToken } from '../../logger';
+import logger, {
+  bindRedactedLogToken,
+  captureRedactedLogToken,
+  type RedactedLogToken,
+} from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -202,6 +206,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // socket whose state is still CONNECTING.
   private connectionReady: Promise<void> | null = null;
   private persistentConnectionLifecycleCleanup: (() => void) | null = null;
+  private persistentConnectionTurnLogToken: RedactedLogToken | undefined;
   // Per-provider serialization queue. Concurrent calls on the same provider
   // instance share one socket; the OpenAI Realtime wire shape is not designed
   // to multiplex unrelated turns over a single connection (events for one
@@ -1922,19 +1927,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private installPersistentConnectionLifecycleHandlers(ws: WebSocket): void {
     this.persistentConnectionLifecycleCleanup?.();
 
-    const onIdleError = bindRedactedLogToken(undefined, (error: Error) => {
-      logger.error(`Persistent WebSocket error while idle: ${error}`);
-      if (this.persistentConnection === ws) {
-        this.tearDownPersistentConnection(`idle socket error: ${error.message}`);
-      }
-    });
-    const onIdleClose = bindRedactedLogToken(undefined, (code: number, reason: Buffer) => {
-      const message = formatCloseMessage('Persistent WebSocket closed while idle', code, reason);
-      logger.debug(message);
-      if (this.persistentConnection === ws) {
-        this.tearDownPersistentConnection(`idle socket close: code=${code}`);
-      }
-    });
+    const onIdleError = (error: Error) =>
+      bindRedactedLogToken(this.persistentConnectionTurnLogToken, () => {
+        logger.error(`Persistent WebSocket error while idle: ${error}`);
+        if (this.persistentConnection === ws) {
+          this.tearDownPersistentConnection(`idle socket error: ${error.message}`);
+        }
+      })();
+    const onIdleClose = (code: number, reason: Buffer) =>
+      bindRedactedLogToken(this.persistentConnectionTurnLogToken, () => {
+        const message = formatCloseMessage('Persistent WebSocket closed while idle', code, reason);
+        logger.debug(message);
+        if (this.persistentConnection === ws) {
+          this.tearDownPersistentConnection(`idle socket close: code=${code}`);
+        }
+      })();
 
     ws.on('error', onIdleError);
     ws.on('close', onIdleClose);
@@ -2070,12 +2077,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     reject: (reason: Error) => void,
   ): Promise<void> {
     const redactedLogToken = captureRedactedLogToken();
+    this.persistentConnectionTurnLogToken = redactedLogToken;
     // Reset audio state at the start of each request
     this.resetAudioState();
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     // Snapshot before the await so a concurrent turn cannot mutate it under us.
     const previousItemIdAtTurnStart = this.previousItemId;
-    const realtimeToolConfig = await this.getRealtimeToolConfigWithTimeout();
+    let realtimeToolConfig: Awaited<ReturnType<typeof this.getRealtimeToolConfigWithTimeout>>;
+    try {
+      realtimeToolConfig = await this.getRealtimeToolConfigWithTimeout();
+    } catch (error) {
+      if (this.persistentConnectionTurnLogToken === redactedLogToken) {
+        this.persistentConnectionTurnLogToken = undefined;
+      }
+      throw error;
+    }
 
     const startRequestTimeout = () =>
       setTimeout(() => {
@@ -2472,6 +2488,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         conn.removeListener('message', messageHandler);
         conn.removeListener('error', onSocketError);
         conn.removeListener('close', onSocketClose);
+        if (this.persistentConnectionTurnLogToken === redactedLogToken) {
+          this.persistentConnectionTurnLogToken = undefined;
+        }
       };
     }
 
@@ -2499,6 +2518,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       clearRequestTimeout();
       if (cleanupMessageHandler) {
         cleanupMessageHandler();
+      }
+      if (this.persistentConnectionTurnLogToken === redactedLogToken) {
+        this.persistentConnectionTurnLogToken = undefined;
       }
       throw error;
     }
