@@ -136,6 +136,30 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         mockCallApiContext,
       );
     });
+
+    it('should project grader vars before calling matchesFactuality', async () => {
+      const mockResult = { pass: true, score: 1, reason: 'test' };
+      vi.mocked(matchesFactuality).mockResolvedValue(mockResult);
+
+      const params = {
+        ...baseParams,
+        assertion: { type: 'factuality' as const, graderVars: ['audience'] },
+        baseType: 'factuality' as const,
+        renderedValue: 'expected answer',
+        test: { vars: { audience: 'expert', secret: 'excluded' } },
+      };
+
+      await handleFactuality(params);
+
+      expect(matchesFactuality).toHaveBeenCalledWith(
+        'test prompt',
+        'expected answer',
+        'test output',
+        undefined,
+        { audience: 'expert' },
+        mockCallApiContext,
+      );
+    });
   });
 
   describe('handleModelGradedClosedQa', () => {

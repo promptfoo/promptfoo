@@ -231,7 +231,12 @@ tests:
       - type: trajectory:goal-success
         value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
         provider: openai:gpt-5-mini
+        # Pass no additional test variables to the grader. The goal, output,
+        # and trajectory remain available as built-in inputs.
+        graderVars: []
 ```
+
+Use `graderVars` to limit ambient test variables sent to the `trajectory:goal-success` grader. An empty list sends none; the reserved built-ins `goal`, `output`, and `trajectory` are always supplied. See [Limiting variables sent to graders](/docs/configuration/expected-outputs/model-graded/#limiting-variables-sent-to-graders).
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 

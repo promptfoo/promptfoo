@@ -70,7 +70,9 @@ Reserved names depend on the assertion type:
 
 The same protection applies to `not-` variants such as `not-llm-rubric`.
 
-`graderVars` does not remove values already inserted into an assertion's `value`. For example, a rubric containing `{{foo}}` still includes the value of `foo` after variable substitution. To keep a variable out of the grader request, omit it from both `graderVars` and `value`.
+For assertions dispatched through `runAssertion`, `graderVars` does not remove values already inserted into an assertion's `value`. For example, a rubric containing `{{foo}}` still includes the value of `foo` after variable substitution. `select-best` does not substitute test variables into its `value`.
+
+`graderVars` filters only the ambient variable map. It does not remove values used to construct built-in grader inputs such as the evaluated prompt, output, question, context, messages, goal, or trajectory. To keep a value out of the grader request, omit it from `graderVars`, assertion values, and built-in inputs.
 
 A custom `rubricPrompt` is rendered with the projected variables. References to variables excluded by `graderVars` render as empty strings. Assertion types not listed below do not use `graderVars`.
 
