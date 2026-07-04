@@ -1,9 +1,7 @@
 import { matchesAgentRubric } from '../matchers/agent';
 import { isGraderFailure } from '../matchers/llmGrading';
+import { type AssertionParams, type GradingResult, getGraderVars } from '../types/index';
 import invariant from '../util/invariant';
-import { getGraderVars } from './utils';
-
-import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleAgentRubric = async ({
   assertion,
