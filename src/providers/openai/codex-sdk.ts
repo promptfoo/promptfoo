@@ -30,7 +30,7 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
-import { checkCodexCliCompatibility } from './codexCliCompatibility';
+import { CodexCliCompatibilityError, checkCodexCliCompatibility } from './codexCliCompatibility';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -2230,6 +2230,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       if (isAbort) {
         logger.warn('OpenAI Codex SDK call aborted');
         return { error: 'OpenAI Codex SDK call aborted' };
+      }
+
+      if (error instanceof CodexCliCompatibilityError) {
+        return { error: `Error calling OpenAI Codex SDK: ${error.message}` };
       }
 
       // Safely extract error message - error may not be an Error object

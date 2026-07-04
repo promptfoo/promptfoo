@@ -7,6 +7,7 @@ import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
+import { CodexCliCompatibilityError } from '../../src/providers/openai/codexCliCompatibility';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
@@ -54,7 +55,8 @@ vi.mock('../../src/esm', async (importOriginal) => {
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 
-vi.mock('../../src/providers/openai/codexCliCompatibility', () => ({
+vi.mock('../../src/providers/openai/codexCliCompatibility', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/openai/codexCliCompatibility')>()),
   checkCodexCliCompatibility: mockCompatibilityPreflight,
 }));
 
@@ -2492,8 +2494,8 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should reject an incompatible SDK and CLI before starting a Codex turn', async () => {
         mockCompatibilityPreflight.mockRejectedValue(
-          new Error(
-            '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+          new CodexCliCompatibilityError(
+            '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/429/codex reports 0.429.0',
           ),
         );
 
@@ -2505,8 +2507,10 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain(
-          '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+          '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/429/codex reports 0.429.0',
         );
+        expect(result.metadata?.rateLimitKind).toBeUndefined();
+        expect(result.metadata?.http).toBeUndefined();
         expect(MockCodex).not.toHaveBeenCalled();
         expect(mockStartThread).not.toHaveBeenCalled();
         expect(mockResumeThread).not.toHaveBeenCalled();

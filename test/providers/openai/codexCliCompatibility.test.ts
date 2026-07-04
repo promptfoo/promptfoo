@@ -58,7 +58,7 @@ describe('checkCodexCliCompatibility', () => {
     );
   });
 
-  it('caches successful checks', async () => {
+  it('rechecks successful probes on each call', async () => {
     mockVersion('codex-cli 0.130.0');
     const options = {
       sdkEntryPoint,
@@ -72,7 +72,7 @@ describe('checkCodexCliCompatibility', () => {
       env: { ...options.env },
     });
 
-    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
   });
 
   it('rechecks when the probe environment changes', async () => {
@@ -105,6 +105,22 @@ describe('checkCodexCliCompatibility', () => {
     expect(mockExecFile).toHaveBeenCalledTimes(2);
   });
 
+  it('rechecks a PATH-resolved command after replacement', async () => {
+    const options = {
+      sdkEntryPoint,
+      codexPathOverride: 'codex-custom',
+      env: { PATH: '/custom/bin' },
+    };
+    mockVersion('codex-cli 0.130.0');
+    await checkCodexCliCompatibility(options);
+
+    mockVersion('codex-cli 0.131.0');
+    await expect(checkCodexCliCompatibility(options)).rejects.toThrow(
+      'codex-custom reports 0.131.0',
+    );
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects the r7 SDK and CLI mismatch', async () => {
     mockVersion('codex-cli 0.142.3');
 
@@ -116,6 +132,20 @@ describe('checkCodexCliCompatibility', () => {
       }),
     ).rejects.toThrow(
       '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.142.3',
+    );
+  });
+
+  it('rejects a matching precedence version with different build metadata', async () => {
+    mockVersion('codex-cli 0.130.0+fork');
+
+    await expect(
+      checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride: '/custom/codex',
+        env: {},
+      }),
+    ).rejects.toThrow(
+      '@openai/codex-sdk supports Codex CLI/event schema 0.130.0, but /custom/codex reports 0.130.0+fork',
     );
   });
 

@@ -801,7 +801,7 @@ providers:
       codex_path_override: /custom/path/to/codex
 ```
 
-Before starting a turn, promptfoo runs the custom binary once as `exec --experimental-json --version` with a 10-second hard timeout. The probe receives the same prepared `cli_env` and inherited process environment as the real SDK spawn, except API credentials and per-turn tracing identifiers are removed. Its reported version must exactly match the CLI version pinned by `node_modules/@openai/codex-sdk/package.json` in `dependencies["@openai/codex"]`.
+Before each turn, promptfoo runs the custom binary as `exec --experimental-json --version` with a 10-second hard timeout. The probe receives the same prepared `cli_env` and inherited process environment as the real SDK spawn, except API credentials and per-turn tracing identifiers are removed. Its reported version must exactly match the CLI version pinned by `node_modules/@openai/codex-sdk/package.json` in `dependencies["@openai/codex"]`.
 
 If you intentionally use a schema-compatible fork or a different CLI version, you can accept that compatibility risk explicitly:
 
@@ -819,7 +819,7 @@ Compatibility failures report one of these conditions before a Codex turn starts
 - the custom binary cannot run JSON event mode within the timeout; or
 - the custom binary reports a different or invalid version.
 
-The successful check is cached for the binary path, file size and modification time, SDK entry point, and probe environment. Replacing the binary or changing `cli_env` triggers a fresh check.
+Successful checks are not cached across turns. This avoids retaining identifiers derived from inherited environment secrets and ensures PATH-resolved wrappers or replaced binaries are rechecked.
 
 ## Caching Behavior
 

@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -11,8 +10,11 @@ const CODEX_CLI_PACKAGE = '@openai/codex';
 const CODEX_SDK_DOCS_URL = 'https://www.promptfoo.dev/docs/providers/openai-codex-sdk/';
 const CODEX_VERSION_PATTERN =
   /\bcodex-cli(?:-exec)?\s+v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)/;
-const compatibilityChecks = new Map<string, Promise<void>>();
 const execFileAsync = promisify(execFile);
+
+export class CodexCliCompatibilityError extends Error {
+  override name = 'CodexCliCompatibilityError';
+}
 
 interface CodexSdkManifest {
   name?: string;
@@ -57,7 +59,7 @@ async function runCompatibilityCheck(options: CompatibilityOptions): Promise<voi
     supportedVersion = getSupportedCliVersion(options.sdkEntryPoint);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
+    throw new CodexCliCompatibilityError(
       `Could not verify Codex CLI compatibility for ${options.codexPathOverride}: ${message}. For more information, see: ${CODEX_SDK_DOCS_URL}`,
     );
   }
@@ -78,51 +80,22 @@ async function runCompatibilityCheck(options: CompatibilityOptions): Promise<voi
     output = `${stdout}\n${stderr}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
+    throw new CodexCliCompatibilityError(
       `Could not verify Codex CLI compatibility for ${options.codexPathOverride}: ${message}. For more information, see: ${CODEX_SDK_DOCS_URL}`,
     );
   }
 
   const version = CODEX_VERSION_PATTERN.exec(output)?.[1];
-  if (!version || !semver.valid(version) || !semver.eq(version, supportedVersion)) {
-    throw new Error(
+  if (!version || !semver.valid(version) || semver.compareBuild(version, supportedVersion) !== 0) {
+    throw new CodexCliCompatibilityError(
       `${CODEX_SDK_PACKAGE} supports Codex CLI/event schema ${supportedVersion}, but ${options.codexPathOverride} reports ${version ?? 'an unknown version'}. For more information, see: ${CODEX_SDK_DOCS_URL}`,
     );
   }
 }
 
-function getBinaryIdentity(codexPathOverride: string): string {
-  try {
-    const stats = fs.statSync(codexPathOverride);
-    return `${stats.size}:${stats.mtimeMs}`;
-  } catch {
-    // The probe below will report an actionable error if the binary is unavailable.
-    return 'unavailable';
-  }
-}
-
 export function checkCodexCliCompatibility(options: CompatibilityOptions): Promise<void> {
-  const envIdentity = crypto
-    .createHash('sha256')
-    .update(
-      JSON.stringify(
-        Object.entries(options.env).sort(([left], [right]) => left.localeCompare(right)),
-      ),
-    )
-    .digest('hex');
-  const cacheKey = [
-    options.sdkEntryPoint,
-    options.codexPathOverride,
-    getBinaryIdentity(options.codexPathOverride),
-    envIdentity,
-  ].join('\0');
-  let check = compatibilityChecks.get(cacheKey);
-  if (!check) {
-    check = runCompatibilityCheck(options).catch((error) => {
-      compatibilityChecks.delete(cacheKey);
-      throw error;
-    });
-    compatibilityChecks.set(cacheKey, check);
-  }
-  return check;
+  // The environment may contain arbitrary credentials. Do not derive a
+  // process-lifetime cache key from it; probing each turn also detects PATH
+  // replacements and wrapper changes reliably.
+  return runCompatibilityCheck(options);
 }
