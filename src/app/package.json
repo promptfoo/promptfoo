@@ -55,7 +55,7 @@
     "csv-stringify": "^6.7.0",
     "diff": "^9.0.0",
     "idb-keyval": "^6.2.2",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^5.0.0",
     "jsdom": "^29.0.0",
     "lucide-react": "^1.0.0",
     "postcss": "^8.5.10",

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
@@ -17,12 +16,13 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
+import { loadYaml } from '../src/util/yamlLoad';
 import { mockProcessEnv } from './util/utils';
 
 import type { ProviderOptions } from '../src/types/index';
 
 vi.mock('fs');
-vi.mock('js-yaml');
+vi.mock('../src/util/yamlLoad');
 vi.mock('../src/util/fetch/index.ts');
 vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
@@ -86,14 +86,14 @@ describe('loadApiProvider', () => {
       },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const provider = await loadApiProvider('file://test.yaml', {
       basePath: '/test',
     });
 
     expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.yaml'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(loadYaml).toHaveBeenCalledWith('yaml content');
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
@@ -106,14 +106,14 @@ describe('loadApiProvider', () => {
       },
     };
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContent));
-    vi.mocked(yaml.load).mockReturnValue(jsonContent);
+    vi.mocked(loadYaml).mockReturnValue(jsonContent);
 
     const provider = await loadApiProvider('file://test.json', {
       basePath: '/test',
     });
 
     expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.json'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent));
+    expect(loadYaml).toHaveBeenCalledWith(JSON.stringify(jsonContent));
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
@@ -138,7 +138,7 @@ describe('loadApiProvider', () => {
     };
 
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContentWithRefs);
+    vi.mocked(loadYaml).mockReturnValue(yamlContentWithRefs);
     vi.mocked(fileUtil.maybeLoadConfigFromExternalFile).mockReturnValue(resolvedContent);
 
     const _provider = await loadApiProvider('file://provider.yaml', {
@@ -174,7 +174,7 @@ describe('loadApiProvider', () => {
     };
 
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
-    vi.mocked(yaml.load).mockReturnValue(jsonContentWithRefs);
+    vi.mocked(loadYaml).mockReturnValue(jsonContentWithRefs);
     vi.mocked(fileUtil.maybeLoadConfigFromExternalFile).mockReturnValue(resolvedContent);
 
     const _provider = await loadApiProvider('file://provider.json', {
@@ -855,13 +855,13 @@ describe('loadApiProvider', () => {
 
   it('should handle invalid yaml content', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue('invalid: yaml: content:');
-    vi.mocked(yaml.load).mockReturnValue(null);
+    vi.mocked(loadYaml).mockReturnValue(null);
     await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('Provider config');
   });
 
   it('should handle yaml config without id', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue('config:\n  key: value');
-    vi.mocked(yaml.load).mockReturnValue({ config: { key: 'value' } });
+    vi.mocked(loadYaml).mockReturnValue({ config: { key: 'value' } });
     await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('must have an id');
   });
 
@@ -919,7 +919,7 @@ describe('loadApiProvider', () => {
       },
     ];
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     await expect(loadApiProvider('file://test.yaml')).rejects.toThrow(
       'Multiple providers found in test.yaml. Use loadApiProviders instead of loadApiProvider.',
@@ -938,7 +938,7 @@ describe('loadApiProvider', () => {
       },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const provider = await loadApiProvider('file://test.yaml', {
       basePath: '/test',
@@ -972,14 +972,14 @@ describe('loadApiProvider', () => {
       },
     ];
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const providers = await loadApiProviders('file://test.yaml');
     expect(providers).toHaveLength(2);
     expect(providers[0]).toBeDefined();
     expect(providers[1]).toBeDefined();
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.yaml'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(loadYaml).toHaveBeenCalledWith('yaml content');
   });
 
   it('should handle absolute file paths', async () => {
@@ -988,7 +988,7 @@ describe('loadApiProvider', () => {
       config: { apiKey: 'test-key' },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const absolutePath = path.resolve('/absolute/path/to/providers.yaml');
     const provider = await loadApiProvider(`file://${absolutePath}`);
@@ -1007,7 +1007,7 @@ describe('loadApiProvider', () => {
       },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const provider = await loadApiProvider('file://test.yaml');
     expect(provider).toBeDefined();
@@ -1150,7 +1150,7 @@ describe('loadApiProviders', () => {
       config: { apiKey: 'test-key' },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const relativePath = 'relative/path/to/providers.yaml';
     const providers = await loadApiProviders(`file://${relativePath}`, {
@@ -1170,14 +1170,14 @@ describe('loadApiProviders', () => {
       config: { apiKey: 'test-key' },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const absolutePath = path.resolve('/absolute/path/to/providers.yaml');
     const providers = await loadApiProviders(`file://${absolutePath}`);
 
     expect(providers).toHaveLength(1);
     expect(fs.readFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(loadYaml).toHaveBeenCalledWith('yaml content');
   });
 
   it('should load multiple providers from a file specified in a providers array', async () => {
@@ -1193,7 +1193,7 @@ describe('loadApiProviders', () => {
       },
     ];
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     // Create provider array with a mix of direct provider and file reference
     const providerArray = [
@@ -1213,7 +1213,7 @@ describe('loadApiProviders', () => {
 
     // Verify file was read correctly
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('providers.yaml'), 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(loadYaml).toHaveBeenCalledWith('yaml content');
   });
 
   it('should handle nested arrays of providers from multiple file references', async () => {
@@ -1248,7 +1248,7 @@ describe('loadApiProviders', () => {
     });
 
     // Mock yaml loading based on different file contents
-    vi.mocked(yaml.load).mockImplementation((content) => {
+    vi.mocked(loadYaml).mockImplementation((content) => {
       if (content === 'first file content') {
         return firstFileContent;
       } else if (content === 'second file content') {
@@ -1291,7 +1291,7 @@ describe('loadApiProviders', () => {
       },
     };
     vi.mocked(fs.readFileSync).mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockReturnValue(yamlContent);
+    vi.mocked(loadYaml).mockReturnValue(yamlContent);
 
     const providers = await loadApiProviders('file://test.yaml');
 
