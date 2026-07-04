@@ -479,6 +479,32 @@ describe('TestCaseDialog', () => {
 
       expect(screen.getByRole('status')).toHaveTextContent(announcement);
     });
+
+    it('prioritizes execution and announces its terminal result', () => {
+      const { rerender } = renderWithTheme(
+        <TestCaseDialog {...defaultProps} isGenerating isRunningTest />,
+      );
+
+      expect(screen.getByRole('status')).toHaveTextContent('Running preview against target');
+
+      rerender(
+        <TestCaseDialog
+          {...defaultProps}
+          isGenerating={false}
+          targetResponses={[{ output: 'Done', error: null }]}
+        />,
+      );
+      expect(screen.getByRole('status')).toHaveTextContent('Preview completed');
+
+      rerender(
+        <TestCaseDialog
+          {...defaultProps}
+          isGenerating={false}
+          targetResponses={[{ output: null, error: 'Target failed' }]}
+        />,
+      );
+      expect(screen.getByRole('status')).toHaveTextContent('Preview failed');
+    });
   });
 
   describe('targetResponses output handling', () => {

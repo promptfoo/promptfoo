@@ -66,6 +66,23 @@ interface TestCaseDialogProps {
   allowPluginChange?: boolean;
 }
 
+function getPreviewAnnouncement(
+  isGenerating: boolean,
+  isRunningTest: boolean,
+  latestTargetResponse: TargetResponse | undefined,
+): string {
+  if (isRunningTest) {
+    return 'Running preview against target';
+  }
+  if (isGenerating) {
+    return 'Generating preview';
+  }
+  if (latestTargetResponse) {
+    return latestTargetResponse.error ? 'Preview failed' : 'Preview completed';
+  }
+  return '';
+}
+
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
@@ -147,6 +164,13 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
+
+  const latestTargetResponse = targetResponses[targetResponses.length - 1];
+  const previewAnnouncement = getPreviewAnnouncement(
+    isGenerating,
+    isRunningTest,
+    latestTargetResponse,
+  );
 
   const renderPluginDocumentationLink =
     pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
@@ -268,11 +292,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
         <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
           <div aria-live="polite" className="sr-only" role="status">
-            {isGenerating
-              ? 'Generating preview'
-              : isRunningTest
-                ? 'Running preview against target'
-                : ''}
+            {previewAnnouncement}
           </div>
           <div className="max-h-[50vh] overflow-y-auto">
             <ChatMessages

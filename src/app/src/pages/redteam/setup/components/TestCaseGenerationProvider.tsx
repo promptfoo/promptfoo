@@ -749,17 +749,21 @@ export const TestCaseGenerationProvider: React.FC<{
     // Trigger if we have a new generated test case pending execution.
     // We know it's pending if generated > responses.
     if (generatedTestCases.length > targetResponses.length) {
-      const abortController = new AbortController();
-      testExecutionAbortController.current = abortController;
-
-      if (shouldEvaluateAgainstTarget) {
-        executeTest(abortController);
-      } else {
-        // No target, just finish this turn immediately (only for single turn)
+      if (!shouldEvaluateAgainstTarget) {
+        // A target can be removed while an execution is pending. Clear its loading state
+        // before completing the generated preview without a target.
+        testExecutionAbortController.current?.abort();
+        testExecutionAbortController.current = null;
+        setIsRunningTest(false);
         const testCase = generatedTestCases[generatedTestCases.length - 1];
         onSuccessRef.current?.(testCase);
         setIsGenerating(false);
+        return;
       }
+
+      const abortController = new AbortController();
+      testExecutionAbortController.current = abortController;
+      executeTest(abortController);
 
       return () => abortController.abort();
     }

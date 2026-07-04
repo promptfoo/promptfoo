@@ -452,7 +452,7 @@ describe('TestCaseGenerationProvider', () => {
       const user = userEvent.setup();
       const policyConfig = {
         policy: {
-          id: 'refund-policy',
+          id: 'abcdef123456',
           name: 'Refund Policy',
           text: 'Do not promise refunds without approval.',
         },
@@ -505,10 +505,10 @@ describe('TestCaseGenerationProvider', () => {
     it('should discard a pending preview when switching policies', async () => {
       const user = userEvent.setup();
       const policyA = {
-        policy: { id: 'policy-a', name: 'Policy A', text: 'Follow policy A.' },
+        policy: { id: 'aaaaaa111111', name: 'Policy A', text: 'Follow policy A.' },
       };
       const policyB = {
-        policy: { id: 'policy-b', name: 'Policy B', text: 'Follow policy B.' },
+        policy: { id: 'bbbbbb222222', name: 'Policy B', text: 'Follow policy B.' },
       };
       const pendingRequests = new Map<
         string,
@@ -592,14 +592,14 @@ describe('TestCaseGenerationProvider', () => {
             redTeamConfig={{
               ...MOCK_CONFIG,
               plugins: [
-                { id: 'pii', config: pluginConfig },
-                { id: 'pii', config: { ...pluginConfig } },
+                { id: 'pii:direct', config: pluginConfig },
+                { id: 'pii:direct', config: { ...pluginConfig } },
               ],
             }}
             allowPluginChange
           >
             <TestConsumer
-              testPlugin="pii"
+              testPlugin="pii:direct"
               pluginConfig={{ ...pluginConfig }}
               testStrategy="basic"
               isPluginStatic
@@ -612,13 +612,13 @@ describe('TestCaseGenerationProvider', () => {
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
 
       const dropdown = screen.getByTestId('plugin-dropdown');
-      expect(dropdown).toHaveTextContent('PII Protection Suite (1)');
+      expect(dropdown).toHaveTextContent('PII via Direct Exposure (1)');
 
       await user.click(dropdown);
-      await user.click(screen.getByRole('option', { name: 'PII Protection Suite (2)' }));
+      await user.click(screen.getByRole('option', { name: 'PII via Direct Exposure (2)' }));
 
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
-      expect(dropdown).toHaveTextContent('PII Protection Suite (2)');
+      expect(dropdown).toHaveTextContent('PII via Direct Exposure (2)');
     });
 
     it('should ignore malformed configured plugins when choosing the fallback', async () => {
@@ -634,6 +634,11 @@ describe('TestCaseGenerationProvider', () => {
                 { config: {} } as never,
                 { id: 'policy', config: { policy: '' } },
                 { id: 'policy', config: { policy: {} } } as never,
+                'removed-plugin' as Plugin,
+                {
+                  id: 'policy',
+                  config: { policy: { id: 'not-a-policy-id', text: 'Invalid policy' } },
+                } as never,
               ],
             }}
             allowPluginChange
@@ -842,6 +847,49 @@ describe('TestCaseGenerationProvider', () => {
       // Wait for the target response to be displayed
       await waitFor(() => {
         expect(targetResponseComponent).toHaveTextContent('Simulated target output');
+      });
+    });
+
+    it('should stop announcing execution when the target is removed', async () => {
+      const user = userEvent.setup();
+      let executionSignal: AbortSignal | undefined;
+
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/providers/test') {
+          executionSignal = options?.signal as AbortSignal;
+          return new Promise<Response>(() => {});
+        }
+        return defaultCallApiImplementation(path, options);
+      });
+
+      const target = {
+        id: 'http',
+        config: { url: 'http://localhost:7979', method: 'POST' },
+      };
+      const { rerender } = render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={{ ...MOCK_CONFIG, target }}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => {
+        expect(screen.getByRole('status')).toHaveTextContent('Running preview against target');
+      });
+
+      rerender(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await waitFor(() => {
+        expect(executionSignal?.aborted).toBe(true);
+        expect(screen.getByRole('status')).toHaveTextContent('');
       });
     });
 
