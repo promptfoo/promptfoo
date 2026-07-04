@@ -54,7 +54,12 @@ export interface SanitizedLogContext {
   [key: string]: unknown;
 }
 
-const sensitiveLogScope = new AsyncLocalStorage<Record<string, unknown>>();
+interface SensitiveLogScope {
+  goatRunId: string;
+  active: boolean;
+}
+
+const sensitiveLogScope = new AsyncLocalStorage<SensitiveLogScope>();
 const safeSensitiveLogContexts = new WeakSet<object>();
 
 /**
@@ -62,7 +67,23 @@ const safeSensitiveLogContexts = new WeakSet<object>();
  * serialization, while callers can explicitly retain known-safe metadata diagnostics.
  */
 export function runWithRedactedLogging<T>(goatRunId: string, callback: () => T): T {
-  return sensitiveLogScope.run({ goatRunId }, callback);
+  const scope: SensitiveLogScope = { goatRunId, active: true };
+  let result: T;
+  try {
+    result = sensitiveLogScope.run(scope, callback);
+  } catch (error) {
+    scope.active = false;
+    throw error;
+  }
+
+  if (result && typeof (result as unknown as PromiseLike<unknown>).then === 'function') {
+    return Promise.resolve(result).finally(() => {
+      scope.active = false;
+    }) as T;
+  }
+
+  scope.active = false;
+  return result;
 }
 
 /** Marks a freshly-created, content-free context as safe inside a redacted logging scope. */
@@ -422,15 +443,15 @@ function createLogMethodWithContext(
 
     const scope = sensitiveLogScope.getStore();
     const markedSafe = Boolean(context && safeSensitiveLogContexts.has(context));
-    if (scope && !markedSafe) {
+    if (scope?.active && !markedSafe) {
       message = '[Sensitive operation] Diagnostic content suppressed';
       context = {
-        ...scope,
+        goatRunId: scope.goatRunId,
         level,
         contentSuppressed: true,
       };
-    } else if (scope && context) {
-      context = { ...context, ...scope };
+    } else if (scope?.active && context) {
+      context = { ...context, goatRunId: scope.goatRunId };
     }
 
     if (!context) {

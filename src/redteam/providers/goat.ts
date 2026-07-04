@@ -371,7 +371,7 @@ export default class GoatProvider implements ApiProvider {
       try {
         return await this.callApiInLogScope(goatRunId, context, options);
       } catch (error) {
-        if (isAbortError(error) && options?.abortSignal?.aborted === true) {
+        if (options?.abortSignal?.aborted === true || isAbortError(error)) {
           const abortError = new Error('Operation aborted');
           abortError.name = 'AbortError';
           throw abortError;
@@ -747,6 +747,10 @@ export default class GoatProvider implements ApiProvider {
             continue;
           }
 
+          for (const diagnostic of lastTransformResult.diagnostics ?? []) {
+            log.warn('[GOAT] Child operation degraded', { ...diagnostic });
+          }
+
           // For audio/image transforms, send a hybrid format:
           // - Previous turns as text (for context)
           // - Current turn as audio/image (the actual attack)
@@ -854,6 +858,12 @@ export default class GoatProvider implements ApiProvider {
               retryDelayMs: tracingOptions.retryDelayMs,
               spanFilter: tracingOptions.spanFilter,
               sanitizeAttributes: tracingOptions.sanitizeAttributes,
+            });
+            log.debug('[GOAT] Child operation outcome', {
+              component: 'trace-context',
+              stage: 'fetch',
+              outcome: traceContext ? 'success' : 'unavailable',
+              attemptLimit: Math.min((getFiniteNumber(tracingOptions.maxRetries) ?? 3) + 1, 101),
             });
 
             if (traceContext) {
@@ -986,6 +996,11 @@ export default class GoatProvider implements ApiProvider {
                 hasEvalId: Boolean(evalId),
               });
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
+              log.debug('[GOAT] Child operation outcome', {
+                component: 'indirect-web-pwn',
+                stage: 'exfil-tracking',
+                outcome: exfilData ? 'success' : 'unavailable',
+              });
               if (exfilData) {
                 gradingContext = {
                   ...(gradingContext ?? {}),
@@ -1059,7 +1074,7 @@ export default class GoatProvider implements ApiProvider {
         }
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (isAbortError(error) && options?.abortSignal?.aborted === true) {
+        if (options?.abortSignal?.aborted === true || isAbortError(error)) {
           log.debug('[GOAT] Operation aborted', { errorStage });
           throw error;
         }

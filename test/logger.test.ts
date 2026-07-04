@@ -1462,6 +1462,28 @@ describe('logger', () => {
       expect(JSON.stringify(customLogger.warn.mock.calls)).not.toContain('PRIVATE_');
     });
 
+    it('should revoke a completed scope for persistent async descendants', async () => {
+      logger.setStructuredLogging(true);
+      let logFromPersistentResource!: () => void;
+
+      await logger.runWithRedactedLogging('completed-run', async () => {
+        await new Promise<void>((resolve) => {
+          setImmediate(() => {
+            logFromPersistentResource = () =>
+              logger.default.info('NORMAL_REUSED_RESOURCE_LOG', { connectionReused: true });
+            resolve();
+          });
+        });
+      });
+
+      logFromPersistentResource();
+
+      expect(customLogger.info).toHaveBeenCalledWith({
+        message: 'NORMAL_REUSED_RESOURCE_LOG',
+        connectionReused: true,
+      });
+    });
+
     it('should suppress unmarked content in plain logging mode', () => {
       logger.setStructuredLogging(false);
 

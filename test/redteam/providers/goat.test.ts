@@ -7,6 +7,7 @@ import logger from '../../../src/logger';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { isRemoteMaterializationUpgradeError } from '../../../src/redteam/remoteMaterialization';
+import { Strategies } from '../../../src/redteam/strategies';
 import { createMockProvider } from '../../factories/provider';
 
 import type {
@@ -783,6 +784,46 @@ describe('RedteamGoatProvider', () => {
       ([message]) => message === '[GOAT] GOAT turn target prompt',
     );
     expect(promptLog?.[1]?.targetPromptLength).toBe(targetPrompt.length);
+  });
+
+  it('should retain fixed degraded child outcomes without logging child content', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      _perTurnLayers: ['base64'],
+    });
+    const base64Strategy = Strategies.find((strategy) => strategy.id === 'base64');
+    expect(base64Strategy).toBeDefined();
+    vi.spyOn(base64Strategy!, 'action').mockImplementation(async (testCases) =>
+      testCases.map((testCase) => ({
+        ...testCase,
+        metadata: {
+          ...testCase.metadata,
+          runtimeTransformDiagnostics: [
+            {
+              component: 'indirect-web-pwn',
+              stage: 'update-page',
+              outcome: 'degraded',
+              childContent: sensitive('degraded-child'),
+            },
+          ],
+        },
+      })),
+    );
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GOAT] Child operation degraded',
+      expect.objectContaining({
+        component: 'indirect-web-pwn',
+        stage: 'update-page',
+        outcome: 'degraded',
+      }),
+    );
+    expect(serializeLogCalls(warnSpy)).not.toContain(sensitiveLogMarker);
   });
 
   it('should handle grader integration and stop early on failure', async () => {
@@ -1773,25 +1814,19 @@ describe('RedteamGoatProvider', () => {
       ).rejects.toMatchObject({ name: 'AbortError', message: 'Operation aborted' });
     });
 
-    it('should not treat a provider-spoofed AbortError as caller cancellation', async () => {
+    it('should preserve cancellation owned by a nested target provider', async () => {
       const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
-      const spoofedAbort = new Error(sensitive('spoofed-abort'));
-      spoofedAbort.name = 'AbortError';
-      mockFetch
-        .mockRejectedValueOnce(spoofedAbort)
-        .mockResolvedValueOnce(createRemoteMessageResponse('second-turn attack'));
-      const abortController = new AbortController();
+      const providerAbort = new Error(sensitive('provider-abort'));
+      providerAbort.name = 'AbortError';
+      const targetProvider = createMockProvider();
+      targetProvider.callApi.mockRejectedValueOnce(providerAbort);
 
-      const result = await provider.callApi(
-        'test prompt',
-        createMockContext(createMockTargetProvider()),
-        {
-          abortSignal: abortController.signal,
-        },
-      );
+      await expect(
+        provider.callApi('test prompt', createMockContext(targetProvider)),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'Operation aborted' });
 
-      expect(result.metadata?.stopReason).toBe('Max turns reached');
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should not propagate a provider-spoofed materialization upgrade error', async () => {

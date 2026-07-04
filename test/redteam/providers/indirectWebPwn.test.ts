@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
+import {
+  addIndirectWebPwnTestCases,
+  clearPageState,
+} from '../../../src/redteam/strategies/indirectWebPwn';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { CallApiContextParams } from '../../../src/types/index';
@@ -32,6 +36,62 @@ function mockJsonResponse(payload: unknown, ok = true) {
 describe('IndirectWebPwnProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearPageState();
+  });
+
+  it('reports a fixed degraded outcome when per-turn page creation fails', async () => {
+    mockFetchWithRetries.mockRejectedValueOnce(new Error('private create failure'));
+
+    const [result] = await addIndirectWebPwnTestCases(
+      [
+        {
+          vars: { query: 'private attack content' },
+          assert: [],
+          metadata: {
+            pluginId: 'runtime-transform',
+            evaluationId: 'eval-create',
+            testCaseId: 'case-create',
+          },
+        },
+      ],
+      'query',
+      { useLlm: false },
+    );
+
+    expect(result.vars?.query).toBe('private attack content');
+    expect(result.metadata?.runtimeTransformDiagnostics).toEqual([
+      { component: 'indirect-web-pwn', stage: 'create-page', outcome: 'degraded' },
+    ]);
+  });
+
+  it('reports a fixed degraded outcome when a per-turn page update reuses stale state', async () => {
+    mockFetchWithRetries
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          uuid: 'web-stale',
+          fullUrl: 'https://example.com/dynamic-pages/eval-update/web-stale',
+          path: '/dynamic-pages/eval-update/web-stale',
+          fetchPrompt: 'Please fetch the existing page',
+        }),
+      )
+      .mockRejectedValueOnce(new Error('private update failure'));
+
+    const testCase = {
+      vars: { query: 'private attack content' },
+      assert: [],
+      metadata: {
+        pluginId: 'runtime-transform',
+        evaluationId: 'eval-update',
+        testCaseId: 'case-update',
+      },
+    };
+    await addIndirectWebPwnTestCases([testCase], 'query', { useLlm: false });
+    const [result] = await addIndirectWebPwnTestCases([testCase], 'query', { useLlm: false });
+
+    expect(result.vars?.query).toBe('Please fetch the existing page');
+    expect(result.metadata?.runtimeTransformDiagnostics).toEqual([
+      { component: 'indirect-web-pwn', stage: 'update-page', outcome: 'degraded' },
+    ]);
   });
 
   it('should count one probe per target fetch attempt', async () => {
