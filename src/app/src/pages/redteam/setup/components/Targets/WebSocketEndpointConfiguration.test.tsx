@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -71,23 +73,40 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(update).toHaveBeenCalledWith('messageTemplate', 'Hey {{name}}');
   });
 
-  it('updates WebSocket subprotocols as a string array', async () => {
+  it('allows typing multiple WebSocket subprotocols and trims them on blur', async () => {
     const user = userEvent.setup();
     const update = vi.fn();
 
-    renderWithProviders(
-      <WebSocketEndpointConfiguration
-        selectedTarget={baseProvider}
-        updateWebSocketTarget={update}
-        urlError={null}
-      />,
-    );
+    const StatefulConfiguration = () => {
+      const [provider, setProvider] = useState(baseProvider);
+
+      return (
+        <WebSocketEndpointConfiguration
+          selectedTarget={provider}
+          updateWebSocketTarget={(field, value) => {
+            update(field, value);
+            setProvider((current) => ({
+              ...current,
+              config: { ...current.config, [field]: value },
+            }));
+          }}
+          urlError={null}
+        />
+      );
+    };
+
+    renderWithProviders(<StatefulConfiguration />);
 
     const protocolsField = screen.getByLabelText('WebSocket Subprotocols');
-    await user.click(protocolsField);
-    await user.paste('json, graphql-transport-ws');
+    await user.type(protocolsField, 'json,  graphql-transport-ws  ');
+
+    expect(protocolsField).toHaveValue('json,  graphql-transport-ws  ');
 
     expect(update).toHaveBeenCalledWith('protocols', ['json', 'graphql-transport-ws']);
+
+    await user.tab();
+
+    expect(protocolsField).toHaveValue('json, graphql-transport-ws');
   });
 
   it('preserves raw Sec-WebSocket-Protocol headers and shows migration guidance', () => {
