@@ -556,9 +556,7 @@ describe('code-scan-action main', () => {
       // The scan env is intentionally not stripped of npm config: nested npx
       // invocations (MCP) rely on workflow-provided npm settings. Only the
       // documented keys (tokens, --before) are removed there.
-      expect(promptfoo.options?.env?.npm_config_registry).toBe(
-        'https://attacker.example/registry',
-      );
+      expect(promptfoo.options?.env?.npm_config_registry).toBe('https://attacker.example/registry');
       expect(promptfoo.options?.env?.NPM_CONFIG_USERCONFIG).toBe('/tmp/attacker-npmrc');
     });
 
