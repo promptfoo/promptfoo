@@ -12,9 +12,11 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
+import { getGraderById } from '../../src/redteam/graders';
 import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
 
 import type { TraceStore } from '../../src/tracing/store';
+import type { AtomicTestCase } from '../../src/types';
 
 // Helper to create protobuf-encoded OTLP data for tests
 let protoRoot: protobuf.Root | null = null;
@@ -225,6 +227,93 @@ describe('OTLPReceiver', () => {
         ]),
         { skipTraceCheck: false, warnIfMissingTrace: false },
       );
+    });
+
+    it('should preserve OTLP JSON span events through agentic grading', async () => {
+      const pluginId = 'agentic:handoff-context-leakage';
+      const traceId = '34343434343434343434343434343434';
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from(traceId, 'hex').toString('base64'),
+                    spanId: Buffer.from('3434343434343434', 'hex').toString('base64'),
+                    name: 'agent handoff',
+                    startTimeUnixNano: '1700000000000000000',
+                    events: [
+                      {
+                        name: 'agentic runtime verifier',
+                        timeUnixNano: '1700000000500000000',
+                        attributes: [
+                          {
+                            key: 'promptfoo.agentic.plugin_id',
+                            value: { stringValue: pluginId },
+                          },
+                          {
+                            key: 'promptfoo.agentic.evidence_json',
+                            value: {
+                              stringValue: JSON.stringify({
+                                findings: [{ kind: 'handoff-context-leakage', pluginId }],
+                                pluginId,
+                              }),
+                            },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      const storedSpans = mockTraceStore.addSpans.mock.calls[0][1];
+      expect(storedSpans[0].events).toEqual([
+        {
+          name: 'agentic runtime verifier',
+          timestamp: 1700000000500,
+          attributes: expect.objectContaining({
+            'promptfoo.agentic.plugin_id': pluginId,
+          }),
+        },
+      ]);
+
+      const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+      expect(grader).toBeDefined();
+      const result = await grader!.getResult(
+        'prompt',
+        'model output without verifier evidence',
+        {
+          metadata: { purpose: 'agentic runtime app' },
+        } as AtomicTestCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceData: {
+            evaluationId: 'eval-event-ingestion',
+            testCaseId: 'case-event-ingestion',
+            traceId,
+            spans: storedSpans,
+          },
+        },
+      );
+
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.metadata?.evidenceSource).toBe('otel');
+      expect(result.grade.metadata?.deterministicFailureKind).toBe('handoff-context-leakage');
     });
 
     it('should accept json with a charset content type', async () => {
@@ -493,11 +582,20 @@ describe('OTLPReceiver', () => {
                     spanId: spanIdBytes,
                     name: 'protobuf-test-span',
                     kind: 2, // SPAN_KIND_SERVER
-                    startTimeUnixNano: 1700000000000000000n,
-                    endTimeUnixNano: 1700000001000000000n,
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
                     attributes: [
                       { key: 'http.method', value: { stringValue: 'POST' } },
                       { key: 'http.status_code', value: { intValue: 200 } },
+                    ],
+                    events: [
+                      {
+                        name: 'guardrail decision',
+                        timeUnixNano: '1700000000500000000',
+                        attributes: [
+                          { key: 'guardrails.decision', value: { stringValue: 'blocked' } },
+                        ],
+                      },
                     ],
                     status: {
                       code: 1, // STATUS_CODE_OK
@@ -535,6 +633,13 @@ describe('OTLPReceiver', () => {
               'otel.scope.name': 'opentelemetry.instrumentation.test',
               'otel.scope.version': '1.0.0',
             }),
+            events: [
+              {
+                name: 'guardrail decision',
+                timestamp: 1700000000500,
+                attributes: { 'guardrails.decision': 'blocked' },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'Success',
           }),

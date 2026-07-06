@@ -13,6 +13,17 @@ function getFiles(dir: string, extension: string, excludes: string[] = []): stri
     .map((file) => file.replace(extension, ''));
 }
 
+function getDocFiles(dir: string): string[] {
+  const topLevelDocs = getFiles(dir, '.md', ['_category_.json']);
+  const indexBackedDirectories = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => fs.existsSync(path.join(dir, entry.name, 'index.md')))
+    .map((entry) => entry.name);
+
+  return [...topLevelDocs, ...indexBackedDirectories];
+}
+
 function toKebabCase(str: string): string {
   return str.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 }
@@ -96,7 +107,7 @@ describe('Plugin Documentation', () => {
     'imageDatasetUtils.ts',
     'multiInputFormat.ts',
   ]);
-  const docFiles = getFiles(DOCS_DIR, '.md', ['_category_.json']);
+  const docFiles = getDocFiles(DOCS_DIR);
 
   describe('Plugin files and documentation files', () => {
     it('should have matching plugin and documentation files', () => {
