@@ -370,7 +370,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "^5.0.0",
+    "js-yaml": "5.2.0",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
