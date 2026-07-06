@@ -24,11 +24,8 @@ export const ANTHROPIC_MODELS = [
   })),
   // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
   // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
-  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. Per Anthropic's
-  // pricing docs, Sonnet 5 bills its FULL 1M context at the standard rate — there is
-  // no >200K long-context tier (a 900k-token request bills at the same per-token rate
-  // as a 9k-token request), so it is intentionally left OUT of `hasTieredPricing`
-  // below. (This differs from Sonnet 4.5, which does carry the >200K tier.)
+  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. The full 1M
+  // context bills at this flat rate — prompt size never changes the per-token price.
   ...['claude-sonnet-5'].map((model) => ({
     id: model,
     cost: {
@@ -332,8 +329,7 @@ export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
  * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
  * unless the user supplied an explicit `cost`/`inputCost`/`outputCost` override. The premium is a
  * flat multiplier that calculateAnthropicCost applies to the *final* computed cost, so it composes
- * correctly with tiered long-context pricing (the >200K tier is selected first, then multiplied)
- * and with cache pricing. Callers decide whether the request is regional.
+ * with cache pricing rather than overriding it. Callers decide whether the request is regional.
  */
 export function applyClaudeRegionalPremium(modelName: string, config: any): any {
   if (
@@ -523,7 +519,7 @@ export function calculateAnthropicCost(
     ? applyClaudeRegionalPremium(modelName, config)
     : config;
   // Apply the regional endpoint premium (if any) as a flat multiplier on the final cost, so it
-  // composes with tiered long-context and cache pricing rather than overriding either.
+  // composes with cache pricing rather than overriding it.
   const regionalPremiumMultiplier: number = effectiveConfig.regionalPremiumMultiplier ?? 1;
   const withRegionalPremium = (cost: number | undefined): number | undefined =>
     cost == null ? cost : cost * regionalPremiumMultiplier;
@@ -564,32 +560,9 @@ export function calculateAnthropicCost(
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
 
-  // Anthropic docs: the >200k threshold considers input + cache read + cache creation tokens
-  const effectiveInputTokens = promptTokens + cacheRead + cacheCreation;
-
-  // Claude Sonnet models with 1M context support have tiered pricing based on prompt size
-  const hasTieredPricing = [
-    'claude-sonnet-4-5',
-    'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-5-latest',
-    'claude-sonnet-4-6',
-    'claude-sonnet-4-6-latest',
-  ].includes(pricingModelName);
-
-  if (hasTieredPricing) {
-    const isLongContext = effectiveInputTokens > 200_000;
-    const baseInputRate =
-      effectiveConfig.inputCost ?? effectiveConfig.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
-    const outputRate =
-      effectiveConfig.outputCost ?? effectiveConfig.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
-
-    return withRegionalPremium(
-      calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
-        completionTokens * outputRate,
-    );
-  }
-
-  // For non-tiered models, apply cache pricing only when cache tokens are present
+  // Per-token rates are flat regardless of prompt size — every model bills its full
+  // context window at the standard rate. Apply cache pricing only when cache tokens
+  // are present.
   if (cacheRead || cacheCreation) {
     if (modelInfo) {
       const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
