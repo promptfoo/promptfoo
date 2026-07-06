@@ -8,6 +8,9 @@ import * as path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The action embeds the monorepo's promptfoo version at build time and pins the
+// runtime install to it; read the same source here so assertions track releases.
+import { version as pinnedPromptfooVersion } from '../../package.json';
 import { FileChangeStatus } from '../../src/types/codeScan';
 import { mockProcessEnv } from '../util/utils';
 
@@ -155,6 +158,7 @@ interface PromptfooExecCall {
 }
 
 interface NpmExecCall {
+  args: string[];
   options?: { env?: Record<string, string> };
 }
 
@@ -275,17 +279,23 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   };
 }
 
+function isNpmInstallCall([command, args]: [string, ...unknown[]]): boolean {
+  return (
+    command === 'npm' &&
+    Array.isArray(args) &&
+    args[0] === 'install' &&
+    args[1] === '-g' &&
+    typeof args[2] === 'string' &&
+    args[2].startsWith('promptfoo@')
+  );
+}
+
 async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   await import('../../code-scan-action/src/main');
 
   const call = await vi.waitFor(() => {
-    const npmCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) =>
-        command === 'npm' &&
-        Array.isArray(args) &&
-        args[0] === 'install' &&
-        args[1] === '-g' &&
-        args[2] === 'promptfoo',
+    const npmCall = mocks.exec.exec.mock.calls.find((mockCall) =>
+      isNpmInstallCall(mockCall as [string, ...unknown[]]),
     );
 
     if (!npmCall) {
@@ -296,6 +306,7 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   });
 
   return {
+    args: call[1] as string[],
     options: call[2] as NpmExecCall['options'],
   };
 }
@@ -307,13 +318,8 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
     const promptfooCall = mocks.exec.exec.mock.calls.find(
       ([command, args]) => command === 'promptfoo' && Array.isArray(args),
     );
-    const npmCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) =>
-        command === 'npm' &&
-        Array.isArray(args) &&
-        args[0] === 'install' &&
-        args[1] === '-g' &&
-        args[2] === 'promptfoo',
+    const npmCall = mocks.exec.exec.mock.calls.find((mockCall) =>
+      isNpmInstallCall(mockCall as [string, ...unknown[]]),
     );
 
     if (!promptfooCall || !Array.isArray(promptfooCall[1]) || !npmCall) {
@@ -325,6 +331,7 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
 
   return {
     npmInstall: {
+      args: calls.npmCall[1] as string[],
       options: calls.npmCall[2] as NpmExecCall['options'],
     },
     promptfoo: {
@@ -469,6 +476,70 @@ describe('code-scan-action main', () => {
       expect(mocks.core.info).toHaveBeenCalledWith(
         'OIDC token not available: Failed to get GitHub OIDC token: OIDC not configured',
       );
+    });
+  });
+
+  describe('scanner install pinning', () => {
+    function mockPromptfooVersionInput(value: string): void {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity' || name === 'minimum-severity') {
+          return 'medium';
+        }
+        if (name === 'promptfoo-version') {
+          return value;
+        }
+        return '';
+      });
+    }
+
+    it('installs the release-pinned promptfoo version with lifecycle scripts disabled', async () => {
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual([
+        'install',
+        '-g',
+        `promptfoo@${pinnedPromptfooVersion}`,
+        '--ignore-scripts',
+      ]);
+    });
+
+    it('installs an exact promptfoo-version input override', async () => {
+      mockPromptfooVersionInput('0.100.5');
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(['install', '-g', 'promptfoo@0.100.5', '--ignore-scripts']);
+    });
+
+    it('accepts an exact prerelease promptfoo-version override', async () => {
+      mockPromptfooVersionInput('1.2.3-rc.1');
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(['install', '-g', 'promptfoo@1.2.3-rc.1', '--ignore-scripts']);
+    });
+
+    it.each([
+      ['a dist-tag', 'latest'],
+      ['a semver range', '^0.100.0'],
+      ['an npm flag smuggled after the version', '0.100.5 --before=2020-01-01'],
+      ['an alias to another package', 'npm:malicious-package@1.0.0'],
+      ['a git URL', 'github:attacker/promptfoo'],
+    ])('rejects %s as promptfoo-version without running any install', async (_label, value) => {
+      mockPromptfooVersionInput(value);
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining(`Invalid promptfoo-version "${value}"`),
+        );
+      });
+
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
     });
   });
 

@@ -10,6 +10,11 @@ import * as path from 'path';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
+// esbuild inlines (and tree-shakes) this named JSON import at build time, so each
+// action release ships with the promptfoo CLI version that was current in the
+// monorepo when the release was built — the runtime install below is pinned to it
+// instead of resolving a mutable dist-tag like `latest`.
+import { version as defaultPromptfooVersion } from '../../package.json';
 import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
 import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
@@ -34,6 +39,7 @@ interface ActionInputs {
   githubToken: string;
   enableForkPrs: boolean;
   sarifOutputPath: string | undefined;
+  promptfooVersion: string;
 }
 
 interface PullRequestForkPayload {
@@ -86,6 +92,24 @@ function resolveMinimumSeverityInput(): string {
   return primary || alias || DEFAULT_MINIMUM_SEVERITY;
 }
 
+// Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
+// a dist-tag, a git/URL spec, or an extra npm flag — must be rejected because the value
+// is passed straight into `npm install` and controls which code scans the repository.
+const EXACT_SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+function resolvePromptfooVersionInput(): string {
+  const override = core.getInput('promptfoo-version').trim();
+  if (!override) {
+    return defaultPromptfooVersion;
+  }
+  if (!EXACT_SEMVER_PATTERN.test(override)) {
+    throw new Error(
+      `Invalid promptfoo-version "${override}": expected an exact version like 0.121.0`,
+    );
+  }
+  return override;
+}
+
 function getActionInputs(): ActionInputs {
   return {
     apiHost: core.getInput('api-host'),
@@ -98,6 +122,7 @@ function getActionInputs(): ActionInputs {
     // core.getInput returns '' when unset; normalize so a falsy check at the call site
     // doesn't have to special-case the empty-string sentinel.
     sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
+    promptfooVersion: resolvePromptfooVersionInput(),
   };
 }
 
@@ -317,11 +342,18 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
+  promptfooVersion: string,
 ): Promise<ScanResponse> {
   const installEnv = createSubprocessEnv();
 
-  core.info('📦 Installing promptfoo...');
-  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: installEnv });
+  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
+  // Supply-chain hardening: install an exact, release-pinned version rather than
+  // resolving `latest` at runtime, and refuse to run install/postinstall lifecycle
+  // scripts — the scanner tree must not execute arbitrary code before the scan starts.
+  // (promptfoo and its dependency tree work without lifecycle scripts.)
+  await exec.exec('npm', ['install', '-g', `promptfoo@${promptfooVersion}`, '--ignore-scripts'], {
+    env: installEnv,
+  });
   core.info('✅ Promptfoo installed successfully');
 
   core.info('🚀 Running promptfoo code-scans run...');
@@ -363,11 +395,15 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
+function getScanResponse(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+  promptfooVersion: string,
+): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
-  return runPromptfooScan(cliArgs, oidcToken);
+  return runPromptfooScan(cliArgs, oidcToken, promptfooVersion);
 }
 
 function buildCommentBody(comment: Comment): string {
@@ -748,7 +784,7 @@ async function runCodeScan(): Promise<void> {
     await fetchBaseBranch(baseBranch);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs, oidcToken);
+    const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);

@@ -192,6 +192,9 @@ jobs:
     needs: [release-please, build]
     permissions:
       contents: read
+      # For actions/attest-build-provenance on the mirrored dist/ artifacts.
+      id-token: write
+      attestations: write
     env:
       # Plain release-artifact files mirrored into promptfoo/code-scan-action.
       # `dist/` (a directory) and `.release-source.json` (generated below, not
@@ -266,6 +269,15 @@ jobs:
             "version": "$CODE_SCAN_ACTION_VERSION"
           }
           JSON
+
+      # Signed build provenance for the exact dist/ bytes mirrored into
+      # promptfoo/code-scan-action, so consumers can verify the committed bundle
+      # came from this workflow without re-running the build:
+      #   gh attestation verify dist/index.js --repo promptfoo/promptfoo
+      - name: Attest build provenance for mirrored dist
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: ${{ runner.temp }}/code-scan-action-export/dist/*
 
       - name: Open mirror release PR
         env:

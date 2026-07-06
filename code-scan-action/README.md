@@ -32,7 +32,7 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     enable-fork-prs: true
 ```
@@ -45,7 +45,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     sarif-output-path: promptfoo-code-scan.sarif
 
@@ -57,9 +57,28 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
     category: promptfoo-code-scan
 ```
 
+## Supply Chain Security
+
+- **Pinned scanner install.** Each action release installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input (exact versions only) to override the pin.
+- **Pin by commit SHA for maximum assurance.** Version tags like `v0` and `v0.1.8` are managed by release automation and, like all git tags, are not cryptographically immutable — only a full commit SHA is. To fully pin the action:
+
+  ```yaml
+  uses: promptfoo/code-scan-action@148e01f35bc65bd992b9f44679577aa9123be6ab # v0.1.8
+  ```
+
+  Resolve the commit for any release with `gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha`.
+
+- **Verify build provenance.** The committed `dist/` bundle is built by the [promptfoo monorepo release workflow](https://github.com/promptfoo/promptfoo/blob/main/.github/workflows/release-please.yml), which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout of this repository with:
+
+  ```bash
+  gh attestation verify dist/index.js --repo promptfoo/promptfoo
+  ```
+
+  Additionally, every release PR in this repository is validated by a workflow that rebuilds `dist/` from the pinned monorepo source commit and fails on any byte difference.
+
 ## Contributing
 
-Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/promptfoo/code-scan-action) in the main promptfoo repository.
+Please note that this is a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/code-scan-action) in the main promptfoo repository.
 
 ## License
 
