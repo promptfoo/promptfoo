@@ -146,6 +146,59 @@ describe('AssertsForm', () => {
     ]);
   });
 
+  it('edits the onlyPassing option for a latency selector', async () => {
+    initialValues = [{ type: 'select-lowest-latency', value: { onlyPassing: false } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const onlyPassing = screen.getByRole('checkbox', { name: 'Only passing outputs' });
+    expect(onlyPassing).not.toBeChecked();
+
+    await userEvent.click(onlyPassing);
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'select-lowest-latency', value: { onlyPassing: true } },
+    ]);
+  });
+
+  it('uses the passing-only default when selecting the latency selector', async () => {
+    initialValues = [{ type: 'equals', value: 'stale value' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'select-lowest-latency' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'select-lowest-latency', value: { onlyPassing: true } },
+    ]);
+    expect(screen.getByRole('checkbox', { name: 'Only passing outputs' })).toBeChecked();
+  });
+
+  it('preserves onlyPassing when switching between metric selectors', async () => {
+    initialValues = [{ type: 'select-lowest-cost', value: { onlyPassing: false } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'select-lowest-latency' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'select-lowest-latency', value: { onlyPassing: false } },
+    ]);
+    expect(screen.getByRole('checkbox', { name: 'Only passing outputs' })).not.toBeChecked();
+  });
+
+  it('removes selector options when switching to a regular assertion', async () => {
+    initialValues = [{ type: 'select-lowest-cost', value: { onlyPassing: false } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'is-json' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'is-json' }]);
+    expect(
+      screen.queryByRole('checkbox', { name: 'Only passing outputs' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {
     const user = userEvent.setup();
     initialValues = [

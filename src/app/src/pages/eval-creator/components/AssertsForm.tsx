@@ -182,15 +182,24 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                       if (i !== index) {
                         return a;
                       }
-                      if (newType === 'select-lowest-cost') {
+                      if (METRIC_SELECTOR_TYPES.has(newType)) {
                         const { value: _value, ...assertionWithoutValue } = a;
+                        const existingOnlyPassing =
+                          typeof a.value === 'object' &&
+                          a.value !== null &&
+                          !Array.isArray(a.value) &&
+                          typeof (a.value as { onlyPassing?: unknown }).onlyPassing === 'boolean'
+                            ? (a.value as { onlyPassing: boolean }).onlyPassing
+                            : undefined;
                         return {
                           ...assertionWithoutValue,
                           type: newType,
-                          value: { onlyPassing: false },
+                          value: {
+                            onlyPassing: existingOnlyPassing ?? newType === 'select-lowest-latency',
+                          },
                         };
                       }
-                      if (newType === 'select-lowest-latency') {
+                      if (METRIC_SELECTOR_TYPES.has(a.type)) {
                         const { value: _value, ...assertionWithoutValue } = a;
                         return { ...assertionWithoutValue, type: newType };
                       }
@@ -213,7 +222,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   </SelectContent>
                 </Select>
 
-                {assert.type === 'select-lowest-cost' && (
+                {METRIC_SELECTOR_TYPES.has(assert.type) && (
                   <div className="flex items-center gap-2">
                     <Checkbox
                       id={`assert-only-passing-${index}`}
