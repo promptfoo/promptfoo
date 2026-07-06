@@ -137,6 +137,14 @@ describe('prepareComments', () => {
     expect(result.reviewBody).toContain('Medium');
   });
 
+  it('keeps rescan and documentation links when the effective severity is config-controlled', () => {
+    const result = prepareComments([], 'Review text', undefined);
+
+    expect(result.reviewBody).not.toContain('Minimum severity threshold');
+    expect(result.reviewBody).toContain('@promptfoo-scanner');
+    expect(result.reviewBody).toContain('[Learn more]');
+  });
+
   it('should sort comments by severity descending', () => {
     const comments: Comment[] = [
       { severity: CodeScanSeverity.LOW, finding: 'Low issue', file: 'a.ts', line: 1 },

@@ -49,11 +49,13 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var |
 | `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                   |
 | `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                               |
-| `--config <path>`                 | Path to config file                                                                                 | `.promptfoo-code-scan.yaml`                          |
+| `--config <path>`                 | Path to an explicit config file                                                                     | Built-in defaults                                    |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                 |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
+| `--min-severity <level>`          | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                    | `medium`                                             |
+| `--minimum-severity <level>`      | Alias for `--min-severity`; `--min-severity` takes precedence                                       | None                                                 |
 | `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                |
 | `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                               |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
@@ -102,7 +104,7 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create a `.promptfoo-code-scan.yaml` file in your repository root:
+Create a `.promptfoo-code-scan.yaml` file and select it explicitly with `--config`. Without `--config`, the CLI uses built-in defaults and does not auto-discover repository configuration.
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical)
@@ -121,7 +123,7 @@ guidance: |
 # guidanceFile: ./scan-guidance.md
 
 # Optional: Promptfoo API host URL
-# apiHost: https://api.promptfoo.dev
+# apiHost: https://api.promptfoo.app
 ```
 
 ## Custom Guidance

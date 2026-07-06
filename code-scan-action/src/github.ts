@@ -8,9 +8,9 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
 import {
-  clampCommentLines,
   extractValidLineRanges,
   type FileLineRanges,
+  isLineInDiff,
 } from '../../src/codeScan/util/diffLineRanges';
 import {
   type Comment,
@@ -123,31 +123,39 @@ async function getPRDiffRanges(
 }
 
 /**
- * Clamp a comment's line numbers to valid diff ranges.
- * Returns the adjusted comment, or null if lines cannot be clamped.
+ * Whether a comment's exact line(s) can be placed as an inline review comment.
+ *
+ * GitHub only accepts review comments anchored to lines that appear in the reviewed
+ * diff. We intentionally do NOT clamp an out-of-diff line to the nearest visible hunk:
+ * default full-repository tracing routinely reports findings on unchanged lines, and
+ * clamping would silently re-point the comment at unrelated code, destroying the true
+ * location. A finding is inline-eligible only when its exact `file:line` is in the diff;
+ * for multi-line findings both endpoints must be in the diff. Everything else is routed
+ * to a general comment that preserves the original location in text.
  */
-function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges): Comment | null {
+function isInlineCommentInDiff(comment: Comment, validRanges: FileLineRanges): boolean {
   if (!comment.file || comment.line == null) {
-    return comment;
+    return false;
   }
 
-  const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
-
-  if (!clamped) {
-    // File not in diff - return null to convert to general comment
-    return null;
+  if (!isLineInDiff(comment.file, comment.line, validRanges)) {
+    return false;
   }
 
-  return {
-    ...comment,
-    startLine: clamped.startLine,
-    line: clamped.line,
-  };
+  // Multi-line comment: GitHub requires start_line to be in the diff too. When startLine
+  // is absent or not strictly less than line, toReviewComment posts it single-line, so the
+  // end line is the only anchor that must be present.
+  if (comment.startLine != null && comment.startLine < comment.line) {
+    return isLineInDiff(comment.file, comment.startLine, validRanges);
+  }
+
+  return true;
 }
 
 /**
  * Validate review-comment locations against the current PR diff.
- * Comments that cannot be placed inline are returned separately for general posting.
+ * Comments that cannot be placed inline are returned separately for general posting with
+ * their original locations preserved.
  */
 async function partitionReviewCommentsWithOctokit(
   octokit: Octokit,
@@ -169,12 +177,12 @@ async function partitionReviewCommentsWithOctokit(
       continue;
     }
 
-    const clamped = clampCommentToValidRange(comment, validRanges);
-    if (clamped) {
-      lineComments.push(clamped);
+    if (isInlineCommentInDiff(comment, validRanges)) {
+      // Exact location is in the diff - keep it inline, unmodified.
+      lineComments.push(comment);
     } else {
       core.warning(
-        `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
+        `Comment on ${comment.file}:${comment.line} is not on a line in the reviewed diff - posting as a general comment to preserve its location`,
       );
       invalidLineComments.push(comment);
     }
