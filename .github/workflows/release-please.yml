@@ -183,18 +183,14 @@ jobs:
         always() &&
         !cancelled() &&
         needs.release-please.outputs.code_scan_action_release_created == 'true' &&
-        needs.build.result == 'success' &&
-        needs.publish-npm.result != 'cancelled'
+        needs.build.result == 'success'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Gate on `build` so root test failures block the mirror — code-scan-action
     # imports shared source from ../../src, so broken root code means broken action.
-    # `publish-npm` is in `needs` for ordering only (success, failure, and skipped
-    # all proceed): when a root release and an action release land in the same run,
-    # the npm-availability check below must not race the in-flight publish. The
-    # check consults the registry directly, so a failed publish-npm that was later
-    # backfilled does not block the mirror.
+    # `publish-npm` is in `needs` for ordering only, not gating — see the
+    # npm-availability check below for the rationale.
     needs: [release-please, build, publish-npm]
     permissions:
       contents: read
@@ -234,8 +230,9 @@ jobs:
       # version, inlined into dist/ at build time. Refuse to mirror a release whose
       # pinned scanner version never reached npm (e.g. a failed publish-npm awaiting
       # backfill) — otherwise every consumer scan fails at install time with E404.
-      # The registry is the ground truth here; `needs: publish-npm` above only
-      # guarantees a same-run publish has finished before this check runs. Retries
+      # The registry is the ground truth (a publish-npm job result would wrongly
+      # block a version that was backfilled later); `needs: publish-npm` guarantees
+      # a same-run publish has finished before this check runs, and the retries
       # absorb registry read-after-write lag for a just-published version.
       - name: Verify pinned promptfoo version is published to npm
         run: |
@@ -245,8 +242,10 @@ jobs:
             if npm view "promptfoo@${version}" version; then
               exit 0
             fi
-            echo "promptfoo@${version} not visible on npm (attempt ${attempt}/5); retrying in 30s"
-            sleep 30
+            if [[ "$attempt" -lt 5 ]]; then
+              echo "promptfoo@${version} not visible on npm (attempt ${attempt}/5); retrying in 30s"
+              sleep 30
+            fi
           done
           echo "::error::promptfoo@${version} is not published to npm; the mirrored action would fail at install time"
           exit 1
@@ -265,6 +264,16 @@ jobs:
       - name: Build Code Scan Action
         working-directory: code-scan-action
         run: npm run build
+
+      # Companion to the npm-availability gate above: that step validates the version
+      # read from package.json, this one asserts the built bundle actually embeds the
+      # same pin — so a future refactor of the pin source in main.ts cannot desync
+      # the gate from what ships.
+      - name: Verify built dist embeds the published scanner pin
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          grep -Fq "\"${version}\"" code-scan-action/dist/index.js
 
       - name: Prepare mirror release payload
         env:
@@ -295,10 +304,8 @@ jobs:
           JSON
 
       # Hand the executable payload (dist/ plus the action.yml that selects the
-      # entrypoint) to the attest-code-scan-action job below. Attestation runs in
-      # its own job so `id-token: write` is never ambient to the npm ci / build
-      # steps here — a compromised dependency lifecycle script must not be able to
-      # mint OIDC tokens or sign attestations as this repository.
+      # entrypoint) to attest-code-scan-action — see that job for why attestation
+      # is isolated from this one.
       - name: Upload release payload for attestation
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -377,13 +384,6 @@ jobs:
           fi
 
   attest-code-scan-action:
-    if: >-
-      ${{
-        always() &&
-        !cancelled() &&
-        needs.release-please.outputs.code_scan_action_release_created == 'true' &&
-        needs.publish-code-scan-action.result == 'success'
-      }}
     # Signed build provenance for the exact bytes mirrored into
     # promptfoo/code-scan-action — both the dist/ bundle and the action.yml that
     # selects the entrypoint — so consumers can verify the committed artifacts came
@@ -391,8 +391,11 @@ jobs:
     #   gh attestation verify dist/index.js --repo promptfoo/promptfoo
     #   gh attestation verify action.yml --repo promptfoo/promptfoo
     # Kept as a separate job so id-token/attestations permissions are confined to
-    # steps that never install packages or execute repository code.
-    needs: [release-please, publish-code-scan-action]
+    # steps that never install packages or execute repository code — a compromised
+    # dependency lifecycle script in the publish job must not be able to mint OIDC
+    # tokens or sign attestations as this repository. Default `needs` gating (run
+    # only when the publish job succeeded) is exactly the behavior wanted here.
+    needs: [publish-code-scan-action]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

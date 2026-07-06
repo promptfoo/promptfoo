@@ -350,28 +350,31 @@ function parseScanOutput(scanOutput: string): ScanResponse {
   }
 }
 
+// Owns every hardening decision for the scanner install as one unit so a future npm
+// invocation cannot accidentally drop one of them:
+// - exact release-pinned version, never a mutable spec like `latest`
+// - --ignore-scripts: the scanner tree must not execute arbitrary code before the
+//   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
+// - sanitized env (createSubprocessEnv) with tokens and npm overrides stripped
+// - cwd outside the checked-out workspace: npm's global mode documents (and testing
+//   confirms) that it ignores the per-project .npmrc, but the workspace holds the
+//   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
+//   strict-ssl, ignore-scripts…) may ever be in scope
+async function installPromptfooCli(promptfooVersion: string): Promise<void> {
+  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
+  await exec.exec('npm', ['install', '-g', `promptfoo@${promptfooVersion}`, '--ignore-scripts'], {
+    env: createSubprocessEnv(),
+    cwd: process.env.RUNNER_TEMP || os.tmpdir(),
+  });
+  core.info('✅ Promptfoo installed successfully');
+}
+
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
-  const installEnv = createSubprocessEnv();
-  // Run the install from outside the checked-out workspace. npm's global mode
-  // documents (and testing confirms) that it ignores the per-project .npmrc, but the
-  // workspace cwd holds the untrusted PR being scanned — don't let any cwd-derived
-  // npm config (registry, proxy, strict-ssl, ignore-scripts…) ever be in scope.
-  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
-
-  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
-  // Supply-chain hardening: install an exact, release-pinned version rather than
-  // resolving `latest` at runtime, and refuse to run install/postinstall lifecycle
-  // scripts — the scanner tree must not execute arbitrary code before the scan starts.
-  // (promptfoo and its dependency tree work without lifecycle scripts.)
-  await exec.exec('npm', ['install', '-g', `promptfoo@${promptfooVersion}`, '--ignore-scripts'], {
-    env: installEnv,
-    cwd: installCwd,
-  });
-  core.info('✅ Promptfoo installed successfully');
+  await installPromptfooCli(promptfooVersion);
 
   core.info('🚀 Running promptfoo code-scans run...');
 

@@ -280,7 +280,8 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   };
 }
 
-function isNpmInstallCall([command, args]: [string, ...unknown[]]): boolean {
+function isNpmInstallCall(call: unknown[]): boolean {
+  const [command, args] = call;
   return (
     command === 'npm' &&
     Array.isArray(args) &&
@@ -295,9 +296,7 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   await import('../../code-scan-action/src/main');
 
   const call = await vi.waitFor(() => {
-    const npmCall = mocks.exec.exec.mock.calls.find((mockCall) =>
-      isNpmInstallCall(mockCall as [string, ...unknown[]]),
-    );
+    const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
     if (!npmCall) {
       throw new Error('npm install exec call not found');
@@ -319,9 +318,7 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
     const promptfooCall = mocks.exec.exec.mock.calls.find(
       ([command, args]) => command === 'promptfoo' && Array.isArray(args),
     );
-    const npmCall = mocks.exec.exec.mock.calls.find((mockCall) =>
-      isNpmInstallCall(mockCall as [string, ...unknown[]]),
-    );
+    const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
     if (!promptfooCall || !Array.isArray(promptfooCall[1]) || !npmCall) {
       throw new Error('expected promptfoo and npm install exec calls not found');
