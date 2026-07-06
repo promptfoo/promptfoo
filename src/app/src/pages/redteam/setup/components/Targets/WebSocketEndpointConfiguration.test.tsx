@@ -109,6 +109,50 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(protocolsField).toHaveValue('json, graphql-transport-ws');
   });
 
+  it('syncs WebSocket subprotocols when the parent loads a different target', async () => {
+    const user = userEvent.setup();
+
+    const StatefulConfiguration = () => {
+      const [provider, setProvider] = useState<ProviderOptions>({
+        ...baseProvider,
+        config: { ...baseProvider.config, protocols: ['json'] },
+      });
+
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setProvider({
+                ...baseProvider,
+                config: {
+                  ...baseProvider.config,
+                  protocols: ['mqtt', 'graphql-transport-ws'],
+                },
+              })
+            }
+          >
+            Load target
+          </button>
+          <WebSocketEndpointConfiguration
+            selectedTarget={provider}
+            updateWebSocketTarget={() => {}}
+            urlError={null}
+          />
+        </>
+      );
+    };
+
+    renderWithProviders(<StatefulConfiguration />);
+
+    const protocolsField = screen.getByLabelText('WebSocket Subprotocols');
+    expect(protocolsField).toHaveValue('json');
+
+    await user.click(screen.getByRole('button', { name: 'Load target' }));
+
+    expect(protocolsField).toHaveValue('mqtt, graphql-transport-ws');
+  });
+
   it('preserves raw Sec-WebSocket-Protocol headers and shows migration guidance', () => {
     const update = vi.fn();
     const providerWithHeader: ProviderOptions = {
