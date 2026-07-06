@@ -117,7 +117,7 @@ describe('AssertsForm', () => {
     expect(options.some((option) => option.textContent === 'select-lowest-latency')).toBe(true);
   });
 
-  it('removes stale values when switching to a metric selector', async () => {
+  it('replaces stale values with cost selector options', async () => {
     initialValues = [{ type: 'equals', value: '' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
@@ -125,8 +125,25 @@ describe('AssertsForm', () => {
     const option = await screen.findByRole('option', { name: 'select-lowest-cost' });
     await userEvent.click(option);
 
-    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'select-lowest-cost' }]);
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'select-lowest-cost', value: { onlyPassing: false } },
+    ]);
     expect(screen.queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Only passing outputs' })).not.toBeChecked();
+  });
+
+  it('edits the onlyPassing option for a cost selector', async () => {
+    initialValues = [{ type: 'select-lowest-cost', value: { onlyPassing: true } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const onlyPassing = screen.getByRole('checkbox', { name: 'Only passing outputs' });
+    expect(onlyPassing).toBeChecked();
+
+    await userEvent.click(onlyPassing);
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'select-lowest-cost', value: { onlyPassing: false } },
+    ]);
   });
 
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {

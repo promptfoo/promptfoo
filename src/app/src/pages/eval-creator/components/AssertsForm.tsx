@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { Checkbox } from '@app/components/ui/checkbox';
 import { DeleteIcon } from '@app/components/ui/icons';
 import { Label } from '@app/components/ui/label';
 import {
@@ -181,7 +182,15 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                       if (i !== index) {
                         return a;
                       }
-                      if (METRIC_SELECTOR_TYPES.has(newType)) {
+                      if (newType === 'select-lowest-cost') {
+                        const { value: _value, ...assertionWithoutValue } = a;
+                        return {
+                          ...assertionWithoutValue,
+                          type: newType,
+                          value: { onlyPassing: false },
+                        };
+                      }
+                      if (newType === 'select-lowest-latency') {
                         const { value: _value, ...assertionWithoutValue } = a;
                         return { ...assertionWithoutValue, type: newType };
                       }
@@ -203,6 +212,28 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     ))}
                   </SelectContent>
                 </Select>
+
+                {assert.type === 'select-lowest-cost' && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`assert-only-passing-${index}`}
+                      checked={
+                        typeof assert.value === 'object' &&
+                        assert.value !== null &&
+                        !Array.isArray(assert.value) &&
+                        (assert.value as { onlyPassing?: unknown }).onlyPassing === true
+                      }
+                      onCheckedChange={(checked) => {
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: { onlyPassing: checked === true } } : a,
+                        );
+                        setAsserts(newAsserts);
+                        onAdd(newAsserts);
+                      }}
+                    />
+                    <Label htmlFor={`assert-only-passing-${index}`}>Only passing outputs</Label>
+                  </div>
+                )}
 
                 {/* Value textarea */}
                 {!METRIC_SELECTOR_TYPES.has(assert.type) && (
