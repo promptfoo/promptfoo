@@ -59,7 +59,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ## Contributing
 
-Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/promptfoo/code-scan-action) in the main promptfoo repository.
+Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/code-scan-action) in the main promptfoo repository.
 
 ## License
 
