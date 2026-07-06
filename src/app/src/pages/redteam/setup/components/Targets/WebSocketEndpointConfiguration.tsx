@@ -65,6 +65,9 @@ const WebSocketEndpointConfiguration = ({
   updateWebSocketTarget,
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
+  const [protocolsInput, setProtocolsInput] = useState(() =>
+    formatProtocols(selectedTarget.config.protocols),
+  );
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
   );
@@ -97,8 +100,12 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="websocket-protocols">WebSocket Subprotocols</Label>
           <Input
             id="websocket-protocols"
-            value={formatProtocols(selectedTarget.config.protocols)}
-            onChange={(e) => updateWebSocketTarget('protocols', parseProtocols(e.target.value))}
+            value={protocolsInput}
+            onChange={(e) => {
+              setProtocolsInput(e.target.value);
+              updateWebSocketTarget('protocols', parseProtocols(e.target.value));
+            }}
+            onBlur={() => setProtocolsInput(formatProtocols(parseProtocols(protocolsInput)))}
             placeholder="json, graphql-transport-ws"
           />
           <p className="text-sm text-muted-foreground">
