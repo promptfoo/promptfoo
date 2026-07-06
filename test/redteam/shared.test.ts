@@ -108,8 +108,12 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
 });
 vi.mock('fs');
 vi.mock('fs/promises');
-vi.mock('js-yaml');
-vi.mock('../../src/util/yamlLoad');
+// js-yaml v5 is native ESM with a sealed namespace, so vi.spyOn cannot patch it.
+// Wrap dump in a spy-able mock that keeps the real implementation.
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn(actual.dump) };
+});
 vi.mock('os');
 
 describe('doRedteamRun', () => {

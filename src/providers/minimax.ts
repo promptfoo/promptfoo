@@ -21,6 +21,23 @@ type MiniMaxConfig = OpenAiCompletionOptions & {
   cacheReadCost?: number;
 };
 
+type MiniMaxModelCost = {
+  input: number;
+  output: number;
+  cache_read: number;
+  longContext?: {
+    threshold: number;
+    input: number;
+    output: number;
+    cache_read: number;
+  };
+};
+
+type MiniMaxModel = {
+  id: string;
+  cost: MiniMaxModelCost;
+};
+
 type MiniMaxProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: {
     config?: MiniMaxConfig;
@@ -37,13 +54,19 @@ function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): st
   return undefined;
 }
 
-export const MINIMAX_CHAT_MODELS = [
+export const MINIMAX_CHAT_MODELS: MiniMaxModel[] = [
   {
     id: 'MiniMax-M3',
     cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      cache_read: 0.12 / 1e6,
+      input: 0.3 / 1e6,
+      output: 1.2 / 1e6,
+      cache_read: 0.06 / 1e6,
+      longContext: {
+        threshold: 512_000,
+        input: 0.6 / 1e6,
+        output: 2.4 / 1e6,
+        cache_read: 0.12 / 1e6,
+      },
     },
   },
   {
@@ -87,9 +110,13 @@ export function calculateMiniMaxCost(
     ? Math.min(Math.max(cachedTokens!, 0), promptTokens!)
     : 0;
   const uncachedPromptTokens = promptTokens! - billableCachedTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
+  const modelCost =
+    model.cost.longContext && promptTokens! > model.cost.longContext.threshold
+      ? model.cost.longContext
+      : model.cost;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const cacheReadCost = config.cacheReadCost ?? modelCost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
   const cacheReadCostTotal = cacheReadCost * billableCachedTokens;

@@ -221,6 +221,16 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 32 + 100 * 64) / 1e6, 6);
   });
 
+  it('should calculate cost correctly with audio tokens for gpt-audio (repriced to $32/$64)', () => {
+    const cost = calculateOpenAICost('gpt-audio', {}, 1000, 500, 200, 100);
+    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 32 + 100 * 64) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for the chat-latest alias', () => {
+    const cost = calculateOpenAICost('chat-latest', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 5 + 500 * 30) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-audio-mini-2025-12-15', () => {
     const cost = calculateOpenAICost('gpt-audio-mini-2025-12-15', {}, 1000, 500, 200, 100);
     expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6, 6);
