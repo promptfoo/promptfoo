@@ -182,7 +182,7 @@ const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
-const CLAUDE_4_5_AND_4_6_TIER_PATTERN =
+const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
 
 interface ClaudeModelFamily {
@@ -232,7 +232,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     samplingParamsDeprecated: true,
     regionalPremium: true,
   },
-  { match: CLAUDE_4_5_AND_4_6_TIER_PATTERN, regionalPremium: true },
+  { match: CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN, regionalPremium: true },
 ];
 
 function hasClaudeCapability(
@@ -329,7 +329,8 @@ export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
  * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
  * unless the user supplied an explicit `cost`/`inputCost`/`outputCost` override. The premium is a
  * flat multiplier that calculateAnthropicCost applies to the *final* computed cost, so it composes
- * with cache pricing rather than overriding it. Callers decide whether the request is regional.
+ * with provider-selected long-context and cache pricing rather than overriding either. Callers
+ * decide whether the request is regional.
  */
 export function applyClaudeRegionalPremium(modelName: string, config: any): any {
   if (
@@ -519,7 +520,7 @@ export function calculateAnthropicCost(
     ? applyClaudeRegionalPremium(modelName, config)
     : config;
   // Apply the regional endpoint premium (if any) as a flat multiplier on the final cost, so it
-  // composes with cache pricing rather than overriding it.
+  // composes with long-context and cache pricing rather than overriding either.
   const regionalPremiumMultiplier: number = effectiveConfig.regionalPremiumMultiplier ?? 1;
   const withRegionalPremium = (cost: number | undefined): number | undefined =>
     cost == null ? cost : cost * regionalPremiumMultiplier;
@@ -560,9 +561,8 @@ export function calculateAnthropicCost(
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
 
-  // Per-token rates are flat regardless of prompt size — every model bills its full
-  // context window at the standard rate. Apply cache pricing only when cache tokens
-  // are present.
+  // This shared helper does not infer size-based tiers. Provider-specific callers can supply
+  // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.
   if (cacheRead || cacheCreation) {
     if (modelInfo) {
       const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
