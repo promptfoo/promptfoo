@@ -156,7 +156,7 @@ describe('WebSocketEndpointConfiguration', () => {
   it('preserves a trailing comma during an active edit and applies external protocols on blur', async () => {
     const user = userEvent.setup();
     const update = vi.fn();
-    let updateProtocolsExternally = () => {
+    let updateProtocolsExternally: () => void = () => {
       throw new Error('StatefulConfiguration was not rendered');
     };
 
