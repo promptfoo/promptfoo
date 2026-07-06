@@ -306,7 +306,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.41",
     "@swc/core-linux-x64-musl": "^1.15.41",
     "@swc/core-win32-x64-msvc": "^1.15.41",
-    "google-auth-library": "^10.7.0",
+    "google-auth-library": "^10.9.0",
     "hono": "^4.12.25",
     "ibm-cloud-sdk-core": "^5.4.22",
     "jks-js": "^1.1.5",
