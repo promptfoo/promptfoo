@@ -542,6 +542,26 @@ describe('code-scan-action main', () => {
       ]);
     });
 
+    it('strips env-level npm config overrides from the install but not the scan', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({
+        npm_config_registry: 'https://attacker.example/registry',
+        NPM_CONFIG_USERCONFIG: '/tmp/attacker-npmrc',
+      });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.npm_config_registry).toBeUndefined();
+      expect(npmInstall.options?.env?.NPM_CONFIG_USERCONFIG).toBeUndefined();
+      // The scan env is intentionally not stripped of npm config: nested npx
+      // invocations (MCP) rely on workflow-provided npm settings. Only the
+      // documented keys (tokens, --before) are removed there.
+      expect(promptfoo.options?.env?.npm_config_registry).toBe(
+        'https://attacker.example/registry',
+      );
+      expect(promptfoo.options?.env?.NPM_CONFIG_USERCONFIG).toBe('/tmp/attacker-npmrc');
+    });
+
     it('runs the install from RUNNER_TEMP so workspace npm config is out of scope', async () => {
       const runnerTemp = path.resolve('/runner/temp');
       mockProcessEnv({ RUNNER_TEMP: runnerTemp });

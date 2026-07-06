@@ -357,16 +357,30 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 // - exact release-pinned version, never a mutable spec like `latest`
 // - --ignore-scripts: the scanner tree must not execute arbitrary code before the
 //   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
-// - sanitized env (createSubprocessEnv) with tokens and the npm --before override
-//   stripped
+// - sanitized env (createSubprocessEnv) with tokens stripped, plus every env-level
+//   npm config override removed (see below)
 // - cwd outside the checked-out workspace: npm's global mode documents (and testing
 //   confirms) that it ignores the per-project .npmrc, but the workspace holds the
 //   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
 //   strict-ssl, ignore-scripts…) may ever be in scope
 async function installPromptfooCli(promptfooVersion: string): Promise<void> {
+  // npm interprets any npm_config_*/NPM_CONFIG_* env var as config, and a
+  // PR-controlled step running before this action can persist such vars via
+  // $GITHUB_ENV to redirect this install to another registry, swap the user config
+  // file, or re-enable lifecycle scripts. Strip them all — for the install only:
+  // runner-admin file config (user/global .npmrc, HTTPS_PROXY) still applies, and
+  // the scan subprocess keeps workflow-provided npm config because its nested npx
+  // invocations (MCP) rely on it.
+  const env = createSubprocessEnv();
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase().startsWith('npm_config_')) {
+      delete env[key];
+    }
+  }
+
   core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
   await exec.exec('npm', ['install', '-g', `promptfoo@${promptfooVersion}`, '--ignore-scripts'], {
-    env: createSubprocessEnv(),
+    env,
     cwd: process.env.RUNNER_TEMP || os.tmpdir(),
   });
   core.info('✅ Promptfoo installed successfully');
