@@ -106,6 +106,7 @@ const mocks = vi.hoisted(() => {
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
+    mkdtempSync: vi.fn(),
     realpathSync: vi.fn(),
     lstatSync: vi.fn(),
   };
@@ -141,6 +142,7 @@ vi.mock('fs', async () => {
     unlinkSync: mocks.fs.unlinkSync,
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
+    mkdtempSync: mocks.fs.mkdtempSync,
     realpathSync: mocks.fs.realpathSync,
     lstatSync: mocks.fs.lstatSync,
     // Strip O_NOFOLLOW so writeSarifFile takes the writeFileSync fallback path that the
@@ -152,6 +154,23 @@ vi.mock('fs', async () => {
 });
 
 const originalEnv = { ...process.env };
+
+// Matches the deterministic fs.mkdtempSync mock; the install passes empty user/global
+// npm config files under this dir to isolate the registry from a poisoned .npmrc.
+const MOCK_NPMRC_DIR = path.join(os.tmpdir(), 'promptfoo-npmrc-test');
+
+function expectedInstallArgs(version: string): string[] {
+  return [
+    'install',
+    '-g',
+    `promptfoo@${version}`,
+    '--ignore-scripts',
+    '--userconfig',
+    path.join(MOCK_NPMRC_DIR, 'user'),
+    '--globalconfig',
+    path.join(MOCK_NPMRC_DIR, 'global'),
+  ];
+}
 
 interface PromptfooExecCall {
   args: string[];
@@ -206,6 +225,9 @@ function setupMocks() {
   mocks.core.getBooleanInput.mockReturnValue(false);
   mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
 
+  // Deterministic temp dir for the install's isolated --userconfig/--globalconfig
+  // files, so tests can assert the exact npm args without touching disk.
+  mocks.fs.mkdtempSync.mockReturnValue(MOCK_NPMRC_DIR);
   mocks.fs.realpathSync.mockImplementation((p: string) => p);
   // Default: target file does not exist yet, so writeSarifFile won't trip the symlink check.
   mocks.fs.lstatSync.mockImplementation(() => {
@@ -493,15 +515,10 @@ describe('code-scan-action main', () => {
       });
     }
 
-    it('installs the release-pinned promptfoo version with lifecycle scripts disabled', async () => {
+    it('installs the release-pinned promptfoo version with lifecycle scripts disabled and isolated npm config', async () => {
       const { args } = await importActionAndGetNpmInstallCall();
 
-      expect(args).toEqual([
-        'install',
-        '-g',
-        `promptfoo@${pinnedPromptfooVersion}`,
-        '--ignore-scripts',
-      ]);
+      expect(args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
     });
 
     it('installs an exact promptfoo-version input override', async () => {
@@ -509,7 +526,7 @@ describe('code-scan-action main', () => {
 
       const { args } = await importActionAndGetNpmInstallCall();
 
-      expect(args).toEqual(['install', '-g', 'promptfoo@0.100.5', '--ignore-scripts']);
+      expect(args).toEqual(expectedInstallArgs('0.100.5'));
     });
 
     it('accepts an exact prerelease promptfoo-version override', async () => {
@@ -517,7 +534,7 @@ describe('code-scan-action main', () => {
 
       const { args } = await importActionAndGetNpmInstallCall();
 
-      expect(args).toEqual(['install', '-g', 'promptfoo@1.2.3-rc.1', '--ignore-scripts']);
+      expect(args).toEqual(expectedInstallArgs('1.2.3-rc.1'));
     });
 
     it('accepts 15-digit numeric components (the cap boundary)', async () => {
@@ -526,7 +543,7 @@ describe('code-scan-action main', () => {
 
       const { args } = await importActionAndGetNpmInstallCall();
 
-      expect(args).toEqual(['install', '-g', `promptfoo@${version}`, '--ignore-scripts']);
+      expect(args).toEqual(expectedInstallArgs(version));
     });
 
     it('falls back to the release-pinned version when promptfoo-version is whitespace', async () => {
@@ -534,12 +551,17 @@ describe('code-scan-action main', () => {
 
       const { args } = await importActionAndGetNpmInstallCall();
 
-      expect(args).toEqual([
-        'install',
-        '-g',
-        `promptfoo@${pinnedPromptfooVersion}`,
-        '--ignore-scripts',
-      ]);
+      expect(args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
+    });
+
+    it('strips NODE_OPTIONS from both the install and scan subprocesses', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({ NODE_OPTIONS: '--require=/tmp/payload.cjs' });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.NODE_OPTIONS).toBeUndefined();
+      expect(promptfoo.options?.env?.NODE_OPTIONS).toBeUndefined();
     });
 
     it('strips env-level npm config overrides from the install but not the scan', async () => {

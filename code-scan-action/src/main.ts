@@ -159,6 +159,13 @@ function createSubprocessEnv(): Record<string, string> {
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
 
+  // A PR-controlled step running earlier in the workflow can persist
+  // NODE_OPTIONS=--require=/path/to/payload.cjs via $GITHUB_ENV; Node preloads that
+  // module into every child node process — npm during the install and promptfoo during
+  // the scan (when the OIDC token / API key are in scope). Strip it from all
+  // subprocesses; the action does not rely on caller-provided NODE_OPTIONS.
+  delete env.NODE_OPTIONS;
+
   for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
     delete env[key];
   }
@@ -364,25 +371,46 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 //   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
 //   strict-ssl, ignore-scripts…) may ever be in scope
 async function installPromptfooCli(promptfooVersion: string): Promise<void> {
-  // npm interprets any npm_config_*/NPM_CONFIG_* env var as config, and a
-  // PR-controlled step running before this action can persist such vars via
-  // $GITHUB_ENV to redirect this install to another registry, swap the user config
-  // file, or re-enable lifecycle scripts. Strip them all — for the install only:
-  // runner-admin file config (user/global .npmrc, HTTPS_PROXY) still applies, and
-  // the scan subprocess keeps workflow-provided npm config because its nested npx
-  // invocations (MCP) rely on it.
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+
+  // npm reads its registry (and other config) from both env vars and user/global
+  // .npmrc files. A PR-controlled step running before this action can poison either:
+  // set npm_config_registry via $GITHUB_ENV, or write `registry=https://attacker/` to
+  // $HOME/.npmrc — redirecting this exact install to an attacker registry whose
+  // promptfoo tarball then runs as the scanner. Close both channels for the install:
+  //  - strip every npm_config_*/NPM_CONFIG_* env var, and
+  //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
+  //    consulted (two distinct paths: npm rejects loading one file as both).
+  // The pinned version therefore resolves from the runner's default (public) registry.
+  // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
+  // for this one install (the SaaS scan already requires public egress); the scan
+  // subprocess keeps workflow-provided npm config because its nested npx (MCP)
+  // invocations rely on it.
   const env = createSubprocessEnv();
   for (const key of Object.keys(env)) {
     if (key.toLowerCase().startsWith('npm_config_')) {
       delete env[key];
     }
   }
+  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
+  const emptyUserConfig = path.join(npmrcDir, 'user');
+  const emptyGlobalConfig = path.join(npmrcDir, 'global');
 
   core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
-  await exec.exec('npm', ['install', '-g', `promptfoo@${promptfooVersion}`, '--ignore-scripts'], {
-    env,
-    cwd: process.env.RUNNER_TEMP || os.tmpdir(),
-  });
+  await exec.exec(
+    'npm',
+    [
+      'install',
+      '-g',
+      `promptfoo@${promptfooVersion}`,
+      '--ignore-scripts',
+      '--userconfig',
+      emptyUserConfig,
+      '--globalconfig',
+      emptyGlobalConfig,
+    ],
+    { env, cwd: installCwd },
+  );
   core.info('✅ Promptfoo installed successfully');
 }
 
