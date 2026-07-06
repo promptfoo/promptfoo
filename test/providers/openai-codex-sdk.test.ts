@@ -2492,6 +2492,26 @@ describe('OpenAICodexSDKProvider', () => {
         preflight.resolve(undefined);
       });
 
+      it('should not start compatibility preflight after aborting during SDK import', async () => {
+        const sdkImport = createDeferred<typeof mockCodexSDK>();
+        mockImportModule.mockReturnValueOnce(sdkImport.promise);
+        const abortController = new AbortController();
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const resultPromise = provider.callApi('Test prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+        abortController.abort();
+        sdkImport.resolve(mockCodexSDK);
+
+        await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
+        expect(MockCodex).not.toHaveBeenCalled();
+      });
+
       it('should reject an incompatible SDK and CLI before starting a Codex turn', async () => {
         mockCompatibilityPreflight.mockRejectedValue(
           new CodexCliCompatibilityError(
