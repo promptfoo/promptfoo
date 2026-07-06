@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
@@ -156,38 +156,33 @@ describe('WebSocketEndpointConfiguration', () => {
   it('preserves a trailing comma during an active edit and applies external protocols on blur', async () => {
     const user = userEvent.setup();
     const update = vi.fn();
+    let updateProtocolsExternally = () => {
+      throw new Error('StatefulConfiguration was not rendered');
+    };
 
     const StatefulConfiguration = () => {
       const [provider, setProvider] = useState<ProviderOptions>({
         ...baseProvider,
         config: { ...baseProvider.config, protocols: ['json'] },
       });
+      updateProtocolsExternally = () =>
+        setProvider({
+          ...baseProvider,
+          config: { ...baseProvider.config, protocols: ['mqtt'] },
+        });
 
       return (
-        <>
-          <button
-            type="button"
-            onClick={() =>
-              setProvider({
-                ...baseProvider,
-                config: { ...baseProvider.config, protocols: ['mqtt'] },
-              })
-            }
-          >
-            Update protocols externally
-          </button>
-          <WebSocketEndpointConfiguration
-            selectedTarget={provider}
-            updateWebSocketTarget={(field, value) => {
-              update(field, value);
-              setProvider((current) => ({
-                ...current,
-                config: { ...current.config, [field]: value },
-              }));
-            }}
-            urlError={null}
-          />
-        </>
+        <WebSocketEndpointConfiguration
+          selectedTarget={provider}
+          updateWebSocketTarget={(field, value) => {
+            update(field, value);
+            setProvider((current) => ({
+              ...current,
+              config: { ...current.config, [field]: value },
+            }));
+          }}
+          urlError={null}
+        />
       );
     };
 
@@ -201,7 +196,7 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(protocolsField).toHaveValue('json,');
     expect(update).toHaveBeenLastCalledWith('protocols', ['json']);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Update protocols externally' }));
+    act(updateProtocolsExternally);
 
     expect(protocolsField).toHaveFocus();
     expect(protocolsField).toHaveValue('json,');
