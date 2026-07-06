@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
@@ -151,6 +151,64 @@ describe('WebSocketEndpointConfiguration', () => {
     await user.click(screen.getByRole('button', { name: 'Load target' }));
 
     expect(protocolsField).toHaveValue('mqtt, graphql-transport-ws');
+  });
+
+  it('preserves a trailing comma during an active edit and applies external protocols on blur', async () => {
+    const user = userEvent.setup();
+    const update = vi.fn();
+
+    const StatefulConfiguration = () => {
+      const [provider, setProvider] = useState<ProviderOptions>({
+        ...baseProvider,
+        config: { ...baseProvider.config, protocols: ['json'] },
+      });
+
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setProvider({
+                ...baseProvider,
+                config: { ...baseProvider.config, protocols: ['mqtt'] },
+              })
+            }
+          >
+            Update protocols externally
+          </button>
+          <WebSocketEndpointConfiguration
+            selectedTarget={provider}
+            updateWebSocketTarget={(field, value) => {
+              update(field, value);
+              setProvider((current) => ({
+                ...current,
+                config: { ...current.config, [field]: value },
+              }));
+            }}
+            urlError={null}
+          />
+        </>
+      );
+    };
+
+    renderWithProviders(<StatefulConfiguration />);
+
+    const protocolsField = screen.getByLabelText('WebSocket Subprotocols');
+    await user.click(protocolsField);
+    await user.type(protocolsField, ',');
+
+    expect(protocolsField).toHaveFocus();
+    expect(protocolsField).toHaveValue('json,');
+    expect(update).toHaveBeenLastCalledWith('protocols', ['json']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update protocols externally' }));
+
+    expect(protocolsField).toHaveFocus();
+    expect(protocolsField).toHaveValue('json,');
+
+    await user.tab();
+
+    expect(protocolsField).toHaveValue('mqtt');
   });
 
   it('preserves raw Sec-WebSocket-Protocol headers and shows migration guidance', () => {
