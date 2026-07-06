@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import * as core from '@actions/core';
@@ -355,6 +356,11 @@ async function runPromptfooScan(
   promptfooVersion: string,
 ): Promise<ScanResponse> {
   const installEnv = createSubprocessEnv();
+  // Run the install from outside the checked-out workspace. npm's global mode
+  // documents (and testing confirms) that it ignores the per-project .npmrc, but the
+  // workspace cwd holds the untrusted PR being scanned — don't let any cwd-derived
+  // npm config (registry, proxy, strict-ssl, ignore-scripts…) ever be in scope.
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
 
   core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
   // Supply-chain hardening: install an exact, release-pinned version rather than
@@ -363,6 +369,7 @@ async function runPromptfooScan(
   // (promptfoo and its dependency tree work without lifecycle scripts.)
   await exec.exec('npm', ['install', '-g', `promptfoo@${promptfooVersion}`, '--ignore-scripts'], {
     env: installEnv,
+    cwd: installCwd,
   });
   core.info('✅ Promptfoo installed successfully');
 

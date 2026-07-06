@@ -4,6 +4,7 @@
  * Tests for the GitHub Action main entry point, specifically the CLI args construction.
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Stats } from 'node:fs';
 
@@ -159,7 +160,7 @@ interface PromptfooExecCall {
 
 interface NpmExecCall {
   args: string[];
-  options?: { env?: Record<string, string> };
+  options?: { env?: Record<string, string>; cwd?: string };
 }
 
 interface PromptfooAndNpmExecCalls {
@@ -520,6 +521,23 @@ describe('code-scan-action main', () => {
       const { args } = await importActionAndGetNpmInstallCall();
 
       expect(args).toEqual(['install', '-g', 'promptfoo@1.2.3-rc.1', '--ignore-scripts']);
+    });
+
+    it('runs the install from RUNNER_TEMP so workspace npm config is out of scope', async () => {
+      const runnerTemp = path.resolve('/runner/temp');
+      mockProcessEnv({ RUNNER_TEMP: runnerTemp });
+
+      const { options } = await importActionAndGetNpmInstallCall();
+
+      expect(options?.cwd).toBe(runnerTemp);
+    });
+
+    it('falls back to os.tmpdir() for the install cwd when RUNNER_TEMP is unset', async () => {
+      mockProcessEnv({ RUNNER_TEMP: undefined });
+
+      const { options } = await importActionAndGetNpmInstallCall();
+
+      expect(options?.cwd).toBe(os.tmpdir());
     });
 
     it.each([

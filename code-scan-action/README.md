@@ -72,10 +72,11 @@ The hardening below applies to releases after v0.1.8; earlier releases resolve `
   uses: promptfoo/code-scan-action@<full-commit-sha> # <tag>
   ```
 
-- **Verify build provenance.** The committed `dist/` bundle is built by the [promptfoo monorepo release workflow](https://github.com/promptfoo/promptfoo/blob/main/.github/workflows/release-please.yml), which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout of this repository with:
+- **Verify build provenance.** The committed `dist/` bundle and the `action.yml` that selects the entrypoint are built and exported by the [promptfoo monorepo release workflow](https://github.com/promptfoo/promptfoo/blob/main/.github/workflows/release-please.yml), which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout of this repository with:
 
   ```bash
   gh attestation verify dist/index.js --repo promptfoo/promptfoo
+  gh attestation verify action.yml --repo promptfoo/promptfoo
   ```
 
   Additionally, every release PR in this repository is validated by a workflow that rebuilds `dist/` from the pinned monorepo source commit and fails on any byte difference.
