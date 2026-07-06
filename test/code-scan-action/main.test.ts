@@ -528,6 +528,10 @@ describe('code-scan-action main', () => {
       ['an npm flag smuggled after the version', '0.100.5 --before=2020-01-01'],
       ['an alias to another package', 'npm:malicious-package@1.0.0'],
       ['a git URL', 'github:attacker/promptfoo'],
+      // Invalid semver that npm would reclassify as a mutable dist-tag lookup.
+      ['a numeric component above MAX_SAFE_INTEGER', '9999999999999999999.1.1'],
+      ['a leading-zero component', '01.2.3'],
+      ['an overlong version string', `1.2.3-${'a'.repeat(300)}`],
     ])('rejects %s as promptfoo-version without running any install', async (_label, value) => {
       mockPromptfooVersionInput(value);
 

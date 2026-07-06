@@ -185,7 +185,7 @@ jobs:
 
       - name: Run Promptfoo Code Scan
         id: promptfoo-code-scan
-        uses: promptfoo/code-scan-action@148e01f35bc65bd992b9f44679577aa9123be6ab # v0.1.8
+        uses: promptfoo/code-scan-action@v0
         env:
           PROMPTFOO_API_KEY: ${{ secrets.PROMPTFOO_API_KEY }}
         with:
@@ -202,11 +202,13 @@ jobs:
           category: promptfoo-code-scan
 ```
 
-The example pins each action to a full commit SHA with a version comment. Tags such as `v0` are convenient but mutable; a commit SHA is the only immutable reference. Resolve the commit for a release with `gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha`.
+The example pins the third-party actions to full commit SHAs with version comments. Tags such as `v0` are convenient but mutable; a commit SHA is the only immutable reference. For maximum assurance, pin `promptfoo/code-scan-action` the same way — resolve a release tag to its commit with `gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha` and use `uses: promptfoo/code-scan-action@<full-commit-sha> # <tag>`.
 
 ## Supply Chain Security
 
-- Each action release installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input to override the pin with another exact version.
+The hardening below applies to code-scan-action releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
+
+- The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input to override the pin with another exact version.
 - The `dist/` bundle committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) is built by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo`.
 
 ## See Also

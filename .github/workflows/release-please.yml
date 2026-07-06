@@ -227,6 +227,18 @@ jobs:
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0
 
+      # The action's runtime install is pinned to this commit's root package.json
+      # version, inlined into dist/ at build time. Refuse to mirror a release whose
+      # pinned scanner version never reached npm (e.g. a failed publish-npm awaiting
+      # backfill) — otherwise every consumer scan fails at install time with E404.
+      # Runs on main are serialized by the concurrency group, so a same-window root
+      # release's publish-npm has already finished (or failed) by the time this runs.
+      - name: Verify pinned promptfoo version is published to npm
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          npm view "promptfoo@${version}" version
+
       # Install root deps first; code-scan-action imports shared source from ../../src
       - run: npm ci
 

@@ -59,14 +59,18 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ## Supply Chain Security
 
-- **Pinned scanner install.** Each action release installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input (exact versions only) to override the pin.
-- **Pin by commit SHA for maximum assurance.** Version tags like `v0` and `v0.1.8` are managed by release automation and, like all git tags, are not cryptographically immutable — only a full commit SHA is. To fully pin the action:
+The hardening below applies to releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
 
-  ```yaml
-  uses: promptfoo/code-scan-action@148e01f35bc65bd992b9f44679577aa9123be6ab # v0.1.8
+- **Pinned scanner install.** The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input (exact versions only) to override the pin.
+- **Pin by commit SHA for maximum assurance.** Version tags like `v0` and `v0.1.8` are managed by release automation and, like all git tags, are not cryptographically immutable — only a full commit SHA is. Resolve a release tag to its commit and pin that:
+
+  ```bash
+  gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha
   ```
 
-  Resolve the commit for any release with `gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha`.
+  ```yaml
+  uses: promptfoo/code-scan-action@<full-commit-sha> # <tag>
+  ```
 
 - **Verify build provenance.** The committed `dist/` bundle is built by the [promptfoo monorepo release workflow](https://github.com/promptfoo/promptfoo/blob/main/.github/workflows/release-please.yml), which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout of this repository with:
 

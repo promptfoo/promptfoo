@@ -95,14 +95,24 @@ function resolveMinimumSeverityInput(): string {
 // Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
 // a dist-tag, a git/URL spec, or an extra npm flag — must be rejected because the value
 // is passed straight into `npm install` and controls which code scans the repository.
-const EXACT_SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+// Numeric components are capped at 15 digits and leading zeros are rejected: anything
+// beyond that is invalid semver, and npm reclassifies invalid-semver specs as mutable
+// dist-tag lookups, which would defeat the exact-version contract.
+const SEMVER_NUMERIC = String.raw`(?:0|[1-9]\d{0,14})`;
+const SEMVER_PRERELEASE_ID = String.raw`(?:0|[1-9]\d{0,14}|\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const EXACT_SEMVER_PATTERN = new RegExp(
+  `^${SEMVER_NUMERIC}\\.${SEMVER_NUMERIC}\\.${SEMVER_NUMERIC}` +
+    `(?:-${SEMVER_PRERELEASE_ID}(?:\\.${SEMVER_PRERELEASE_ID})*)?$`,
+);
+// semver's own MAX_LENGTH; also bounds regex work on hostile input.
+const MAX_VERSION_LENGTH = 256;
 
 function resolvePromptfooVersionInput(): string {
   const override = core.getInput('promptfoo-version').trim();
   if (!override) {
     return defaultPromptfooVersion;
   }
-  if (!EXACT_SEMVER_PATTERN.test(override)) {
+  if (override.length > MAX_VERSION_LENGTH || !EXACT_SEMVER_PATTERN.test(override)) {
     throw new Error(
       `Invalid promptfoo-version "${override}": expected an exact version like 0.121.0`,
     );
