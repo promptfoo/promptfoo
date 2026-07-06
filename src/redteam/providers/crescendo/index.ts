@@ -232,6 +232,7 @@ export class CrescendoProvider implements ApiProvider {
           provider: this.config.redteamProvider,
           preferSmallModel: false,
           jsonOnly: true,
+          purpose: 'attack',
         });
       }
     }

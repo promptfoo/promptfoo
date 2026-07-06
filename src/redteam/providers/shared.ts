@@ -30,7 +30,12 @@ import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import {
+  ATTACKER_MODEL,
+  ATTACKER_MODEL_SMALL,
+  getRedteamProviderMaxTokens,
+  TEMPERATURE,
+} from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -82,18 +87,121 @@ export function resetRedteamProviderLoader(): void {
   redteamProviderLoader = defaultRedteamProviderLoader;
 }
 
+/**
+ * Apply a bounded default output cap to OpenAI-family attack/grading providers. Keep this
+ * provider-specific: native providers use different request schemas, while the Responses API
+ * uses `max_output_tokens` and chat/completions use different aliases.
+ */
+type OpenAiOutputCapKind = 'chat' | 'completion' | 'responses';
+
+function hasProviderPrototype(provider: ApiProvider, constructorName: string): boolean {
+  let prototype = Object.getPrototypeOf(provider);
+  while (prototype) {
+    if (prototype.constructor?.name === constructorName) {
+      return true;
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  return false;
+}
+
+function getOpenAiOutputCapKind(provider: ApiProvider): OpenAiOutputCapKind | undefined {
+  const constructorName = provider.constructor?.name ?? '';
+  if (
+    hasProviderPrototype(provider, 'OpenAiResponsesProvider') ||
+    constructorName === 'AzureResponsesProvider' ||
+    constructorName === 'XAIResponsesProvider'
+  ) {
+    return 'responses';
+  }
+  if (
+    provider instanceof OpenAiChatCompletionProvider ||
+    hasProviderPrototype(provider, 'AzureChatCompletionProvider')
+  ) {
+    return 'chat';
+  }
+  if (
+    hasProviderPrototype(provider, 'OpenAiCompletionProvider') ||
+    constructorName === 'AzureCompletionProvider'
+  ) {
+    return 'completion';
+  }
+  return undefined;
+}
+
+async function cloneProviderConfig(provider: ApiProvider): Promise<ApiProvider> {
+  const config = (provider as { config?: Record<string, unknown> }).config;
+  if (!config || typeof config !== 'object') {
+    return provider;
+  }
+
+  // Some providers (notably Azure) populate authentication state asynchronously on the
+  // original instance. Wait before cloning so the capped copy receives the initialized state
+  // rather than a promise whose continuation will mutate a different object.
+  const initializationPromise = (provider as { initializationPromise?: Promise<unknown> | null })
+    .initializationPromise;
+  if (initializationPromise) {
+    await initializationPromise;
+  }
+
+  const descriptors = Object.getOwnPropertyDescriptors(provider);
+  const configDescriptor = Object.getOwnPropertyDescriptor(provider, 'config');
+  descriptors.config = {
+    configurable: configDescriptor?.configurable ?? true,
+    enumerable: configDescriptor?.enumerable ?? true,
+    value: { ...config },
+    writable: true,
+  };
+  return Object.create(Object.getPrototypeOf(provider), descriptors) as ApiProvider;
+}
+
+async function withDefaultOutputCap(provider: ApiProvider): Promise<ApiProvider> {
+  const providerKind = getOpenAiOutputCapKind(provider);
+  if (!providerKind) {
+    return provider;
+  }
+
+  // A caller may reuse an instantiated provider for normal batch generation. Clone the
+  // provider's own state before changing its config so attack/grading limits do not leak into
+  // those uncapped generation calls.
+  const cappedProvider = await cloneProviderConfig(provider);
+  const config = (cappedProvider as { config?: Record<string, unknown> }).config;
+  if (!config || typeof config !== 'object') {
+    return cappedProvider;
+  }
+
+  const defaultCap = getRedteamProviderMaxTokens();
+  if (providerKind === 'responses') {
+    config.max_output_tokens ??= defaultCap;
+    return cappedProvider;
+  }
+
+  if (providerKind === 'chat') {
+    const configuredCap = config.max_completion_tokens ?? config.max_tokens ?? defaultCap;
+    config.max_tokens ??= configuredCap;
+    config.max_completion_tokens ??= configuredCap;
+    return cappedProvider;
+  }
+
+  if (providerKind === 'completion') {
+    config.max_tokens ??= defaultCap;
+  }
+  return cappedProvider;
+}
+
 async function loadRedteamProvider({
   provider,
   jsonOnly = false,
   preferSmallModel = false,
-  purpose = 'redteam',
+  purpose = 'generation',
 }: {
   provider?: RedteamFileConfig['provider'];
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
-  purpose?: 'redteam' | 'grading';
+  purpose?: 'attack' | 'generation' | 'grading';
 } = {}) {
   let ret;
+  const shouldCapOutput = purpose === 'attack' || purpose === 'grading';
   const redteamProvider = provider || cliState.config?.redteam?.provider;
   if (isApiProvider(redteamProvider)) {
     logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
@@ -104,19 +212,44 @@ async function loadRedteamProvider({
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
+    const maxTokens = shouldCapOutput ? getRedteamProviderMaxTokens() : undefined;
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
+        ...(maxTokens === undefined
+          ? {}
+          : {
+              // Set both aliases; OpenAI chat selects the valid field for the active model.
+              max_tokens: maxTokens,
+              max_completion_tokens: maxTokens,
+            }),
       },
     });
   }
+  if (shouldCapOutput) {
+    ret = await withDefaultOutputCap(ret);
+  }
   return ret;
+}
+
+function getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
+  if (!cliState.config?.defaultTest || typeof cliState.config.defaultTest !== 'object') {
+    return undefined;
+  }
+
+  const defaultTest = cliState.config.defaultTest as any;
+  return (
+    defaultTest.provider || defaultTest.options?.provider?.text || defaultTest.options?.provider
+  );
 }
 
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
   private jsonOnlyProvider: ApiProvider | undefined;
+  private attackProvider: ApiProvider | undefined;
+  private attackJsonOnlyProvider: ApiProvider | undefined;
+  private configuredProvider: RedteamFileConfig['provider'] | undefined;
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
@@ -144,6 +277,9 @@ class RedteamProviderManager {
   clearProvider() {
     this.provider = undefined;
     this.jsonOnlyProvider = undefined;
+    this.attackProvider = undefined;
+    this.attackJsonOnlyProvider = undefined;
+    this.configuredProvider = undefined;
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
@@ -152,6 +288,9 @@ class RedteamProviderManager {
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
+    this.configuredProvider = provider;
+    this.attackProvider = undefined;
+    this.attackJsonOnlyProvider = undefined;
     this.provider = await loadRedteamProvider({ provider });
     this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
   }
@@ -174,14 +313,39 @@ class RedteamProviderManager {
     provider,
     jsonOnly = false,
     preferSmallModel = false,
+    purpose = 'generation',
   }: {
     provider?: RedteamFileConfig['provider'];
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
+    purpose?: 'attack' | 'generation';
   }): Promise<ApiProvider> {
-    if (this.provider && this.jsonOnlyProvider) {
+    if (purpose === 'generation' && this.provider && this.jsonOnlyProvider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
       return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
+    }
+
+    if (purpose === 'attack' && this.configuredProvider !== undefined) {
+      const cachedAttackProvider = jsonOnly ? this.attackJsonOnlyProvider : this.attackProvider;
+      if (cachedAttackProvider) {
+        logger.debug(
+          `[RedteamProviderManager] Using cached attack provider: ${cachedAttackProvider.id()}`,
+        );
+        return this.wrapProvider(cachedAttackProvider);
+      }
+
+      const loadedAttackProvider = await loadRedteamProvider({
+        provider: this.configuredProvider,
+        jsonOnly,
+        preferSmallModel,
+        purpose: 'attack',
+      });
+      if (jsonOnly) {
+        this.attackJsonOnlyProvider = loadedAttackProvider;
+      } else {
+        this.attackProvider = loadedAttackProvider;
+      }
+      return this.wrapProvider(loadedAttackProvider);
     }
 
     // Check if we have an explicit provider argument or redteam.provider configured
@@ -190,14 +354,7 @@ class RedteamProviderManager {
     // If no explicit redteam provider, try defaultTest config chain as fallback
     // This ensures users who configure defaultTest.options.provider get consistent behavior
     if (!hasExplicitProvider) {
-      const defaultTestProvider =
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.provider) ||
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.options?.provider) ||
-        undefined;
+      const defaultTestProvider = getDefaultTestProvider();
 
       if (defaultTestProvider) {
         logger.debug(
@@ -215,6 +372,7 @@ class RedteamProviderManager {
           provider: defaultTestProvider,
           jsonOnly,
           preferSmallModel,
+          purpose,
         });
         logger.debug(
           `[RedteamProviderManager] Using redteam provider from defaultTest: ${redteamProvider.id()}`,
@@ -228,7 +386,12 @@ class RedteamProviderManager {
       jsonOnly,
       preferSmallModel,
     });
-    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
+    const redteamProvider = await loadRedteamProvider({
+      provider,
+      jsonOnly,
+      preferSmallModel,
+      purpose,
+    });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return this.wrapProvider(redteamProvider);
   }
@@ -255,14 +418,7 @@ class RedteamProviderManager {
     }
 
     // 3) Try defaultTest config chain (grading-first)
-    const cfg =
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.provider) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider) ||
-      undefined;
+    const cfg = getDefaultTestProvider();
 
     if (cfg) {
       const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });
@@ -272,8 +428,13 @@ class RedteamProviderManager {
       return this.wrapProvider(loaded);
     }
 
-    // 4) Fallback to redteam provider (already wraps)
-    return this.getProvider({ jsonOnly });
+    // 4) Fallback to the manager-configured redteam provider or the default local grader.
+    const loaded = await loadRedteamProvider({
+      provider: this.configuredProvider,
+      jsonOnly,
+      purpose: 'grading',
+    });
+    return this.wrapProvider(loaded);
   }
 
   async getMultilingualProvider(): Promise<ApiProvider | undefined> {
