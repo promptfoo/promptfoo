@@ -160,6 +160,13 @@ describe('AssertsForm', () => {
     ]);
   });
 
+  it('shows the passing-only default for a latency selector without options', () => {
+    initialValues = [{ type: 'select-lowest-latency' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByRole('checkbox', { name: 'Only passing outputs' })).toBeChecked();
+  });
+
   it('uses the passing-only default when selecting the latency selector', async () => {
     initialValues = [{ type: 'equals', value: 'stale value' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);

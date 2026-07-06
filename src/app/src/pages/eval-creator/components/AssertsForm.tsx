@@ -230,7 +230,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         typeof assert.value === 'object' &&
                         assert.value !== null &&
                         !Array.isArray(assert.value) &&
-                        (assert.value as { onlyPassing?: unknown }).onlyPassing === true
+                        typeof (assert.value as { onlyPassing?: unknown }).onlyPassing === 'boolean'
+                          ? (assert.value as { onlyPassing: boolean }).onlyPassing
+                          : assert.type === 'select-lowest-latency'
                       }
                       onCheckedChange={(checked) => {
                         const newAsserts = asserts.map((a, i) =>
