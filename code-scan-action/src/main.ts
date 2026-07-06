@@ -96,9 +96,11 @@ function resolveMinimumSeverityInput(): string {
 // Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
 // a dist-tag, a git/URL spec, or an extra npm flag — must be rejected because the value
 // is passed straight into `npm install` and controls which code scans the repository.
-// Numeric components are capped at 15 digits and leading zeros are rejected: anything
-// beyond that is invalid semver, and npm reclassifies invalid-semver specs as mutable
-// dist-tag lookups, which would defeat the exact-version contract.
+// Numeric components are capped at 15 digits so they always stay below
+// Number.MAX_SAFE_INTEGER, node-semver's actual component limit: an oversized
+// component makes the spec invalid semver, which npm reclassifies as a mutable
+// dist-tag lookup, defeating the exact-version contract. Leading zeros are rejected
+// as invalid strict semver (npm loose-parses them rather than resolving exactly).
 const SEMVER_NUMERIC = String.raw`(?:0|[1-9]\d{0,14})`;
 const SEMVER_PRERELEASE_ID = String.raw`(?:0|[1-9]\d{0,14}|\d*[A-Za-z-][0-9A-Za-z-]*)`;
 const EXACT_SEMVER_PATTERN = new RegExp(
@@ -355,7 +357,8 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 // - exact release-pinned version, never a mutable spec like `latest`
 // - --ignore-scripts: the scanner tree must not execute arbitrary code before the
 //   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
-// - sanitized env (createSubprocessEnv) with tokens and npm overrides stripped
+// - sanitized env (createSubprocessEnv) with tokens and the npm --before override
+//   stripped
 // - cwd outside the checked-out workspace: npm's global mode documents (and testing
 //   confirms) that it ignores the per-project .npmrc, but the workspace holds the
 //   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,

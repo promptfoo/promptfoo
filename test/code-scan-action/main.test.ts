@@ -520,6 +520,28 @@ describe('code-scan-action main', () => {
       expect(args).toEqual(['install', '-g', 'promptfoo@1.2.3-rc.1', '--ignore-scripts']);
     });
 
+    it('accepts 15-digit numeric components (the cap boundary)', async () => {
+      const version = `${'9'.repeat(15)}.0.0`;
+      mockPromptfooVersionInput(version);
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(['install', '-g', `promptfoo@${version}`, '--ignore-scripts']);
+    });
+
+    it('falls back to the release-pinned version when promptfoo-version is whitespace', async () => {
+      mockPromptfooVersionInput('   ');
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual([
+        'install',
+        '-g',
+        `promptfoo@${pinnedPromptfooVersion}`,
+        '--ignore-scripts',
+      ]);
+    });
+
     it('runs the install from RUNNER_TEMP so workspace npm config is out of scope', async () => {
       const runnerTemp = path.resolve('/runner/temp');
       mockProcessEnv({ RUNNER_TEMP: runnerTemp });
@@ -543,9 +565,13 @@ describe('code-scan-action main', () => {
       ['an npm flag smuggled after the version', '0.100.5 --before=2020-01-01'],
       ['an alias to another package', 'npm:malicious-package@1.0.0'],
       ['a git URL', 'github:attacker/promptfoo'],
-      // Invalid semver that npm would reclassify as a mutable dist-tag lookup.
+      // Above-MAX_SAFE_INTEGER components are invalid semver that npm reclassifies as
+      // a mutable dist-tag lookup; leading zeros are invalid strict semver that npm
+      // would loose-parse instead of resolving exactly.
       ['a numeric component above MAX_SAFE_INTEGER', '9999999999999999999.1.1'],
+      ['a 16-digit numeric component (above the cap)', `${'9'.repeat(16)}.0.0`],
       ['a leading-zero component', '01.2.3'],
+      ['a leading-zero numeric prerelease id', '1.2.3-01'],
       ['an overlong version string', `1.2.3-${'a'.repeat(300)}`],
     ])('rejects %s as promptfoo-version without running any install', async (_label, value) => {
       mockPromptfooVersionInput(value);

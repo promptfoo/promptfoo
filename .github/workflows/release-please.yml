@@ -229,7 +229,8 @@ jobs:
       # The action's runtime install is pinned to this commit's root package.json
       # version, inlined into dist/ at build time. Refuse to mirror a release whose
       # pinned scanner version never reached npm (e.g. a failed publish-npm awaiting
-      # backfill) — otherwise every consumer scan fails at install time with E404.
+      # backfill) — otherwise every consumer scan fails at install time with ETARGET
+      # (no matching version found).
       # The registry is the ground truth (a publish-npm job result would wrongly
       # block a version that was backfilled later); `needs: publish-npm` guarantees
       # a same-run publish has finished before this check runs, and the retries
@@ -273,7 +274,12 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          grep -Fq "\"${version}\"" code-scan-action/dist/index.js
+          count="$(grep -Fc "\"${version}\"" code-scan-action/dist/index.js || true)"
+          echo "dist/index.js embeds \"${version}\" ${count} time(s)"
+          if [[ "$count" -eq 0 ]]; then
+            echo "::error::dist/index.js does not embed promptfoo@${version}; the runtime pin has desynced from the npm-availability gate"
+            exit 1
+          fi
 
       - name: Prepare mirror release payload
         env:
