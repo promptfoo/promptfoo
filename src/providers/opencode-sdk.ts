@@ -1356,6 +1356,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     sessionId: string,
+    allSessionParts: OpenCodePromptPart[] = [],
   ): ProviderResponse {
     const responseData = unwrapOpenCodeResult(response);
     const assistantMessage = responseData?.info;
@@ -1377,7 +1378,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const tokens = assistantMessage?.tokens;
-    const skillCalls = this.deriveSkillCalls(parts);
+    // Prefer full session history when available so skill calls from intermediate
+    // turns are captured. OpenCode is multi-turn: the skill tool is typically
+    // invoked before the final response, so its tool part is absent from `parts`.
+    const skillCalls = this.deriveSkillCalls(allSessionParts.length > 0 ? allSessionParts : parts);
 
     return {
       output,
@@ -1538,7 +1542,34 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return { error: 'OpenCode SDK call aborted' };
       }
 
-      const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
+      // Fetch the full session message history to capture skill tool calls from
+      // intermediate turns. OpenCode runs as a multi-turn agent and the skill
+      // invocation typically happens before the final response, so it is absent
+      // from responseData.parts. Without this, deriveSkillCalls always returns []
+      // and the skill-used assertion always fails for multi-turn sessions.
+      let allSessionParts: OpenCodePromptPart[] = [];
+      try {
+        const messagesParams =
+          this.opencodeModule?.apiVersion === 'v2'
+            ? { sessionID: session.sessionId, ...session.sessionQuery }
+            : { path: getSessionPath(session.sessionId), query: session.sessionQuery };
+        const messagesResult = await (client.session as any).messages(messagesParams);
+        const messages: Array<{ parts?: OpenCodePromptPart[] }> =
+          (messagesResult as any)?.data ?? messagesResult ?? [];
+        allSessionParts = messages.flatMap((m) => m.parts ?? []);
+        logger.debug(
+          `[OpenCode SDK] Fetched ${messages.length} messages, ${allSessionParts.length} total parts for skill tracking`,
+        );
+      } catch (e) {
+        logger.debug(`[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`);
+      }
+
+      const providerResponse = this.buildProviderResponse(
+        config,
+        response,
+        session.sessionId,
+        allSessionParts,
+      );
 
       await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
       logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
