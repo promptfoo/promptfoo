@@ -56,6 +56,7 @@ import { AlignedHarmfulPlugin } from './harmful/aligned';
 import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
+import { PersonaInjectionPlugin } from './personaInjection';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
@@ -513,6 +514,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
+  createPluginFactory(PersonaInjectionPlugin, 'persona-injection'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),

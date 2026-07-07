@@ -61,6 +61,7 @@ import {
 } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
+import { PersonaInjectionGrader } from './plugins/personaInjection';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { InsuranceCoverageDiscriminationPluginGrader } from './plugins/insurance/coverageDiscrimination';
 import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDisclosure';
@@ -205,6 +206,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:weapons:ied': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
+  'promptfoo:redteam:persona-injection': new PersonaInjectionGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:insurance:coverage-discrimination':
     new InsuranceCoverageDiscriminationPluginGrader(),
