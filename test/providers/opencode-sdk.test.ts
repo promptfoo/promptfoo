@@ -134,6 +134,7 @@ describe('OpenCodeSDKProvider', () => {
     // random test ordering.
     mockSessionCreate.mockReset();
     mockSessionPrompt.mockReset();
+    mockSessionMessages.mockReset();
     mockSessionDelete.mockReset();
     mockSessionAbort.mockReset();
 
@@ -181,6 +182,7 @@ describe('OpenCodeSDKProvider', () => {
     );
     mockSessionDelete.mockResolvedValue(undefined);
     mockSessionAbort.mockResolvedValue(undefined);
+    mockSessionMessages.mockResolvedValue([]);
 
     // File system mocks
     tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
@@ -520,6 +522,122 @@ describe('OpenCodeSDKProvider', () => {
             input: { name: 'missing-skill' },
             source: 'tool',
             is_error: true,
+          },
+        ]);
+      });
+
+      it('should capture skill calls from intermediate turns via session history', async () => {
+        // The skill tool is invoked in turn 1; the final response (turn 2) has only
+        // a text part. Without fetching the full session history, deriveSkillCalls
+        // would see no tool parts and return [] — causing skill-used assertions to fail.
+        // parentID on the assistant message anchors the slice to the user message
+        // that triggered this prompt, so only the relevant turns are inspected.
+        mockSessionPrompt.mockResolvedValue({
+          data: {
+            ...createMockPromptResponse([{ type: 'text', text: 'All done.' }]).data,
+            info: {
+              ...createMockPromptResponse([{ type: 'text', text: 'All done.' }]).data.info,
+              id: 'assistant-msg-1',
+              parentID: 'user-msg-1',
+            },
+          },
+        });
+        mockSessionMessages.mockResolvedValue([
+          // Message from a PREVIOUS prompt — must not bleed into this evaluation
+          {
+            id: 'user-msg-0',
+            parts: [{ type: 'text', text: 'Previous prompt' }],
+          },
+          {
+            id: 'assistant-msg-0',
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'old-skill' },
+                  metadata: { name: 'old-skill', dir: '/repo/.agents/skills/old-skill' },
+                },
+              },
+            ],
+          },
+          // Messages belonging to THIS prompt (anchor: user-msg-1)
+          {
+            id: 'user-msg-1',
+            parts: [{ type: 'text', text: 'Generate the data layer' }],
+          },
+          {
+            id: 'intermediate-msg-1',
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'atenea-angular-data' },
+                  metadata: {
+                    name: 'atenea-angular-data',
+                    dir: '/repo/.agents/skills/atenea-angular-data',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: 'assistant-msg-1',
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Generate the data layer');
+
+        // Only the skill from THIS prompt's turns must appear — not old-skill
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'atenea-angular-data',
+            input: { name: 'atenea-angular-data' },
+            path: path.join('/repo/.agents/skills/atenea-angular-data', 'SKILL.md'),
+            source: 'tool',
+          },
+        ]);
+      });
+
+      it('should fall back to final response parts when session.messages fails', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              type: 'tool',
+              tool: 'skill',
+              state: {
+                status: 'completed',
+                input: { name: 'review-standards' },
+                metadata: {
+                  name: 'review-standards',
+                  dir: '/repo/.agents/skills/review-standards',
+                },
+              },
+            },
+            { type: 'text', text: 'Done.' },
+          ]),
+        );
+        mockSessionMessages.mockRejectedValue(new Error('messages endpoint unavailable'));
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use skill');
+
+        // Graceful degradation: skill in final parts is still captured
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'review-standards',
+            input: { name: 'review-standards' },
+            path: path.join('/repo/.agents/skills/review-standards', 'SKILL.md'),
+            source: 'tool',
           },
         ]);
       });
