@@ -542,14 +542,15 @@ describe('OpenCodeSDKProvider', () => {
             },
           },
         });
+        // Session messages use { info: { id }, parts } structure (matching the real API)
         mockSessionMessages.mockResolvedValue([
           // Message from a PREVIOUS prompt — must not bleed into this evaluation
           {
-            id: 'user-msg-0',
+            info: { id: 'user-msg-0', role: 'user' },
             parts: [{ type: 'text', text: 'Previous prompt' }],
           },
           {
-            id: 'assistant-msg-0',
+            info: { id: 'assistant-msg-0', role: 'assistant' },
             parts: [
               {
                 type: 'tool',
@@ -564,28 +565,28 @@ describe('OpenCodeSDKProvider', () => {
           },
           // Messages belonging to THIS prompt (anchor: user-msg-1)
           {
-            id: 'user-msg-1',
-            parts: [{ type: 'text', text: 'Generate the data layer' }],
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Apply the code standards skill' }],
           },
           {
-            id: 'intermediate-msg-1',
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
             parts: [
               {
                 type: 'tool',
                 tool: 'skill',
                 state: {
                   status: 'completed',
-                  input: { name: 'atenea-angular-data' },
+                  input: { name: 'code-standards' },
                   metadata: {
-                    name: 'atenea-angular-data',
-                    dir: '/repo/.agents/skills/atenea-angular-data',
+                    name: 'code-standards',
+                    dir: '/repo/.agents/skills/code-standards',
                   },
                 },
               },
             ],
           },
           {
-            id: 'assistant-msg-1',
+            info: { id: 'assistant-msg-1', role: 'assistant' },
             parts: [{ type: 'text', text: 'All done.' }],
           },
         ]);
@@ -593,14 +594,14 @@ describe('OpenCodeSDKProvider', () => {
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
-        const result = await provider.callApi('Generate the data layer');
+        const result = await provider.callApi('Apply the code standards skill');
 
         // Only the skill from THIS prompt's turns must appear — not old-skill
         expect(result.metadata?.skillCalls).toEqual([
           {
-            name: 'atenea-angular-data',
-            input: { name: 'atenea-angular-data' },
-            path: path.join('/repo/.agents/skills/atenea-angular-data', 'SKILL.md'),
+            name: 'code-standards',
+            input: { name: 'code-standards' },
+            path: path.join('/repo/.agents/skills/code-standards', 'SKILL.md'),
             source: 'tool',
           },
         ]);
