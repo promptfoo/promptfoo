@@ -92,6 +92,6 @@
     "dompurify": "^3.4.8",
     "js-yaml": "5.2.0",
     "react-countup": "^6.5.3",
-    "swiper": "^12.1.2"
+    "swiper": "^14.0.0"
   }
 }
