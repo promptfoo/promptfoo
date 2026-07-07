@@ -14,6 +14,14 @@ import type { OtelConfig } from './otelConfig';
 // Singleton instances
 let provider: NodeTracerProvider | null = null;
 let initialized = false;
+let activeConfig: OtelConfig | null = null;
+
+const PROCESS_WIDE_CONFIG_FIELDS: Array<keyof OtelConfig> = [
+  'serviceName',
+  'endpoint',
+  'localExport',
+  'debug',
+];
 
 // Use a global symbol to track handlers across module resets (important for tests)
 const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
@@ -50,19 +58,27 @@ function getHandlers(): OtelHandlers {
  * @param config - OTEL configuration
  */
 export function initializeOtel(config: OtelConfig): void {
-  if (initialized) {
-    logger.debug('[OtelSdk] Already initialized, skipping');
-    return;
-  }
-
   if (!config.enabled) {
     logger.debug('[OtelSdk] OTEL tracing is disabled');
     return;
   }
 
+  if (initialized) {
+    const conflictingFields = PROCESS_WIDE_CONFIG_FIELDS.filter(
+      (field) => activeConfig?.[field] !== config[field],
+    );
+    if (conflictingFields.length > 0) {
+      throw new Error(
+        `OpenTelemetry is already initialized with different process-wide configuration fields: ${conflictingFields.join(', ')}. Use the same tracing exporter settings for evaluations in one process, or run them in separate processes.`,
+      );
+    }
+    logger.debug('[OtelSdk] Already initialized, skipping');
+    return;
+  }
+
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
     serviceName: config.serviceName,
-    endpoint: config.endpoint,
+    otlpExport: Boolean(config.endpoint),
     localExport: config.localExport,
   });
 
@@ -97,7 +113,7 @@ export function initializeOtel(config: OtelConfig): void {
       url: config.endpoint,
     });
     spanProcessors.push(new BatchSpanProcessor(otlpExporter));
-    logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
+    logger.debug('[OtelSdk] Added OTLP exporter');
   }
 
   // Create trace provider with resource and span processors
@@ -106,6 +122,7 @@ export function initializeOtel(config: OtelConfig): void {
   // Register the provider globally
   provider.register();
 
+  activeConfig = { ...config };
   initialized = true;
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
@@ -131,6 +148,7 @@ export async function shutdownOtel(): Promise<void> {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
     provider = null;
+    activeConfig = null;
     initialized = false;
     cleanupShutdownHandlers();
   }

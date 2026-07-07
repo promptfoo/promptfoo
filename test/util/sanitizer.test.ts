@@ -589,6 +589,24 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(input);
       expect(result).toEqual(input);
     });
+
+    it('should sanitize credentials from nested exporter endpoints', () => {
+      const result = sanitizeObject({
+        tracing: {
+          endpoint: 'https://collector-user:collector-password@example.test/v1/traces?token=secret',
+        },
+        endpointName: 'production-endpoint',
+      });
+
+      expect(result.tracing.endpoint).toContain('example.test/v1/traces');
+      expect(JSON.stringify(result)).not.toContain('collector-password');
+      expect(JSON.stringify(result)).not.toContain('token=secret');
+      expect(result.endpointName).toBe('production-endpoint');
+      expect(sanitizeObject({ endpoint: 'override-endpoint' })).toEqual({
+        endpoint: 'override-endpoint',
+      });
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('array handling', () => {

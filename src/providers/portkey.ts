@@ -50,6 +50,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
   constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: 'portkey',
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'PORTKEY_API_KEY',

@@ -89,6 +89,10 @@ export function calculateMoonshotCost(
 class MoonshotProvider extends OpenAiChatCompletionProvider {
   config: MoonshotConfig;
 
+  protected override getGenAIProviderName(): string {
+    return 'moonshot_ai';
+  }
+
   constructor(modelName: string, providerOptions: MoonshotProviderOptions) {
     const moonshotConfig = providerOptions.config ?? {};
     const resolvedConfig: MoonshotConfig = {

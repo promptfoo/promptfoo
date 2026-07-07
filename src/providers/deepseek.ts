@@ -95,6 +95,10 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
+  protected override getGenAIProviderName(): string {
+    return 'deepseek';
+  }
+
   constructor(modelName: string, providerOptions: DeepSeekProviderOptions) {
     // Extract the nested config
     const deepseekConfig = providerOptions.config?.config;

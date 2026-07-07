@@ -759,6 +759,7 @@ describe('loadApiProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
       'meta-llama/Meta-Llama-3-8B-Instruct-Turbo',
       {
+        genAIProviderName: 'hyperbolic',
         config: expect.objectContaining({
           apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
           apiKeyEnvar: 'HYPERBOLIC_API_KEY',
@@ -771,6 +772,7 @@ describe('loadApiProvider', () => {
   it('should load GitHub provider with default model', async () => {
     const provider = await loadApiProvider('github:');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
+      genAIProviderName: 'github',
       config: expect.objectContaining({
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
@@ -782,6 +784,7 @@ describe('loadApiProvider', () => {
   it('should load GitHub provider with specific model', async () => {
     const provider = await loadApiProvider('github:openai/gpt-4o-mini');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
+      genAIProviderName: 'github',
       config: expect.objectContaining({
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',

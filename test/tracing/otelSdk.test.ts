@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
@@ -183,6 +184,17 @@ describe('otelSdk', () => {
       expect(constructorArg.spanProcessors?.length).toBe(2);
     });
 
+    it('should omit exporter endpoint credentials from logs without changing the exporter URL', () => {
+      const endpoint =
+        'https://collector-user:collector-password@example.com/v1/traces?api_key=sk-proj-abcdefghijklmnopqrstuvwxyz';
+
+      initializeOtel({ ...defaultConfig, endpoint });
+
+      expect(otlpExporterCalls[0]).toEqual({ url: endpoint });
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(endpoint);
+      expect(logger.debug).toHaveBeenCalledWith('[OtelSdk] Added OTLP exporter');
+    });
+
     it('should skip local export when localExport is false', () => {
       initializeOtel({
         ...defaultConfig,
@@ -212,6 +224,25 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
 
       expect(mockRegister.mock.calls.length).toBe(firstCallCount);
+    });
+
+    it('should reject conflicting process-wide configuration without exposing values', () => {
+      initializeOtel({
+        ...defaultConfig,
+        endpoint: 'https://first-user:first-password@first.example/v1/traces',
+      });
+      const conflictingEndpoint =
+        'https://second-user:second-password@second.example/v1/traces?token=secret';
+
+      expect(() =>
+        initializeOtel({
+          ...defaultConfig,
+          serviceName: 'other-service',
+          endpoint: conflictingEndpoint,
+        }),
+      ).toThrow('different process-wide configuration fields: serviceName, endpoint');
+      expect(mockRegister).toHaveBeenCalledOnce();
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(conflictingEndpoint);
     });
 
     it('should create resource with service name and version', () => {

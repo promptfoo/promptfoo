@@ -49,7 +49,10 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
   private agentId: string;
 
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
+    super(buildOpenClawModelName(agentId), {
+      ...buildOpenClawProviderOptions(agentId, providerOptions),
+      genAIProviderName: 'openclaw',
+    });
     this.agentId = agentId;
   }
 

@@ -100,6 +100,21 @@ type EnvVars = {
    * Standard OTEL environment variable for OTLP endpoint.
    */
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+  /**
+   * Standard signal-specific OTLP/HTTP traces endpoint.
+   */
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?: string;
+  /**
+   * Standard OTEL service name, used when the Promptfoo-specific override is unset.
+   */
+  OTEL_SERVICE_NAME?: string;
+  /**
+   * Standard OTEL opt-in for semantic convention stability. When this includes
+   * "gen_ai_latest_experimental", built-in provider spans use the latest Gen AI
+   * convention (operation names text_completion/embeddings).
+   * When unset, legacy names (completion, embedding) are emitted.
+   */
+  OTEL_SEMCONV_STABILITY_OPT_IN?: string;
 
   //=========================================================================
   // promptfoo configuration options

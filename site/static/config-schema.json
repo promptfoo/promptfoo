@@ -59,13 +59,13 @@
           "$ref": "#/definitions/__schema40"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema41"
+          "$ref": "#/definitions/__schema44"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema46"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema47"
         }
       },
       "required": ["prompts"],
@@ -3079,6 +3079,18 @@
         "enabled": {
           "type": "boolean"
         },
+        "serviceName": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "localExport": {
+          "type": "boolean"
+        },
+        "debug": {
+          "type": "boolean"
+        },
         "failOnReceiverStartFailure": {
           "type": "boolean"
         },
@@ -3154,29 +3166,39 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean"
+              "$ref": "#/definitions/__schema41"
             },
             "endpoint": {
-              "type": "string"
+              "$ref": "#/definitions/__schema42"
             },
             "headers": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {
-                "type": "string"
-              }
+              "$ref": "#/definitions/__schema43"
             }
           },
           "required": ["enabled", "endpoint"],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Accepted for configuration compatibility only; the built-in receiver does not relay spans."
         }
       },
       "required": ["enabled"],
       "additionalProperties": false
     },
     "__schema41": {
+      "type": "boolean"
+    },
+    "__schema42": {
+      "type": "string"
+    },
+    "__schema43": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "__schema44": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3219,15 +3241,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema45"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema45": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema46": {
       "type": "object",
       "properties": {
         "description": {
@@ -3355,7 +3377,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema45"
             }
           ]
         },
@@ -3429,7 +3451,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema47": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

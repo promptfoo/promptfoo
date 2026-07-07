@@ -704,7 +704,7 @@ When wrapper OTEL instrumentation is enabled, the Python provider wrapper:
 - Captures token usage from `tokenUsage` in your response
 - Includes evaluation and test case metadata
 
-The spans follow [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
+The spans follow the [primary OpenTelemetry GenAI span specification](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`. By default, the wrapper preserves its historical `gen_ai.system`, span names, operation names, and token-detail names. Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to emit current provider, operation, and dotted reasoning/cache token names. Python and JavaScript instrumentation use the same success/error status rules and redact common credential shapes from traced request and response bodies.
 
 This span covers the provider call itself. If you need internal workflow telemetry for tools, agents, or handoffs, create custom child spans or export framework-native traces into Promptfoo. See the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) for a full example that makes `trajectory:*` assertions work with the Python `openai-agents` SDK.
 

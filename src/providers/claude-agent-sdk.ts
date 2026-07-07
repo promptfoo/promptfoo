@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -1338,8 +1339,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       return await withGenAISpan(
         {
           system: 'anthropic',
-          operationName: 'chat',
+          operationName: 'invoke_agent',
           model: config.model || 'default',
+          requestModel: config.model,
           providerId: this.providerId,
           traceparent: context?.traceparent,
           maxTokens: config.max_thinking_tokens,
@@ -1402,7 +1404,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             turnCount = index;
             const attributes: Record<string, string | number | boolean> = {
               'gen_ai.turn.index': index,
-              'gen_ai.system': 'anthropic',
             };
             if (msg.parent_tool_use_id) {
               attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
@@ -1437,6 +1438,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               index,
               startTime: now,
               endTime: now,
+              system: 'anthropic',
               attributes,
               errorMessage: msg.error,
               logLabel: 'ClaudeAgentSDK',
@@ -1589,10 +1591,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             logger.warn(
               `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
             );
-            otelTrace.getActiveSpan()?.setStatus({
+            const activeSpan = otelTrace.getActiveSpan();
+            activeSpan?.setStatus({
               code: SpanStatusCode.ERROR,
               message: 'stream closed without terminal_reason after multiple result messages',
             });
+            activeSpan?.setAttribute(ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER);
           }
           const raw = JSON.stringify(finalMsg);
           const tokenUsage: ProviderResponse['tokenUsage'] = {
@@ -1620,10 +1624,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               ? finalMsg.terminal_reason
               : undefined;
           if (abortedTerminalReason) {
-            otelTrace.getActiveSpan()?.setStatus({
+            const activeSpan = otelTrace.getActiveSpan();
+            activeSpan?.setStatus({
               code: SpanStatusCode.ERROR,
               message: `aborted: ${abortedTerminalReason}`,
             });
+            activeSpan?.setAttribute(ATTR_ERROR_TYPE, abortedTerminalReason);
           }
 
           // Only SDKResultSuccess carries `api_error_status` per the SDK types;
@@ -1723,26 +1729,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           if (Array.isArray(toolCalls) && toolCalls.length > 0) {
             additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
           }
-          // Response model: the SDK reports per-model usage keyed by model name.
-          // Pick the key with the largest token usage rather than iteration order —
-          // the SDK makes no ordering contract, and tie-breaking by usage gives the
-          // model that actually did most of the work when fallbacks fire.
+          // The SDK reports aggregate usage keyed by model, not which model
+          // produced the final response. Emit a response model only when that
+          // aggregate is unambiguous; choosing the highest-usage model can
+          // misattribute a subagent or fallback as the response model.
           let responseModel: string | undefined;
           const modelUsage = metadata.modelUsage;
           if (modelUsage && typeof modelUsage === 'object' && !Array.isArray(modelUsage)) {
-            let topUsage = -1;
-            for (const [key, usage] of Object.entries(
-              modelUsage as Record<string, { inputTokens?: number; outputTokens?: number }>,
-            )) {
-              if (typeof key !== 'string' || key.length === 0 || key === 'undefined') {
-                continue;
-              }
-              const total = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
-              if (total > topUsage) {
-                topUsage = total;
-                responseModel = key;
-              }
-            }
+            const modelNames = Object.keys(modelUsage).filter(
+              (key) => key.length > 0 && key !== 'undefined',
+            );
+            responseModel = modelNames.length === 1 ? modelNames[0] : undefined;
           }
 
           // Map the SDK's terminal_reason into the standard GenAI finish_reasons
@@ -1754,6 +1751,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             tokenUsage: response.tokenUsage,
             responseModel,
             responseId: response.sessionId,
+            conversationId: response.sessionId,
             finishReasons,
             cacheHit: response.cached,
             responseBody:

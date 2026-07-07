@@ -90,6 +90,7 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
 
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: 'databricks',
       config: mergedConfig,
     });
 

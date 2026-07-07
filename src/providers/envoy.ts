@@ -59,6 +59,7 @@ export function createEnvoyProvider(
 
   const envoyConfig = {
     ...options,
+    genAIProviderName: 'envoy',
     config: {
       apiBaseUrl: normalizedBaseUrl,
       // Authentication is optional and depends on gateway configuration

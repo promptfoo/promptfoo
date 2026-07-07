@@ -1,6 +1,8 @@
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
+import { context as otelContext } from '@opentelemetry/api';
+import { suppressTracing } from '@opentelemetry/core';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -48,7 +50,7 @@ import {
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { flushOtel, initializeOtel } from './tracing/otelSdk';
 import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
@@ -1401,10 +1403,13 @@ export function getTraceLinkage(
  * @returns The result of the test case.
  */
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
-  return withCacheNamespace(
-    getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
-  );
+  const execute = () =>
+    withCacheNamespace(getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions), () =>
+      runEvalInternal(options),
+    );
+  return isTracingEnabledForTest(options.testSuite, options.test)
+    ? execute()
+    : otelContext.with(suppressTracing(otelContext.active()), execute);
 }
 
 async function runEvalInternal({
@@ -2676,15 +2681,15 @@ function createRunEvalTest(
   };
 }
 
-function isTracingEnabledForTest(testSuite: TestSuite, testCase: AtomicTestCase) {
+function isTracingEnabledForTest(testSuite: TestSuite | undefined, testCase: AtomicTestCase) {
   const tracingEnvEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
   const tracingEnabled =
     tracingEnvEnabled ||
     testCase.metadata?.tracingEnabled === true ||
-    testSuite.tracing?.enabled === true;
+    testSuite?.tracing?.enabled === true;
 
   logger.debug(
-    `[Evaluator] Tracing check: env=${tracingEnvEnabled}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
+    `[Evaluator] Tracing check: env=${tracingEnvEnabled}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite?.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
   );
 
   return tracingEnabled;
@@ -4767,12 +4772,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-        const otelConfig = getDefaultOtelConfig();
+        const otelConfig = getDefaultOtelConfig(
+          this.testSuite as unknown as Record<string, unknown>,
+        );
         initializeOtel(otelConfig);
         otelInitialized = true;
       }
 
-      return await this._runEvaluation();
+      const runEvaluation = () => this._runEvaluation();
+      return await (tracingEnabled
+        ? runEvaluation()
+        : otelContext.with(suppressTracing(otelContext.active()), runEvaluation));
     } catch (error) {
       evaluationError = error;
       throw error;
@@ -4790,11 +4800,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       let cleanupError: unknown;
       try {
-        // Flush and shutdown OTEL SDK
+        // The OTEL provider is process-wide and remains active for overlapping
+        // or later evaluations. Flush this evaluation's completed spans; the
+        // SDK's process handlers own final shutdown.
         if (otelInitialized) {
           logger.debug('[Evaluator] Flushing OTEL spans...');
           await flushOtel();
-          await shutdownOtel();
         }
 
         if (otlpReceiverAcquired && isOtlpReceiverStarted()) {

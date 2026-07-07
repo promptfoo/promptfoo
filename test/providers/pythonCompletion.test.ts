@@ -148,6 +148,7 @@ describe('PythonProvider', () => {
   afterEach(() => {
     // Ensure cliState is cleaned up after each test
     cliState.maxConcurrency = undefined;
+    vi.unstubAllEnvs();
   });
 
   describe('constructor', () => {
@@ -290,12 +291,31 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockPoolInstance.execute.mockResolvedValue({ embedding: [0.1, 0.2, 0.3] });
 
-      const result = await provider.callEmbeddingApi('test prompt');
+      const context = {
+        prompt: { raw: 'prompt-secret', label: 'embedding' },
+        vars: { apiKey: 'var-secret' },
+        traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+        tracestate: 'vendor=value',
+        evaluationId: 'eval-123',
+        testCaseId: 'test-123',
+      };
+      const result = await provider.callEmbeddingApi('test prompt', context);
 
       expect(mockPoolInstance.execute).toHaveBeenCalledWith('call_embedding_api', [
         'test prompt',
         { config: {} },
+        {
+          __promptfooApiType: 'call_embedding_api',
+          traceparent: context.traceparent,
+          tracestate: context.tracestate,
+          evaluationId: 'eval-123',
+          testCaseId: 'test-123',
+        },
       ]);
+      expect(JSON.stringify(mockPoolInstance.execute.mock.calls[0])).not.toContain('var-secret');
+      expect(JSON.stringify(mockPoolInstance.execute.mock.calls[0])).not.toContain('prompt-secret');
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('var-secret');
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('prompt-secret');
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
     });
 
@@ -324,11 +344,20 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockPoolInstance.execute.mockResolvedValue({ classification: { label: 'test', score: 0.9 } });
 
-      const result = await provider.callClassificationApi('test prompt');
+      const context = {
+        prompt: { raw: 'test prompt', label: 'classification' },
+        vars: {},
+        traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+      };
+      const result = await provider.callClassificationApi('test prompt', context);
 
       expect(mockPoolInstance.execute).toHaveBeenCalledWith('call_classification_api', [
         'test prompt',
         { config: {} },
+        {
+          __promptfooApiType: 'call_classification_api',
+          traceparent: context.traceparent,
+        },
       ]);
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
     });
@@ -370,6 +399,79 @@ describe('PythonProvider', () => {
       );
       expect(mockPoolInstance.execute).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
+    });
+
+    it('emits a worker span for a traced cached embedding result', async () => {
+      vi.stubEnv('PROMPTFOO_ENABLE_OTEL', 'yes');
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2] })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockPoolInstance.execute.mockImplementation(async (_functionName, args) => args[3]);
+      const context = {
+        prompt: { raw: 'embedding-secret', label: 'similar' },
+        vars: { secret: 'must-not-cross' },
+        traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+      };
+
+      const result = await provider.callEmbeddingApi('test prompt', context);
+
+      expect(mockPoolInstance.execute).toHaveBeenCalledWith('__promptfoo_trace_cached_result', [
+        'test prompt',
+        { config: {} },
+        {
+          __promptfooApiType: 'call_embedding_api',
+          __promptfooCached: true,
+          traceparent: context.traceparent,
+        },
+        { embedding: [0.1, 0.2] },
+      ]);
+      expect(JSON.stringify(mockPoolInstance.execute.mock.calls[0])).not.toContain(
+        'must-not-cross',
+      );
+      expect(result).toEqual({ embedding: [0.1, 0.2] });
+    });
+
+    it('keeps cached calls process-local when Python OTEL is disabled', async () => {
+      vi.stubEnv('PROMPTFOO_ENABLE_OTEL', 'false');
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue({
+        get: vi.fn().mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2] })),
+        set: vi.fn(),
+      } as never);
+
+      const result = await provider.callEmbeddingApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'similar' },
+        vars: {},
+        traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+      });
+
+      expect(mockPoolInstance.execute).not.toHaveBeenCalled();
+      expect(result).toEqual({ embedding: [0.1, 0.2] });
+    });
+
+    it('preserves embedding cache keys across different assertion contexts', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = { get: vi.fn().mockResolvedValue(null), set: vi.fn() };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockPoolInstance.execute.mockResolvedValue({ embedding: [0.1, 0.2] });
+
+      await provider.callEmbeddingApi('test prompt', {
+        prompt: { raw: 'first', label: 'similar' },
+        vars: { tenant: 'one' },
+      });
+      await provider.callEmbeddingApi('test prompt', {
+        prompt: { raw: 'second', label: 'similar' },
+        vars: { tenant: 'two' },
+      });
+
+      expect(mockCache.get).toHaveBeenCalledTimes(2);
+      expect(mockCache.get.mock.calls[0][0]).toBe(mockCache.get.mock.calls[1][0]);
     });
 
     it('should cache result when cache is enabled', async () => {

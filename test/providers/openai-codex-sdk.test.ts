@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -18,6 +19,39 @@ const mockRun = vi.fn();
 const mockRunStreamed = vi.fn();
 const mockStartThread = vi.fn();
 const mockResumeThread = vi.fn();
+
+interface RecordedGenAISpan {
+  name: string;
+  attributes: Record<string, unknown>;
+}
+
+function installGenAISpanRecorder(): RecordedGenAISpan[] {
+  const emitted: RecordedGenAISpan[] = [];
+  vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startActiveSpan: (...args: any[]) => {
+      const name = args[0];
+      const attributes = { ...(args[1]?.attributes ?? {}) };
+      emitted.push({ name, attributes });
+      const callback = args[args.length - 1];
+      return callback({
+        addEvent: () => undefined,
+        end: () => undefined,
+        isRecording: () => true,
+        recordException: () => undefined,
+        setAttribute: (key: string, value: unknown) => {
+          attributes[key] = value;
+        },
+        setAttributes: (values: Record<string, unknown>) => {
+          Object.assign(attributes, values);
+        },
+        setStatus: () => undefined,
+        spanContext: () => ({ traceId: 'trace', spanId: 'span' }),
+        updateName: () => undefined,
+      });
+    },
+  } as unknown as ReturnType<typeof trace.getTracer>);
+  return emitted;
+}
 
 // Mock thread instance
 const mockThread = {
@@ -326,6 +360,74 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
+      it('should report the model supplied through cli_config in current telemetry', async () => {
+        const restoreEnv = mockProcessEnv({
+          OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+        });
+        const emitted = installGenAISpanRecorder();
+        mockRun.mockResolvedValue(createMockResponse('Test response'));
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: { cli_config: { model: 'gpt-5.5' } },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(emitted.find((span) => span.name === 'invoke_agent')?.attributes).toMatchObject({
+            'gen_ai.request.model': 'gpt-5.5',
+          });
+          expect(
+            emitted.find((span) => span.name === 'invoke_agent')?.attributes,
+          ).not.toHaveProperty('gen_ai.response.model');
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it('should preserve legacy placeholders and prefer top-level models over cli_config', async () => {
+        const emitted = installGenAISpanRecorder();
+        mockRun.mockResolvedValue(createMockResponse('Test response'));
+        const restoreLegacy = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+
+        try {
+          const cliOnlyProvider = new OpenAICodexSDKProvider({
+            config: { cli_config: { model: 'gpt-cli' } },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+          await cliOnlyProvider.callApi('Legacy prompt');
+
+          expect(emitted.find((span) => span.name === 'chat codex')?.attributes).toMatchObject({
+            'gen_ai.request.model': 'codex',
+          });
+
+          const restoreLatest = mockProcessEnv({
+            OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+          });
+          try {
+            const topLevelProvider = new OpenAICodexSDKProvider({
+              config: { model: 'gpt-top', cli_config: { model: 'gpt-cli' } },
+              env: { OPENAI_API_KEY: 'test-api-key' },
+            });
+            await topLevelProvider.callApi('Current prompt');
+
+            expect(emitted.find((span) => span.name === 'invoke_agent')?.attributes).toMatchObject({
+              'gen_ai.request.model': 'gpt-top',
+            });
+            expect(mockStartThread).toHaveBeenLastCalledWith(
+              expect.objectContaining({ model: 'gpt-top' }),
+            );
+            expect(MockCodex).toHaveBeenLastCalledWith(
+              expect.objectContaining({ config: expect.objectContaining({ model: 'gpt-cli' }) }),
+            );
+          } finally {
+            restoreLatest();
+          }
+        } finally {
+          restoreLegacy();
+        }
       });
 
       it('should preserve Codex reasoning token usage details', async () => {

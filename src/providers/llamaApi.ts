@@ -72,6 +72,7 @@ export class LlamaApiProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, options: ProviderOptions = {}) {
     super(modelName, {
       ...options,
+      genAIProviderName: 'llama-api',
       config: {
         ...options.config,
         apiBaseUrl: 'https://api.llama.com/compat/v1',

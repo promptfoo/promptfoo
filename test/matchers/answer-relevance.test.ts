@@ -34,6 +34,11 @@ describe('matchesAnswerRelevance', () => {
     const input = 'Input text';
     const output = 'Sample output';
     const threshold = 0.5;
+    const providerCallContext = {
+      prompt: { raw: input, label: 'answer-relevance' },
+      vars: {},
+      traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+    };
 
     const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
     mockCallApi.mockImplementation(() => {
@@ -51,7 +56,9 @@ describe('matchesAnswerRelevance', () => {
       });
     });
 
-    await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({
+    await expect(
+      matchesAnswerRelevance(input, output, threshold, undefined, providerCallContext),
+    ).resolves.toEqual({
       pass: true,
       reason: 'Relevance 1.00 is greater than threshold 0.5',
       score: 1,
@@ -78,7 +85,7 @@ describe('matchesAnswerRelevance', () => {
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
       expect.any(Object),
     );
-    expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
+    expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text', providerCallContext);
   });
 
   it('should fail when the relevance score is below the threshold', async () => {

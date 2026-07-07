@@ -224,7 +224,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const spanContext = buildChatSpanContext({
       system: 'openai',
+      operationName: 'invoke_agent',
       model: this.assistantConfig.modelName || this.assistantId,
+      requestModel: this.assistantConfig.modelName,
+      agentId: this.assistantId,
       providerId: this.id(),
       prompt,
       context,
@@ -458,6 +461,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     return {
       output: outputBlocks.join('\n\n').trim(),
       tokenUsage: getTokenUsage(run, false),
+      metadata: { conversationId: run.thread_id },
     };
   }
 }

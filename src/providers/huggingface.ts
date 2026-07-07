@@ -85,6 +85,7 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
 
     super(resolvedModelName, {
       ...providerOptions,
+      genAIProviderName: 'huggingface',
       config: {
         ...config,
         apiBaseUrl,

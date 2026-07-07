@@ -47,6 +47,15 @@ const claudeCodeAuthMocks = vi.hoisted(() => ({
   loadClaudeCodeCredential: vi.fn(),
 }));
 
+const tracingMocks = vi.hoisted(() => ({
+  setGenAIRequestAttributes: vi.fn(),
+}));
+
+vi.mock('../../../src/tracing/genaiTracer', async (importOriginal) => ({
+  ...(await importOriginal()),
+  setGenAIRequestAttributes: tracingMocks.setGenAIRequestAttributes,
+}));
+
 vi.mock('../../../src/providers/anthropic/claudeCodeAuth', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -218,6 +227,44 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.output).toEqual(resultFromCache.output);
       expect(result.cost).toEqual(resultFromCache.cost);
       expect(result.tokenUsage).toEqual(resultFromCache.tokenUsage);
+    });
+
+    it('records request metadata from merged and extra-body wire parameters', async () => {
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg_123',
+        type: 'message',
+        role: 'assistant',
+        model: 'wire-claude',
+        content: [{ type: 'text', text: 'ok', citations: null }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'test',
+          config: {
+            max_tokens: 99,
+            temperature: 0.8,
+            top_p: 0.9,
+            extra_body: { model: 'wire-claude', max_tokens: 77, temperature: 0.4 },
+          },
+        },
+        vars: {},
+      });
+
+      expect(tracingMocks.setGenAIRequestAttributes).toHaveBeenCalledWith(expect.anything(), {
+        model: 'wire-claude',
+        operationName: 'chat',
+        maxTokens: 77,
+        temperature: 0.4,
+        topP: 0.9,
+        topK: undefined,
+        stopSequences: undefined,
+        stream: false,
+      });
     });
 
     it('should pass the tool choice if specified', async () => {
@@ -795,6 +842,8 @@ describe('AnthropicMessagesProvider', () => {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-test-123',
+        model: 'claude-3-5-sonnet-20241022',
         content: [{ type: 'text', text: 'Test output' }],
         usage: { input_tokens: 50, output_tokens: 50, server_tool_use: null },
       } as Anthropic.Messages.Message);
@@ -804,6 +853,10 @@ describe('AnthropicMessagesProvider', () => {
         output: 'Test output',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
         cost: 1.5,
+        metadata: {
+          responseId: 'msg-test-123',
+          model: 'claude-3-5-sonnet-20241022',
+        },
       });
     });
 

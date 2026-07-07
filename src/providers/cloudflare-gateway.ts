@@ -90,6 +90,20 @@ const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
   grok: { apiKeyEnvar: 'XAI_API_KEY' },
 };
 
+const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
+  openai: 'openai',
+  groq: 'groq',
+  'perplexity-ai': 'perplexity',
+  'google-ai-studio': 'gcp.gemini',
+  mistral: 'mistral_ai',
+  cohere: 'cohere',
+  'azure-openai': 'azure.ai.openai',
+  'workers-ai': 'cloudflare-ai',
+  huggingface: 'huggingface',
+  replicate: 'replicate',
+  grok: 'x_ai',
+};
+
 /**
  * Get a custom environment variable value safely
  * Uses process.env directly for arbitrary env var names to avoid type casting issues
@@ -326,6 +340,7 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
 
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: GEN_AI_PROVIDER_NAMES[underlyingProvider] ?? underlyingProvider,
       config,
     });
 

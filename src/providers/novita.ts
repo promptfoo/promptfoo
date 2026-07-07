@@ -57,6 +57,7 @@ export class NovitaChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, options: NovitaProviderOptions = {}) {
     super(modelName, {
       ...options,
+      genAIProviderName: 'novita',
       config: getNovitaConfig(options.config),
     });
   }

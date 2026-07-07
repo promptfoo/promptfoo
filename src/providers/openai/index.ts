@@ -33,15 +33,22 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   config: OpenAiSharedOptions;
   env?: EnvOverrides;
+  protected readonly configuredGenAIProviderName: string;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiSharedOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: OpenAiSharedOptions;
+      id?: string;
+      env?: EnvOverrides;
+      genAIProviderName?: string;
+    } = {},
   ) {
-    const { config, id, env } = options;
+    const { config, id, env, genAIProviderName = 'openai' } = options;
     this.env = env;
     this.modelName = modelName;
     this.config = config ? { ...config } : {};
+    this.configuredGenAIProviderName = genAIProviderName;
     this.id = id ? () => id : this.id;
   }
 

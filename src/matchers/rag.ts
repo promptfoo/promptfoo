@@ -75,12 +75,17 @@ export async function matchesAnswerRelevance(
     candidateQuestions.push(resp.output);
   }
 
+  const callEmbeddingApi = embeddingProvider.callEmbeddingApi;
   invariant(
-    typeof embeddingProvider.callEmbeddingApi === 'function',
+    typeof callEmbeddingApi === 'function',
     `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
   );
 
-  const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
+  const callEmbedding = (text: string) =>
+    providerCallContext === undefined
+      ? callEmbeddingApi.call(embeddingProvider, text)
+      : callEmbeddingApi.call(embeddingProvider, text, providerCallContext);
+  const inputEmbeddingResp = await callEmbedding(input);
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
@@ -91,7 +96,7 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
-    const resp = await embeddingProvider.callEmbeddingApi(question);
+    const resp = await callEmbedding(question);
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);

@@ -102,6 +102,7 @@ export function createCometApiProvider(
 
   const openaiOptions = {
     ...options,
+    genAIProviderName: 'cometapi',
     config: {
       ...(options.config || {}),
       apiBaseUrl: 'https://api.cometapi.com/v1',

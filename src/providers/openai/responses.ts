@@ -135,11 +135,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o4-mini-deep-research-2025-06-26',
   ];
 
+  /** Latest-convention provider identity; subclasses override for known backends. */
+  protected getGenAIProviderName(): string {
+    return this.configuredGenAIProviderName;
+  }
+
   config: OpenAiCompletionOptions;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: OpenAiCompletionOptions;
+      id?: string;
+      env?: EnvOverrides;
+      genAIProviderName?: string;
+    } = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};
@@ -409,6 +419,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // The Responses API uses `max_output_tokens` rather than `max_tokens`.
     const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
     const effectiveBody = resolved.body as Record<string, any>;
+    const effectiveModel =
+      typeof effectiveBody.model === 'string' && effectiveBody.model.trim()
+        ? effectiveBody.model
+        : this.modelName;
     // Read request params from the resolved body (what we actually send) rather
     // than the raw config, so defaults/env-derived values (e.g. a default
     // temperature, OPENAI_TOP_P) are reflected on the span. The Responses API
@@ -417,7 +431,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const spanContext = buildChatSpanContext({
       system: 'openai',
-      model: this.modelName,
+      providerName: this.getGenAIProviderName(),
+      model: effectiveModel,
       providerId: this.id(),
       prompt,
       context,
@@ -426,6 +441,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         temperature: asNumber(effectiveBody.temperature),
         topP: asNumber(effectiveBody.top_p),
         stopSequences: Array.isArray(effectiveBody.stop) ? effectiveBody.stop : undefined,
+        stream: effectiveBody.stream === true,
       },
     });
 

@@ -100,6 +100,7 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
 
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: 'cloudflare-ai',
       config,
     });
 

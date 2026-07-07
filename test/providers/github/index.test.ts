@@ -31,6 +31,7 @@ describe('createGitHubProvider', () => {
     const result = createGitHubProvider('github:', {}, {} as any);
 
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
+      genAIProviderName: 'github',
       config: {
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
@@ -48,6 +49,7 @@ describe('createGitHubProvider', () => {
     const result = createGitHubProvider('github:openai/gpt-4.1-mini', {}, {} as any);
 
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
+      genAIProviderName: 'github',
       config: {
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
@@ -65,6 +67,7 @@ describe('createGitHubProvider', () => {
     const result = createGitHubProvider('github:anthropic/claude-3.5:sonnet', {}, {} as any);
 
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('anthropic/claude-3.5:sonnet', {
+      genAIProviderName: 'github',
       config: {
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
@@ -92,6 +95,7 @@ describe('createGitHubProvider', () => {
     );
 
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+      genAIProviderName: 'github',
       config: {
         temperature: 0.7,
         max_tokens: 2048,
@@ -124,6 +128,7 @@ describe('createGitHubProvider', () => {
       label: 'Custom Label',
       transform: 'output.trim()',
       delay: 1000,
+      genAIProviderName: 'github',
       config: {
         temperature: 0.5,
         apiBaseUrl: 'https://models.github.ai/inference',

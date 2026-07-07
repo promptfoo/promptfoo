@@ -3,8 +3,9 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
-  type GenAISpanContext,
-  type GenAISpanResult,
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
@@ -501,59 +502,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
+    const spanContext = buildChatSpanContext({
       system: 'anthropic',
-      operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
-    };
-
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-          completionDetails: response.tokenUsage.completionDetails,
-        };
-      }
-
-      // Extract finish reason if available
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-
-      // Cache hit status
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-
-      // Response body for debugging/observability
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-
-      return result;
-    };
+      prompt,
+      context,
+    });
 
     // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      (span) => this.callApiInternal(prompt, context, span),
+      extractProviderResponseAttributes,
+    );
   }
 
   /**
@@ -562,6 +524,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    span?: Parameters<typeof setGenAIRequestAttributes>[0],
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config: AnthropicMessageOptions = {
@@ -770,6 +733,24 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
+    if (span) {
+      const asNumber = (value: unknown): number | undefined =>
+        typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+      const stopSequences = Array.isArray(params.stop_sequences)
+        ? params.stop_sequences.filter((value): value is string => typeof value === 'string')
+        : undefined;
+      setGenAIRequestAttributes(span, {
+        model: typeof params.model === 'string' ? params.model : undefined,
+        operationName: 'chat',
+        maxTokens: asNumber(params.max_tokens),
+        temperature: asNumber(params.temperature),
+        topP: asNumber(params.top_p),
+        topK: asNumber(params.top_k),
+        stopSequences,
+        stream: params.stream === true,
+      });
+    }
+
     logger.debug('Calling Anthropic Messages API', {
       params: getMessagesRequestMetadata(params),
     });
@@ -866,6 +847,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             }),
             cost: getAnthropicCostFromMessage(this.modelName, config, parsedCachedResponse),
             cached: true,
+            metadata: {
+              responseId: parsedCachedResponse.id,
+              model: parsedCachedResponse.model,
+            },
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -948,6 +933,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(finishReason && { finishReason }),
         ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
         cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+        metadata: {
+          responseId: resolvedMessage.id,
+          model: resolvedMessage.model,
+        },
       };
     } catch (err) {
       logger.error(

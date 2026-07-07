@@ -19,7 +19,7 @@ function installTracerSpy(): RecordedSpan[] {
   const make = (name: string, attributes: Record<string, any> = {}) => {
     const entry: RecordedSpan = { name, attributes: { ...attributes }, ended: false };
     spans.push(entry);
-    return {
+    return Object.freeze({
       setAttribute: (key: string, value: unknown) => {
         entry.attributes[key] = value;
       },
@@ -35,7 +35,7 @@ function installTracerSpy(): RecordedSpan[] {
       spanContext: () => ({ traceId: 'x', spanId: 'y' }),
       isRecording: () => true,
       updateName: () => undefined,
-    };
+    });
   };
   vi.spyOn(trace, 'getTracer').mockReturnValue({
     startSpan: (name: string, options?: { attributes?: Record<string, unknown> }) =>
@@ -142,6 +142,24 @@ describe('OpenAiResponsesProvider tracing', () => {
     expect(chatSpan?.attributes['gen_ai.request.temperature']).toBe(0.3);
     expect(chatSpan?.attributes['gen_ai.request.top_p']).toBe(0.9);
     expect(chatSpan?.attributes['gen_ai.request.max_tokens']).toBe(256);
+  });
+
+  it('uses the effective passthrough model in the span name and request attribute', async () => {
+    const spans = installTracerSpy();
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: successResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', passthrough: { model: 'gpt-4o-mini' } },
+    });
+    await provider.callApi('Test prompt');
+
+    const chatSpan = spans.find((span) => span.name === 'chat gpt-4o-mini');
+    expect(chatSpan?.attributes['gen_ai.request.model']).toBe('gpt-4o-mini');
   });
 
   it('marks the chat span ERROR when the API returns an error', async () => {

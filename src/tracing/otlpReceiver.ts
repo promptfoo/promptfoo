@@ -713,7 +713,6 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
           };
-
           traces.push({
             traceId,
             span: {
@@ -885,7 +884,14 @@ export class OTLPReceiver {
 
     const spanKindCode = span.kind ?? 0;
     const spanKindName = SPAN_KIND_MAP[spanKindCode] ?? 'unspecified';
-
+    const attributes: Record<string, any> = {
+      ...resourceAttributes,
+      ...this.parseDecodedAttributes(span.attributes),
+      'otel.scope.name': scopeSpan.scope?.name,
+      'otel.scope.version': scopeSpan.scope?.version,
+      'otel.span.kind': spanKindName,
+      'otel.span.kind_code': spanKindCode,
+    };
     return {
       traceId,
       span: {
@@ -894,14 +900,7 @@ export class OTLPReceiver {
         name: span.name,
         startTime: this.toMilliseconds(span.startTimeUnixNano) ?? 0,
         endTime: this.toMilliseconds(span.endTimeUnixNano),
-        attributes: {
-          ...resourceAttributes,
-          ...this.parseDecodedAttributes(span.attributes),
-          'otel.scope.name': scopeSpan.scope?.name,
-          'otel.scope.version': scopeSpan.scope?.version,
-          'otel.span.kind': spanKindName,
-          'otel.span.kind_code': spanKindCode,
-        },
+        attributes,
         statusCode: span.status?.code,
         statusMessage: span.status?.message,
       },

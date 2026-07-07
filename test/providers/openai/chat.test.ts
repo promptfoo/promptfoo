@@ -9,6 +9,15 @@ import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
+const tracingMocks = vi.hoisted(() => ({
+  setGenAIRequestAttributes: vi.fn(),
+}));
+
+vi.mock('../../../src/tracing/genaiTracer', async (importOriginal) => ({
+  ...(await importOriginal()),
+  setGenAIRequestAttributes: tracingMocks.setGenAIRequestAttributes,
+}));
+
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -68,6 +77,8 @@ describe('OpenAI Provider', () => {
     it('should call API successfully', async () => {
       const mockResponse = {
         data: {
+          id: 'chatcmpl-test-123',
+          model: 'gpt-4o-mini-2026-01-01',
           choices: [{ message: { content: 'Test output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         },
@@ -88,6 +99,53 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+      expect(result.metadata).toMatchObject({
+        responseId: 'chatcmpl-test-123',
+        model: 'gpt-4o-mini-2026-01-01',
+      });
+    });
+
+    it('records request metadata from the finalized wire body', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          id: 'chatcmpl-test-123',
+          model: 'wire-model',
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          max_tokens: 10,
+          temperature: 0.1,
+          top_p: 0.2,
+          passthrough: { model: 'wire-model' },
+        },
+      });
+
+      await provider.callApi('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'test',
+          config: { max_tokens: 99, temperature: 0.8, top_p: 0.9 },
+        },
+        vars: {},
+      });
+
+      expect(tracingMocks.setGenAIRequestAttributes).toHaveBeenCalledWith(expect.anything(), {
+        model: 'wire-model',
+        operationName: 'chat',
+        maxTokens: 99,
+        temperature: 0.8,
+        topP: 0.9,
+        stopSequences: undefined,
+        frequencyPenalty: undefined,
+        presencePenalty: undefined,
+        stream: false,
+      });
     });
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {
