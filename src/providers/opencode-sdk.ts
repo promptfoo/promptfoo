@@ -493,7 +493,7 @@ interface OpenCodeAssistantMessage {
 }
 
 interface OpenCodeSessionMessage {
-  id?: string;
+  info?: { id?: string };
   parts?: OpenCodePromptPart[];
 }
 
@@ -1567,7 +1567,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         const messagesResult = await (client.session as any).messages(messagesParams);
         const messages: OpenCodeSessionMessage[] =
           (messagesResult as any)?.data ?? messagesResult ?? [];
-        const startIndex = parentId ? messages.findIndex((m) => m.id === parentId) : -1;
+        const startIndex = parentId ? messages.findIndex((m) => m.info?.id === parentId) : -1;
         const relevantMessages = startIndex >= 0 ? messages.slice(startIndex) : messages;
         allSessionParts = relevantMessages.flatMap((m) => m.parts ?? []);
         logger.debug(
