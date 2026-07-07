@@ -71,26 +71,8 @@ describe('handleContains', () => {
   it('should handle number values', () => {
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: { type: 'contains', value: '42' },
-      renderedValue: '42' as AssertionValue,
-      outputString: 'The answer is 42',
-      inverse: false,
-    };
-
-    const result = handleContains(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle the numeric value 0 (regression: 0 is a valid number)', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
       assertion: { type: 'contains', value: 0 },
-      renderedValue: 0 as unknown as AssertionValue,
+      renderedValue: 0,
       outputString: 'There are 0 errors',
       inverse: false,
     };
@@ -108,7 +90,7 @@ describe('handleContains', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains', value: 0 },
-      renderedValue: 0 as unknown as AssertionValue,
+      renderedValue: 0,
       outputString: 'no digits here',
       inverse: false,
     };
@@ -209,6 +191,47 @@ describe('handleIContains', () => {
       reason: 'Assertion passed',
       assertion: params.assertion,
     });
+  });
+
+  it.each([
+    { outputString: 'There are 0 errors', pass: true },
+    { outputString: 'no digits here', pass: false },
+  ])('should handle numeric 0 when pass is $pass', ({ outputString, pass }) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'icontains', value: 0 },
+      renderedValue: 0,
+      outputString,
+      inverse: false,
+    };
+
+    const result = handleIContains(params);
+    expect(result).toEqual({
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : 'Expected output to contain "0"',
+      assertion: params.assertion,
+    });
+  });
+});
+
+describe.each([
+  ['contains', handleContains],
+  ['icontains', handleIContains],
+] as const)('%s numeric validation', (type, handler) => {
+  it('should reject NaN', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: Number.NaN },
+      renderedValue: Number.NaN,
+      outputString: 'NaN',
+      inverse: false,
+    };
+
+    expect(() => handler(params)).toThrow(
+      `"${type}" assertion type must have a string or number value`,
+    );
   });
 });
 

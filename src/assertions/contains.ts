@@ -116,11 +116,8 @@ export const handleContains = ({
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
   invariant(
-    value !== undefined && value !== null && value !== '',
-    '"contains" assertion type must have a string or number value',
-  );
-  invariant(
-    typeof value === 'string' || typeof value === 'number',
+    (typeof value === 'string' && value !== '') ||
+      (typeof value === 'number' && !Number.isNaN(value)),
     '"contains" assertion type must have a string or number value',
   );
   const pass = outputString.includes(String(value)) !== inverse;
@@ -143,11 +140,8 @@ export const handleIContains = ({
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
   invariant(
-    value !== undefined && value !== null && value !== '',
-    '"icontains" assertion type must have a string or number value',
-  );
-  invariant(
-    typeof value === 'string' || typeof value === 'number',
+    (typeof value === 'string' && value !== '') ||
+      (typeof value === 'number' && !Number.isNaN(value)),
     '"icontains" assertion type must have a string or number value',
   );
   const pass = outputString.toLowerCase().includes(String(value).toLowerCase()) !== inverse;
