@@ -1,6 +1,5 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { materializeMcpToolCallRemote } from './extraction/util';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
@@ -14,30 +13,74 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types';
-import type { TokenUsage } from '../types/shared';
 
 const WRAPPED_MCP_PROVIDER = Symbol('wrappedMcpProvider');
+type ProviderTokenUsage = NonNullable<ProviderResponse['tokenUsage']>;
+type CompletionDetails = NonNullable<ProviderTokenUsage['completionDetails']>;
 
 type McpProviderWithTools = ApiProvider & {
   getAvailableTools: () => Promise<MCPTool[]>;
   [WRAPPED_MCP_PROVIDER]?: true;
 };
 
+function addTokenCount(left: number | undefined, right: number | undefined): number {
+  return (left ?? 0) + (right ?? 0);
+}
+
+function mergeCompletionDetails(
+  target: CompletionDetails | undefined,
+  update: CompletionDetails | undefined,
+): CompletionDetails | undefined {
+  if (!update) {
+    return target;
+  }
+
+  return {
+    reasoning: addTokenCount(target?.reasoning, update.reasoning),
+    acceptedPrediction: addTokenCount(target?.acceptedPrediction, update.acceptedPrediction),
+    rejectedPrediction: addTokenCount(target?.rejectedPrediction, update.rejectedPrediction),
+    cacheReadInputTokens: addTokenCount(target?.cacheReadInputTokens, update.cacheReadInputTokens),
+    cacheCreationInputTokens: addTokenCount(
+      target?.cacheCreationInputTokens,
+      update.cacheCreationInputTokens,
+    ),
+  };
+}
+
+function mergeMaterializationTokenTotals(
+  responseTokenUsage: ProviderResponse['tokenUsage'],
+  materializationTokenUsage: Partial<ProviderTokenUsage>,
+): Partial<ProviderTokenUsage> {
+  const tokenUsage: Partial<ProviderTokenUsage> = { ...(responseTokenUsage ?? {}) };
+
+  tokenUsage.prompt = addTokenCount(tokenUsage.prompt, materializationTokenUsage.prompt);
+  tokenUsage.completion = addTokenCount(
+    tokenUsage.completion,
+    materializationTokenUsage.completion,
+  );
+  tokenUsage.cached = addTokenCount(tokenUsage.cached, materializationTokenUsage.cached);
+  tokenUsage.total = addTokenCount(tokenUsage.total, materializationTokenUsage.total);
+  tokenUsage.completionDetails = mergeCompletionDetails(
+    tokenUsage.completionDetails,
+    materializationTokenUsage.completionDetails,
+  );
+
+  return tokenUsage;
+}
+
 function mergeMaterializationTokenUsage(
   response: ProviderResponse,
-  materializationTokenUsage: Partial<TokenUsage> | undefined,
+  materializationTokenUsage: Partial<ProviderTokenUsage> | undefined,
 ): ProviderResponse {
   if (!materializationTokenUsage) {
     return response;
   }
 
   const { numRequests: _numRequests, ...tokenUsageWithoutRequests } = materializationTokenUsage;
-  const tokenUsage: Partial<TokenUsage> = { ...(response.tokenUsage ?? {}) };
-  accumulateTokenUsage(tokenUsage, tokenUsageWithoutRequests);
 
   return {
     ...response,
-    tokenUsage,
+    tokenUsage: mergeMaterializationTokenTotals(response.tokenUsage, tokenUsageWithoutRequests),
   };
 }
 
@@ -96,7 +139,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
         context?.test?.metadata?.goal ?? context?.test?.metadata?.originalPrompt ?? prompt;
       const purpose = String(context?.test?.metadata?.purpose ?? '');
       let materializedPrompt: string;
-      let materializationTokenUsage: Partial<TokenUsage> | undefined;
+      let materializationTokenUsage: Partial<ProviderTokenUsage> | undefined;
 
       try {
         materializedPrompt = await materializeMcpValue({

@@ -15,8 +15,12 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
-import type { ApiProvider, CallApiOptionsParams, RemoteGenerationContext } from '../../types/index';
-import type { TokenUsage } from '../../types/shared';
+import type {
+  ApiProvider,
+  CallApiOptionsParams,
+  ProviderResponse,
+  RemoteGenerationContext,
+} from '../../types/index';
 import type { McpToolDefinition } from '../mcpToolCall';
 
 export const RedTeamGenerationResponse = z.object({
@@ -90,7 +94,7 @@ export async function fetchRemoteGeneration(
 export async function materializeMcpToolCallRemote(
   options: PromptfooMcpMaterializationOptions,
   callApiOptions?: CallApiOptionsParams,
-): Promise<{ prompt: string; tokenUsage?: Partial<TokenUsage> } | undefined> {
+): Promise<{ prompt: string; tokenUsage?: ProviderResponse['tokenUsage'] } | undefined> {
   if (!shouldGenerateRemote()) {
     return undefined;
   }
@@ -111,7 +115,10 @@ export async function materializeMcpToolCallRemote(
   };
 
   try {
-    const response = await fetchWithCache<{ result?: unknown; tokenUsage?: Partial<TokenUsage> }>(
+    const response = await fetchWithCache<{
+      result?: unknown;
+      tokenUsage?: ProviderResponse['tokenUsage'];
+    }>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
