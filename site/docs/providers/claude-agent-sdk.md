@@ -324,7 +324,8 @@ providers:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      custom_allowed_tools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
+      custom_allowed_tools:
+        ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
 
 # Block specific tools
 providers:
