@@ -94,6 +94,10 @@ describe('maybeWrapMcpProviderForRedteam', () => {
   });
 
   const parseToolCall = (raw: unknown) => JSON.parse(String(raw));
+  const remoteMaterializedCall = (tokenUsage?: Record<string, number>) => ({
+    prompt: JSON.stringify(searchCompaniesCall),
+    ...(tokenUsage ? { tokenUsage } : {}),
+  });
 
   beforeEach(() => {
     providerManagerMocks.getProvider.mockReset();
@@ -102,7 +106,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
   it('uses remote materialization for invalid redteam target calls before they reach MCP providers', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
-      JSON.stringify(searchCompaniesCall),
+      remoteMaterializedCall(),
     );
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
@@ -125,9 +129,33 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(parseToolCall(target.calls[0].context?.vars.prompt)).toEqual(searchCompaniesCall);
   });
 
+  it('adds remote materialization token usage to the wrapped target response', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
+      remoteMaterializedCall({
+        completion: 3,
+        numRequests: 1,
+        prompt: 7,
+        total: 10,
+      }),
+    );
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+      output: 'ok',
+      tokenUsage: {
+        cached: 0,
+        completion: 3,
+        prompt: 7,
+        total: 10,
+      },
+    });
+  });
+
   it('passes linked cloud target context to remote materialization', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
-      JSON.stringify(searchCompaniesCall),
+      remoteMaterializedCall(),
     );
 
     const target = new FakeMcpProvider(
@@ -270,7 +298,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
   it('returns a materialization error when the wrapped provider call fails', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
-      JSON.stringify(searchCompaniesCall),
+      remoteMaterializedCall(),
     );
 
     const target = new FakeMcpProvider([searchCompaniesTool]);

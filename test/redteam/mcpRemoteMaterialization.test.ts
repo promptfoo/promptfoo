@@ -56,6 +56,11 @@ describe('materializeMcpToolCallRemote', () => {
           tool: 'search_companies',
           args: { query: 'clean energy' },
         },
+        tokenUsage: {
+          prompt: 12,
+          completion: 4,
+          total: 16,
+        },
       },
       status: 200,
       statusText: 'OK',
@@ -68,9 +73,14 @@ describe('materializeMcpToolCallRemote', () => {
       value: 'Find clean energy companies.',
     });
 
-    expect(JSON.parse(result ?? '')).toEqual({
+    expect(JSON.parse(result?.prompt ?? '')).toEqual({
       tool: 'search_companies',
       args: { query: 'clean energy' },
+    });
+    expect(result?.tokenUsage).toEqual({
+      prompt: 12,
+      completion: 4,
+      total: 16,
     });
     expect(JSON.parse((vi.mocked(fetchWithCache).mock.calls[0][1] as any).body)).toMatchObject({
       email: 'test@example.com',

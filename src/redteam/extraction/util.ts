@@ -16,6 +16,7 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { ApiProvider, CallApiOptionsParams, RemoteGenerationContext } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 import type { McpToolDefinition } from '../mcpToolCall';
 
 export const RedTeamGenerationResponse = z.object({
@@ -89,7 +90,7 @@ export async function fetchRemoteGeneration(
 export async function materializeMcpToolCallRemote(
   options: PromptfooMcpMaterializationOptions,
   callApiOptions?: CallApiOptionsParams,
-): Promise<string | undefined> {
+): Promise<{ prompt: string; tokenUsage?: Partial<TokenUsage> } | undefined> {
   if (!shouldGenerateRemote()) {
     return undefined;
   }
@@ -110,7 +111,7 @@ export async function materializeMcpToolCallRemote(
   };
 
   try {
-    const response = await fetchWithCache<{ result?: unknown }>(
+    const response = await fetchWithCache<{ result?: unknown; tokenUsage?: Partial<TokenUsage> }>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -133,7 +134,10 @@ export async function materializeMcpToolCallRemote(
       throw new Error('Remote MCP materialization did not return a valid tool call');
     }
 
-    return stringifyMcpToolCall(toolCall);
+    return {
+      prompt: stringifyMcpToolCall(toolCall),
+      tokenUsage: response.data.tokenUsage,
+    };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw err;

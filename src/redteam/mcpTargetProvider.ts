@@ -1,5 +1,6 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
+import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { materializeMcpToolCallRemote } from './extraction/util';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
@@ -13,6 +14,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types';
+import type { TokenUsage } from '../types/shared';
 
 const WRAPPED_MCP_PROVIDER = Symbol('wrappedMcpProvider');
 
@@ -20,6 +22,24 @@ type McpProviderWithTools = ApiProvider & {
   getAvailableTools: () => Promise<MCPTool[]>;
   [WRAPPED_MCP_PROVIDER]?: true;
 };
+
+function mergeMaterializationTokenUsage(
+  response: ProviderResponse,
+  materializationTokenUsage: Partial<TokenUsage> | undefined,
+): ProviderResponse {
+  if (!materializationTokenUsage) {
+    return response;
+  }
+
+  const { numRequests: _numRequests, ...tokenUsageWithoutRequests } = materializationTokenUsage;
+  const tokenUsage: Partial<TokenUsage> = { ...(response.tokenUsage ?? {}) };
+  accumulateTokenUsage(tokenUsage, tokenUsageWithoutRequests);
+
+  return {
+    ...response,
+    tokenUsage,
+  };
+}
 
 function isRedteamTest(test: AtomicTestCase | undefined): boolean {
   return Boolean(test?.metadata?.pluginId || test?.metadata?.strategyId);
@@ -76,6 +96,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
         context?.test?.metadata?.goal ?? context?.test?.metadata?.originalPrompt ?? prompt;
       const purpose = String(context?.test?.metadata?.purpose ?? '');
       let materializedPrompt: string;
+      let materializationTokenUsage: Partial<TokenUsage> | undefined;
 
       try {
         materializedPrompt = await materializeMcpValue({
@@ -103,7 +124,8 @@ class RedteamMcpTargetProvider implements ApiProvider {
         );
 
         if (remoteMaterializedPrompt) {
-          materializedPrompt = remoteMaterializedPrompt;
+          materializedPrompt = remoteMaterializedPrompt.prompt;
+          materializationTokenUsage = remoteMaterializedPrompt.tokenUsage;
         } else {
           const materializerProvider = await redteamProviderManager.getProvider({
             jsonOnly: true,
@@ -128,7 +150,8 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }
         : undefined;
 
-      return await this.target.callApi(materializedPrompt, materializedContext, options);
+      const response = await this.target.callApi(materializedPrompt, materializedContext, options);
+      return mergeMaterializationTokenUsage(response, materializationTokenUsage);
     } catch (error) {
       return {
         error: `Failed to materialize MCP target prompt: ${
