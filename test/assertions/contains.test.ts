@@ -86,6 +86,42 @@ describe('handleContains', () => {
     });
   });
 
+  it('should handle the numeric value 0 (regression: 0 is a valid number)', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains', value: 0 },
+      renderedValue: 0 as unknown as AssertionValue,
+      outputString: 'There are 0 errors',
+      inverse: false,
+    };
+
+    const result = handleContains(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should fail (not throw) when output does not contain the numeric value 0', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains', value: 0 },
+      renderedValue: 0 as unknown as AssertionValue,
+      outputString: 'no digits here',
+      inverse: false,
+    };
+
+    const result = handleContains(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Expected output to contain "0"',
+      assertion: params.assertion,
+    });
+  });
+
   it('should handle inverse assertion correctly', () => {
     const params: AssertionParams = {
       ...defaultParams,

@@ -115,7 +115,10 @@ export const handleContains = ({
   inverse,
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
-  invariant(value, '"contains" assertion type must have a string or number value');
+  invariant(
+    value !== undefined && value !== null && value !== '',
+    '"contains" assertion type must have a string or number value',
+  );
   invariant(
     typeof value === 'string' || typeof value === 'number',
     '"contains" assertion type must have a string or number value',
@@ -139,7 +142,10 @@ export const handleIContains = ({
   inverse,
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
-  invariant(value, '"icontains" assertion type must have a string or number value');
+  invariant(
+    value !== undefined && value !== null && value !== '',
+    '"icontains" assertion type must have a string or number value',
+  );
   invariant(
     typeof value === 'string' || typeof value === 'number',
     '"icontains" assertion type must have a string or number value',
