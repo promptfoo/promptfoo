@@ -61,7 +61,6 @@ import {
 } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
-import { PersonaInjectionGrader } from './plugins/personaInjection';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { InsuranceCoverageDiscriminationPluginGrader } from './plugins/insurance/coverageDiscrimination';
 import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDisclosure';
@@ -81,6 +80,7 @@ import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophan
 import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
+import { PersonaInjectionGrader } from './plugins/personaInjection';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
 import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
 import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInteraction';
