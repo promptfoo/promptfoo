@@ -607,6 +607,59 @@ describe('OpenCodeSDKProvider', () => {
         ]);
       });
 
+      it('should not include messages from a concurrent prompt on the same session', async () => {
+        // If another prompt fires on the same persistent session while session.messages
+        // is in flight, messages after the current assistant message must be excluded.
+        // The end anchor (assistantMessage.id) bounds the slice from above.
+        mockSessionPrompt.mockResolvedValue({
+          data: {
+            ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data,
+            info: {
+              ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data.info,
+              id: 'assistant-msg-1',
+              parentID: 'user-msg-1',
+            },
+          },
+        });
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Current prompt' }],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'Done.' }],
+          },
+          // Messages from a CONCURRENT prompt — must not be included
+          {
+            info: { id: 'user-msg-2', role: 'user' },
+            parts: [{ type: 'text', text: 'Concurrent prompt' }],
+          },
+          {
+            info: { id: 'concurrent-intermediate', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'other-skill' },
+                  metadata: { name: 'other-skill', dir: '/repo/.agents/skills/other-skill' },
+                },
+              },
+            ],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        // other-skill from the concurrent prompt must not appear
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
       it('should fall back to final response parts when session.messages fails', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse([

@@ -1570,11 +1570,24 @@ export class OpenCodeSDKProvider implements ApiProvider {
           const messagesResult = await (client.session as any).messages(messagesParams);
           const messages: OpenCodeSessionMessage[] =
             (messagesResult as any)?.data ?? messagesResult ?? [];
+          // Bound the slice with both a start anchor (parentID → user message that
+          // triggered this prompt) and an end anchor (assistantMessage.id → the
+          // response we just received). Without the end anchor, messages from a
+          // concurrent prompt on the same shared session could be included and
+          // cause skill-used to pass for the wrong evaluation row.
           const startIndex = parentId ? messages.findIndex((m) => m.info?.id === parentId) : -1;
-          const relevantMessages = startIndex >= 0 ? messages.slice(startIndex) : messages;
+          const endIndex = assistantMessage?.id
+            ? messages.findIndex((m) => m.info?.id === assistantMessage.id)
+            : -1;
+          const relevantMessages =
+            startIndex >= 0
+              ? messages.slice(startIndex, endIndex >= startIndex ? endIndex + 1 : undefined)
+              : endIndex >= 0
+                ? messages.slice(0, endIndex + 1)
+                : messages;
           allSessionParts = relevantMessages.flatMap((m) => m.parts ?? []);
           logger.debug(
-            `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} from parentID anchor, ${allSessionParts.length} total parts for skill tracking`,
+            `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
           );
         } catch (e) {
           logger.debug(`[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`);
