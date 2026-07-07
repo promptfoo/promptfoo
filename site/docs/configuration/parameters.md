@@ -212,13 +212,13 @@ Variables use [Nunjucks](https://mozilla.github.io/nunjucks/) templating:
 
 ```yaml
 # Basic substitution
-prompt: "Hello {{name}}"
+prompt: 'Hello {{name}}'
 
 # Filters
-prompt: "URGENT: {{message | upper}}"
+prompt: 'URGENT: {{message | upper}}'
 
 # Conditionals
-prompt: "{% if premium %}Premium support: {% endif %}{{query}}"
+prompt: '{% if premium %}Premium support: {% endif %}{{query}}'
 ```
 
 ### File References
