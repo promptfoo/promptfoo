@@ -643,6 +643,28 @@ describe('OpenCodeSDKProvider', () => {
         ]);
       });
 
+      it('should skip session.messages fetch when skill tool is disabled', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: false } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Do something without skills');
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+      });
+
+      it('should skip session.messages fetch when call is aborted before fetch', async () => {
+        const controller = new AbortController();
+        controller.abort();
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Do something', undefined, { abortSignal: controller.signal });
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+      });
+
       it('should handle SDK exceptions', async () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockSessionPrompt.mockRejectedValue(new Error('Network error'));
