@@ -6,7 +6,7 @@ prompts:
 
 providers:
   # Google AI Studio configuration (API key authentication)
-  - id: google:image:imagen-4.0-generate-preview-06-06
+  - id: google:image:imagen-4.0-generate-001
     label: Imagen 4.0 (Google AI Studio)
     config:
       aspectRatio: '16:9'
@@ -14,7 +14,7 @@ providers:
       # Note: seed and addWatermark are not supported in Google AI Studio
 
   # Vertex AI configuration (OAuth authentication)
-  - id: google:image:imagen-4.0-generate-preview-06-06
+  - id: google:image:imagen-4.0-generate-001
     label: Imagen 4.0 (Vertex AI)
     config:
       projectId: 'your-project-id' # Forces Vertex AI usage

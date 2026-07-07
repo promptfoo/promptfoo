@@ -27,10 +27,7 @@ import {
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
-  CLAUDE_5_REGIONAL_PREMIUM,
-  calculateCacheInputCost,
   isAlwaysOnAdaptiveThinkingClaudeModel,
-  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
 } from '../anthropic/util';
@@ -45,6 +42,7 @@ import {
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { calculateBedrockCost } from './pricing';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -148,126 +146,6 @@ export interface BedrockConverseToolConfig {
   name?: string;
   description?: string;
   input_schema?: Record<string, unknown>;
-}
-
-/**
- * Bedrock model pricing per 1M tokens
- * Prices as of 2025 - may need updates
- */
-const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
-  // Claude 5
-  'anthropic.claude-fable-5': { input: 10, output: 50 },
-  // Claude Opus 4.8
-  'anthropic.claude-opus-4-8': { input: 5, output: 25 },
-  // Claude Opus 4.7
-  'anthropic.claude-opus-4-7': { input: 5, output: 25 },
-  // Claude Opus 4.6
-  'anthropic.claude-opus-4-6': { input: 5, output: 25 },
-  // Claude Opus 4.5
-  'anthropic.claude-opus-4-5': { input: 5, output: 25 },
-  // Claude Opus 4/4.1
-  'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 4/4.5
-  'anthropic.claude-sonnet-4': { input: 3, output: 15 },
-  // Claude Haiku 4.5
-  'anthropic.claude-haiku-4': { input: 1, output: 5 },
-  // Claude 3.x
-  'anthropic.claude-3-opus': { input: 15, output: 75 },
-  'anthropic.claude-3-5-sonnet': { input: 3, output: 15 },
-  'anthropic.claude-3-7-sonnet': { input: 3, output: 15 },
-  'anthropic.claude-3-5-haiku': { input: 0.8, output: 4 },
-  'anthropic.claude-3-haiku': { input: 0.25, output: 1.25 },
-  // Amazon Nova
-  'amazon.nova-micro': { input: 0.035, output: 0.14 },
-  'amazon.nova-lite': { input: 0.06, output: 0.24 },
-  'amazon.nova-pro': { input: 0.8, output: 3.2 },
-  'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
-  // Amazon Titan Text
-  'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
-  'amazon.titan-text-express': { input: 0.8, output: 1.6 },
-  'amazon.titan-text-premier': { input: 0.5, output: 1.5 },
-  // Meta Llama
-  'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
-  'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
-  'meta.llama3-1-405b': { input: 5.32, output: 16 },
-  'meta.llama3-2-1b': { input: 0.1, output: 0.1 },
-  'meta.llama3-2-3b': { input: 0.15, output: 0.15 },
-  'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
-  'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
-  'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
-  'meta.llama4-scout': { input: 0.17, output: 0.68 },
-  'meta.llama4-maverick': { input: 0.17, output: 0.68 },
-  'meta.llama4': { input: 1.0, output: 3.0 },
-  // Mistral
-  'mistral.mistral-7b': { input: 0.15, output: 0.2 },
-  'mistral.mixtral-8x7b': { input: 0.45, output: 0.7 },
-  'mistral.mistral-large': { input: 4, output: 12 },
-  'mistral.mistral-small': { input: 1, output: 3 },
-  'mistral.pixtral-large': { input: 2, output: 6 },
-  // AI21 Jamba
-  'ai21.jamba-1-5-mini': { input: 0.2, output: 0.4 },
-  'ai21.jamba-1-5-large': { input: 2, output: 8 },
-  // Cohere
-  'cohere.command-r': { input: 0.5, output: 1.5 },
-  'cohere.command-r-plus': { input: 3, output: 15 },
-  // DeepSeek
-  'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
-  'deepseek.r1': { input: 1.35, output: 5.4 },
-  // Qwen
-  'qwen.qwen3-32b': { input: 0.2, output: 0.6 },
-  'qwen.qwen3-235b': { input: 0.18, output: 0.54 },
-  'qwen.qwen3-coder-30b': { input: 0.2, output: 0.6 },
-  'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
-  'qwen.qwen3': { input: 0.5, output: 1.5 },
-  // Writer Palmyra
-  'writer.palmyra-x5': { input: 0.6, output: 6 },
-  'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
-  // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
-  // Responses API (see src/providers/bedrock/openaiResponses.ts).
-  'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
-  'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
-};
-
-/**
- * Calculate cost based on model and token usage
- */
-function calculateBedrockConverseCost(
-  modelId: string,
-  promptTokens?: number,
-  completionTokens?: number,
-  cacheReadTokens = 0,
-  cacheWriteTokens = 0,
-): number | undefined {
-  if (promptTokens === undefined || completionTokens === undefined) {
-    return undefined;
-  }
-
-  // Find matching pricing
-  const normalizedModelId = modelId.toLowerCase();
-  // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
-  // premium. The model ID may be a bare `global.` profile or an
-  // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
-  const isGlobalEndpoint =
-    normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
-  const pricingMultiplier =
-    isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
-      ? CLAUDE_5_REGIONAL_PREMIUM
-      : 1;
-  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
-    if (normalizedModelId.includes(modelPrefix)) {
-      const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
-      const inputCost = normalizedModelId.includes('anthropic.claude')
-        ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
-        : promptTokens * inputRate;
-      const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
-      return inputCost + outputCost;
-    }
-  }
-
-  return undefined;
 }
 
 /**
@@ -1211,10 +1089,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
-    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
-
-    // Raw additional fields must not bypass Fable's model-level constraints.
-    if (alwaysOnAdaptiveThinking) {
+    // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
+    // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
+    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
+    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
       delete fields.top_k;
@@ -1615,12 +1494,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Calculate cost
-    const cost = calculateBedrockConverseCost(
+    const cost = calculateBedrockCost(
       this.modelName,
       promptTokens,
       completionTokens,
       cacheReadTokens,
       cacheWriteTokens,
+      this.getRegion(),
+      this.config.serviceTier,
     );
 
     // Build metadata
@@ -1968,12 +1849,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         numRequests: 1,
       };
 
-      const cost = calculateBedrockConverseCost(
+      const cost = calculateBedrockCost(
         this.modelName,
         usage.inputTokens,
         usage.outputTokens,
         usage.cacheReadInputTokens,
         usage.cacheWriteInputTokens,
+        this.getRegion(),
+        this.config.serviceTier,
       );
 
       // Surface MCP failures via the response `error` field. If the model also

@@ -121,6 +121,11 @@ export interface AzureModelCost {
   cost: {
     input: number;
     output: number;
+    longContext?: {
+      threshold: number;
+      input: number;
+      output: number;
+    };
   };
 }
 

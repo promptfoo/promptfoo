@@ -22,7 +22,7 @@ function isConnectionError(error: Error) {
 }
 
 /** Extracts the request URL as a string. A `Request`'s `toString()` is "[object Request]", so read `.url`. */
-function getRequestUrlString(url: string | URL | Request): string {
+export function getRequestUrlString(url: string | URL | Request): string {
   return url instanceof Request ? url.url : url.toString();
 }
 

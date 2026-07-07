@@ -81,8 +81,12 @@ function parseUnquotedField(value: string, startIndex: number): ParsedField {
 
 /**
  * Split a contains-any string into fields while preserving quoted commas.
+ *
+ * Exported so the duplicated copy in `src/csv.ts` (kept separate to avoid the
+ * frontend bundling the assertion handlers) can be drift-checked against this
+ * canonical implementation in tests.
  */
-function parseCommaSeparatedValues(value: string): string[] {
+export function parseCommaSeparatedValues(value: string): string[] {
   const results: string[] = [];
   let i = 0;
   while (i < value.length) {

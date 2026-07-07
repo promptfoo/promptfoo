@@ -269,7 +269,8 @@ describe('xAI Chat Provider', () => {
       expect(GROK_3_MINI_MODELS).not.toContain('grok-2-1212');
     });
 
-    it('identifies Grok Code Fast as reasoning models', () => {
+    it('identifies Grok Build and its Grok Code Fast aliases as reasoning models', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-build-0.1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1-0825');
@@ -623,15 +624,63 @@ describe('xAI Chat Provider', () => {
       expect(miniAliasCost).toBeDefined();
     });
 
+    it('applies the cache-read rate to cached prompt tokens', () => {
+      // The model table defines cache_read for grok-4, but it was never applied.
+      const full = calculateXAICost('grok-4-0709', {}, 1000, 500);
+      const discounted = calculateXAICost('grok-4-0709', {}, 1000, 500, 0, 800);
+      expect(full).toBeDefined();
+      expect(discounted as number).toBeLessThan(full as number);
+    });
+
+    it('bills the cached prompt subset at the cache-read rate (deterministic)', () => {
+      // input $3/M, output $15/M, cache-read $0.75/M; 1000 prompt (800 cached), 500 output.
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+      // (200 uncached * 3e-6) + (800 cached * 0.75e-6) + (500 * 15e-6) = 0.0087
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 800)).toBeCloseTo(0.0087, 10);
+      // Without any cached tokens: (1000 * 3e-6) + (500 * 15e-6) = 0.0105
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500)).toBeCloseTo(0.0105, 10);
+      // A proxy may make cache hits free; an explicit zero must not fall back to model pricing.
+      expect(
+        calculateXAICost('grok-4-0709', { ...rates, cacheReadCost: 0 }, 1000, 500, 0, 800),
+      ).toBeCloseTo(0.0081, 10);
+    });
+
+    it('clamps cached prompt tokens to valid usage boundaries', () => {
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+
+      // A full cache hit bills every prompt token at the reduced rate.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 1000)).toBeCloseTo(0.00825, 10);
+      // Inconsistent provider usage cannot discount more tokens than the prompt contains.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 2000)).toBeCloseTo(0.00825, 10);
+      // Invalid negative usage falls back to the undiscounted input cost.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, -1)).toBeCloseTo(0.0105, 10);
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Number.NaN)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Infinity)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+    });
+
+    it('falls back to full input pricing when the model has no cache-read rate', () => {
+      // grok-2-1212 has input: 2.0/1e6, output: 10.0/1e6, and no cache_read rate.
+      // Cached tokens reported by the provider must not produce a NaN cost or a
+      // phantom discount; they bill at the full input rate exactly as if no cache
+      // tokens were reported.
+      const withCache = calculateXAICost('grok-2-1212', {}, 1000, 500, 0, 800);
+      const withoutCache = calculateXAICost('grok-2-1212', {}, 1000, 500);
+      // (2.0/1e6 * 1000) + (10.0/1e6 * 500) = 0.002 + 0.005 = 0.007
+      expect(withCache).toBeCloseTo(0.007, 10);
+      expect(withCache).toBe(withoutCache);
+    });
+
     it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
       for (const modelName of [
         'grok-4-1-fast-reasoning',
         'grok-4-fast-non-reasoning',
         'grok-4',
-        'grok-code-fast',
-        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
-        // it shares the post-retirement billing target with the undated slug.
-        'grok-code-fast-1-0825',
         'grok-3',
         // The grok-3 family collapses every -beta and -fast variant into the
         // same id on xAI's catalog, so all of them must redirect together.
@@ -642,6 +691,47 @@ describe('xAI Chat Provider', () => {
       ]) {
         expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
       }
+    });
+
+    it('bills grok-build-0.1 and its grok-code-fast aliases at its own pricing', () => {
+      // xAI's docs list grok-code-fast-1 / grok-code-fast / grok-code-fast-1-0825 as
+      // aliases of grok-build-0.1 ($1.00 input / $2.00 output per 1M tokens), so they
+      // must NOT redirect to grok-4.3 pricing.
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 100_000, 1_000_000)).toBeCloseTo(2.1, 10);
+      }
+    });
+
+    it('switches grok-build-0.1 and its aliases to higher-context pricing above 200k tokens', () => {
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        // Exactly at the threshold stays on the standard tier (exclusive >).
+        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
+          (200_000 * 1 + 1_000 * 2) / 1e6,
+          10,
+        );
+        // One token over switches the whole request to the higher tier.
+        expect(calculateXAICost(modelName, {}, 200_001, 1_000)).toBeCloseTo(
+          (200_001 * 2 + 1_000 * 4) / 1e6,
+          10,
+        );
+      }
+    });
+
+    it('uses higher-context cache-read pricing for grok-build-0.1 cached prompt tokens', () => {
+      expect(calculateXAICost('grok-build-0.1', {}, 200_001, 1_000, 0, 100_000)).toBeCloseTo(
+        (100_001 * 2 + 100_000 * 0.4 + 1_000 * 4) / 1e6,
+        10,
+      );
     });
 
     it('returns undefined for invalid inputs', () => {
@@ -678,6 +768,13 @@ describe('xAI Chat Provider', () => {
         500,
       );
       expect(cost).toBe(2.5);
+    });
+
+    it('does not mix model cache pricing with custom input cost overrides', () => {
+      expect(calculateXAICost('grok-4-0709', { cost: 0.001 }, 1000, 500, 0, 800)).toBe(1.5);
+      expect(
+        calculateXAICost('grok-4-0709', { inputCost: 0.001, outputCost: 0.003 }, 1000, 500, 0, 800),
+      ).toBe(2.5);
     });
 
     it('does not double-count reasoning tokens already included in completion tokens', () => {
@@ -891,6 +988,59 @@ describe('xAI Chat Provider', () => {
       expect(result.output).toBe('Test response');
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
+    });
+
+    it('should apply cache-read pricing from normalized token usage', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Cached response' } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            total_tokens: 1500,
+            prompt_tokens_details: { cached_tokens: 800 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            inputCost: 3e-6,
+            outputCost: 15e-6,
+            cacheReadCost: 0.75e-6,
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(800);
+      expect(result.cost).toBeCloseTo(0.0087, 10);
+    });
+
+    it('should leave cost undefined when usage is missing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Response without usage' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Response without usage');
+      expect(result.cost).toBeUndefined();
     });
 
     it('does not double-count reasoning tokens already included in completion tokens', async () => {

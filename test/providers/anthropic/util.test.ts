@@ -2,12 +2,15 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
+  isClaudeRegionalPremiumModel,
+  isClaudeSonnet5Model,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
@@ -168,53 +171,60 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
-    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt <= 200k tokens', () => {
-      // Test with 150k tokens (below threshold)
+    it('bills Claude Sonnet 4.5 at the standard rate below 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 150_000, 10_000);
       expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
     });
 
-    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt exactly 200k tokens', () => {
-      // Test with exactly 200k tokens (at threshold, should use lower tier)
-      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 200_000, 10_000);
-      expect(cost).toBe(0.75); // (3/1e6 * 200,000) + (15/1e6 * 10,000) = 0.6 + 0.15 = 0.75
-    });
-
-    it('should calculate tiered cost for Claude Sonnet 4.5 with prompt > 200k tokens', () => {
-      // Test with 250k tokens (above threshold)
+    it('bills Claude Sonnet 4.5 at the standard rate above 200k tokens (no long-context tier)', () => {
+      // Guards against a >200K surcharge sneaking back in: the per-token rate must
+      // not change with prompt size.
       const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 250_000, 10_000);
-      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+      expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
     });
 
-    it('should calculate tiered cost for Claude Sonnet 4.5 20250929 with > 200k tokens', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 300_000, 20_000);
-      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
-      expect(cost).toBe(2.25);
+    it('bills the Claude Sonnet 4.5 latest alias at the standard rate above 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-latest', {}, 300_000, 20_000);
+      expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
     });
 
-    it('should calculate tiered cost for Claude Sonnet 4.5 latest alias', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-5-latest', {}, 250_000, 10_000);
-      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
-    });
-
-    it('should calculate tiered cost for Claude Sonnet 4.6 with prompt <= 200k tokens', () => {
+    it('bills Claude Sonnet 4.6 at the standard rate below 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 150_000, 10_000);
       expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
     });
 
-    it('should calculate tiered cost for Claude Sonnet 4.6 with prompt > 200k tokens', () => {
+    it('bills Claude Sonnet 4.6 at the standard rate above 200k tokens (full 1M at standard pricing)', () => {
+      // Per Anthropic pricing, Sonnet 4.6 includes the full 1M context window at
+      // standard pricing — a 900k-token request bills at the same per-token rate as 9k.
       const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 300_000, 20_000);
-      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
-      expect(cost).toBe(2.25);
+      expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
     });
 
-    it('should calculate tiered cost for Claude Sonnet 4.6 latest alias', () => {
+    it('bills the Claude Sonnet 4.6 latest alias at the standard rate above 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
-      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+      expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
+    });
+
+    it('should calculate default cost for Claude Sonnet 5 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    });
+
+    it('should calculate standard cost for Claude Sonnet 5 at or below 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+      // Per Anthropic pricing, Sonnet 5 bills its full 1M context at the standard rate —
+      // there is no >200K surcharge.
+      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
+      // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2 (no >200K surcharge applies)
+      expect(cost).toBe(1.2);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
-      // Other Sonnet 4 models don't have tiered pricing
+      // Other Sonnet 4 models bill at the same standard rate
       const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];
 
       models.forEach((model) => {
@@ -225,7 +235,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should respect config.cost override for Claude Sonnet 4.5 models', () => {
-      // When config.cost is provided, it should override tiered pricing
+      // When config.cost is provided, it should override list pricing
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { cost: 0.02 },
@@ -235,7 +245,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(5200); // (0.02 * 250,000) + (0.02 * 10,000) = 5000 + 200 = 5200
     });
 
-    it('should respect separate config input and output cost overrides for tiered models', () => {
+    it('should respect separate config input and output cost overrides for Sonnet 4.5 models', () => {
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { inputCost: 0.01, outputCost: 0.03 },
@@ -257,7 +267,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeUndefined();
     });
 
-    it('should apply cache pricing for non-tiered models with cache tokens', () => {
+    it('should apply cache pricing for Claude 3.5 models with cache tokens', () => {
       // claude-3-5-sonnet: $3/MTok input, $15/MTok output
       // Anthropic: input_tokens is the uncached portion; cache tokens are additive
       // 100 uncached input, 50 cache_read, 30 cache_write, 200 output
@@ -267,7 +277,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
-    it('should apply separate config input and output cost overrides to non-tiered cache pricing', () => {
+    it('should apply separate config input and output cost overrides to Claude 3.5 cache pricing', () => {
       const cost = calculateAnthropicCost(
         'claude-3-5-sonnet-20241022',
         { inputCost: 0.01, outputCost: 0.03 },
@@ -280,10 +290,9 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
-    it('should apply cache pricing for Sonnet 4.5 tiered model with cache tokens', () => {
-      // Sonnet 4.5 below 200k threshold: $3/MTok input, $15/MTok output
+    it('should apply cache pricing for Sonnet 4.5 with cache tokens', () => {
+      // Sonnet 4.5: $3/MTok input, $15/MTok output
       // 100k uncached input, 20k cache_read, 10k cache_write, 10k output
-      // effective total input = 100k + 20k + 10k = 130k (below 200k threshold)
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         {},
@@ -300,7 +309,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
-    it('should apply separate config input and output cost overrides to tiered cache pricing', () => {
+    it('should apply separate config input and output cost overrides to Sonnet 4.5 cache pricing', () => {
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { inputCost: 0.01, outputCost: 0.03 },
@@ -313,7 +322,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
-    it('should prefer inputCost/outputCost over cost and preserve tiered cache math when all are set', () => {
+    it('should prefer inputCost/outputCost over cost and preserve cache math when all are set', () => {
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { cost: 0.99, inputCost: 0.01, outputCost: 0.03 },
@@ -326,7 +335,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 6);
     });
 
-    it('should use config.cost as fallback for the unset side on tiered cache pricing', () => {
+    it('should use config.cost as fallback for the unset side on Sonnet 4.5 cache pricing', () => {
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { cost: 0.02, inputCost: 0.01 },
@@ -339,7 +348,7 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 6);
     });
 
-    it('should use config.cost as fallback for the unset side on non-tiered cache pricing', () => {
+    it('should use config.cost as fallback for the unset side on Claude 3.5 cache pricing', () => {
       const cost = calculateAnthropicCost(
         'claude-3-5-sonnet-20241022',
         { cost: 0.02, outputCost: 0.03 },
@@ -352,9 +361,10 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 6);
     });
 
-    it('should use long-context tier when cache tokens push past 200k', () => {
-      // Sonnet 4.5 with effective input > 200k due to cache tokens
-      // 150k uncached input, 60k cache_read, 10k cache_write = 220k effective (>200k)
+    it('bills standard rates even when cache tokens push effective input past 200k', () => {
+      // 150k uncached input, 60k cache_read, 10k cache_write = 220k effective input,
+      // billed at the standard $3/$15 with the usual cache multipliers — cache tokens
+      // pushing effective input past 200k must not change the per-token rate.
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         {},
@@ -364,10 +374,10 @@ describe('Anthropic utilities', () => {
         10_000,
       );
       const expected =
-        150_000 * (6 / 1e6) +
-        60_000 * (6 / 1e6) * 0.1 +
-        10_000 * (6 / 1e6) * 1.25 +
-        10_000 * (22.5 / 1e6);
+        150_000 * (3 / 1e6) +
+        60_000 * (3 / 1e6) * 0.1 +
+        10_000 * (3 / 1e6) * 1.25 +
+        10_000 * (15 / 1e6);
       expect(cost).toBeCloseTo(expected, 10);
     });
 
@@ -1833,6 +1843,22 @@ describe('Anthropic utilities', () => {
         8,
       );
     });
+
+    it('composes the regional premium with standard Sonnet 4.6 pricing above 200k tokens', () => {
+      // Sonnet 4.6 bills its full 1M context at standard rates; the regional premium
+      // applies as a flat 1.1x multiplier regardless of prompt size.
+      expect(
+        calculateAnthropicCost('us.anthropic.claude-sonnet-4-6', {}, 300_000, 20_000),
+      ).toBeCloseTo(((300_000 / 1e6) * 3 + (20_000 / 1e6) * 15) * 1.1, 6);
+      // <=200K regional bills at 1.1x the same $3/$15 standard rate.
+      expect(
+        calculateAnthropicCost('eu.anthropic.claude-sonnet-4-6', {}, 150_000, 10_000),
+      ).toBeCloseTo(((150_000 / 1e6) * 3 + (10_000 / 1e6) * 15) * 1.1, 6);
+      // The global endpoint bills at the standard rate with no premium.
+      expect(
+        calculateAnthropicCost('global.anthropic.claude-sonnet-4-6', {}, 300_000, 20_000),
+      ).toBeCloseTo((300_000 / 1e6) * 3 + (20_000 / 1e6) * 15, 6);
+    });
   });
 
   describe('sampling-params-deprecated model detection', () => {
@@ -1898,6 +1924,82 @@ describe('Anthropic utilities', () => {
       for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
+    });
+
+    it('detects Claude Sonnet 5 across provider naming schemes', () => {
+      for (const id of [
+        'claude-sonnet-5',
+        'anthropic:messages:claude-sonnet-5',
+        'anthropic.claude-sonnet-5',
+        'us.anthropic.claude-sonnet-5',
+        'eu.anthropic.claude-sonnet-5',
+        'global.anthropic.claude-sonnet-5',
+        // A trailing date snapshot is a real, supported form and must match.
+        'claude-sonnet-5-20260630',
+      ]) {
+        expect(isClaudeSonnet5Model(id)).toBe(true);
+        // Sonnet 5 deprecates sampling params (verified against the live API)...
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+        // ...but is NOT always-on adaptive thinking (thinking can still be disabled).
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('does not treat Sonnet 4.x or hypothetical Sonnet 50 as Sonnet 5', () => {
+      for (const id of [
+        'claude-sonnet-4-5',
+        'claude-sonnet-4-5-20250929',
+        'claude-sonnet-4-6',
+        // Boundary: a hypothetical higher-numbered "50" must not match "5".
+        'claude-sonnet-50',
+      ]) {
+        expect(isClaudeSonnet5Model(id)).toBe(false);
+      }
+      // Sonnet 4.5/4.6 keep sampling-param support.
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-sonnet-4-6')).toBe(false);
+    });
+
+    it('flags Claude 4.5+ models for the regional endpoint premium but not earlier releases', () => {
+      // Sonnet 4.5, Haiku 4.5, Opus 4.5, and every later model (4.6/4.7/4.8 + Claude 5).
+      for (const id of [
+        'claude-sonnet-5',
+        'us.anthropic.claude-sonnet-5',
+        'claude-fable-5',
+        'claude-mythos-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-opus-4-5-20251101',
+        'claude-sonnet-4-6',
+        'claude-sonnet-4-5-20250929',
+        'claude-haiku-4-5-20251001',
+      ]) {
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+      }
+      // Opus 4.1 and earlier + pre-4.5 Sonnet/Haiku retain base pricing on all endpoints.
+      for (const id of [
+        'claude-opus-4-1-20250805',
+        'claude-opus-4-20250514',
+        'claude-sonnet-4-20250514',
+        'claude-sonnet-4-0',
+        'claude-3-7-sonnet-20250219',
+        'claude-3-5-haiku-20241022',
+      ]) {
+        expect(isClaudeRegionalPremiumModel(id)).toBe(false);
+      }
+    });
+
+    it('resolves the user-facing warning name for recognized Claude families', () => {
+      expect(getClaudeModelWarningName('claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('us.anthropic.claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('claude-opus-4-8')).toBe('Claude Opus 4.7 and 4.8');
+      expect(getClaudeModelWarningName('claude-opus-4-7')).toBe('Claude Opus 4.7 and 4.8');
+      expect(getClaudeModelWarningName('claude-fable-5')).toBe(
+        'Claude Fable 5 and Claude Mythos 5',
+      );
+      // Regional-premium-only tiers and unrecognized models have no warning name.
+      expect(getClaudeModelWarningName('claude-sonnet-4-6')).toBeUndefined();
+      expect(getClaudeModelWarningName('claude-3-7-sonnet-20250219')).toBeUndefined();
     });
   });
 });
