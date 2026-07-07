@@ -646,15 +646,35 @@ const TokenEstimationConfigSchema = z.object({
 });
 
 // Base signature auth fields
-const BaseSignatureAuthSchema = z.object({
+export const BaseSignatureAuthSchema = z.object({
   signatureValidityMs: z.number().prefault(300000),
   signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().prefault('SHA256'),
+  signatureAlgorithm: z
+    .string()
+    .prefault('SHA256')
+    .refine(
+      (alg) => {
+        // Only allow secure hash algorithms (reject MD5, SHA1, etc.)
+        const allowedAlgorithms = [
+          'SHA256',
+          'SHA384',
+          'SHA512',
+          'SHA224',
+          'SHA512/224',
+          'SHA512/256',
+        ];
+        return allowedAlgorithms.includes(alg.toUpperCase());
+      },
+      {
+        error:
+          'signatureAlgorithm must be a secure hash algorithm (SHA256, SHA384, SHA512, SHA224, SHA512/224, SHA512/256). MD5 and SHA1 are not allowed due to security concerns.',
+      },
+    ),
   signatureRefreshBufferMs: z.number().optional(),
 });
 
 // PEM signature auth schema
-const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
+export const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('pem'),
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
@@ -663,7 +683,7 @@ const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 });
 
 // JKS signature auth schema
-const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
+export const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('jks'),
   keystorePath: z.string().optional(),
   keystoreContent: z.string().optional(), // Base64 encoded JKS content
@@ -674,7 +694,7 @@ const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 });
 
 // PFX signature auth schema
-const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
+export const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('pfx'),
   pfxPath: z.string().optional(),
   pfxContent: z.string().optional(), // Base64 encoded PFX content

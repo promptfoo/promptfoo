@@ -4,7 +4,13 @@ import * as os from 'os';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateSignature } from '../../src/providers/http';
+import {
+  BaseSignatureAuthSchema,
+  generateSignature,
+  JksSignatureAuthSchema,
+  PemSignatureAuthSchema,
+  PfxSignatureAuthSchema,
+} from '../../src/providers/http';
 
 // Hoisted mock for fs.promises.stat
 const mockStat = vi.hoisted(() => vi.fn());
@@ -148,5 +154,151 @@ describe('PFX signature paths (generateSignature)', () => {
     const result = await generateSignature(signatureAuth, Date.now());
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Signature algorithm validation', () => {
+  describe('BaseSignatureAuthSchema', () => {
+    it('accepts secure hash algorithms', () => {
+      const secureAlgorithms = ['SHA256', 'SHA384', 'SHA512', 'SHA224', 'SHA512/224', 'SHA512/256'];
+
+      for (const algorithm of secureAlgorithms) {
+        const result = BaseSignatureAuthSchema.safeParse({
+          signatureAlgorithm: algorithm,
+          signatureValidityMs: 300000,
+          signatureDataTemplate: '{{signatureTimestamp}}',
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it('accepts lowercase secure hash algorithms', () => {
+      const result = BaseSignatureAuthSchema.safeParse({
+        signatureAlgorithm: 'sha256',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects MD5 algorithm', () => {
+      const result = BaseSignatureAuthSchema.safeParse({
+        signatureAlgorithm: 'MD5',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toMatch(/secure hash algorithm/);
+      }
+    });
+
+    it('rejects SHA1 algorithm', () => {
+      const result = BaseSignatureAuthSchema.safeParse({
+        signatureAlgorithm: 'SHA1',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toMatch(/secure hash algorithm/);
+      }
+    });
+
+    it('rejects unknown algorithms', () => {
+      const result = BaseSignatureAuthSchema.safeParse({
+        signatureAlgorithm: 'UNKNOWN',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('defaults to SHA256 when not specified', () => {
+      const result = BaseSignatureAuthSchema.safeParse({
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.signatureAlgorithm).toBe('SHA256');
+      }
+    });
+  });
+
+  describe('PEM signature auth with algorithm validation', () => {
+    it('accepts PEM with secure algorithm', () => {
+      const result = PemSignatureAuthSchema.safeParse({
+        type: 'pem',
+        privateKey: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----',
+        signatureAlgorithm: 'SHA256',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects PEM with weak algorithm', () => {
+      const result = PemSignatureAuthSchema.safeParse({
+        type: 'pem',
+        privateKey: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----',
+        signatureAlgorithm: 'MD5',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('JKS signature auth with algorithm validation', () => {
+    it('accepts JKS with secure algorithm', () => {
+      const result = JksSignatureAuthSchema.safeParse({
+        type: 'jks',
+        keystorePath: '/path/to/keystore.jks',
+        keystorePassword: 'password',
+        signatureAlgorithm: 'SHA512',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects JKS with weak algorithm', () => {
+      const result = JksSignatureAuthSchema.safeParse({
+        type: 'jks',
+        keystorePath: '/path/to/keystore.jks',
+        keystorePassword: 'password',
+        signatureAlgorithm: 'SHA1',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('PFX signature auth with algorithm validation', () => {
+    it('accepts PFX with secure algorithm', () => {
+      const result = PfxSignatureAuthSchema.safeParse({
+        type: 'pfx',
+        pfxPath: '/path/to/cert.pfx',
+        pfxPassword: 'password',
+        signatureAlgorithm: 'SHA384',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects PFX with weak algorithm', () => {
+      const result = PfxSignatureAuthSchema.safeParse({
+        type: 'pfx',
+        pfxPath: '/path/to/cert.pfx',
+        pfxPassword: 'password',
+        signatureAlgorithm: 'MD5',
+        signatureValidityMs: 300000,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
