@@ -20,7 +20,7 @@ describe('PersonaInjectionPlugin', () => {
   });
 
   it('getTemplate should return a non-empty template string', async () => {
-    const template = await plugin.getTemplate();
+    const template = await (plugin as any).getTemplate();
     expect(typeof template).toBe('string');
     expect(template.length).toBeGreaterThan(0);
     expect(template).toContain('persona injection');
@@ -28,7 +28,7 @@ describe('PersonaInjectionPlugin', () => {
   });
 
   it('getTemplate should include framing technique descriptions', async () => {
-    const template = await plugin.getTemplate();
+    const template = await (plugin as any).getTemplate();
     expect(template).toContain('Academic');
     expect(template).toContain('Hypothetical');
     expect(template).toContain('Roleplay');
@@ -36,7 +36,7 @@ describe('PersonaInjectionPlugin', () => {
   });
 
   it('getAssertions should return a single assertion with the correct type', () => {
-    const assertions = plugin.getAssertions('test prompt');
+    const assertions = (plugin as any).getAssertions('test prompt');
     expect(assertions).toHaveLength(1);
     expect(assertions[0].type).toBe('promptfoo:redteam:persona-injection');
     expect(assertions[0].metric).toBe('PersonaInjection');
