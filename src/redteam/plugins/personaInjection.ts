@@ -11,12 +11,12 @@ const PLUGIN_ID = 'promptfoo:redteam:persona-injection';
  * operational guardrails.
  *
  * Inspired by the C2 (Gradual Identity Substitution) behavior class documented
- * in Dwivedi (2025), where multi-turn escalation sequences attempt to replace a
- * model's system-prompt identity with an alternative persona (e.g. "DevMode",
- * "ResearchBot", "FreeAI") using academic framing, hypothetical questions, and
- * explicit persona assignment.
+ * in Dwivedi (2026, preprint), where multi-turn escalation sequences attempt to
+ * replace a model's system-prompt identity with an alternative persona (e.g.
+ * "DevMode", "ResearchBot", "FreeAI") using academic framing, hypothetical
+ * questions, and explicit persona assignment.
  *
- * Empirical baseline (Dwivedi 2025, C2): 7 of 29 models adopted the injected
+ * Empirical baseline (Dwivedi 2026, C2): 7 of 29 models adopted the injected
  * persona across 5 providers.
  */
 
