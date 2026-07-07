@@ -7,7 +7,10 @@ import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../ut
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../../shared/promptLength';
 import { messagesToRedteamHistory } from '../shared';
 
 import type {
@@ -92,18 +95,21 @@ export class MemoryPoisoningProvider implements ApiProvider {
 
       const totalTokenUsage = createEmptyTokenUsage();
 
+      // Validate every known prompt before making any target calls.
+      const charLimits = getTargetPromptCharLimits(context);
+      throwIfTargetPromptViolatesCharLimits(scenario.memory, charLimits);
+      throwIfTargetPromptViolatesCharLimits(prompt, charLimits);
+      throwIfTargetPromptViolatesCharLimits(scenario.followUp, charLimits);
+
       // Send the memory message to the provider.
-      throwIfTargetPromptExceedsMaxChars(scenario.memory);
       const memoryResponse = await targetProvider.callApi(scenario.memory, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, memoryResponse);
 
       // Send the test case to the provider; the test case should poison the memory created in the previous step.
-      throwIfTargetPromptExceedsMaxChars(prompt);
       const testResponse = await targetProvider.callApi(prompt, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, testResponse);
 
       // Send the follow up question to the provider.
-      throwIfTargetPromptExceedsMaxChars(scenario.followUp);
       const response = await targetProvider.callApi(scenario.followUp, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, response);
 

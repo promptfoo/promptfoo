@@ -1,5 +1,5 @@
 import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
-import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
+import { pluginIdMatchesStrategyTargets } from './pluginTargeting';
 
 import type { RedteamStrategyObject } from '../types';
 
@@ -17,37 +17,21 @@ export function pluginMatchesStrategyTargets(
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as any)) {
+  if (
+    !pluginIdMatchesStrategyTargets(
+      pluginId,
+      testCase.metadata?.pluginConfig,
+      strategyId,
+      targetPlugins,
+    )
+  ) {
     return false;
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
     return false;
   }
-
-  // Check if this strategy is excluded for this plugin
-  const excludedStrategies = testCase.metadata?.pluginConfig?.excludeStrategies as
-    | string[]
-    | undefined;
-  if (Array.isArray(excludedStrategies) && excludedStrategies.includes(strategyId)) {
-    return false;
-  }
-
-  if (!targetPlugins || targetPlugins.length === 0) {
-    return true; // If no targets specified, strategy applies to all plugins
-  }
-
-  return targetPlugins.some((target) => {
-    // Direct match
-    if (target === pluginId) {
-      return true;
-    }
-
-    // Category match (e.g. 'harmful' matches 'harmful:hate')
-    if ((pluginId || '').startsWith(`${target}:`)) {
-      return true;
-    }
-
-    return false;
-  });
+  return true;
 }
+
+export { pluginIdMatchesStrategyTargets } from './pluginTargeting';

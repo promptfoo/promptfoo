@@ -7,6 +7,7 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
+  expandRuntimePlugins,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   FRAMEWORK_COMPLIANCE_IDS,
@@ -16,6 +17,7 @@ import {
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
+  pluginIdMatchesStrategyTargets,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
@@ -197,68 +199,335 @@ export const RedteamStrategySchema = z.union([
   }),
 ]);
 
+function getCharsPerMessageLimit(limit: unknown): number | undefined {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit > 0 ? limit : undefined;
+}
+
+function hasValidCharsPerMessageLimit(limit: unknown): boolean {
+  return limit === undefined || getCharsPerMessageLimit(limit) !== undefined;
+}
+
+function hasValidCharsPerMessageRange(data: {
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
+}): boolean {
+  return (
+    data.maxCharsPerMessage === undefined ||
+    data.minCharsPerMessage === undefined ||
+    data.minCharsPerMessage <= data.maxCharsPerMessage
+  );
+}
+
+function getStringList(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : undefined;
+}
+
+function strategyTargetsPlugin(
+  strategyId: string,
+  strategyConfig: Record<string, unknown> | undefined,
+  pluginId: string,
+  pluginConfig: Record<string, unknown> | undefined,
+): boolean {
+  // Validate the same concrete plugin ids that runtime materializes, then delegate the
+  // targeting decision to runtime's predicate instead of maintaining a validator simulation.
+  return expandRuntimePlugins([{ id: pluginId, config: pluginConfig }], (id) =>
+    REDTEAM_ALL_PLUGINS.includes(id as Plugin),
+  ).plugins.some((plugin) =>
+    pluginIdMatchesStrategyTargets(
+      plugin.id,
+      plugin.config,
+      strategyId,
+      getStringList(strategyConfig?.plugins),
+    ),
+  );
+}
+
+type ScopedPromptLimitConfig = Record<string, unknown> & {
+  maxCharsPerMessage?: unknown;
+  minCharsPerMessage?: unknown;
+  steps?: unknown[];
+};
+type ScopedPromptLimit = string | { id: string; config?: ScopedPromptLimitConfig };
+
+type PromptLimitConfig = {
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
+  plugins?: ScopedPromptLimit[];
+  strategies?: ScopedPromptLimit[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '[unserializable]';
+  }
+}
+
+function isBasicStrategy(strategy: ScopedPromptLimit): boolean {
+  return (typeof strategy === 'string' ? strategy : strategy.id) === 'basic';
+}
+
+function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | number)[]): void {
+  ctx.addIssue({
+    code: 'custom',
+    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+    path,
+  });
+}
+
+function validateScopedCharsPerMessageLimits(
+  scopes: unknown[],
+  pathPrefix: Array<string | number>,
+  ctx: z.RefinementCtx,
+  seen = new WeakSet<object>(),
+  recurseLayerSteps = false,
+): void {
+  for (const [index, scope] of scopes.entries()) {
+    if (typeof scope === 'string') {
+      continue;
+    }
+    if (!isRecord(scope) || typeof scope.id !== 'string') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'layer steps must be strategy ids or strategy objects',
+        path: [...pathPrefix, index],
+      });
+      continue;
+    }
+    if (seen.has(scope)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'layer steps must not contain cycles',
+        path: [...pathPrefix, index],
+      });
+      continue;
+    }
+    seen.add(scope);
+    if (!isRecord(scope.config)) {
+      continue;
+    }
+    const configPath = [...pathPrefix, index, 'config'];
+    for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
+      if (!hasValidCharsPerMessageLimit(scope.config[key])) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${key} must be a positive integer`,
+          path: [...configPath, key],
+        });
+      }
+    }
+    if (
+      !hasValidCharsPerMessageRange({
+        maxCharsPerMessage: getCharsPerMessageLimit(scope.config.maxCharsPerMessage),
+        minCharsPerMessage: getCharsPerMessageLimit(scope.config.minCharsPerMessage),
+      })
+    ) {
+      addCharsPerMessageRangeIssue(ctx, [...configPath, 'minCharsPerMessage']);
+    }
+    if (recurseLayerSteps && scope.id === 'layer' && Array.isArray(scope.config.steps)) {
+      validateScopedCharsPerMessageLimits(
+        scope.config.steps,
+        [...configPath, 'steps'],
+        ctx,
+        seen,
+        true,
+      );
+    }
+  }
+}
+
+function validateEffectiveCharsPerMessageRanges(
+  data: PromptLimitConfig,
+  ctx: z.RefinementCtx,
+): void {
+  const pluginConfigs = (data.plugins ?? []).map((plugin, index) => ({
+    index,
+    plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
+  }));
+  const seenLayerScopes = new WeakSet<object>();
+  const expandLayerSteps = (
+    strategy: ScopedPromptLimit,
+    index: number,
+    inheritedConfig?: Record<string, unknown>,
+  ): Array<{ index: number; strategy: { id: string; config?: Record<string, unknown> } }> => {
+    if (typeof strategy === 'string') {
+      return [{ index, strategy: { id: strategy, config: inheritedConfig } }];
+    }
+    if (!isRecord(strategy) || typeof strategy.id !== 'string' || seenLayerScopes.has(strategy)) {
+      return [];
+    }
+    seenLayerScopes.add(strategy);
+    const ownConfig = isRecord(strategy.config) ? strategy.config : {};
+    // Runtime layers inherit their outer config, while a step's explicit targeting wins.
+    const config = {
+      ...inheritedConfig,
+      ...ownConfig,
+      ...(ownConfig.plugins === undefined && inheritedConfig?.plugins !== undefined
+        ? { plugins: inheritedConfig.plugins }
+        : {}),
+    };
+    const current = [{ index, strategy: { id: strategy.id, config } }];
+    if (strategy.id !== 'layer' || !Array.isArray(ownConfig.steps)) {
+      return current;
+    }
+    // A layer's limits constrain the completed pipeline, not each intermediate
+    // step. Only inherit targeting so step ranges remain independently valid.
+    const stepTargetingConfig =
+      config.plugins === undefined ? undefined : { plugins: config.plugins };
+    return [
+      ...current,
+      ...ownConfig.steps.flatMap((step) =>
+        expandLayerSteps(step as ScopedPromptLimit, index, stepTargetingConfig),
+      ),
+    ];
+  };
+  const configuredStrategies = data.strategies ?? [];
+  const basicStrategyConfigs = configuredStrategies.flatMap((strategy, index) =>
+    isBasicStrategy(strategy) &&
+    (typeof strategy === 'string' || strategy.config?.enabled !== false)
+      ? [{ index, strategy: { id: '', config: undefined } }]
+      : [],
+  );
+  const strategyConfigs = configuredStrategies
+    .filter((strategy) => !isBasicStrategy(strategy))
+    .flatMap((strategy, index) => expandLayerSteps(strategy, index));
+  const effectivePlugins =
+    pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
+  const effectiveStrategies =
+    basicStrategyConfigs.length > 0 || strategyConfigs.length > 0
+      ? [...basicStrategyConfigs, ...strategyConfigs]
+      : [{ index: 0, strategy: { id: '', config: undefined } }];
+  for (const { index: strategyIndex, strategy } of effectiveStrategies) {
+    if (strategy.config?.numTests === 0) {
+      continue;
+    }
+    for (const { index: pluginIndex, plugin } of effectivePlugins) {
+      if (!strategyTargetsPlugin(strategy.id, strategy.config, plugin.id, plugin.config)) {
+        continue;
+      }
+      const effectiveRange = {
+        maxCharsPerMessage:
+          data.maxCharsPerMessage ??
+          getCharsPerMessageLimit(strategy.config?.maxCharsPerMessage) ??
+          getCharsPerMessageLimit(plugin.config?.maxCharsPerMessage),
+        minCharsPerMessage:
+          data.minCharsPerMessage ??
+          getCharsPerMessageLimit(strategy.config?.minCharsPerMessage) ??
+          getCharsPerMessageLimit(plugin.config?.minCharsPerMessage),
+      };
+      if (!hasValidCharsPerMessageRange(effectiveRange)) {
+        addCharsPerMessageRangeIssue(
+          ctx,
+          strategy.config?.minCharsPerMessage === undefined
+            ? ['plugins', pluginIndex, 'config', 'minCharsPerMessage']
+            : ['strategies', strategyIndex, 'config', 'minCharsPerMessage'],
+        );
+      }
+    }
+  }
+}
+
+function safeConfigKey(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    return (
+      JSON.stringify(value, (_key, item) => {
+        if (isRecord(item)) {
+          if (seen.has(item)) {
+            return '[Circular]';
+          }
+          seen.add(item);
+        }
+        return item;
+      }) ?? ''
+    );
+  } catch {
+    return '[Unserializable]';
+  }
+}
 /**
  * Schema for `promptfoo redteam generate` command options
  */
 // NOTE: Remember to edit types/redteam.ts:RedteamCliGenerateOptions if you edit this schema
-export const RedteamGenerateOptionsSchema = z.object({
-  addPlugins: z
-    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
-    .optional()
-    .describe('Additional plugins to include'),
-  addStrategies: z
-    .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
-    .optional()
-    .describe('Additional strategies to include'),
-  cache: z.boolean().describe('Whether to use caching'),
-  config: z.string().optional().describe('Path to the configuration file'),
-  target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
-  defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
-  defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
-  description: z.string().optional().describe('Custom description/name for the generated tests'),
-  delay: z
-    .int()
-    .nonnegative()
-    .optional()
-    .describe('Delay in milliseconds between plugin API calls'),
-  envFile: z.string().optional().describe('Path to the environment file'),
-  filterProviders: z.string().optional().describe('Regex used to select providers'),
-  filterTargets: z.string().optional().describe('Regex used to select targets'),
-  force: z.boolean().describe('Whether to force generation').prefault(false),
-  injectVar: z.string().optional().describe('Variable to inject'),
-  language: z
-    .union([z.string(), z.array(z.string())])
-    .optional()
-    .describe('Language(s) of tests to generate'),
-  frameworks: z
-    .array(z.enum(frameworkOptions))
-    .min(1)
-    .optional()
-    .describe(
-      'Subset of compliance frameworks to include when generating, reporting, and filtering results',
-    ),
-  maxConcurrency: z.int().positive().optional().describe('Maximum number of concurrent API calls'),
-  maxCharsPerMessage: z
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum number of characters allowed per generated user message'),
-  numTests: z.int().positive().optional().describe('Number of tests to generate'),
-  output: z.string().optional().describe('Output file path'),
-  plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
-  provider: z.string().optional().describe('Provider to use'),
-  purpose: z.string().optional().describe('Purpose of the redteam generation'),
-  strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
-  write: z.boolean().describe('Whether to write the output'),
-  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
-  progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
-  configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
-  strict: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Fail the scan if any plugins fail to generate test cases'),
-});
+export const RedteamGenerateOptionsSchema = z
+  .object({
+    addPlugins: z
+      .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
+      .optional()
+      .describe('Additional plugins to include'),
+    addStrategies: z
+      .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
+      .optional()
+      .describe('Additional strategies to include'),
+    cache: z.boolean().describe('Whether to use caching'),
+    config: z.string().optional().describe('Path to the configuration file'),
+    target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
+    defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
+    defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
+    description: z.string().optional().describe('Custom description/name for the generated tests'),
+    delay: z
+      .int()
+      .nonnegative()
+      .optional()
+      .describe('Delay in milliseconds between plugin API calls'),
+    envFile: z.string().optional().describe('Path to the environment file'),
+    filterProviders: z.string().optional().describe('Regex used to select providers'),
+    filterTargets: z.string().optional().describe('Regex used to select targets'),
+    force: z.boolean().describe('Whether to force generation').prefault(false),
+    injectVar: z.string().optional().describe('Variable to inject'),
+    language: z
+      .union([z.string(), z.array(z.string())])
+      .optional()
+      .describe('Language(s) of tests to generate'),
+    frameworks: z
+      .array(z.enum(frameworkOptions))
+      .min(1)
+      .optional()
+      .describe(
+        'Subset of compliance frameworks to include when generating, reporting, and filtering results',
+      ),
+    maxConcurrency: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of concurrent API calls'),
+    maxCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of characters allowed per generated user message'),
+    minCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Minimum number of characters required per generated user message'),
+    numTests: z.int().positive().optional().describe('Number of tests to generate'),
+    output: z.string().optional().describe('Output file path'),
+    plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
+    provider: z.string().optional().describe('Provider to use'),
+    purpose: z.string().optional().describe('Purpose of the redteam generation'),
+    strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
+    write: z.boolean().describe('Whether to write the output'),
+    burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
+    progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
+    configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
+    strict: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Fail the scan if any plugins fail to generate test cases'),
+  })
+  .refine(hasValidCharsPerMessageRange, {
+    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+    path: ['minCharsPerMessage'],
+  });
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
@@ -323,6 +592,11 @@ export const RedteamConfigSchema = z
       .positive()
       .optional()
       .describe('Maximum number of characters allowed per generated user message'),
+    minCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Minimum number of characters required per generated user message'),
     delay: z
       .int()
       .nonnegative()
@@ -346,6 +620,20 @@ export const RedteamConfigSchema = z
       )
       .optional()
       .describe('Global grading examples that apply to all plugins'),
+  })
+  .superRefine((data, ctx) => {
+    if (!hasValidCharsPerMessageRange(data)) {
+      addCharsPerMessageRangeIssue(ctx, ['minCharsPerMessage']);
+    }
+    validateScopedCharsPerMessageLimits(data.plugins ?? [], ['plugins'], ctx);
+    validateScopedCharsPerMessageLimits(
+      data.strategies ?? [],
+      ['strategies'],
+      ctx,
+      undefined,
+      true,
+    );
+    validateEffectiveCharsPerMessageRanges(data, ctx);
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -393,7 +681,7 @@ export const RedteamConfigSchema = z
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      const key = `${id}:${JSON.stringify(config)}:${severity || ''}`;
+      const key = `${id}:${safeJsonStringify(config)}:${severity || ''}`;
       const pluginObject: RedteamPluginObject = { id };
       if (numTests !== undefined || data.numTests !== undefined) {
         pluginObject.numTests = numTests ?? data.numTests;
@@ -415,7 +703,9 @@ export const RedteamConfigSchema = z
     ) => {
       (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
         // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
-        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
+        const existingPlugin = pluginMap.get(
+          `${item}:${safeJsonStringify(config)}:${severity || ''}`,
+        );
         if (!existingPlugin || existingPlugin.numTests === undefined) {
           addPlugin(item, config, numTests, severity);
         }
@@ -522,7 +812,7 @@ export const RedteamConfigSchema = z
         if (a.id !== b.id) {
           return a.id.localeCompare(b.id);
         }
-        return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
+        return safeConfigKey(a.config || {}).localeCompare(safeConfigKey(b.config || {}));
       });
 
     // Helper to generate a unique key for strategies
@@ -536,12 +826,12 @@ export const RedteamConfigSchema = z
           return `layer/${strategy.config.label}`;
         }
         if (strategy.config.steps) {
-          return `layer:${JSON.stringify(strategy.config.steps)}`;
+          return `layer:${safeJsonStringify(strategy.config.steps)}`;
         }
       }
       // For other strategies with config, include config in key to allow multiple instances
       if (strategy.config && Object.keys(strategy.config).length > 0) {
-        return `${strategy.id}:${JSON.stringify(strategy.config)}`;
+        return `${strategy.id}:${safeJsonStringify(strategy.config)}`;
       }
       return strategy.id;
     };
@@ -572,6 +862,7 @@ export const RedteamConfigSchema = z
     return {
       numTests: data.numTests,
       ...(data.maxCharsPerMessage ? { maxCharsPerMessage: data.maxCharsPerMessage } : {}),
+      ...(data.minCharsPerMessage ? { minCharsPerMessage: data.minCharsPerMessage } : {}),
       plugins: uniquePlugins,
       strategies,
       ...(frameworks ? { frameworks } : {}),

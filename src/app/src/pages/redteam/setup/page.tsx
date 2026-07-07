@@ -78,6 +78,20 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
+const normalizeImportedPositiveInteger = (
+  value: unknown,
+  fieldName: 'minCharsPerMessage' | 'maxCharsPerMessage',
+): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof parsed !== 'number' || !Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`redteam.${fieldName} must be a positive integer`);
+  }
+  return parsed;
+};
+
 const TAB_CONFIG = [
   { value: '0', label: 'Target Type', icon: Crosshair },
   { value: '1', label: 'Target Config', icon: Settings },
@@ -355,6 +369,23 @@ export default function RedTeamSetupPage() {
       const applicationDefinition = yamlConfig.redteam?.applicationDefinition
         ? yamlConfig.redteam.applicationDefinition
         : purposeToApplicationDefinition(yamlConfig.redteam?.purpose);
+      const maxCharsPerMessage = normalizeImportedPositiveInteger(
+        yamlConfig.redteam?.maxCharsPerMessage,
+        'maxCharsPerMessage',
+      );
+      const minCharsPerMessage = normalizeImportedPositiveInteger(
+        yamlConfig.redteam?.minCharsPerMessage,
+        'minCharsPerMessage',
+      );
+      if (
+        minCharsPerMessage !== undefined &&
+        maxCharsPerMessage !== undefined &&
+        minCharsPerMessage > maxCharsPerMessage
+      ) {
+        throw new Error(
+          'redteam.minCharsPerMessage must be less than or equal to redteam.maxCharsPerMessage',
+        );
+      }
 
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
@@ -367,6 +398,8 @@ export default function RedTeamSetupPage() {
         provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
+        maxCharsPerMessage,
+        minCharsPerMessage,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition,
         testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',

@@ -111,6 +111,35 @@ describe('runtimeTransform', () => {
       expect(mockSecondStrategy.action).toHaveBeenCalledTimes(1);
     });
 
+    it('enforces each per-turn layer limit before a later layer can mask it', async () => {
+      const expandStrategy: Strategy = {
+        id: 'expand',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((testCase) => ({ ...testCase, vars: { input: 'long enough' } })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'short',
+        'input',
+        [{ id: 'base64', config: { minCharsPerMessage: 10 } }, 'expand'],
+        [...mockStrategies, expandStrategy],
+      );
+
+      expect(result.error).toContain('Transform base64 output is below minCharsPerMessage=10');
+      expect(expandStrategy.action).not.toHaveBeenCalled();
+    });
+
+    it('enforces media layer minimums against the transcript', async () => {
+      const result = await applyRuntimeTransforms(
+        'short',
+        'input',
+        [{ id: 'audio', config: { minCharsPerMessage: 10 } }],
+        mockStrategies,
+      );
+      expect(result.error).toContain('Transform audio output is below minCharsPerMessage=10');
+    });
+
     it('should extract audio data from data URL', async () => {
       const result = await applyRuntimeTransforms('hello', 'input', ['audio'], mockStrategies);
 

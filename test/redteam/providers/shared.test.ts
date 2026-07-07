@@ -530,6 +530,20 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('returns an error before calling the target when the prompt is below minCharsPerMessage', async () => {
+      setCliStateConfig({ redteam: { minCharsPerMessage: 9 } });
+      const mockProvider = createMockProvider({
+        response: { output: 'test response', tokenUsage: { numRequests: 1 } },
+      });
+      const result = await getTargetResponse(mockProvider, 'short');
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: '',
+        error: 'Target prompt message at prompt is below minCharsPerMessage=9: 5 characters.',
+        tokenUsage: { numRequests: 0 },
+      });
+    });
+
     it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
       setCliStateConfig({
         redteam: {
@@ -577,6 +591,25 @@ describe('shared redteam provider utilities', () => {
       expect(mockProvider.callApi).not.toHaveBeenCalled();
       expect(result.error).toBe(
         'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
+    it('prefers global minCharsPerMessage to test metadata', async () => {
+      setCliStateConfig({ redteam: { minCharsPerMessage: 9 } });
+      const mockProvider = createMockProvider({
+        response: { output: 'test response', tokenUsage: { numRequests: 1 } },
+      });
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: { metadata: { pluginConfig: { minCharsPerMessage: 5 } } },
+      } as CallApiContextParams;
+
+      const result = await getTargetResponse(mockProvider, 'sixsix', context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at prompt is below minCharsPerMessage=9: 6 characters.',
       );
     });
 

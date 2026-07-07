@@ -52,117 +52,129 @@ export interface TracingConfig {
   strategies?: Record<string, TracingConfig>;
 }
 
-export const PluginConfigSchema = z.object({
-  examples: z.array(z.string()).optional(),
-  graderExamples: z
-    .array(
-      z.object({
-        output: z.string(),
-        pass: z.boolean(),
-        score: z.number(),
-        reason: z.string(),
-      }),
-    )
-    .optional(),
-  graderGuidance: z.string().optional(),
-  severity: SeveritySchema.optional(),
-  language: z.union([z.string(), z.array(z.string())]).optional(),
-  prompt: z.string().optional(),
-  purpose: z.string().optional(),
-  // TODO: should be z.record(Modifier, z.unknown())
-  modifiers: z.record(z.string(), z.unknown()).optional(),
-  // BOLA
-  targetIdentifiers: z.array(z.string()).optional(),
-  // BFLA
-  targetSystems: z.array(z.string()).optional(),
-  // Competitor
-  mentions: z.boolean().optional(),
-  // SSRF
-  targetUrls: z.array(z.string()).optional(),
-  ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-  // PII
-  name: z.string().optional(),
-  // CyberSecEval
-  multilingual: z.boolean().optional(),
+export const PluginConfigSchema = z
+  .object({
+    examples: z.array(z.string()).optional(),
+    graderExamples: z
+      .array(
+        z.object({
+          output: z.string(),
+          pass: z.boolean(),
+          score: z.number(),
+          reason: z.string(),
+        }),
+      )
+      .optional(),
+    graderGuidance: z.string().optional(),
+    severity: SeveritySchema.optional(),
+    language: z.union([z.string(), z.array(z.string())]).optional(),
+    prompt: z.string().optional(),
+    purpose: z.string().optional(),
+    // TODO: should be z.record(Modifier, z.unknown())
+    modifiers: z.record(z.string(), z.unknown()).optional(),
+    // BOLA
+    targetIdentifiers: z.array(z.string()).optional(),
+    // BFLA
+    targetSystems: z.array(z.string()).optional(),
+    // Competitor
+    mentions: z.boolean().optional(),
+    // SSRF
+    targetUrls: z.array(z.string()).optional(),
+    ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+    // PII
+    name: z.string().optional(),
+    // CyberSecEval
+    multilingual: z.boolean().optional(),
 
-  // Indirect Prompt Injection
-  indirectInjectionVar: z.string().optional(),
-  // RAG Poisoning
-  intendedResults: z.array(z.string()).optional(),
-  intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
-  policy: z.union([z.string(), PolicyObjectSchema]).optional(),
-  systemPrompt: z.string().optional(),
-  // Strategy exclusions - allows plugins to exclude incompatible strategies
-  excludeStrategies: z.array(z.string()).optional(),
+    // Indirect Prompt Injection
+    indirectInjectionVar: z.string().optional(),
+    // RAG Poisoning
+    intendedResults: z.array(z.string()).optional(),
+    intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
+    policy: z.union([z.string(), PolicyObjectSchema]).optional(),
+    systemPrompt: z.string().optional(),
+    // Strategy exclusions - allows plugins to exclude incompatible strategies
+    excludeStrategies: z.array(z.string()).optional(),
 
-  // Coding agent deterministic fixture fields
-  protectedFilePath: z.string().optional(),
-  protectedFilePaths: z.array(z.string()).optional(),
-  secretFilePath: z.string().optional(),
-  secretFilePaths: z.array(z.string()).optional(),
-  secretLocalFilePath: z.string().optional(),
-  secretLocalFilePaths: z.array(z.string()).optional(),
-  secretFileValue: z.string().optional(),
-  secretFileValues: z.array(z.string()).optional(),
-  outsideWritePath: z.string().optional(),
-  outsideWritePaths: z.array(z.string()).optional(),
-  outsideWriteHostPath: z.string().optional(),
-  outsideWriteHostPaths: z.array(z.string()).optional(),
-  outsideWriteProbeDir: z.string().optional(),
-  outsideWriteProbeDirs: z.array(z.string()).optional(),
-  outsideWriteAllowedPath: z.string().optional(),
-  outsideWriteAllowedPaths: z.array(z.string()).optional(),
-  outsideWriteExpectedSha256: z.string().optional(),
-  outsideWritePathSha256: z.string().optional(),
-  outsideWriteSha256: z.string().optional(),
-  outsideWriteMustNotExistPath: z.string().optional(),
-  outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
-  mustNotExistPath: z.string().optional(),
-  mustNotExistPaths: z.array(z.string()).optional(),
-  protectedWritePath: z.string().optional(),
-  protectedWritePaths: z.array(z.string()).optional(),
-  sandboxWritePath: z.string().optional(),
-  sandboxWritePaths: z.array(z.string()).optional(),
-  verifierArtifactRoot: z.string().optional(),
-  verifierArtifactRoots: z.array(z.string()).optional(),
-  verifierProbeDir: z.string().optional(),
-  verifierProbeDirs: z.array(z.string()).optional(),
-  workspacePath: z.string().optional(),
-  workspacePaths: z.array(z.string()).optional(),
-  workspaceRoot: z.string().optional(),
-  workspaceRoots: z.array(z.string()).optional(),
-  workingDirectory: z.string().optional(),
-  workingDirectoryPath: z.string().optional(),
-  workingDir: z.string().optional(),
-  networkEgressUrl: z.string().optional(),
-  networkEgressUrls: z.array(z.string()).optional(),
-  networkTrapUrl: z.string().optional(),
-  networkTrapUrls: z.array(z.string()).optional(),
-  networkEgressHost: z.string().optional(),
-  networkEgressHosts: z.array(z.string()).optional(),
-  networkTrapHost: z.string().optional(),
-  networkTrapHosts: z.array(z.string()).optional(),
-  networkAllowedHost: z.string().optional(),
-  networkAllowedHosts: z.array(z.string()).optional(),
-  networkAllowedUrl: z.string().optional(),
-  networkAllowedUrls: z.array(z.string()).optional(),
-  networkTrapLogPath: z.string().optional(),
-  networkTrapLogPaths: z.array(z.string()).optional(),
-  networkScanPath: z.string().optional(),
-  networkScanPaths: z.array(z.string()).optional(),
-  networkWorkspacePath: z.string().optional(),
-  networkWorkspacePaths: z.array(z.string()).optional(),
-  networkEgressReceipt: z.string().optional(),
-  networkEgressReceipts: z.array(z.string()).optional(),
+    // Coding agent deterministic fixture fields
+    protectedFilePath: z.string().optional(),
+    protectedFilePaths: z.array(z.string()).optional(),
+    secretFilePath: z.string().optional(),
+    secretFilePaths: z.array(z.string()).optional(),
+    secretLocalFilePath: z.string().optional(),
+    secretLocalFilePaths: z.array(z.string()).optional(),
+    secretFileValue: z.string().optional(),
+    secretFileValues: z.array(z.string()).optional(),
+    outsideWritePath: z.string().optional(),
+    outsideWritePaths: z.array(z.string()).optional(),
+    outsideWriteHostPath: z.string().optional(),
+    outsideWriteHostPaths: z.array(z.string()).optional(),
+    outsideWriteProbeDir: z.string().optional(),
+    outsideWriteProbeDirs: z.array(z.string()).optional(),
+    outsideWriteAllowedPath: z.string().optional(),
+    outsideWriteAllowedPaths: z.array(z.string()).optional(),
+    outsideWriteExpectedSha256: z.string().optional(),
+    outsideWritePathSha256: z.string().optional(),
+    outsideWriteSha256: z.string().optional(),
+    outsideWriteMustNotExistPath: z.string().optional(),
+    outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
+    mustNotExistPath: z.string().optional(),
+    mustNotExistPaths: z.array(z.string()).optional(),
+    protectedWritePath: z.string().optional(),
+    protectedWritePaths: z.array(z.string()).optional(),
+    sandboxWritePath: z.string().optional(),
+    sandboxWritePaths: z.array(z.string()).optional(),
+    verifierArtifactRoot: z.string().optional(),
+    verifierArtifactRoots: z.array(z.string()).optional(),
+    verifierProbeDir: z.string().optional(),
+    verifierProbeDirs: z.array(z.string()).optional(),
+    workspacePath: z.string().optional(),
+    workspacePaths: z.array(z.string()).optional(),
+    workspaceRoot: z.string().optional(),
+    workspaceRoots: z.array(z.string()).optional(),
+    workingDirectory: z.string().optional(),
+    workingDirectoryPath: z.string().optional(),
+    workingDir: z.string().optional(),
+    networkEgressUrl: z.string().optional(),
+    networkEgressUrls: z.array(z.string()).optional(),
+    networkTrapUrl: z.string().optional(),
+    networkTrapUrls: z.array(z.string()).optional(),
+    networkEgressHost: z.string().optional(),
+    networkEgressHosts: z.array(z.string()).optional(),
+    networkTrapHost: z.string().optional(),
+    networkTrapHosts: z.array(z.string()).optional(),
+    networkAllowedHost: z.string().optional(),
+    networkAllowedHosts: z.array(z.string()).optional(),
+    networkAllowedUrl: z.string().optional(),
+    networkAllowedUrls: z.array(z.string()).optional(),
+    networkTrapLogPath: z.string().optional(),
+    networkTrapLogPaths: z.array(z.string()).optional(),
+    networkScanPath: z.string().optional(),
+    networkScanPaths: z.array(z.string()).optional(),
+    networkWorkspacePath: z.string().optional(),
+    networkWorkspacePaths: z.array(z.string()).optional(),
+    networkEgressReceipt: z.string().optional(),
+    networkEgressReceipts: z.array(z.string()).optional(),
 
-  // Multi-variable inputs - allows generating test cases with multiple variables
-  // Keys are variable names, values are descriptions of what each variable should contain
-  inputs: InputsSchema.optional(),
-  maxCharsPerMessage: z.number().int().positive().optional(),
+    // Multi-variable inputs - allows generating test cases with multiple variables
+    // Keys are variable names, values are descriptions of what each variable should contain
+    inputs: InputsSchema.optional(),
+    maxCharsPerMessage: z.number().int().positive().optional(),
+    minCharsPerMessage: z.number().int().positive().optional(),
 
-  // Allow for the inclusion of a nonce to prevent caching of test cases.
-  __nonce: z.number().optional(),
-});
+    // Allow for the inclusion of a nonce to prevent caching of test cases.
+    __nonce: z.number().optional(),
+  })
+  .refine(
+    (config) =>
+      config.maxCharsPerMessage === undefined ||
+      config.minCharsPerMessage === undefined ||
+      config.minCharsPerMessage <= config.maxCharsPerMessage,
+    {
+      message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+      path: ['minCharsPerMessage'],
+    },
+  );
 
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 
@@ -253,6 +265,7 @@ type CommonOptions = {
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   maxConcurrency?: number;
   tracing?: TracingConfig;
 };
@@ -328,6 +341,8 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   tags?: Record<string, string>;
   strict?: boolean;
 
@@ -358,6 +373,7 @@ export interface SavedRedteamConfig {
   extensions?: string[];
   numTests?: number;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   maxConcurrency?: number;
   language?: string | string[];
   provider?: string | ProviderOptions;

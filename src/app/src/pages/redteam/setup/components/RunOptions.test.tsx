@@ -25,6 +25,7 @@ describe('RunOptionsContent', () => {
   const defaultProps = {
     numTests: 10,
     maxCharsPerMessage: 250,
+    minCharsPerMessage: 50,
     runOptions: {
       delay: 0,
       maxConcurrency: 1,
@@ -60,9 +61,26 @@ describe('RunOptionsContent', () => {
       expect(maxCharsPerMessageInput).toBeInTheDocument();
       expect(maxCharsPerMessageInput).toHaveValue(defaultProps.maxCharsPerMessage);
 
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+      expect(minCharsPerMessageInput).toBeInTheDocument();
+      expect(minCharsPerMessageInput).toHaveValue(defaultProps.minCharsPerMessage);
+
       const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
       expect(debugSwitch).toBeInTheDocument();
       expect(debugSwitch).not.toBeChecked();
+    });
+
+    it('should sync message limits after config import updates props', () => {
+      const { rerender } = renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+
+      rerender(
+        <TooltipProvider>
+          <RunOptionsContent {...defaultProps} maxCharsPerMessage={120} minCharsPerMessage={80} />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByLabelText('Max chars per message')).toHaveValue(120);
+      expect(screen.getByLabelText('Min chars per message')).toHaveValue(80);
     });
 
     it('should disable the delay field and show a tooltip when maxConcurrency is greater than 1', () => {
@@ -186,6 +204,75 @@ describe('RunOptionsContent', () => {
       expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 120);
     });
 
+    it('should call updateConfig with minCharsPerMessage when that field is set to a valid value', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(
+        <RunOptionsContent {...defaultProps} minCharsPerMessage={undefined} />,
+      );
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+
+      await user.click(minCharsPerMessageInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('120');
+      await user.tab();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', 120);
+    });
+
+    it('should explain configured minCharsPerMessage when maxCharsPerMessage is below it', () => {
+      renderWithTooltipProvider(
+        <RunOptionsContent {...defaultProps} maxCharsPerMessage={25} minCharsPerMessage={50} />,
+      );
+
+      expect(screen.getByLabelText('Max chars per message')).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByText(RUNOPTIONS_TEXT.maxCharsPerMessage.minError(50))).toBeInTheDocument();
+    });
+
+    it('should reset fractional number of test cases to the configured default on blur', async () => {
+      const user = userEvent.setup();
+      const setValue = vi.fn();
+      renderWithTooltipProvider(
+        <NumberOfTestCasesInput value="1.5" setValue={setValue} updateConfig={mockUpdateConfig} />,
+      );
+      const numTestsInput = screen.getByLabelText('Number of test cases');
+
+      await user.click(numTestsInput);
+      await user.tab();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
+      expect(setValue).toHaveBeenCalledWith(String(REDTEAM_DEFAULTS.NUM_TESTS));
+    });
+
+    it('should clear a pasted fractional minCharsPerMessage on blur', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+
+      await user.clear(minCharsPerMessageInput);
+      await user.paste('1.5');
+      await user.tab();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', undefined);
+      expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 15);
+      expect(minCharsPerMessageInput).toHaveValue(null);
+    });
+
+    it('should not persist minCharsPerMessage above maxCharsPerMessage', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+
+      await user.clear(minCharsPerMessageInput);
+      await user.type(minCharsPerMessageInput, '300');
+      await user.tab();
+
+      expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 300);
+      expect(minCharsPerMessageInput).toHaveValue(50);
+    });
+
     it('should clear maxCharsPerMessage when the field is emptied', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
@@ -296,6 +383,18 @@ describe('DelayBetweenAPICallsInput', () => {
     await user.tab();
     expect(updateRunOption).toHaveBeenCalledWith('delay', 250);
     expect(setValue).toHaveBeenCalledWith('250');
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
+  });
+
+  it('normalizes fractional values to 0 on blur and enforces maxConcurrency=1', async () => {
+    const user = userEvent.setup();
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="1.5" />);
+    const input = screen.getByLabelText('Delay between API calls');
+    await user.click(input);
+    await user.tab();
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setValue).toHaveBeenCalledWith('0');
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
   });
@@ -429,6 +528,20 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 5);
     expect(setValue).toHaveBeenCalledWith('5');
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setDelayValue).toHaveBeenCalledWith('0');
+  });
+
+  it('normalizes fractional values to 1 on blur and enforces delay=0', async () => {
+    const user = userEvent.setup();
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="1.5" />);
+    const input = screen.getByLabelText('Max concurrent requests');
+
+    await user.click(input);
+    await user.tab();
+
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setValue).toHaveBeenCalledWith('1');
     expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
     expect(setDelayValue).toHaveBeenCalledWith('0');
   });

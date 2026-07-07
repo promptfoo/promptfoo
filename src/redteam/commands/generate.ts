@@ -204,16 +204,25 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
 
 async function getConfigHash(
   configPath: string,
-  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+  options: Pick<
+    RedteamCliGenerateOptions,
+    'filterProviders' | 'filterTargets' | 'maxCharsPerMessage' | 'minCharsPerMessage'
+  >,
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
-  const filters = {
+  const runtimeOptions = {
     ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
     ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+    ...(options.maxCharsPerMessage === undefined
+      ? {}
+      : { maxCharsPerMessage: options.maxCharsPerMessage }),
+    ...(options.minCharsPerMessage === undefined
+      ? {}
+      : { minCharsPerMessage: options.minCharsPerMessage }),
   };
   const hashInput =
-    Object.keys(filters).length > 0
-      ? JSON.stringify({ version: VERSION, content, filters })
+    Object.keys(runtimeOptions).length > 0
+      ? JSON.stringify({ version: VERSION, content, runtimeOptions })
       : `${VERSION}:${content}`;
   return createHash('md5').update(hashInput).digest('hex');
 }
@@ -592,6 +601,12 @@ async function doGenerateRedteamInternal(
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+    ...((options.maxCharsPerMessage ?? redteamConfig?.maxCharsPerMessage) === undefined
+      ? {}
+      : { maxCharsPerMessage: options.maxCharsPerMessage ?? redteamConfig?.maxCharsPerMessage }),
+    ...((options.minCharsPerMessage ?? redteamConfig?.minCharsPerMessage) === undefined
+      ? {}
+      : { minCharsPerMessage: options.minCharsPerMessage ?? redteamConfig?.minCharsPerMessage }),
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
     plugins,
@@ -825,6 +840,12 @@ async function doGenerateRedteamInternal(
       strategies: strategyObjs || [],
       plugins: plugins || [],
       sharing: config.sharing,
+      ...(config.maxCharsPerMessage === undefined
+        ? {}
+        : { maxCharsPerMessage: config.maxCharsPerMessage }),
+      ...(config.minCharsPerMessage === undefined
+        ? {}
+        : { minCharsPerMessage: config.minCharsPerMessage }),
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
 
@@ -975,6 +996,7 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
+          redteam: updatedRedteamConfig,
           tests: redteamTests,
         },
         'redteam.yaml',

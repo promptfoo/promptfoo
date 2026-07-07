@@ -29,7 +29,10 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -305,24 +308,6 @@ export function isConversationEndedResponse(
   return Boolean(response?.conversationEnded);
 }
 
-function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): number | undefined {
-  const configuredLimit =
-    (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: unknown } | undefined)
-      ?.maxCharsPerMessage ??
-    (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: unknown } | undefined)
-      ?.maxCharsPerMessage;
-
-  if (
-    typeof configuredLimit !== 'number' ||
-    !Number.isInteger(configuredLimit) ||
-    configuredLimit <= 0
-  ) {
-    return undefined;
-  }
-
-  return configuredLimit;
-}
-
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -338,7 +323,7 @@ export async function getTargetResponse(
   let targetRespRaw;
 
   try {
-    throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
+    throwIfTargetPromptViolatesCharLimits(targetPrompt, getTargetPromptCharLimits(context));
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
@@ -350,7 +335,11 @@ export async function getTargetResponse(
       error: (error as Error).message,
       tokenUsage: {
         numRequests:
-          error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
+          error instanceof Error &&
+          (error.message.includes('maxCharsPerMessage=') ||
+            error.message.includes('minCharsPerMessage='))
+            ? 0
+            : 1,
       },
     };
   }

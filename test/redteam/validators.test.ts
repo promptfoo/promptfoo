@@ -155,6 +155,29 @@ describe('redteamGenerateOptionsSchema', () => {
     expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
 
+  it('should require minCharsPerMessage to be a positive integer', () => {
+    expect(
+      RedteamGenerateOptionsSchema.safeParse({
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        minCharsPerMessage: 0,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject generate options with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamGenerateOptionsSchema.safeParse({
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        maxCharsPerMessage: 5,
+        minCharsPerMessage: 6,
+      }).success,
+    ).toBe(false);
+  });
+
   it('should require maxCharsPerMessage to be a positive integer', () => {
     const input = {
       cache: true,
@@ -245,6 +268,237 @@ describe('redteamPluginSchema', () => {
 });
 
 describe('redteamConfigSchema', () => {
+  it('should reject config with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: ['harmful:hate'],
+        maxCharsPerMessage: 5,
+        minCharsPerMessage: 6,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject effective plugin config with global max below plugin min', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        maxCharsPerMessage: 5,
+        plugins: [{ id: 'harmful:hate', config: { minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject invalid scoped minCharsPerMessage values', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { minCharsPerMessage: 1.5 } }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: ['harmful:hate'],
+        strategies: [{ id: 'goat', config: { minCharsPerMessage: 0 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject combined strategy and plugin message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: [{ id: 'goat', config: { minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should ignore basic strategy message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: [{ id: 'basic', config: { minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should allow unrelated strategy and plugin message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'pii:direct', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['harmful:hate'], maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should validate basic ranges when other strategies are configured', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        minCharsPerMessage: 10,
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: ['basic', { id: 'goat', config: { maxCharsPerMessage: 30 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should skip disabled basic ranges when other strategies are configured', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        minCharsPerMessage: 10,
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: [
+          { id: 'basic', config: { enabled: false } },
+          { id: 'goat', config: { maxCharsPerMessage: 30 } },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should ignore default coding-agent strategy exclusions in message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'coding-agent:core', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'base64', config: { maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should ignore default cross-session strategy exclusions in message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'cross-session-leak', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'goat', config: { maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should reject collection plugin ranges targeted after expansion', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['harmful:hate'], maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject non-prefix collection plugin ranges targeted after expansion', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'default', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['harmful:hate'], maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should preserve direct plugin IDs when validating targeted ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'bias:gender', config: { maxCharsPerMessage: 5 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['politics'], minCharsPerMessage: 10 } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should reject invalid layered strategy step message limits', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        strategies: [
+          { id: 'layer', config: { steps: [{ id: 'goat', config: { minCharsPerMessage: 1.5 } }] } },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject malformed and cyclic layered strategy steps without throwing', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        strategies: [{ id: 'layer', config: { steps: [null] } }],
+      }).success,
+    ).toBe(false);
+
+    const cyclicLayer: { id: string; config: { steps: unknown[] } } = {
+      id: 'layer',
+      config: { steps: [] },
+    };
+    cyclicLayer.config.steps.push(cyclicLayer);
+    expect(RedteamConfigSchema.safeParse({ strategies: [cyclicLayer] }).success).toBe(false);
+  });
+
+  it('should ignore steps in custom plugin config', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'file://custom-plugin.js', config: { steps: [null] } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should preserve layered strategy step targets in message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'pii:direct', config: { minCharsPerMessage: 10 } }],
+        strategies: [
+          {
+            id: 'layer',
+            config: {
+              plugins: ['pii:direct'],
+              steps: [{ id: 'goat', config: { plugins: ['harmful:hate'], maxCharsPerMessage: 5 } }],
+            },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should allow layer final limits to differ from intermediate step limits', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        strategies: [
+          {
+            id: 'layer',
+            config: {
+              maxCharsPerMessage: 5,
+              steps: [{ id: 'goat', config: { minCharsPerMessage: 10 } }, { id: 'base64' }],
+            },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should reject layered strategy step ranges combined with plugin ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { minCharsPerMessage: 10 } }],
+        strategies: [
+          { id: 'layer', config: { steps: [{ id: 'goat', config: { maxCharsPerMessage: 5 } }] } },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject strategy config with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: ['harmful:hate'],
+        strategies: [{ id: 'goat', config: { maxCharsPerMessage: 5, minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject plugin config with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5, minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject invalid plugin ranges even when strategies target other plugins', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5, minCharsPerMessage: 6 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['pii:direct'] } }],
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { id: 'missing-purpose' },
     { id: 'empty-purpose', purpose: '' },

@@ -56,6 +56,7 @@ redteam:
   strategies: Array<string | { id: string }>
   numTests: number
   maxCharsPerMessage: number
+  minCharsPerMessage: number
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
@@ -74,6 +75,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts                            |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                                                |
 | `maxCharsPerMessage`         | `number`                  | Maximum characters allowed in each generated user message                                               | None                                             |
+| `minCharsPerMessage`         | `number`                  | Minimum characters required in each generated user message                                              | None                                             |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                                        |
 | `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                                   |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts                            |
@@ -319,19 +321,19 @@ testGenerationInstructions: |
 
 ### Message Length Limits
 
-Use `redteam.maxCharsPerMessage` to cap each generated user message before it is sent to your target. Promptfoo adds this limit to generation prompts, retries plugin outputs that exceed it, drops oversized strategy outputs, and fails a red team eval before calling the target if the rendered user message is still too long.
+Use `redteam.maxCharsPerMessage` to cap each generated user message and `redteam.minCharsPerMessage` to require a minimum length before a generated user message is sent to your target. Promptfoo adds these limits to generation prompts, retries plugin outputs outside the range, drops strategy outputs outside the range, and fails a red team eval before calling the target if the rendered user message is still outside the range.
 
 ```yaml
 redteam:
-  maxCharsPerMessage: 280
   plugins:
     - harmful:hate
     - id: 'contracts'
       config:
+        minCharsPerMessage: 80
         maxCharsPerMessage: 180
 ```
 
-If `redteam.maxCharsPerMessage` is set, it applies to every plugin and strategy in the scan. Use `plugins[].config.maxCharsPerMessage` only when you want a plugin-specific cap and have not set a global limit.
+If either top-level message length limit is set, it applies to every plugin and strategy in the scan. Use `plugins[].config.minCharsPerMessage` or `plugins[].config.maxCharsPerMessage` only when you want a plugin-specific range and have not set that global limit. When both limits are set, `minCharsPerMessage` must be less than or equal to `maxCharsPerMessage`.
 
 ## Core Concepts
 

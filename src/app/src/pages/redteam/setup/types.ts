@@ -74,6 +74,7 @@ export interface Config {
   purpose?: string;
   numTests?: number;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   maxConcurrency?: number;
   applicationDefinition: ApplicationDefinition;
   entities: string[];

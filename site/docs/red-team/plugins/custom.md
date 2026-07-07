@@ -132,6 +132,7 @@ Custom plugins support the same shared generation controls used by built-in plug
 ```yaml
 redteam:
   language: German
+  minCharsPerMessage: 120
   maxCharsPerMessage: 500
   testGenerationInstructions: Prefer edge-case probes that look like realistic support chats.
   plugins:
@@ -159,6 +160,7 @@ redteam:
 | `language`                   | `redteam` or plugin `config`       | Appended as a modifier. Arrays generate one batch per language; plugin-level values override the top-level value. |
 | `inputs`                     | target `inputs` or plugin `config` | Enables multi-input output parsing and sets `{{ hasCustomOutputFormat }}` to `true`.                              |
 | `maxCharsPerMessage`         | `redteam` or plugin `config`       | Appended as a generation constraint and used to drop generated test cases that exceed the limit.                  |
+| `minCharsPerMessage`         | `redteam` or plugin `config`       | Appended as a generation constraint and used to drop generated test cases below the limit.                        |
 | `testGenerationInstructions` | `redteam`                          | Appended to the generation prompt as an additional modifier.                                                      |
 | `severity`                   | plugin entry                       | Stored in generated test metadata and shown in results.                                                           |
 

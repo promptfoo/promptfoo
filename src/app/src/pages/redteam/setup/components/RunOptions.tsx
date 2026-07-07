@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
@@ -19,6 +19,13 @@ export const RUNOPTIONS_TEXT = {
     helper:
       'Optional character cap for each generated user message and final prompt sent to the target. Leave blank for no limit.',
     error: 'Max chars per message must be greater than 0',
+    minError: (minCharsPerMessage: number) =>
+      `Max chars per message must be at least ${minCharsPerMessage} to match min chars per message`,
+  },
+  minCharsPerMessage: {
+    helper:
+      'Optional character floor for each generated user message and final prompt sent to the target. Leave blank for no limit.',
+    error: 'Min chars per message must be greater than 0 and no greater than max chars per message',
   },
   delayBetweenApiCalls: {
     helper:
@@ -40,6 +47,7 @@ export const RUNOPTIONS_TEXT = {
 interface RunOptionsProps {
   numTests: number | undefined;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   runOptions?: Partial<RedteamRunOptions>;
   updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   updateRunOption: (
@@ -63,7 +71,7 @@ const isBelowMin = (value: string, min: number) => {
     return false;
   }
   const n = Number(value);
-  return Number.isNaN(n) || n < min;
+  return Number.isNaN(n) || !Number.isInteger(n) || n < min;
 };
 
 /**
@@ -99,7 +107,10 @@ export const NumberOfTestCasesInput = ({
           return;
         }
         const parsed = Number(value);
-        const safe = Number.isNaN(parsed) || parsed < 1 ? defaultNumberOfTests : parsed;
+        const safe =
+          Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1
+            ? defaultNumberOfTests
+            : parsed;
         updateConfig('numTests', safe);
         setValue(String(safe));
       }}
@@ -127,6 +138,8 @@ export interface MaxCharsPerMessageInputProps {
   setValue: (value: string) => void;
   updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   readOnly?: boolean;
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
 }
 
 export const MaxCharsPerMessageInput = ({
@@ -134,8 +147,19 @@ export const MaxCharsPerMessageInput = ({
   setValue,
   updateConfig,
   readOnly,
+  maxCharsPerMessage,
+  minCharsPerMessage,
 }: MaxCharsPerMessageInputProps) => {
-  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxCharsPerMessage.error : undefined;
+  const parsedValue = Number(value);
+  const error =
+    value.trim() !== '' &&
+    minCharsPerMessage !== undefined &&
+    !Number.isNaN(parsedValue) &&
+    parsedValue < minCharsPerMessage
+      ? RUNOPTIONS_TEXT.maxCharsPerMessage.minError(minCharsPerMessage)
+      : isBelowMin(value, 1)
+        ? RUNOPTIONS_TEXT.maxCharsPerMessage.error
+        : undefined;
 
   return (
     <NumberInput
@@ -156,9 +180,13 @@ export const MaxCharsPerMessageInput = ({
           return;
         }
         const parsed = Number(value);
-        if (Number.isNaN(parsed) || parsed < 1) {
+        if (Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1) {
           updateConfig('maxCharsPerMessage', undefined);
           setValue('');
+          return;
+        }
+        if (minCharsPerMessage !== undefined && parsed < minCharsPerMessage) {
+          setValue(maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage));
           return;
         }
         updateConfig('maxCharsPerMessage', parsed);
@@ -166,6 +194,61 @@ export const MaxCharsPerMessageInput = ({
       }}
       readOnly={readOnly}
       helperText={error ? error : RUNOPTIONS_TEXT.maxCharsPerMessage.helper}
+      error={Boolean(error)}
+    />
+  );
+};
+
+export const MinCharsPerMessageInput = ({
+  value,
+  setValue,
+  updateConfig,
+  readOnly,
+  maxCharsPerMessage,
+  minCharsPerMessage,
+}: MaxCharsPerMessageInputProps) => {
+  const parsedValue = Number(value);
+  const error =
+    isBelowMin(value, 1) ||
+    (maxCharsPerMessage !== undefined &&
+      !Number.isNaN(parsedValue) &&
+      parsedValue > maxCharsPerMessage)
+      ? RUNOPTIONS_TEXT.minCharsPerMessage.error
+      : undefined;
+
+  return (
+    <NumberInput
+      fullWidth
+      label="Min chars per message"
+      value={value}
+      min={1}
+      onChange={(v) => {
+        setValue(v?.toString() || '');
+      }}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        if (value.trim() === '') {
+          updateConfig('minCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        const parsed = Number(value);
+        if (Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1) {
+          updateConfig('minCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        if (maxCharsPerMessage !== undefined && parsed > maxCharsPerMessage) {
+          setValue(minCharsPerMessage === undefined ? '' : String(minCharsPerMessage));
+          return;
+        }
+        updateConfig('minCharsPerMessage', parsed);
+        setValue(String(parsed));
+      }}
+      readOnly={readOnly}
+      helperText={error ? error : RUNOPTIONS_TEXT.minCharsPerMessage.helper}
       error={Boolean(error)}
     />
   );
@@ -210,7 +293,7 @@ export const DelayBetweenAPICallsInput = ({
           return;
         }
         const parsed = value === '' ? 0 : Number(value);
-        const safe = Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
+        const safe = Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 0 ? 0 : parsed;
         updateRunOption('delay', safe);
         setValue(String(safe));
         // Enforce mutual exclusivity
@@ -281,7 +364,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
           return;
         }
         const parsed = value === '' ? 1 : Number(value);
-        const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+        const safe = Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1 ? 1 : parsed;
         updateRunOption('maxConcurrency', safe);
         setValue(String(safe));
         // Enforce mutual exclusivity
@@ -308,6 +391,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
 export const RunOptionsContent = ({
   numTests,
   maxCharsPerMessage,
+  minCharsPerMessage,
   runOptions,
   updateConfig,
   updateRunOption,
@@ -324,12 +408,33 @@ export const RunOptionsContent = ({
   const [maxCharsPerMessageInput, setMaxCharsPerMessageInput] = useState<string>(
     maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage),
   );
+  const [minCharsPerMessageInput, setMinCharsPerMessageInput] = useState<string>(
+    minCharsPerMessage === undefined ? '' : String(minCharsPerMessage),
+  );
   const [delayInput, setDelayInput] = useState<string>(
     runOptions?.delay === undefined ? '0' : String(runOptions.delay),
   );
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState<string>(
     runOptions?.maxConcurrency === undefined ? '1' : String(runOptions.maxConcurrency),
   );
+
+  useEffect(() => {
+    setNumTestsInput(numTests === undefined ? '0' : String(numTests));
+  }, [numTests]);
+  useEffect(() => {
+    setMaxCharsPerMessageInput(maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage));
+  }, [maxCharsPerMessage]);
+  useEffect(() => {
+    setMinCharsPerMessageInput(minCharsPerMessage === undefined ? '' : String(minCharsPerMessage));
+  }, [minCharsPerMessage]);
+  useEffect(() => {
+    setDelayInput(runOptions?.delay === undefined ? '0' : String(runOptions.delay));
+  }, [runOptions?.delay]);
+  useEffect(() => {
+    setMaxConcurrencyInput(
+      runOptions?.maxConcurrency === undefined ? '1' : String(runOptions.maxConcurrency),
+    );
+  }, [runOptions?.maxConcurrency]);
 
   // Normalize language to array
   const languageArray = useMemo<string[]>(() => {
@@ -356,6 +461,16 @@ export const RunOptionsContent = ({
         value={maxCharsPerMessageInput}
         setValue={setMaxCharsPerMessageInput}
         updateConfig={updateConfig}
+        maxCharsPerMessage={maxCharsPerMessage}
+        minCharsPerMessage={minCharsPerMessage}
+      />
+
+      <MinCharsPerMessageInput
+        value={minCharsPerMessageInput}
+        setValue={setMinCharsPerMessageInput}
+        updateConfig={updateConfig}
+        maxCharsPerMessage={maxCharsPerMessage}
+        minCharsPerMessage={minCharsPerMessage}
       />
 
       <MaxNumberOfConcurrentRequestsInput
