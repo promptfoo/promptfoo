@@ -433,10 +433,17 @@ describe('TrueFoundry', () => {
 
       it('should normalize Azure safety blocks proxied through TrueFoundry', async () => {
         const guardrailResponse = {
+          status: 'failure',
+          message:
+            "azure-foundry error: Response content blocked by label 'MultiSeverity_HateSpeechScore'.",
           error: {
-            message: "Response content blocked by label 'MultiSeverity_SelfHarmScore'.",
-            code: 'content_filter_error',
+            message:
+              "azure-foundry error: Response content blocked by label 'MultiSeverity_HateSpeechScore'.",
+            type: 'APIError',
+            code: '400',
           },
+          error_origin_level: 'api_error',
+          provider: 'azure-foundry',
         };
 
         const response = new Response(JSON.stringify(guardrailResponse), {
@@ -450,14 +457,15 @@ describe('TrueFoundry', () => {
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe(
-          "Response content blocked by label 'MultiSeverity_SelfHarmScore'.",
+          "azure-foundry error: Response content blocked by label 'MultiSeverity_HateSpeechScore'.",
         );
         expect(result.isRefusal).toBe(true);
         expect(result.guardrails).toEqual({
           flagged: true,
           flaggedInput: false,
           flaggedOutput: true,
-          reason: "Response content blocked by label 'MultiSeverity_SelfHarmScore'.",
+          reason:
+            "azure-foundry error: Response content blocked by label 'MultiSeverity_HateSpeechScore'.",
         });
       });
 
