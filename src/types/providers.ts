@@ -212,4 +212,12 @@ export interface DefaultProviders {
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
   webSearchProvider?: ApiProvider;
+  /**
+   * Default provider used to generate adversarial inputs for red teaming.
+   */
+  redteamProvider?: ApiProvider;
+  /**
+   * Provider suitable for redteam strategies that require JSON output.
+   */
+  redteamJsonProvider?: ApiProvider;
 }

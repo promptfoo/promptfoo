@@ -51,7 +51,6 @@ import {
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  REDTEAM_MODEL,
   type Severity,
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
@@ -1032,7 +1031,7 @@ export function redteamGenerateCommand(
     )
     .option(
       '--provider <provider>',
-      `Provider to use for generating adversarial tests. Defaults to: ${REDTEAM_MODEL}`,
+      'Provider for local adversarial generation; overrides credential-based default selection',
     )
     .option(
       '--injectVar <varname>',
