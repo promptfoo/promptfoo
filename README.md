@@ -99,3 +99,12 @@ Join our [Discord community](https://discord.gg/promptfoo) for help and discussi
 <a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=promptfoo/promptfoo" />
 </a>
+
+
+## Known Issues and Workarounds
+
+The maintainers are aware of the following issues:
+
+- Issue mentioned in the bug tracker
+- Users should follow the recommended practices
+- See the documentation for more details
