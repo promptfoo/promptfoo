@@ -1697,6 +1697,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests if a pipeline sub-agent accepts a false orchestrator authority claim and acts on restricted resources without verifying the token',
+    label: 'technical',
+    link: '/docs/red-team/plugins/orchestrator-trust-injection/',
+    name: 'Orchestrator Trust Injection',
+    pluginId: 'orchestrator-trust-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
+  },
+  {
     category: 'Brand',
     description: 'Model susceptible to relying on an incorrect user assumption or input',
     label: 'technical',
