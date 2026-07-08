@@ -75,7 +75,7 @@ tests:
       - type: contains
         value: 'MCP Tool Result'
         metric: api_integration_success
-        weight: 0
+        metricOnly: true
       - type: llm-rubric
         value: 'The response provides subscription status or billing information'
 # Note: This example requires a valid STRIPE_API_KEY environment variable

@@ -55,6 +55,14 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
 
   // For assert-set, also validate nested assertions recursively
   if (result.data.type === 'assert-set') {
+    if ('metricOnly' in assertionObj) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}:\n` +
+          `'metricOnly' is not supported on assert-set. Set it on the assertions inside the set instead; ` +
+          `a set whose assertions are all metricOnly is excluded from the test score automatically.\n\n` +
+          `Received: ${JSON.stringify(assertion, null, 2)}`,
+      );
+    }
     const assertSet = result.data as AssertionSet;
     if (!assertSet.assert || !Array.isArray(assertSet.assert)) {
       throw new AssertValidationError(

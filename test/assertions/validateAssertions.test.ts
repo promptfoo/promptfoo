@@ -139,6 +139,52 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).not.toThrow();
     });
 
+    it('rejects metricOnly on the assert-set itself', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              metricOnly: true,
+              assert: [
+                {
+                  type: 'equals',
+                  value: 'Expected output',
+                },
+              ],
+            } as any,
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('allows metricOnly on assertions inside an assert-set', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'javascript',
+                  value: '1',
+                  metric: 'tp',
+                  metricOnly: true,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
     it('validates assert-set has assert property', () => {
       const tests: TestCase[] = [
         {

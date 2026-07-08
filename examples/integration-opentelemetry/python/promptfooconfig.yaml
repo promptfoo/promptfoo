@@ -92,7 +92,7 @@ defaultTest:
         pattern: '*'
         max: 2000
         percentile: 95
-      weight: 0
+      metricOnly: true
       metric: p95_latency
 
     # Ensure retrieval operations are fast

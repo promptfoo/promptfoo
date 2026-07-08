@@ -3287,10 +3287,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    // Metric-only assertions don't participate in pass/fail, so they're
+    // excluded from assertion pass/fail stats.
+    const countedAssertResults = (row.gradingResult?.componentResults ?? []).filter(
+      (r) => !r.assertion?.metricOnly,
+    );
+    metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
+    metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 

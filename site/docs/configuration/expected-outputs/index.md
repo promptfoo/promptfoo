@@ -49,6 +49,7 @@ tests:
 | value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                                                  |
 | threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`, `ruby`                                                                                                                                                                                                                                    |
 | weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                                                                                |
+| metricOnly       | boolean            | No       | If true, the assertion's score is recorded as a named metric but excluded from the test's pass/fail status and weighted score. Defaults to false. See [Metric-only assertions](#metric-only-assertions)                                                                                                                                            |
 | provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                                                                               |
 | rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                                                                            |
 | config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python/ruby assertions                                                                                                                                                                                                                                                 |
@@ -236,6 +237,45 @@ A `threshold` of `0` makes the test case pass regardless of individual assertion
 :::info
 If weight is set to 0, the assertion automatically passes.
 :::
+
+### Metric-only assertions
+
+Some assertions exist only to emit a score, such as counters that feed [derived metrics](#creating-derived-metrics). Set `metricOnly: true` to record the assertion's score as a named metric without letting it affect the test's pass/fail status or its weighted score.
+
+For example, a detection test needs one assertion that decides pass/fail, plus counters for precision and recall:
+
+```yaml
+tests:
+  - description: 'should detect the planted error'
+    vars:
+      document: file://cases/1/document.txt
+    assert:
+      # This assertion decides whether the test passes
+      - type: llm-rubric
+        value: 'Identifies the factual error in paragraph 2'
+      # These only count detections for derived metrics and never fail the test
+      - type: javascript
+        value: 'JSON.parse(output).errors.length > 0 ? 1 : 0'
+        metric: true_positives
+        metricOnly: true
+      - type: javascript
+        value: 'JSON.parse(output).errors.length === 0 ? 1 : 0'
+        metric: false_negatives
+        metricOnly: true
+
+derivedMetrics:
+  - name: recall
+    value: 'true_positives / (true_positives + false_negatives)'
+```
+
+A metric-only assertion still runs normally and shows its real outcome in `componentResults`. It never fails the test on its own and is excluded from the weighted average of the other assertions. `weight` has no effect on a metric-only assertion. If a metric-only assertion shares a `metric` name with weighted assertions, the named score is their weighted average, with the metric-only contribution counted at weight 1.
+
+Two interactions to be aware of:
+
+- A test-level `threshold` still applies to the aggregate score of the remaining assertions. If every assertion in a test is metric-only, that aggregate score is 0: the test passes without a threshold, but fails any positive one.
+- `metricOnly` belongs on individual assertions, including those inside an `assert-set`. Setting it on the `assert-set` itself is a config error; a set whose assertions are all metric-only is excluded from the test score automatically. `select-best` and `max-score` ignore the property.
+
+Note that `weight: 0` is not equivalent: it force-passes the assertion but also zeroes out its contribution to the named metric, so the recorded score is always 0. Use `metricOnly: true` when the score matters.
 
 ### Custom assertion scoring
 
@@ -568,15 +608,15 @@ defaultTest:
     - type: javascript
       value: output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0
       metric: true_positives
-      weight: 0
+      metricOnly: true
     - type: javascript
       value: output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0
       metric: false_positives
-      weight: 0
+      metricOnly: true
     - type: javascript
       value: output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0
       metric: false_negatives
-      weight: 0
+      metricOnly: true
 
 derivedMetrics:
   - name: precision
@@ -610,7 +650,7 @@ defaultTest:
         const predicted = parseFloat(output);
         return Math.abs(actual - predicted) / actual;
       metric: APE
-      weight: 0
+      metricOnly: true
 
 derivedMetrics:
   # MAPE = Mean Absolute Percentage Error

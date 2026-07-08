@@ -1511,17 +1511,17 @@ assert:
   - type: javascript
     value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
     metric: true_positives
-    weight: 0
+    metricOnly: true
 
   - type: javascript
     value: "output.sentiment === 'positive' && context.vars.sentiment === 'negative' ? 1 : 0"
     metric: false_positives
-    weight: 0
+    metricOnly: true
 
   - type: javascript
     value: "output.sentiment === 'negative' && context.vars.sentiment === 'positive' ? 1 : 0"
     metric: false_negatives
-    weight: 0
+    metricOnly: true
 ```
 
 Then define derived metrics to calculate precision, recall and F-score:

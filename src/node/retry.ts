@@ -259,14 +259,14 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           });
         }
 
-        // Update assertion counts
+        // Update assertion counts. Metric-only assertions don't participate
+        // in pass/fail, so they're excluded from assertion pass/fail stats.
         if (result.gradingResult?.componentResults) {
-          metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
-          ).length;
-          metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
-          ).length;
+          const countedAssertResults = result.gradingResult.componentResults.filter(
+            (r) => !r.assertion?.metricOnly,
+          );
+          metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
+          metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
         }
 
         // Update token usage

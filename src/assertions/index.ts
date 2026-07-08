@@ -818,6 +818,7 @@ export async function runAssertions({
       result,
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
+      metricOnly: assertion.metricOnly,
     });
   });
 
@@ -825,7 +826,7 @@ export async function runAssertions({
     const result = await subAssertResult.testResult();
     const {
       index,
-      assertionSet: { metric, weight },
+      assertionSet: { assert, metric, weight },
     } = subAssertResult.parentAssertionSet!;
 
     mainAssertResult.addResult({
@@ -833,6 +834,9 @@ export async function runAssertions({
       result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
+      // A set whose assertions are all metricOnly is metric-only in effect:
+      // its aggregate score is always 0 and must not dilute the test score.
+      metricOnly: assert.length > 0 && assert.every((subAssert) => subAssert.metricOnly),
     });
   });
 
