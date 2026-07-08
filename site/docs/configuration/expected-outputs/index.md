@@ -273,7 +273,7 @@ A metric-only assertion still runs normally and shows its real outcome in `compo
 Two interactions to be aware of:
 
 - A test-level `threshold` still applies to the aggregate score of the remaining assertions. If every assertion in a test is metric-only, that aggregate score is 0: the test passes without a threshold, but fails any positive one.
-- `metricOnly` belongs on individual assertions, including those inside an `assert-set`. Setting it on the `assert-set` itself is a config error; a set whose assertions are all metric-only is excluded from the test score and assertion pass/fail stats automatically. `select-best` ignores the property, and `max-score` skips metric-only assertions when ranking outputs.
+- `metricOnly` belongs on individual assertions, including those inside an `assert-set`. Setting it on the `assert-set` itself, or on the comparison assertions `select-best` and `max-score`, is a config error. A set whose assertions are all metric-only is excluded from the test score and assertion pass/fail stats automatically, and `max-score` skips metric-only assertions when ranking outputs.
 
 Note that `weight: 0` is not equivalent: it force-passes the assertion but also zeroes out its contribution to the named metric, so the recorded score is always 0. Use `metricOnly: true` when the score matters.
 

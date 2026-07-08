@@ -839,10 +839,12 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    if (componentResults.length > 0) {
-      finalPass =
-        componentResults.filter((result) => result.pass).length === componentResults.length;
-      finalScore = averageComponentResultScore(componentResults, finalScore);
+    // Metric-only assertions don't participate in pass/fail or the score, so
+    // they're excluded when recomputing the row after removing a manual rating.
+    const countedResults = componentResults.filter((result) => !result.assertion?.metricOnly);
+    if (countedResults.length > 0) {
+      finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
+      finalScore = averageComponentResultScore(countedResults, finalScore);
     }
 
     return {

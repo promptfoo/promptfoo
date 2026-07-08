@@ -28,6 +28,24 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
   };
 }
 
+/**
+ * Mark a metric-only result (and any nested component results a script
+ * assertion returned) so downstream assertion pass/fail stats can exclude
+ * them via their `assertion.metricOnly` filters.
+ */
+function withMetricOnlyMarkers(result: GradingResult): GradingResult {
+  return {
+    ...result,
+    ...(result.assertion && { assertion: { ...result.assertion, metricOnly: true } }),
+    ...(result.componentResults && {
+      componentResults: result.componentResults.map((child) => ({
+        ...child,
+        ...(child.assertion && { assertion: { ...child.assertion, metricOnly: true } }),
+      })),
+    }),
+  };
+}
+
 function mergeMetadata(
   baseMetadata: GradingResult['metadata'],
   incomingMetadata: GradingResult['metadata'],
@@ -101,7 +119,7 @@ export class AssertionsResult {
       this.totalScore += result.score * weight;
       this.totalWeight += weight;
     }
-    this.componentResults[index] = result;
+    this.componentResults[index] = metricOnly ? withMetricOnlyMarkers(result) : result;
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';

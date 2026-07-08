@@ -126,10 +126,13 @@ function formatSingleResult(
   let assertions: FormattedEvalResult['assertions'] = null;
   if (result.gradingResult) {
     const componentResults = result.gradingResult.componentResults || [];
+    // Metric-only assertions don't participate in pass/fail, so they're
+    // excluded from assertion pass/fail stats.
+    const countedResults = componentResults.filter((r) => !r.assertion?.metricOnly);
     assertions = {
       totalAssertions: result.testCase.assert?.length || 0,
-      passedAssertions: componentResults.filter((r) => r.pass).length,
-      failedAssertions: componentResults.filter((r) => !r.pass).length,
+      passedAssertions: countedResults.filter((r) => r.pass).length,
+      failedAssertions: countedResults.filter((r) => !r.pass).length,
       componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({
         index: idx,
         type: result.testCase.assert?.[idx]?.type || 'unknown',

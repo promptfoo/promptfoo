@@ -53,6 +53,19 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
     );
   }
 
+  // Comparison assertions decide pass/fail across outputs, so they can't be
+  // metric-only. Reject rather than silently ignore the property.
+  if (
+    (result.data.type === 'select-best' || result.data.type === 'max-score') &&
+    'metricOnly' in assertionObj
+  ) {
+    throw new AssertValidationError(
+      `Invalid assertion at ${context}:\n` +
+        `'metricOnly' is not supported on ${result.data.type}. Comparison assertions decide pass/fail across outputs and cannot be metric-only.\n\n` +
+        `Received: ${JSON.stringify(assertion, null, 2)}`,
+    );
+  }
+
   // For assert-set, also validate nested assertions recursively
   if (result.data.type === 'assert-set') {
     if ('metricOnly' in assertionObj) {

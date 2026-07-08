@@ -162,6 +162,30 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
     });
 
+    it('rejects metricOnly on max-score', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'max-score', metricOnly: true } as any],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('rejects metricOnly on select-best', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'select-best', value: 'best criteria', metricOnly: true } as any],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
     it('allows metricOnly on assertions inside an assert-set', () => {
       const tests: TestCase[] = [
         {
