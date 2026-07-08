@@ -1593,7 +1593,7 @@ Example Response
 Session Parser value:
 
 ```yaml
-sessionParser: 'data.body.responses[0]?.sessionId
+sessionParser: 'data.body.responses[0]?.sessionId'
 ```
 
 The parser can take a string, file or function like the response parser.
@@ -1628,7 +1628,7 @@ sessionParser: 'data.body.sessionId'
 ```
 
 ```yaml
-sessionParser: 'data.headers.["x-session-Id"]'
+sessionParser: 'data.headers["x-session-Id"]'
 ```
 
 ### Client-side session management
