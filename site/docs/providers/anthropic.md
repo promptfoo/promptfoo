@@ -41,7 +41,7 @@ When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Prompt
 1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
 2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
 
-Set `CLAUDE_CONFIG_DIR` to read the credential from a different directory — the same environment variable the Claude Code CLI itself uses to relocate `~/.claude`. This does not affect the macOS keychain lookup, since Claude Code always stores credentials in the keychain on macOS regardless of `CLAUDE_CONFIG_DIR`.
+Set `CLAUDE_CONFIG_DIR` to read the credential from a different directory — the same environment variable the Claude Code CLI itself uses to relocate `~/.claude`. It can be set in your shell, in the config's top-level `env:` block, or in a provider's `env:` block (the provider-scoped value wins). This does not affect the macOS keychain lookup, since Claude Code always stores credentials in the keychain on macOS regardless of `CLAUDE_CONFIG_DIR`.
 
 Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
 

@@ -219,6 +219,27 @@ describe('claudeCodeAuth', () => {
       );
     });
 
+    it('prefers a provider-scoped CLAUDE_CONFIG_DIR env override over the process environment', () => {
+      setPlatform('linux');
+      restoreEnv = mockProcessEnv({ CLAUDE_CONFIG_DIR: '/process-env/claude-config' });
+      mocks.existsSync.mockReturnValue(true);
+      mocks.readFileSync.mockReturnValue(
+        JSON.stringify({
+          claudeAiOauth: { accessToken: 'sk-ant-oat-provider-env' },
+        }),
+      );
+
+      const credential = loadClaudeCodeCredential({
+        CLAUDE_CONFIG_DIR: '/provider-env/claude-config',
+      });
+
+      expect(credential?.accessToken).toBe('sk-ant-oat-provider-env');
+      expect(mocks.readFileSync).toHaveBeenCalledWith(
+        path.join('/provider-env/claude-config', '.credentials.json'),
+        'utf-8',
+      );
+    });
+
     it('falls back to ~/.claude/.credentials.json when CLAUDE_CONFIG_DIR is unset', () => {
       setPlatform('linux');
       restoreEnv = mockProcessEnv({ CLAUDE_CONFIG_DIR: undefined });

@@ -6,6 +6,8 @@ import path from 'node:path';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 
+import type { EnvOverrides } from '../../types/env';
+
 /**
  * Shape of a Claude Code OAuth credential sourced from either the macOS
  * keychain or `$HOME/.claude/.credentials.json`.
@@ -73,14 +75,20 @@ const CLAUDE_CODE_CREDENTIALS_FILENAME = '.credentials.json';
  * `.credentials.json`) in. Honors `CLAUDE_CONFIG_DIR`, the same environment
  * variable the Claude Code CLI itself uses to relocate `~/.claude`, so
  * Promptfoo finds the credential file when a user has customized their
- * Claude Code config location.
+ * Claude Code config location. A provider-scoped `env` override takes
+ * precedence over the root config / process environment, matching how other
+ * provider env vars resolve (see `AnthropicGenericProvider.getApiKey`).
  */
-function resolveConfigDir(): string {
-  return getEnvString('CLAUDE_CONFIG_DIR') || path.join(os.homedir(), '.claude');
+function resolveConfigDir(env?: EnvOverrides): string {
+  return (
+    env?.CLAUDE_CONFIG_DIR ||
+    getEnvString('CLAUDE_CONFIG_DIR') ||
+    path.join(os.homedir(), '.claude')
+  );
 }
 
-function resolveCredentialsPath(): string {
-  return path.join(resolveConfigDir(), CLAUDE_CODE_CREDENTIALS_FILENAME);
+function resolveCredentialsPath(env?: EnvOverrides): string {
+  return path.join(resolveConfigDir(env), CLAUDE_CODE_CREDENTIALS_FILENAME);
 }
 
 /**
@@ -190,8 +198,8 @@ function readFromMacosKeychain(): ClaudeCodeOAuthCredential | null {
   return result.credential;
 }
 
-function readFromFile(): ClaudeCodeOAuthCredential | null {
-  const filePath = resolveCredentialsPath();
+function readFromFile(env?: EnvOverrides): ClaudeCodeOAuthCredential | null {
+  const filePath = resolveCredentialsPath(env);
   if (!fs.existsSync(filePath)) {
     // No credentials file — this is the common "not logged in" path; the
     // caller at `generic.ts` already surfaces a user-facing warning.
@@ -229,7 +237,8 @@ function readFromFile(): ClaudeCodeOAuthCredential | null {
  *    On Windows this resolves to `%USERPROFILE%\.claude\.credentials.json`.
  *    Set `CLAUDE_CONFIG_DIR` to read from a different directory instead —
  *    the same environment variable the Claude Code CLI itself uses to
- *    relocate `~/.claude`.
+ *    relocate `~/.claude`. It resolves from the provider-scoped `env`
+ *    override first, then the root config / process environment.
  *
  * Returns `null` when no credential is available. Callers should check
  * {@link isCredentialExpired} on a non-null return before using it — this
@@ -240,8 +249,8 @@ function readFromFile(): ClaudeCodeOAuthCredential | null {
  * unreadable credentials are logged at `warn` level with a reason so broken
  * setups are diagnosable without enabling debug logging.
  */
-export function loadClaudeCodeCredential(): ClaudeCodeOAuthCredential | null {
-  return readFromMacosKeychain() ?? readFromFile();
+export function loadClaudeCodeCredential(env?: EnvOverrides): ClaudeCodeOAuthCredential | null {
+  return readFromMacosKeychain() ?? readFromFile(env);
 }
 
 /**
