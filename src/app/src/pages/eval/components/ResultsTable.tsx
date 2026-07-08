@@ -845,6 +845,13 @@ function getManualRatingUpdate({
     if (countedResults.length > 0) {
       finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
       finalScore = averageComponentResultScore(countedResults, finalScore);
+    } else if (componentResults.length > 0) {
+      // Every remaining assertion is metric-only. Mirror the server-side
+      // aggregation for all-metricOnly tests without a threshold (pass, with
+      // an aggregate score of 0) so clearing the rating doesn't leave the
+      // stale manual override in place.
+      finalPass = true;
+      finalScore = 0;
     }
 
     return {

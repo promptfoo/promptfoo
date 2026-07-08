@@ -234,17 +234,23 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
-  const failReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  // Metric-only assertions don't participate in pass/fail, so their outcomes
+  // stay out of the aggregate reason lists (they remain visible in the
+  // per-assertion details).
+  const countedResults =
+    output.gradingResult?.componentResults?.filter(
+      (result) => result && !result.assertion?.metricOnly,
+    ) ?? [];
 
-  const passReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  const failReasons = countedResults
+    .filter((result) => !result.pass)
+    .map((result) => result.reason)
+    .filter((reason) => reason);
+
+  const passReasons = countedResults
+    .filter((result) => result.pass)
+    .map((result) => result.reason)
+    .filter((reason) => reason);
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
@@ -607,7 +613,12 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   let passCount = 0;
   let failCount = 0;
 
-  const componentResults = output.gradingResult?.componentResults;
+  // Metric-only assertions don't participate in pass/fail, so they're excluded
+  // from the aggregate pill counts. If every assertion is metric-only, fall
+  // through to the overall grading result below.
+  const componentResults = output.gradingResult?.componentResults?.filter(
+    (result) => !result?.assertion?.metricOnly,
+  );
   if (componentResults?.length) {
     componentResults.forEach((result) => {
       if (result?.pass) {
