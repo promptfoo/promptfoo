@@ -2,6 +2,7 @@ import logger from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -21,6 +22,16 @@ export type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
 };
+
+function providerOutputToString(output: unknown): string {
+  if (output == null) {
+    return '';
+  }
+  if (typeof output === 'string') {
+    return output;
+  }
+  return safeJsonStringify(output) ?? String(output);
+}
 
 type AgentProviderOptions = ProviderOptions & {
   config?: {
@@ -209,7 +220,7 @@ export class SimulatedUser implements ApiProvider {
 
     logger.debug(`User: ${response.output}`);
     return {
-      messages: [...messages, { role: 'user', content: String(response.output || '') }],
+      messages: [...messages, { role: 'user', content: providerOutputToString(response.output) }],
       tokenUsage: response.tokenUsage,
     };
   }
@@ -254,7 +265,7 @@ export class SimulatedUser implements ApiProvider {
       await sleep(targetProvider.delay);
     }
 
-    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
+    logger.debug(`[SimulatedUser] Agent: ${providerOutputToString(response.output)}`);
     return response;
   }
 
@@ -316,7 +327,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
@@ -364,7 +375,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
 
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
