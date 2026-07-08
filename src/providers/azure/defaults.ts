@@ -695,11 +695,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'claude-haiku-4-5',
-    cost: { input: 0.8 / 1000000, output: 4 / 1000000 },
+    cost: { input: 1 / 1000000, output: 5 / 1000000 },
   },
   {
     id: 'claude-haiku-4-5-20251001',
-    cost: { input: 0.8 / 1000000, output: 4 / 1000000 },
+    cost: { input: 1 / 1000000, output: 5 / 1000000 },
   },
 
   // =============================================================================

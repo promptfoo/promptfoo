@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.17",
+  "version": "0.121.18",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -209,7 +209,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.107.2",
+    "webpack": "5.108.1",
     "dompurify": "3.4.11",
     "monaco-editor": {
       ".": "0.55.1",
@@ -217,7 +217,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.187",
+    "@anthropic-ai/claude-agent-sdk": "0.3.195",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -227,7 +227,7 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.4.16",
+    "@biomejs/biome": "2.5.1",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.14",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
@@ -276,7 +276,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.187",
+    "@anthropic-ai/claude-agent-sdk": "0.3.195",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -306,7 +306,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.41",
     "@swc/core-linux-x64-musl": "^1.15.41",
     "@swc/core-win32-x64-msvc": "^1.15.41",
-    "google-auth-library": "^10.7.0",
+    "google-auth-library": "^10.9.0",
     "hono": "^4.12.25",
     "ibm-cloud-sdk-core": "^5.4.22",
     "jks-js": "^1.1.5",
@@ -321,7 +321,7 @@
     "sharp": "^0.35.1"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.105.0",
+    "@anthropic-ai/sdk": "0.106.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -370,7 +370,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "^5.0.0",
+    "js-yaml": "5.2.0",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
