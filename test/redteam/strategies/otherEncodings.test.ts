@@ -221,6 +221,27 @@ describe('other encodings strategy', () => {
       expect(toPigLatin('123')).toBe('123');
     });
 
+    it('should preserve interior and leading punctuation without dropping characters', () => {
+      // Regression: old logic dropped content before the last alphanumeric run.
+      expect(toPigLatin('<script>alert(1)</script>')).toBe('<iptscray>alertway(1)</iptscray>');
+      expect(toPigLatin("don't")).toBe("onday'tay");
+      expect(toPigLatin('(bomb)')).toBe('(ombbay)');
+    });
+
+    it('should transform every word and keep word boundaries in multi-word text', () => {
+      expect(toPigLatin('hello world')).toBe('ellohay orldway');
+    });
+
+    it('should not drop any non-alphanumeric characters', () => {
+      const input = '<a href="http://x.io/p?q=1">go!</a>';
+      const output = toPigLatin(input);
+      // Every punctuation/structural character in the input survives the transform.
+      const punctuation = input.replace(/[a-zA-Z0-9]/g, '');
+      for (const ch of punctuation) {
+        expect(output).toContain(ch);
+      }
+    });
+
     it('should convert to camelCase directly', () => {
       expect(toCamelCase('hello world')).toBe('helloWorld');
       expect(toCamelCase('Hello-World!')).toBe('hello-World!');
