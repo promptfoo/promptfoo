@@ -498,6 +498,30 @@ describe('TrueFoundry', () => {
         });
       });
 
+      it('should preserve downstream content filter failures as API errors', async () => {
+        const errorResponse = {
+          error: {
+            message:
+              'Content filtering system is down or otherwise unable to complete the request in time',
+            code: 'content_filter_error',
+          },
+        };
+
+        const response = new Response(JSON.stringify(errorResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('400 Bad Request');
+        expect(result.error).toContain('content_filter_error');
+        expect(result.isRefusal).toBeUndefined();
+        expect(result.guardrails).toBeUndefined();
+      });
+
       it('should handle network errors', async () => {
         mockedFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 

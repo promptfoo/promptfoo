@@ -38,11 +38,7 @@ type TrueFoundryProviderOptions = ProviderOptions & {
 type JsonRecord = Record<string, unknown>;
 
 const TRUEFOUNDRY_GUARDRAIL_ERROR_TYPE = 'guardrail_checks_failed';
-const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set([
-  'content_filter',
-  'content_filter_error',
-  'content_policy_violation',
-]);
+const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set(['content_filter', 'content_policy_violation']);
 const DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS = [
   /\bresponse content blocked by label\b/i,
   /\b(?:prompt|input|response|output|completion) (?:was )?(?:blocked|filtered)\b/i,
