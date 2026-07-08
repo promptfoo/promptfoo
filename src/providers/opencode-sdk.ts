@@ -1359,6 +1359,46 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
+  /**
+   * Fetches the session message history and returns only the parts that belong
+   * to the current prompt, bounded by parentID (start) and assistantMessage.id
+   * (end) to prevent skill calls from other prompts bleeding in.
+   */
+  private async fetchCurrentPromptParts(
+    client: any,
+    session: { sessionId: string; sessionQuery?: OpenCodeSessionQuery },
+    response: OpenCodeSdkResult<OpenCodePromptResponse>,
+  ): Promise<OpenCodePromptPart[]> {
+    const assistantMessage = unwrapOpenCodeResult(response)?.info;
+    const parentId = assistantMessage?.parentID;
+    const messagesParams =
+      this.opencodeModule?.apiVersion === 'v2'
+        ? { sessionID: session.sessionId, ...session.sessionQuery }
+        : { path: getSessionPath(session.sessionId), query: session.sessionQuery };
+    const messagesResult = await (client.session as any).messages(messagesParams);
+    const messages: OpenCodeSessionMessage[] =
+      (messagesResult as any)?.data ?? messagesResult ?? [];
+    // Bound the slice with both a start anchor (parentID → user message that
+    // triggered this prompt) and an end anchor (assistantMessage.id → the
+    // response we just received). Without the end anchor, messages from a
+    // concurrent prompt on the same shared session could be included and
+    // cause skill-used to pass for the wrong evaluation row.
+    const startIndex = parentId ? messages.findIndex((m) => m.info?.id === parentId) : -1;
+    const endIndex = assistantMessage?.id
+      ? messages.findIndex((m) => m.info?.id === assistantMessage.id)
+      : -1;
+    const relevantMessages =
+      startIndex >= 0
+        ? messages.slice(startIndex, endIndex >= startIndex ? endIndex + 1 : undefined)
+        : endIndex >= 0
+          ? messages.slice(0, endIndex + 1)
+          : messages;
+    logger.debug(
+      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
+    );
+    return relevantMessages.flatMap((m) => m.parts ?? []);
+  }
+
   private buildProviderResponse(
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
@@ -1549,46 +1589,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return { error: 'OpenCode SDK call aborted' };
       }
 
-      // Fetch the session message history to capture skill tool calls from
-      // intermediate turns. OpenCode is multi-turn: the skill tool is invoked
-      // before the final response, so its part is absent from responseData.parts.
-      // We anchor on the parentID of the final assistant message — the ID of the
-      // user message that triggered this prompt — and take only the messages from
-      // that point onward, so skill calls from previous prompts in a persistent
-      // session do not bleed into the current evaluation.
-      // Skip the fetch when skills are disabled (config.tools.skill === false) since
-      // no skill parts can exist, and when the call has already been aborted.
+      // Fetch only the parts that belong to the current prompt from the session
+      // history so that deriveSkillCalls captures skill calls from intermediate
+      // turns. Skipped when the skill tool is disabled or the call was aborted.
       let allSessionParts: OpenCodePromptPart[] = [];
       if (config.tools?.skill !== false && !abortSignal?.aborted) {
         try {
-          const assistantMessage = unwrapOpenCodeResult(response)?.info;
-          const parentId = assistantMessage?.parentID;
-          const messagesParams =
-            this.opencodeModule?.apiVersion === 'v2'
-              ? { sessionID: session.sessionId, ...session.sessionQuery }
-              : { path: getSessionPath(session.sessionId), query: session.sessionQuery };
-          const messagesResult = await (client.session as any).messages(messagesParams);
-          const messages: OpenCodeSessionMessage[] =
-            (messagesResult as any)?.data ?? messagesResult ?? [];
-          // Bound the slice with both a start anchor (parentID → user message that
-          // triggered this prompt) and an end anchor (assistantMessage.id → the
-          // response we just received). Without the end anchor, messages from a
-          // concurrent prompt on the same shared session could be included and
-          // cause skill-used to pass for the wrong evaluation row.
-          const startIndex = parentId ? messages.findIndex((m) => m.info?.id === parentId) : -1;
-          const endIndex = assistantMessage?.id
-            ? messages.findIndex((m) => m.info?.id === assistantMessage.id)
-            : -1;
-          const relevantMessages =
-            startIndex >= 0
-              ? messages.slice(startIndex, endIndex >= startIndex ? endIndex + 1 : undefined)
-              : endIndex >= 0
-                ? messages.slice(0, endIndex + 1)
-                : messages;
-          allSessionParts = relevantMessages.flatMap((m) => m.parts ?? []);
-          logger.debug(
-            `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
-          );
+          allSessionParts = await this.fetchCurrentPromptParts(client, session, response);
         } catch (e) {
           logger.debug(`[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`);
         }
