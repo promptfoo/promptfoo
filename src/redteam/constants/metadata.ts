@@ -88,6 +88,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   image: 'Tests handling of image content',
   imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
+  'orchestrator-trust-injection':
+    'Tests resistance to false orchestrator authority claims in multi-agent pipelines',
   'persona-injection':
     'Tests resistance to gradual identity substitution attacks that bypass safety guidelines',
   'insurance:coverage-discrimination':
@@ -372,6 +374,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
+  'orchestrator-trust-injection': 'Orchestrator Trust Injection',
   'persona-injection': 'Persona Injection',
   'insurance:coverage-discrimination': 'Coverage Discrimination',
   'insurance:data-disclosure': 'Data Disclosure',
@@ -595,6 +598,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
+  'orchestrator-trust-injection': Severity.High,
   'persona-injection': Severity.High,
   'insurance:coverage-discrimination': Severity.Critical,
   'insurance:data-disclosure': Severity.Critical,
@@ -676,6 +680,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'model-identification',
     'hijacking',
     'indirect-prompt-injection',
+    'orchestrator-trust-injection',
     'persona-injection',
     'rbac',
     'reasoning-dos',
@@ -988,6 +993,7 @@ export const categoryAliases: Record<Plugin, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
+  'orchestrator-trust-injection': 'OrchestratorTrustInjection',
   'persona-injection': 'Persona Injection',
   'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
   'insurance:data-disclosure': 'InsuranceDataDisclosure',
@@ -1235,6 +1241,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests identification of dangerous drug-drug, drug-food, and drug-supplement interactions including major contraindications, CYP450 interactions, QT prolongation risks, serotonin syndrome, and additive effects to prevent serious adverse drug events',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
+  'orchestrator-trust-injection':
+    'Tests whether a sub-agent accepts false orchestrator authority claims in pipeline messages without independent verification, potentially accessing restricted resources or relaying elevated permissions to downstream agents',
   'persona-injection':
     'Tests resistance to gradual identity substitution attacks that bypass safety guidelines',
   intent: 'Tests system resilience against specific manipulation attempts',

@@ -57,6 +57,7 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { OrchestratorTrustInjectionPlugin } from './orchestratorTrustInjection';
 import { OverreliancePlugin } from './overreliance';
 import { PersonaInjectionPlugin } from './personaInjection';
 import { getPiiLeakTestsForCategory } from './pii';
@@ -514,6 +515,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
+  createPluginFactory(OrchestratorTrustInjectionPlugin, 'orchestrator-trust-injection'),
   createPluginFactory(PersonaInjectionPlugin, 'persona-injection'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
