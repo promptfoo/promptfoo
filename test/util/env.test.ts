@@ -2,6 +2,13 @@ import * as fs from 'fs';
 
 import dotenv from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import logger from '../../src/logger';
+import * as configManage from '../../src/util/config/manage';
+import {
+  getConfigDirectoryPath,
+  refreshConfigDirectoryPathFromEnv,
+  setConfigDirectoryPath,
+} from '../../src/util/config/manage';
 import { setupEnv } from '../../src/util/env';
 import { mockProcessEnv } from './utils';
 
@@ -18,30 +25,37 @@ describe('setupEnv', () => {
   let dotenvConfigSpy: MockInstance<
     (options?: dotenv.DotenvConfigOptions) => dotenv.DotenvConfigOutput
   >;
+  let loggerInfoSpy: MockInstance;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
     // Ensure NODE_ENV is not set at the start of each test
     mockProcessEnv({ NODE_ENV: undefined });
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: undefined });
+    refreshConfigDirectoryPathFromEnv();
+    setConfigDirectoryPath(undefined);
     // Spy on dotenv.config to verify it's called with the right parameters
     dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     // Mock file existence check - default to true for backward compat with existing tests
     vi.mocked(fs.existsSync).mockReturnValue(true);
   });
 
   afterEach(() => {
     mockProcessEnv(originalEnv, { clear: true });
+    refreshConfigDirectoryPathFromEnv();
+    setConfigDirectoryPath(undefined);
     vi.resetAllMocks();
   });
 
-  it('should call dotenv.config with quiet=true when envPath is undefined', async () => {
+  it('should call dotenv.config with quiet=true when envPath is undefined', () => {
     setupEnv(undefined);
 
     expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
     expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
   });
 
-  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', async () => {
+  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', () => {
     const testEnvPath = '.env.test';
 
     setupEnv(testEnvPath);
@@ -52,9 +66,10 @@ describe('setupEnv', () => {
       override: true,
       quiet: true,
     });
+    expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env.test');
   });
 
-  it('should load environment variables with override when specified env file has conflicting values', async () => {
+  it('should load environment variables with override when specified env file has conflicting values', () => {
     // Mock dotenv.config to simulate loading variables
     dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
       if (options?.path === '.env.production') {
@@ -81,6 +96,21 @@ describe('setupEnv', () => {
     expect(process.env.NODE_ENV).toBe('production');
   });
 
+  it('should refresh the config directory after early env loading and freeze later changes', () => {
+    const refreshConfigDirectorySpy = vi.spyOn(configManage, 'refreshConfigDirectoryPathFromEnv');
+    dotenvConfigSpy.mockImplementation(() => {
+      mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/early/config' });
+      return { parsed: {} };
+    });
+
+    setupEnv('.env.early', { refreshConfigDirectory: true });
+    expect(refreshConfigDirectorySpy).toHaveBeenCalledTimes(1);
+    expect(getConfigDirectoryPath()).toBe('/early/config');
+
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/late/config' });
+    expect(getConfigDirectoryPath()).toBe('/early/config');
+  });
+
   describe('multi-file support', () => {
     it('should call dotenv.config with array of paths when multiple files specified', () => {
       const paths = ['.env', '.env.local'];
@@ -93,6 +123,9 @@ describe('setupEnv', () => {
         override: true,
         quiet: true,
       });
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'Loading environment variables from: .env, .env.local',
+      );
     });
 
     it('should call dotenv.config with single path (not array) when one file specified as array', () => {
@@ -106,6 +139,7 @@ describe('setupEnv', () => {
         override: true,
         quiet: true,
       });
+      expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env');
     });
 
     it('should throw error when specified file does not exist', () => {
@@ -137,6 +171,7 @@ describe('setupEnv', () => {
         override: true,
         quiet: true,
       });
+      expect(loggerInfoSpy).toHaveBeenCalledWith('Loading environment variables from .env');
     });
 
     it('should call default dotenv.config when array contains only empty strings', () => {

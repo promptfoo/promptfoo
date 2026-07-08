@@ -2343,7 +2343,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
   });
 });
 
-describe('VertexChatProvider.callClaudeApi parameter naming', () => {
+describe('VertexChatProvider.callClaudeApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
@@ -2352,6 +2352,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockReset();
 
+    mockIsCacheEnabled.mockReset();
     mockIsCacheEnabled.mockReturnValue(true);
   });
 
@@ -2581,6 +2582,81 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     expect(sentBody.top_p).toBeUndefined();
     expect(sentBody.top_k).toBeUndefined();
     expect(sentBody.max_tokens).toBe(32);
+  });
+
+  it.each([
+    {
+      name: 'at the 200K boundary',
+      region: 'global',
+      inputTokens: 200_000,
+      outputTokens: 10_000,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      pricingOverrides: {},
+      expectedCost: 0.75,
+    },
+    {
+      name: 'above 200K globally',
+      region: 'global',
+      inputTokens: 300_000,
+      outputTokens: 20_000,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      pricingOverrides: {},
+      expectedCost: 2.25,
+    },
+    {
+      name: 'when cache tokens cross 200K regionally',
+      region: 'us-central1',
+      inputTokens: 150_000,
+      outputTokens: 10_000,
+      cacheReadTokens: 60_000,
+      cacheCreationTokens: 10_000,
+      pricingOverrides: {},
+      expectedCost: 1.3596,
+    },
+    {
+      name: 'with custom regional rates above 200K',
+      region: 'us-central1',
+      inputTokens: 300_000,
+      outputTokens: 20_000,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      pricingOverrides: { inputCost: 2 / 1e6, outputCost: 7 / 1e6 },
+      expectedCost: 0.74,
+    },
+  ])('prices Vertex Sonnet 4.5 $name', async ({
+    region,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    pricingOverrides,
+    expectedCost,
+  }) => {
+    const model = 'claude-sonnet-4-5@20250929';
+    provider = new VertexChatProvider(model, {
+      config: { region, max_tokens: 32, ...pricingOverrides },
+    });
+    mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cache_read_input_tokens: cacheReadTokens,
+        cache_creation_input_tokens: cacheCreationTokens,
+      },
+    });
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    expect(result.cost).toBeCloseTo(expectedCost, 6);
   });
 
   it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {

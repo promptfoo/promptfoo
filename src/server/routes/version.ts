@@ -4,12 +4,18 @@ import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { isUpdateBlockedByRuntime } from '../../runtimeCompatibility';
 import { ApiRoutes } from '../../types/api/routes';
 import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
 import { replyError } from '../utils/errors';
+import {
+  getRuntimeNoticeForVersionResponse,
+  getRuntimePolicyForVersionResponse,
+  isUpdateAvailableForRuntime,
+} from './versionUtils';
 import type { Request, Response } from 'express';
 
 /**
@@ -44,6 +50,32 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
   return latestVersion !== currentVersion;
 }
 
+/**
+ * Build the version-response fields shared by the success and error paths: environment-derived
+ * update commands plus the runtime compatibility notice/policy. All inputs are synchronous and
+ * cannot throw, so this is safe to call from the 500 fallback handler.
+ */
+function buildBaseVersionFields() {
+  const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
+  const isContainer = getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER');
+  const isOfficialDockerImage = getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE');
+  const isNpx = isRunningUnderNpx();
+  const updateCommands = getUpdateCommands({ isContainer, isOfficialDockerImage, isNpx });
+  return {
+    currentVersion: VERSION,
+    selfHosted,
+    isNpx,
+    updateCommands,
+    commandType: updateCommands.commandType,
+    runtimeNotice: getRuntimeNoticeForVersionResponse(
+      process.version,
+      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
+    ),
+    runtimePolicy: getRuntimePolicyForVersionResponse(process.version),
+    updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
+  };
+}
+
 const router = express.Router();
 
 // Cache for the latest version check
@@ -66,13 +98,17 @@ const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
-    let latestVersion = versionCache.latestVersion;
+    const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+    let latestVersion = updateChecksDisabled ? VERSION : versionCache.latestVersion;
 
-    const cacheExpired = now - versionCache.timestamp > CACHE_DURATION;
-    const canRetry = now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
+    // A wall-clock rollback must not pin stale cache or failure-rate-limit state indefinitely.
+    const cacheExpired =
+      now < versionCache.timestamp || now - versionCache.timestamp > CACHE_DURATION;
+    const canRetry =
+      now < versionCache.lastAttempt || now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
 
     // Fetch if: (no cache OR cache expired) AND we haven't tried recently
-    if ((!latestVersion || cacheExpired) && canRetry) {
+    if (!updateChecksDisabled && (!latestVersion || cacheExpired) && canRetry) {
       versionCache.lastAttempt = now; // Mark attempt time before trying
       try {
         latestVersion = await getLatestVersion();
@@ -91,38 +127,31 @@ router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): P
       }
     }
 
-    const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
-    const isNpx = isRunningUnderNpx();
-    const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-
+    const base = buildBaseVersionFields();
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
-
+    const latestUpdateAvailable = isUpdateAvailable(resolvedLatestVersion, VERSION);
     const response = {
-      currentVersion: VERSION,
+      ...base,
       latestVersion: resolvedLatestVersion,
-      updateAvailable: isUpdateAvailable(resolvedLatestVersion, VERSION),
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
+      updateAvailable: isUpdateAvailableForRuntime(
+        latestUpdateAvailable,
+        base.updateBlockedByRuntime,
+      ),
+      blockedUpdateNotice:
+        latestUpdateAvailable && base.commandType !== 'docker' && base.runtimePolicy
+          ? getRuntimeNoticeForVersionResponse(process.version)
+          : null,
     };
 
     res.json(VersionSchemas.Response.parse(response));
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
-    const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
-    const isNpx = isRunningUnderNpx();
-    const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-
     replyError(res, 500, 'Failed to check version', {
-      currentVersion: VERSION,
+      ...buildBaseVersionFields(),
       latestVersion: VERSION,
       updateAvailable: false,
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
+      blockedUpdateNotice: null,
     });
   }
 });
