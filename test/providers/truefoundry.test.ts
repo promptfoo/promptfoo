@@ -396,6 +396,100 @@ describe('TrueFoundry', () => {
         expect(result.error).toContain('400 Bad Request');
       });
 
+      it('should normalize TrueFoundry guardrail failures into flagged responses', async () => {
+        const guardrailResponse = {
+          error: {
+            message: 'Guardrail violation detected',
+            type: 'guardrail_checks_failed',
+          },
+          guardrail_checks: {
+            llm_input_guardrails: [{ name: 'safety/prompt-injection' }],
+          },
+        };
+
+        const response = new Response(JSON.stringify(guardrailResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Guardrail violation detected');
+        expect(result.isRefusal).toBe(true);
+        expect(result.guardrails).toEqual({
+          flagged: true,
+          flaggedInput: true,
+          flaggedOutput: false,
+          reason: 'Guardrail violation detected',
+        });
+        expect(result.metadata?.http).toMatchObject({
+          status: 400,
+          statusText: 'Bad Request',
+        });
+      });
+
+      it('should normalize Azure safety blocks proxied through TrueFoundry', async () => {
+        const guardrailResponse = {
+          error: {
+            message: "Response content blocked by label 'MultiSeverity_SelfHarmScore'.",
+            code: 'content_filter_error',
+          },
+        };
+
+        const response = new Response(JSON.stringify(guardrailResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe(
+          "Response content blocked by label 'MultiSeverity_SelfHarmScore'.",
+        );
+        expect(result.isRefusal).toBe(true);
+        expect(result.guardrails).toEqual({
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+          reason: "Response content blocked by label 'MultiSeverity_SelfHarmScore'.",
+        });
+      });
+
+      it('should not guess a direction for ambiguous downstream safety blocks', async () => {
+        const guardrailResponse = {
+          error: {
+            message: 'Safety policy rejected request',
+            code: 'content_filter',
+            innererror: {
+              code: 'ResponsibleAIPolicyViolation',
+            },
+          },
+        };
+
+        const response = new Response(JSON.stringify(guardrailResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Safety policy rejected request');
+        expect(result.isRefusal).toBe(true);
+        expect(result.guardrails).toEqual({
+          flagged: true,
+          reason: 'Safety policy rejected request',
+        });
+      });
+
       it('should handle network errors', async () => {
         mockedFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 
