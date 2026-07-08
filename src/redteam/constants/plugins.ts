@@ -345,6 +345,7 @@ export const ADDITIONAL_PLUGINS = [
   'toxic-chat',
   'imitation',
   'indirect-prompt-injection',
+  'orchestrator-trust-injection',
   'persona-injection',
   'mcp',
   'model-identification',
