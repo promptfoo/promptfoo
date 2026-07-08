@@ -14,6 +14,8 @@ import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
+import type { Assertion } from '../../src/types/index';
+
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -467,6 +469,16 @@ describe('calculateFilteredMetrics', () => {
               score: 0,
               reason: 'counter',
               assertion: { type: 'javascript', metric: 'fp', metricOnly: true },
+            },
+            {
+              // Set-level result of an all-metricOnly assert-set: marked with
+              // an assertion carrying metricOnly so the SQL filter excludes it.
+              pass: false,
+              score: 0,
+              reason: 'Aggregate score 0.00 < 0.5 threshold',
+              // 'assert-set' is not a member of AssertionType; the marker is
+              // read as plain JSON at runtime (mirrors src/assertions/index.ts).
+              assertion: { type: 'assert-set', metricOnly: true } as unknown as Assertion,
             },
           ],
         },

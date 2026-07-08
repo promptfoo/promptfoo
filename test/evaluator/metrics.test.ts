@@ -451,6 +451,56 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(metrics!.assertFailCount).toBe(0);
   });
 
+  it('evaluator should exclude an all-metricOnly assert-set from assertion stats', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for metricOnly set stats')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'contains',
+              value: 'Test',
+            },
+            {
+              type: 'assert-set',
+              // The set's aggregate score is 0 (all members are metricOnly), so
+              // with a threshold its set-level result is failing.
+              threshold: 0.5,
+              assert: [
+                {
+                  type: 'javascript',
+                  value: '1',
+                  metric: 'tp',
+                  metricOnly: true,
+                },
+                {
+                  type: 'javascript',
+                  value: '0',
+                  metric: 'fp',
+                  metricOnly: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const metrics = evalRecord.prompts[0]?.metrics;
+    expect(metrics).toBeDefined();
+    expect(metrics!.testPassCount).toBe(1);
+    expect(metrics!.testFailCount).toBe(0);
+    expect(metrics!.namedScores.tp).toBe(1);
+    expect(metrics!.namedScores.fp).toBe(0);
+    // The set-level result of an all-metricOnly set is metric-only in effect,
+    // so a green eval must not report a failed assertion from it.
+    expect(metrics!.assertPassCount).toBe(1);
+    expect(metrics!.assertFailCount).toBe(0);
+  });
+
   it('should apply max-score to overall pass/fail and stats', async () => {
     const maxScoreProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('max-score-provider'),

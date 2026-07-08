@@ -299,6 +299,35 @@ describe('runAssertions', () => {
       expect(result.namedScores).toMatchObject({ tp: 1 });
     });
 
+    it('should keep the real failing outcome in componentResults for metricOnly with weight: 0', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'contains',
+              value: 'world',
+            },
+            {
+              // Migrated configs may carry both. The legacy weight-0
+              // force-pass must not mask the counter's real outcome.
+              type: 'javascript',
+              value: '0',
+              metric: 'fp',
+              metricOnly: true,
+              weight: 0,
+            },
+          ],
+        },
+        providerResponse: { output: 'Hello world' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.namedScores).toMatchObject({ fp: 0 });
+      expect(result.componentResults![1].pass).toBe(false);
+    });
+
     it('should not dilute the test score when an assert-set contains only metricOnly assertions', async () => {
       const result: GradingResult = await runAssertions({
         prompt: 'Some prompt',
@@ -336,6 +365,9 @@ describe('runAssertions', () => {
       // score of 0 at weight 1 would drag the aggregate down to 0.5.
       expect(result.score).toBe(1);
       expect(result.namedScores).toMatchObject({ tp: 1, fp: 0 });
+      // The set-level result carries the marker so assertion pass/fail stats
+      // (evaluator, retry recompute, filtered SQL metrics) can exclude it.
+      expect(result.componentResults![1].assertion?.metricOnly).toBe(true);
     });
   });
 

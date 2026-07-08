@@ -658,8 +658,11 @@ export async function runAssertion({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
+    // If weight is 0, treat this as a metric-only assertion that can't fail.
+    // Explicit metricOnly assertions skip this: they're already excluded from
+    // pass/fail at aggregation, and force-passing would mask the real outcome
+    // in componentResults for migrated configs still carrying weight: 0.
+    if (assertion.weight === 0 && !assertion.metricOnly) {
       return {
         ...result,
         pass: true, // Force pass for weight=0 assertions
@@ -829,14 +832,26 @@ export async function runAssertions({
       assertionSet: { assert, metric, weight },
     } = subAssertResult.parentAssertionSet!;
 
+    // A set whose assertions are all metricOnly is metric-only in effect:
+    // its aggregate score is always 0 and must not dilute the test score.
+    const metricOnly = assert.length > 0 && assert.every((subAssert) => subAssert.metricOnly);
+
     mainAssertResult.addResult({
       index,
-      result,
+      result: metricOnly
+        ? {
+            ...result,
+            // Mark the stored set-level result so assertion pass/fail stats
+            // (evaluator, retry recompute, filtered SQL metrics) exclude it
+            // via their `assertion.metricOnly` filters. 'assert-set' is not a
+            // member of AssertionType, so this needs a cast; consumers only
+            // read the plain JSON shape at runtime.
+            assertion: { type: 'assert-set', metricOnly: true } as unknown as Assertion,
+          }
+        : result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
-      // A set whose assertions are all metricOnly is metric-only in effect:
-      // its aggregate score is always 0 and must not dilute the test score.
-      metricOnly: assert.length > 0 && assert.every((subAssert) => subAssert.metricOnly),
+      metricOnly,
     });
   });
 
