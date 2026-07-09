@@ -1433,7 +1433,8 @@ Application Details:
             ok: true,
             json: async () => ({
               status: 'in-progress',
-              logs: ['Test running...'],
+              progress: 1,
+              total: 2,
             }),
           } as Response;
         }

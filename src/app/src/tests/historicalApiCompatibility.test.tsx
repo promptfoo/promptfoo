@@ -4,6 +4,8 @@ import { useModelAuditConfigStore } from '@app/pages/model-audit/stores/useModel
 import { useModelAuditHistoryStore } from '@app/pages/model-audit/stores/useModelAuditHistoryStore';
 import useApiConfig from '@app/stores/apiConfig';
 import { mockBrowserProperty } from '@app/tests/browserMocks';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, EvalResponseSchemas } from '@promptfoo/contracts';
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -124,5 +126,32 @@ describe('historical API responses through real typed clients', () => {
       '/api/eval/replay',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('normalizes historical eval-job polling responses through the typed client', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: 'in-progress', progress: 1, total: 2 }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'complete', result: { success: true } }));
+    mockBrowserProperty(globalThis, 'fetch', fetchMock as typeof fetch);
+
+    await expect(
+      callApiJson(ApiRoutes.Eval.GetJob, EvalResponseSchemas.GetJob.Response, {
+        params: { id: 'legacy-job' },
+      }),
+    ).resolves.toEqual({ status: 'in-progress', progress: 1, total: 2, logs: [] });
+    await expect(
+      callApiJson(ApiRoutes.Eval.GetJob, EvalResponseSchemas.GetJob.Response, {
+        params: { id: 'legacy-job' },
+      }),
+    ).resolves.toEqual({
+      status: 'complete',
+      result: { success: true },
+      evalId: null,
+      logs: [],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/eval/job/legacy-job', { method: 'GET' });
   });
 });

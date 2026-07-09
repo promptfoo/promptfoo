@@ -216,6 +216,37 @@ describe('RunTestSuiteButton', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
   });
 
+  it('should poll historical job responses without logs or an eval id', async () => {
+    vi.mocked(callApiJson)
+      .mockResolvedValueOnce({ id: 'legacy-job' } as any)
+      .mockResolvedValueOnce({ status: 'in-progress', progress: 1, total: 2 } as any)
+      .mockResolvedValueOnce({ status: 'complete', result: { success: true } } as any);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await timers.advanceByAsync(1000);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('50% complete');
+
+    await act(async () => {
+      await timers.advanceByAsync(1000);
+    });
+
+    expect(callApiJson).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
 

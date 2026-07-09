@@ -37,17 +37,17 @@ const GetEvalJobResponseSchema = z.discriminatedUnion('status', [
     status: z.literal('in-progress'),
     progress: z.number(),
     total: z.number(),
-    logs: z.array(z.string()),
+    logs: z.array(z.string()).optional().default([]),
   }),
   z.object({
     status: z.literal('complete'),
     result: z.record(z.string(), z.unknown()).nullable(),
-    evalId: z.string().nullable(),
-    logs: z.array(z.string()),
+    evalId: z.string().nullable().optional().default(null),
+    logs: z.array(z.string()).optional().default([]),
   }),
   z.object({
     status: z.literal('error'),
-    logs: z.array(z.string()),
+    logs: z.array(z.string()).optional().default([]),
   }),
 ]);
 

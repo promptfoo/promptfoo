@@ -101,6 +101,28 @@ describe('Eval API schemas', () => {
   });
 
   it.each([
+    {
+      response: { status: 'in-progress', progress: 2, total: 4 },
+      expected: { status: 'in-progress', progress: 2, total: 4, logs: [] },
+    },
+    {
+      response: { status: 'complete', result: { success: true } },
+      expected: {
+        status: 'complete',
+        result: { success: true },
+        evalId: null,
+        logs: [],
+      },
+    },
+    {
+      response: { status: 'error' },
+      expected: { status: 'error', logs: [] },
+    },
+  ])('accepts historical eval-job response %#', ({ response, expected }) => {
+    expect(EvalSchemas.GetJob.Response.parse(response)).toEqual(expected);
+  });
+
+  it.each([
     { provider: { label: 'Legacy provider' }, expectedId: undefined },
     { provider: { id: '', label: 'Legacy provider' }, expectedId: '' },
   ])('accepts legacy provider object %# for route normalization', ({ provider, expectedId }) => {
