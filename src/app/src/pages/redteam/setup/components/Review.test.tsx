@@ -10,8 +10,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ZodType } from 'zod';
 
 const mockShowToast = vi.hoisted(() => vi.fn());
+const TEST_JOB_ID = '00000000-0000-4000-8000-000000000001';
 
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
@@ -70,15 +72,15 @@ vi.mock('@app/utils/api', async (importOriginal) => {
       if (url === '/redteam/status') {
         return {
           ok: true,
-          json: async () => ({ hasRunningJob: false }),
+          json: async () => ({ hasRunningJob: false, jobId: null }),
         };
       }
       return { ok: true, json: async () => ({}) };
     }),
     callApiJson: vi.fn(
-      async (
+      async <T,>(
         route: { clientPath: string },
-        _schema: unknown,
+        schema: ZodType<T>,
         options: {
           params?: Record<string, string | number>;
           query?: URLSearchParams;
@@ -109,7 +111,7 @@ vi.mock('@app/utils/api', async (importOriginal) => {
           }
           throw new MockApiResponseError(response.status, body, response);
         }
-        return response.json();
+        return schema.parse(await response.json());
       },
     ),
     fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
@@ -333,7 +335,7 @@ describe('Review Component', () => {
       if (url === '/redteam/status') {
         return {
           ok: true,
-          json: async () => ({ hasRunningJob: false }),
+          json: async () => ({ hasRunningJob: false, jobId: null }),
         } as Response;
       }
       return { ok: true, json: async () => ({}) } as Response;
@@ -979,18 +981,20 @@ Application Details:
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
         if (url === '/redteam/status') {
           return {
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as any;
         }
         if (url === '/redteam/run') {
           return {
-            json: async () => ({ id: 'test-job-id' }),
+            json: async () => ({ id: TEST_JOB_ID }),
           } as any;
         }
         if (url.startsWith('/eval/job/')) {
           return {
             json: async () => ({
-              status: 'running',
+              status: 'in-progress',
+              progress: 1,
+              total: 2,
               logs: ['Running tests...'],
             }),
           } as any;
@@ -1415,7 +1419,7 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as Response;
         }
         return { ok: true, json: async () => ({}) } as Response;
@@ -1488,7 +1492,12 @@ Application Details:
           if (jobRequests === 1) {
             return {
               ok: true,
-              json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+              json: async () => ({
+                status: 'in-progress',
+                progress: 1,
+                total: 2,
+                logs: ['Running...'],
+              }),
             } as Response;
           }
           return {
@@ -1544,7 +1553,7 @@ Application Details:
       { label: '403 response', status: 403, error: 'Job access denied' },
       { label: '500 response', status: 500, error: 'Job status failed' },
       { label: 'non-JSON response', status: 502, error: null },
-    ])('stops polling after a permanent $label', async ({ status, error }) => {
+    ])('stops polling after an HTTP failure: $label', async ({ status, error }) => {
       timers.useFakeTimers();
       let jobRequests = 0;
       vi.mocked(callApi).mockImplementation(async (url: string) => {
@@ -1559,7 +1568,12 @@ Application Details:
           if (jobRequests === 1) {
             return {
               ok: true,
-              json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+              json: async () => ({
+                status: 'in-progress',
+                progress: 1,
+                total: 2,
+                logs: ['Running...'],
+              }),
             } as Response;
           }
           return {
@@ -1609,6 +1623,78 @@ Application Details:
       expect(jobRequests).toBe(2);
     });
 
+    it.each([
+      {
+        label: 'schema-invalid body',
+        readBody: async () => ({ status: 'in-progress', progress: 'invalid', total: 2 }),
+      },
+      {
+        label: 'malformed-JSON body',
+        readBody: async () => {
+          throw new SyntaxError('Unexpected token in successful response');
+        },
+      },
+    ])('stops polling after a 200 $label', async ({ readBody }) => {
+      timers.useFakeTimers();
+      let jobRequests = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'invalid-response-job' }),
+          } as Response;
+        }
+        if (url === '/eval/job/invalid-response-job') {
+          jobRequests += 1;
+          if (jobRequests === 1) {
+            return {
+              ok: true,
+              json: async () => ({
+                status: 'in-progress',
+                progress: 1,
+                total: 2,
+                logs: ['Running...'],
+              }),
+            } as Response;
+          }
+          return { ok: true, json: readBody } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      await act(async () => {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(jobRequests).toBe(1);
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+
+      expect(jobRequests).toBe(2);
+      expect(mockClearJob).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'Received an invalid job status response. Please try again.',
+        'error',
+      );
+
+      await act(async () => {
+        await timers.advanceByAsync(5000);
+      });
+      expect(jobRequests).toBe(2);
+    });
+
     it('retries a transient network polling error and handles the later completion', async () => {
       timers.useFakeTimers();
       let jobRequests = 0;
@@ -1624,7 +1710,12 @@ Application Details:
           if (jobRequests === 1) {
             return {
               ok: true,
-              json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+              json: async () => ({
+                status: 'in-progress',
+                progress: 1,
+                total: 2,
+                logs: ['Running...'],
+              }),
             } as Response;
           }
           if (jobRequests === 2) {
@@ -1693,6 +1784,7 @@ Application Details:
             json: async () => ({
               status: 'complete',
               evalId: 'eval-result-789',
+              result: {},
               logs: ['Evaluation complete'],
             }),
           } as Response;
@@ -1730,7 +1822,7 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as Response;
         }
         if (url === '/eval/job/saved-job-999') {
@@ -1739,6 +1831,7 @@ Application Details:
             json: async () => ({
               status: 'complete',
               evalId: 'completed-eval-123',
+              result: {},
               logs: ['Done'],
             }),
           } as Response;
@@ -1769,13 +1862,13 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as Response;
         }
         if (url === '/redteam/run') {
           return {
             ok: true,
-            json: async () => ({ id: 'new-job-id' }),
+            json: async () => ({ id: TEST_JOB_ID }),
           } as Response;
         }
         if (url.startsWith('/eval/job/')) {
@@ -1783,6 +1876,8 @@ Application Details:
             ok: true,
             json: async () => ({
               status: 'in-progress',
+              progress: 1,
+              total: 2,
               logs: ['Starting...'],
             }),
           } as Response;
@@ -1811,7 +1906,7 @@ Application Details:
 
       // Wait for job to start
       await waitFor(() => {
-        expect(mockSetJob).toHaveBeenCalledWith('new-job-id');
+        expect(mockSetJob).toHaveBeenCalledWith(TEST_JOB_ID);
       });
     });
 
@@ -1821,19 +1916,19 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as Response;
         }
         if (url === '/redteam/run') {
           return {
             ok: true,
-            json: async () => ({ id: 'job-to-cancel' }),
+            json: async () => ({ id: TEST_JOB_ID }),
           } as Response;
         }
         if (url === '/redteam/cancel') {
           return {
             ok: true,
-            json: async () => ({ success: true }),
+            json: async () => ({ message: 'Cancel request submitted' }),
           } as Response;
         }
         if (url.startsWith('/eval/job/')) {
@@ -1841,6 +1936,8 @@ Application Details:
             ok: true,
             json: async () => ({
               status: 'in-progress',
+              progress: 1,
+              total: 2,
               logs: ['Running...'],
             }),
           } as Response;
@@ -1886,13 +1983,13 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as Response;
         }
         if (url === '/redteam/run') {
           return {
             ok: true,
-            json: async () => ({ id: 'stale-job' }),
+            json: async () => ({ id: TEST_JOB_ID }),
           } as Response;
         }
         if (url === '/redteam/cancel') {
@@ -1902,10 +1999,15 @@ Application Details:
             json: async () => ({ error: 'No job currently running' }),
           } as Response;
         }
-        if (url === '/eval/job/stale-job') {
+        if (url === `/eval/job/${TEST_JOB_ID}`) {
           return {
             ok: true,
-            json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+            json: async () => ({
+              status: 'in-progress',
+              progress: 1,
+              total: 2,
+              logs: ['Running...'],
+            }),
           } as Response;
         }
         return { ok: true, json: async () => ({}) } as Response;
@@ -1980,7 +2082,7 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false }),
+            json: async () => ({ hasRunningJob: false, jobId: null }),
           } as Response;
         }
         return { ok: true, json: async () => ({}) } as Response;

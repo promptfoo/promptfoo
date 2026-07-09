@@ -42,6 +42,7 @@ import {
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ZodError } from 'zod';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
@@ -83,6 +84,21 @@ interface IntentEntry {
 interface IntentPluginRef {
   id: 'intent';
   config: { intent: string | (string | string[])[] };
+}
+
+function getTerminalPollingErrorMessage(error: unknown): string | null {
+  if (error instanceof TypeError) {
+    return null;
+  }
+  if (error instanceof ApiResponseError) {
+    return error.status === 404
+      ? 'Job was interrupted. Please try again.'
+      : `Unable to check job status: ${error.message}`;
+  }
+  if (error instanceof ZodError || error instanceof SyntaxError) {
+    return 'Received an invalid job status response. Please try again.';
+  }
+  return 'Unable to process the job status response. Please try again.';
 }
 
 const isIntentPlugin = (plugin: unknown): plugin is IntentPluginRef =>
@@ -505,20 +521,19 @@ export default function Review({
             }
           }
         } catch (error) {
-          if (error instanceof ApiResponseError) {
-            window.clearInterval(interval);
-            pollIntervalRef.current = null;
-            setIsRunning(false);
-            clearJob();
-            showToast(
-              error.status === 404
-                ? 'Job was interrupted. Please try again.'
-                : `Unable to check job status: ${error.message}`,
-              'error',
-            );
+          const errorMessage = getTerminalPollingErrorMessage(error);
+          if (errorMessage === null) {
+            // Fetch reports transient network failures as TypeError. Keep polling so a later
+            // request can recover when connectivity returns.
+            console.error('Error polling job status:', error);
             return;
           }
-          console.error('Error polling job status:', error);
+
+          window.clearInterval(interval);
+          pollIntervalRef.current = null;
+          setIsRunning(false);
+          clearJob();
+          showToast(errorMessage, 'error');
         }
       }, 1000);
 
