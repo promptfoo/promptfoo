@@ -1,3 +1,4 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTableStore } from './store';
@@ -15,7 +16,6 @@ describe('useTableStore historical API compatibility', () => {
     act(() => {
       useTableStore.setState(initialState, true);
     });
-    vi.unstubAllGlobals();
   });
 
   it('loads an oldest-shape eval table through the real response schema', async () => {
@@ -33,7 +33,7 @@ describe('useTableStore historical API compatibility', () => {
         status: 200,
       }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+    mockBrowserProperty(globalThis, 'fetch', fetchMock as typeof fetch);
 
     let result;
     await act(async () => {

@@ -1,5 +1,6 @@
+import { ApiRoutes } from '@promptfoo/contracts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiRoutes, callApiResponse } from '../api';
+import { callApiResponse } from '../api';
 import { downloadResultsFile } from './downloads';
 
 vi.mock('../api', async (importOriginal) => ({

@@ -1,6 +1,6 @@
+import type { GetScanResponse, ScannerInfo } from '@promptfoo/contracts';
 import type { ModelAuditCheck } from '@promptfoo/types/modelAudit';
 
-import type { GetScanResponse, ScannerInfo } from '../../../../types/api/modelAudit';
 import type { ModelAuditScanResults } from '../../../../types/modelAudit';
 
 /**

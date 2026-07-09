@@ -3,8 +3,9 @@ import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useModelAuditConfigStore } from '@app/pages/model-audit/stores/useModelAuditConfigStore';
 import { useModelAuditHistoryStore } from '@app/pages/model-audit/stores/useModelAuditHistoryStore';
 import useApiConfig from '@app/stores/apiConfig';
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { act, render, renderHook, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -36,10 +37,6 @@ describe('historical API responses through real typed clients', () => {
     });
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it('keeps an installed ModelAudit CLI available when version is omitted', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -47,7 +44,7 @@ describe('historical API responses through real typed clients', () => {
         cwd: '/workspace',
       }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+    mockBrowserProperty(globalThis, 'fetch', fetchMock as typeof fetch);
 
     await expect(useModelAuditConfigStore.getState().checkInstallation()).resolves.toEqual({
       installed: true,
@@ -73,7 +70,7 @@ describe('historical API responses through real typed clients', () => {
       hasErrors: false,
     };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ scans: [scan], total: 1 }));
-    vi.stubGlobal('fetch', fetchMock);
+    mockBrowserProperty(globalThis, 'fetch', fetchMock as typeof fetch);
 
     await useModelAuditHistoryStore.getState().fetchHistoricalScans();
 
@@ -90,7 +87,7 @@ describe('historical API responses through real typed clients', () => {
 
   it('defaults a domain-only share response to the community banner behavior', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ domain: 'localhost' }));
-    vi.stubGlobal('fetch', fetchMock);
+    mockBrowserProperty(globalThis, 'fetch', fetchMock as typeof fetch);
 
     render(<EnterpriseBanner evalId="legacy-eval" />);
 
@@ -110,7 +107,7 @@ describe('historical API responses through real typed clients', () => {
       toolCalls: [{ name: 'lookup', arguments: { id: 42 } }],
     };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ output }));
-    vi.stubGlobal('fetch', fetchMock);
+    mockBrowserProperty(globalThis, 'fetch', fetchMock as typeof fetch);
     const { result } = renderHook(() => useEvalOperations());
 
     let replayResult;
