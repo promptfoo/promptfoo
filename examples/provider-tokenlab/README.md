@@ -2,6 +2,8 @@
 
 This example shows how to evaluate models served by [TokenLab](https://tokenlab.sh/) with promptfoo's existing OpenAI provider. TokenLab exposes an OpenAI-compatible `/v1` API, so no dedicated provider plugin is required.
 
+## Usage
+
 You can initialize this example with:
 
 ```sh
