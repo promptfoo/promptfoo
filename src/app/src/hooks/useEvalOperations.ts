@@ -37,7 +37,7 @@ export function useEvalOperations() {
           return { error: `Provider error: ${data.error}` };
         }
 
-        return { output: data.output || undefined };
+        return { output: data.output };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'An error occurred' };
       }

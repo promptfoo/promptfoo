@@ -91,6 +91,15 @@ describe('Eval API schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts structured outputs from historical replay routes', () => {
+    const output = {
+      content: [{ type: 'text', text: 'Replayed output' }],
+      toolCalls: [{ name: 'lookup', arguments: { id: 42 } }],
+    };
+
+    expect(EvalSchemas.Replay.Response.parse({ output })).toEqual({ output });
+  });
+
   it.each([
     { provider: { label: 'Legacy provider' }, expectedId: undefined },
     { provider: { id: '', label: 'Legacy provider' }, expectedId: '' },

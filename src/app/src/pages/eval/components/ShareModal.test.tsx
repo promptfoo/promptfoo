@@ -72,6 +72,20 @@ describe('ShareModal', () => {
     });
   });
 
+  it('preserves the signup behavior for a historical domain-only response', async () => {
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      data: { domain: 'promptfoo.app' },
+    } as any);
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(
+      await screen.findByText(/You need to be logged in to your Promptfoo cloud account/),
+    ).toBeInTheDocument();
+    expect(mockOnShare).not.toHaveBeenCalled();
+  });
+
   it('displays share URL when successfully generated', async () => {
     const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);

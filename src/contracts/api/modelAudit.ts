@@ -7,7 +7,7 @@ import { ErrorResponseSchema, TimestampSchema } from './common.js';
 
 export const CheckInstalledResponseSchema = z.object({
   installed: z.boolean(),
-  version: z.string().nullable(),
+  version: z.string().nullable().optional().default(null),
   cwd: z.string(),
 });
 
@@ -174,8 +174,8 @@ const ModelAuditRecordSchema = z
 export const ListScansResponseSchema = z.object({
   scans: z.array(ModelAuditRecordSchema),
   total: z.number(),
-  limit: z.number(),
-  offset: z.number(),
+  limit: z.number().optional(),
+  offset: z.number().optional(),
 });
 
 export type ListScansQuery = z.infer<typeof ListScansQuerySchema>;

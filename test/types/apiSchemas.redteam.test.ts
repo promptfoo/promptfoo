@@ -62,6 +62,13 @@ describe('API schema red-team coverage', () => {
       );
     });
 
+    it('defaults historical domain-only share responses to local cloud-disabled behavior', () => {
+      expect(ServerSchemas.ShareCheckDomain.Response.parse({ domain: 'promptfoo.app' })).toEqual({
+        domain: 'promptfoo.app',
+        isCloudEnabled: false,
+      });
+    });
+
     it('keeps prompt hashes and generated dataset bodies bounded to expected shapes', () => {
       expect(ServerSchemas.Prompt.Params.safeParse({ sha256hash: 'a'.repeat(64) }).success).toBe(
         true,
@@ -401,6 +408,32 @@ describe('API schema red-team coverage', () => {
   });
 
   describe('model-audit schemas', () => {
+    it('accepts historical installation and scan-list responses', () => {
+      expect(
+        ModelAuditSchemas.CheckInstalled.Response.parse({
+          installed: true,
+          cwd: '/workspace',
+        }),
+      ).toEqual({ installed: true, version: null, cwd: '/workspace' });
+
+      const historicalScanList = {
+        scans: [
+          {
+            id: 'scan-1',
+            createdAt: 1,
+            updatedAt: 2,
+            modelPath: '/workspace/model.pkl',
+            results: { issues: [] },
+            hasErrors: false,
+          },
+        ],
+        total: 1,
+      };
+      expect(ModelAuditSchemas.ListScans.Response.parse(historicalScanList)).toEqual(
+        historicalScanList,
+      );
+    });
+
     it('trims path checks and rejects empty path probes before filesystem access', () => {
       expect(ModelAuditSchemas.CheckPath.Request.parse({ path: '  ~/model.pkl  ' })).toEqual({
         path: '~/model.pkl',

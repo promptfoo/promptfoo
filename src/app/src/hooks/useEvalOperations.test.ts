@@ -54,6 +54,25 @@ describe('useEvalOperations', () => {
       verifyApiCall();
     });
 
+    it('should preserve a structured output from a historical replay response', async () => {
+      const mockOutput = {
+        content: [{ type: 'text', text: 'Structured replay' }],
+        toolCalls: [{ name: 'lookup', arguments: { id: 42 } }],
+      };
+      setupApiMock({
+        ok: true,
+        data: { output: mockOutput },
+      });
+
+      let replayResult;
+      await act(async () => {
+        replayResult = await result.current.replayEvaluation(params);
+      });
+
+      expect(replayResult).toEqual({ output: mockOutput });
+      verifyApiCall();
+    });
+
     it('should return an object with the error property formatted as "Provider error: [error message]" when the API returns a successful response but the data contains an error field', async () => {
       const mockErrorMessage = 'Failed to process the request.';
       setupApiMock({

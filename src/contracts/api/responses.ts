@@ -69,7 +69,7 @@ export const EvalResponseSchemas = {
   Table: { Response: EvalTableResponseSchema },
   Replay: {
     Response: z.object({
-      output: z.string(),
+      output: z.unknown(),
       error: z.string().nullable().optional(),
       response: z.record(z.string(), z.unknown()).optional(),
     }),
@@ -229,7 +229,7 @@ export const ServerResponseSchemas = {
   ShareCheckDomain: {
     Response: z.object({
       domain: z.string(),
-      isCloudEnabled: z.boolean(),
+      isCloudEnabled: z.boolean().optional().default(false),
     }),
   },
   Share: {
