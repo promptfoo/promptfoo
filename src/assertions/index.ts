@@ -57,6 +57,7 @@ import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
 import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
+import { handleEndsWith } from './endsWith';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleFinishReason } from './finishReason';
@@ -243,6 +244,7 @@ const ASSERTION_HANDLERS: Record<
   'context-relevance': handleContextRelevance,
   'conversation-relevance': handleConversationRelevance,
   cost: handleCost,
+  'ends-with': handleEndsWith,
   equals: handleEquals,
   factuality: handleFactuality,
   'finish-reason': handleFinishReason,

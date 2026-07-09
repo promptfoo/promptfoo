@@ -17,6 +17,7 @@ const BASE_ASSERTION_TYPES = [
   'context-relevance',
   'conversation-relevance',
   'cost',
+  'ends-with',
   'equals',
   'factuality',
   'finish-reason',
@@ -187,9 +188,11 @@ const REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES = new Set<AssertionType>([
 
 const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
   'starts-with',
+  'ends-with',
   'regex',
   'webhook',
   'not-starts-with',
+  'not-ends-with',
   'not-regex',
   'not-webhook',
   'context-recall',

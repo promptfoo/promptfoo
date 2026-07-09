@@ -599,6 +599,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'classifier',
   'contains',
   'contains-all',
+  'ends-with',
   'contains-any',
   'contains-html',
   'contains-json',

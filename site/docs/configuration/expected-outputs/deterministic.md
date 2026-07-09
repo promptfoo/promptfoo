@@ -71,6 +71,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
 | [similar](#similar)                                             | Embedding similarity is above threshold                            |
+| [ends-with](#ends-with)                                         | output ends with string                                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -1017,6 +1018,18 @@ tests:
 ### Python
 
 See [Python assertions](/docs/configuration/expected-outputs/python).
+
+### Ends-With
+
+The `ends-with` assertion checks if the LLM output ends with the specified string.
+
+This example checks if the output ends with "END":
+
+```yaml
+assert:
+  - type: ends-with
+    value: 'END'
+```
 
 ### Starts-With
 
