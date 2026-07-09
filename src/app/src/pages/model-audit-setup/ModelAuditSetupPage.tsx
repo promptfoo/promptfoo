@@ -6,7 +6,8 @@ import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/comp
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { ApiRoutes, callApiJson, callApiResult, ModelAuditSchemas } from '@app/utils/api';
+import { callApiJson, callApiResult } from '@app/utils/api';
+import { ApiRoutes, ModelAuditSchemas } from '@promptfoo/contracts';
 import { useNavigate } from 'react-router-dom';
 import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
 import ConfigurationTab from '../model-audit/components/ConfigurationTab';

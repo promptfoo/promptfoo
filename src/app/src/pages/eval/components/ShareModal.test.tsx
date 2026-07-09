@@ -1,5 +1,6 @@
 import { mockClipboard, mockDocumentExecCommand, mockWindowOpen } from '@app/tests/browserMocks';
-import { ApiRoutes, callApiResult } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/contracts';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

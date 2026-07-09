@@ -1,4 +1,5 @@
-import { ApiRoutes, callApiJson, callApiResult, fetchUserId, UserSchemas } from '@app/utils/api';
+import { callApiJson, callApiResult, fetchUserId } from '@app/utils/api';
+import { ApiRoutes, UserSchemas } from '@promptfoo/contracts';
 import { create } from 'zustand';
 
 interface UserState {

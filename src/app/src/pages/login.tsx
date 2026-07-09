@@ -16,7 +16,8 @@ import { Spinner } from '@app/components/ui/spinner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
-import { ApiRoutes, callApiResult, UserSchemas } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, UserSchemas } from '@promptfoo/contracts';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LoginState {

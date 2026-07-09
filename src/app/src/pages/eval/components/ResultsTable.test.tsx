@@ -1,8 +1,8 @@
 import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { ApiRoutes, EVAL_TABLE_MAX_PAGE_SIZE } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
+import { ApiRoutes, EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/contracts';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

@@ -24,7 +24,8 @@ import { Label } from '@app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, callApiJson, ModelAuditSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ModelAuditSchemas } from '@promptfoo/contracts';
 import { useModelAuditConfigStore } from '../stores';
 
 import type { ScanPath } from '../ModelAudit.types';

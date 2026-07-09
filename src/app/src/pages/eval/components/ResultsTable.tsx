@@ -15,15 +15,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import {
-  ApiRoutes,
-  callApiJson,
-  EVAL_TABLE_MAX_PAGE_SIZE,
-  EvalResponseSchemas,
-} from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { ApiRoutes, EVAL_TABLE_MAX_PAGE_SIZE, EvalResponseSchemas } from '@promptfoo/contracts';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,

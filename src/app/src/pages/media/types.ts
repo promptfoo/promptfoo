@@ -2,14 +2,14 @@
  * Types for the Media Library page
  */
 
+import type { MediaKind } from '@app/utils/media';
 import type {
   EvalOption as ApiEvalOption,
   GraderResult as ApiGraderResult,
   MediaItemContext as ApiMediaContext,
   MediaItem as ApiMediaItem,
   MediaLibraryResponse as ApiMediaLibraryResponse,
-} from '@app/utils/api';
-import type { MediaKind } from '@app/utils/media';
+} from '@promptfoo/contracts';
 
 export type { MediaKind };
 

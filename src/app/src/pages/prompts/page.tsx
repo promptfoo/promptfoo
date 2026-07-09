@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';

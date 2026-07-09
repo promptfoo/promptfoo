@@ -80,6 +80,31 @@ export const ApiMounts = {
   Version: '/api/version',
 } as const;
 
+type ApiMount = (typeof ApiMounts)[keyof typeof ApiMounts];
+type MountedApiRouteFactory = (
+  method: ApiHttpMethod,
+  routerPath: string,
+  operationId: string,
+  summary: string,
+) => ApiRouteContract;
+
+function createMountedApiRouteFactory(mount: ApiMount, tag: string): MountedApiRouteFactory {
+  const clientPrefix = mount.slice('/api'.length);
+  return (method, routerPath, operationId, summary) =>
+    mountedApiRoute(method, clientPrefix, routerPath, operationId, tag, summary);
+}
+
+const blobsRoute = createMountedApiRouteFactory(ApiMounts.Blobs, 'Blobs');
+const configsRoute = createMountedApiRouteFactory(ApiMounts.Configs, 'Configs');
+const evalRoute = createMountedApiRouteFactory(ApiMounts.Eval, 'Eval');
+const mediaRoute = createMountedApiRouteFactory(ApiMounts.Media, 'Media');
+const modelAuditRoute = createMountedApiRouteFactory(ApiMounts.ModelAudit, 'Model Audit');
+const providersRoute = createMountedApiRouteFactory(ApiMounts.Providers, 'Providers');
+const redteamRoute = createMountedApiRouteFactory(ApiMounts.Redteam, 'Redteam');
+const tracesRoute = createMountedApiRouteFactory(ApiMounts.Traces, 'Traces');
+const userRoute = createMountedApiRouteFactory(ApiMounts.User, 'User');
+const versionRoute = createMountedApiRouteFactory(ApiMounts.Version, 'Version');
+
 export const ApiRoutes = {
   Health: standaloneRoute('get', '/health', 'getHealth', 'Health', 'Check local server health'),
   RemoteHealth: rootApiRoute(
@@ -146,427 +171,192 @@ export const ApiRoutes = {
     'Record a web UI telemetry event',
   ),
   Configs: {
-    List: mountedApiRoute('get', '/configs', '/', 'listConfigs', 'Configs', 'List stored configs'),
-    Create: mountedApiRoute(
-      'post',
-      '/configs',
-      '/',
-      'createConfig',
-      'Configs',
-      'Create a stored config',
-    ),
-    ListByType: mountedApiRoute(
-      'get',
-      '/configs',
-      '/:type',
-      'listConfigsByType',
-      'Configs',
-      'List stored configs by type',
-    ),
-    Get: mountedApiRoute(
-      'get',
-      '/configs',
-      '/:type/:id',
-      'getConfig',
-      'Configs',
-      'Get a stored config',
-    ),
+    List: configsRoute('get', '/', 'listConfigs', 'List stored configs'),
+    Create: configsRoute('post', '/', 'createConfig', 'Create a stored config'),
+    ListByType: configsRoute('get', '/:type', 'listConfigsByType', 'List stored configs by type'),
+    Get: configsRoute('get', '/:type/:id', 'getConfig', 'Get a stored config'),
   },
   Eval: {
-    CreateJob: mountedApiRoute(
-      'post',
-      '/eval',
-      '/job',
-      'createEvalJob',
-      'Eval',
-      'Start an evaluation job',
-    ),
-    GetJob: mountedApiRoute(
+    CreateJob: evalRoute('post', '/job', 'createEvalJob', 'Start an evaluation job'),
+    GetJob: evalRoute('get', '/job/:id', 'getEvalJob', 'Get evaluation job status'),
+    Update: evalRoute('patch', '/:id', 'updateEval', 'Update an evaluation table or config'),
+    UpdateAuthor: evalRoute('patch', '/:id/author', 'updateEvalAuthor', 'Update evaluation author'),
+    Table: evalRoute('get', '/:id/table', 'getEvalTable', 'Get evaluation table data'),
+    MetadataKeys: evalRoute(
       'get',
-      '/eval',
-      '/job/:id',
-      'getEvalJob',
-      'Eval',
-      'Get evaluation job status',
-    ),
-    Update: mountedApiRoute(
-      'patch',
-      '/eval',
-      '/:id',
-      'updateEval',
-      'Eval',
-      'Update an evaluation table or config',
-    ),
-    UpdateAuthor: mountedApiRoute(
-      'patch',
-      '/eval',
-      '/:id/author',
-      'updateEvalAuthor',
-      'Eval',
-      'Update evaluation author',
-    ),
-    Table: mountedApiRoute(
-      'get',
-      '/eval',
-      '/:id/table',
-      'getEvalTable',
-      'Eval',
-      'Get evaluation table data',
-    ),
-    MetadataKeys: mountedApiRoute(
-      'get',
-      '/eval',
       '/:id/metadata-keys',
       'getEvalMetadataKeys',
-      'Eval',
       'List metadata keys for an evaluation',
     ),
-    MetadataValues: mountedApiRoute(
+    MetadataValues: evalRoute(
       'get',
-      '/eval',
       '/:id/metadata-values',
       'getEvalMetadataValues',
-      'Eval',
       'List metadata values for one key',
     ),
-    AddResults: mountedApiRoute(
+    AddResults: evalRoute(
       'post',
-      '/eval',
       '/:id/results',
       'addEvalResults',
-      'Eval',
       'Append results to an evaluation',
     ),
-    Replay: mountedApiRoute(
+    Replay: evalRoute('post', '/replay', 'replayEval', 'Replay one evaluation test'),
+    SubmitRating: evalRoute(
       'post',
-      '/eval',
-      '/replay',
-      'replayEval',
-      'Eval',
-      'Replay one evaluation test',
-    ),
-    SubmitRating: mountedApiRoute(
-      'post',
-      '/eval',
       '/:evalId/results/:id/rating',
       'submitEvalResultRating',
-      'Eval',
       'Submit a rating for one result',
     ),
-    Save: mountedApiRoute('post', '/eval', '/', 'saveEval', 'Eval', 'Save an evaluation result'),
-    Delete: mountedApiRoute(
-      'delete',
-      '/eval',
-      '/:id',
-      'deleteEval',
-      'Eval',
-      'Delete one evaluation',
-    ),
-    BulkDelete: mountedApiRoute(
-      'delete',
-      '/eval',
-      '/',
-      'bulkDeleteEvals',
-      'Eval',
-      'Delete multiple evaluations',
-    ),
-    Copy: mountedApiRoute('post', '/eval', '/:id/copy', 'copyEval', 'Eval', 'Copy an evaluation'),
+    Save: evalRoute('post', '/', 'saveEval', 'Save an evaluation result'),
+    Delete: evalRoute('delete', '/:id', 'deleteEval', 'Delete one evaluation'),
+    BulkDelete: evalRoute('delete', '/', 'bulkDeleteEvals', 'Delete multiple evaluations'),
+    Copy: evalRoute('post', '/:id/copy', 'copyEval', 'Copy an evaluation'),
   },
   Media: {
-    Stats: mountedApiRoute(
-      'get',
-      '/media',
-      '/stats',
-      'getMediaStats',
-      'Media',
-      'Get media storage stats',
-    ),
-    Info: mountedApiRoute(
-      'get',
-      '/media',
-      '/info/:type/:filename',
-      'getMediaInfo',
-      'Media',
-      'Get media file metadata',
-    ),
-    Get: mountedApiRoute(
-      'get',
-      '/media',
-      '/:type/:filename',
-      'getMedia',
-      'Media',
-      'Fetch media file bytes',
-    ),
+    Stats: mediaRoute('get', '/stats', 'getMediaStats', 'Get media storage stats'),
+    Info: mediaRoute('get', '/info/:type/:filename', 'getMediaInfo', 'Get media file metadata'),
+    Get: mediaRoute('get', '/:type/:filename', 'getMedia', 'Fetch media file bytes'),
   },
   ModelAudit: {
-    CheckInstalled: mountedApiRoute(
+    CheckInstalled: modelAuditRoute(
       'get',
-      '/model-audit',
       '/check-installed',
       'checkModelAuditInstalled',
-      'Model Audit',
       'Check whether ModelAudit is installed',
     ),
-    ListScanners: mountedApiRoute(
+    ListScanners: modelAuditRoute(
       'get',
-      '/model-audit',
       '/scanners',
       'listModelAuditScanners',
-      'Model Audit',
       'List available ModelAudit scanners',
     ),
-    CheckPath: mountedApiRoute(
+    CheckPath: modelAuditRoute(
       'post',
-      '/model-audit',
       '/check-path',
       'checkModelAuditPath',
-      'Model Audit',
       'Check whether a filesystem path exists',
     ),
-    Scan: mountedApiRoute(
-      'post',
-      '/model-audit',
-      '/scan',
-      'runModelAuditScan',
-      'Model Audit',
-      'Run a ModelAudit scan',
-    ),
-    ListScans: mountedApiRoute(
+    Scan: modelAuditRoute('post', '/scan', 'runModelAuditScan', 'Run a ModelAudit scan'),
+    ListScans: modelAuditRoute(
       'get',
-      '/model-audit',
       '/scans',
       'listModelAuditScans',
-      'Model Audit',
       'List persisted ModelAudit scans',
     ),
-    GetLatestScan: mountedApiRoute(
+    GetLatestScan: modelAuditRoute(
       'get',
-      '/model-audit',
       '/scans/latest',
       'getLatestModelAuditScan',
-      'Model Audit',
       'Get the latest persisted ModelAudit scan',
     ),
-    GetScan: mountedApiRoute(
+    GetScan: modelAuditRoute(
       'get',
-      '/model-audit',
       '/scans/:id',
       'getModelAuditScan',
-      'Model Audit',
       'Get one persisted ModelAudit scan',
     ),
-    DeleteScan: mountedApiRoute(
+    DeleteScan: modelAuditRoute(
       'delete',
-      '/model-audit',
       '/scans/:id',
       'deleteModelAuditScan',
-      'Model Audit',
       'Delete one persisted ModelAudit scan',
     ),
   },
   Providers: {
-    ConfigStatus: mountedApiRoute(
+    ConfigStatus: providersRoute(
       'get',
-      '/providers',
       '/config-status',
       'getProviderConfigStatus',
-      'Providers',
       'Get provider config status',
     ),
-    Test: mountedApiRoute(
+    Test: providersRoute('post', '/test', 'testProvider', 'Test a provider configuration'),
+    Discover: providersRoute(
       'post',
-      '/providers',
-      '/test',
-      'testProvider',
-      'Providers',
-      'Test a provider configuration',
-    ),
-    Discover: mountedApiRoute(
-      'post',
-      '/providers',
       '/discover',
       'discoverProviderTarget',
-      'Providers',
       'Discover target purpose from a provider',
     ),
-    HttpGenerator: mountedApiRoute(
+    HttpGenerator: providersRoute(
       'post',
-      '/providers',
       '/http-generator',
       'generateHttpProvider',
-      'Providers',
       'Generate HTTP provider config from examples',
     ),
-    TestRequestTransform: mountedApiRoute(
+    TestRequestTransform: providersRoute(
       'post',
-      '/providers',
       '/test-request-transform',
       'testProviderRequestTransform',
-      'Providers',
       'Test an HTTP provider request transform',
     ),
-    TestResponseTransform: mountedApiRoute(
+    TestResponseTransform: providersRoute(
       'post',
-      '/providers',
       '/test-response-transform',
       'testProviderResponseTransform',
-      'Providers',
       'Test an HTTP provider response transform',
     ),
-    TestSession: mountedApiRoute(
+    TestSession: providersRoute(
       'post',
-      '/providers',
       '/test-session',
       'testProviderSession',
-      'Providers',
       'Test multi-turn provider session behavior',
     ),
   },
   Redteam: {
-    GenerateTest: mountedApiRoute(
+    GenerateTest: redteamRoute(
       'post',
-      '/redteam',
       '/generate-test',
       'generateRedteamTest',
-      'Redteam',
       'Generate one or more redteam test cases',
     ),
-    Run: mountedApiRoute(
-      'post',
-      '/redteam',
-      '/run',
-      'runRedteam',
-      'Redteam',
-      'Start a redteam run',
-    ),
-    Cancel: mountedApiRoute(
-      'post',
-      '/redteam',
-      '/cancel',
-      'cancelRedteam',
-      'Redteam',
-      'Cancel the running redteam job',
-    ),
-    Task: mountedApiRoute(
-      'post',
-      '/redteam',
-      '/:taskId',
-      'runRedteamTask',
-      'Redteam',
-      'Run a redteam setup task',
-    ),
-    Status: mountedApiRoute(
-      'get',
-      '/redteam',
-      '/status',
-      'getRedteamStatus',
-      'Redteam',
-      'Get redteam job status',
-    ),
+    Run: redteamRoute('post', '/run', 'runRedteam', 'Start a redteam run'),
+    Cancel: redteamRoute('post', '/cancel', 'cancelRedteam', 'Cancel the running redteam job'),
+    Task: redteamRoute('post', '/:taskId', 'runRedteamTask', 'Run a redteam setup task'),
+    Status: redteamRoute('get', '/status', 'getRedteamStatus', 'Get redteam job status'),
   },
   Traces: {
-    GetByEval: mountedApiRoute(
+    GetByEval: tracesRoute(
       'get',
-      '/traces',
       '/evaluation/:evaluationId',
       'getTracesByEvaluation',
-      'Traces',
       'List traces for an evaluation',
     ),
-    Get: mountedApiRoute('get', '/traces', '/:traceId', 'getTrace', 'Traces', 'Get one trace'),
+    Get: tracesRoute('get', '/:traceId', 'getTrace', 'Get one trace'),
   },
   User: {
-    Get: mountedApiRoute(
+    Get: userRoute('get', '/email', 'getUserEmail', 'Get configured user email'),
+    GetId: userRoute('get', '/id', 'getUserId', 'Get local user ID'),
+    Update: userRoute('post', '/email', 'updateUserEmail', 'Update configured user email'),
+    ClearEmail: userRoute('put', '/email/clear', 'clearUserEmail', 'Clear configured user email'),
+    EmailStatus: userRoute(
       'get',
-      '/user',
-      '/email',
-      'getUserEmail',
-      'User',
-      'Get configured user email',
-    ),
-    GetId: mountedApiRoute('get', '/user', '/id', 'getUserId', 'User', 'Get local user ID'),
-    Update: mountedApiRoute(
-      'post',
-      '/user',
-      '/email',
-      'updateUserEmail',
-      'User',
-      'Update configured user email',
-    ),
-    ClearEmail: mountedApiRoute(
-      'put',
-      '/user',
-      '/email/clear',
-      'clearUserEmail',
-      'User',
-      'Clear configured user email',
-    ),
-    EmailStatus: mountedApiRoute(
-      'get',
-      '/user',
       '/email/status',
       'getUserEmailStatus',
-      'User',
       'Get configured user email status',
     ),
-    Login: mountedApiRoute(
-      'post',
-      '/user',
-      '/login',
-      'loginUser',
-      'User',
-      'Authenticate with Promptfoo Cloud',
-    ),
-    Logout: mountedApiRoute(
-      'post',
-      '/user',
-      '/logout',
-      'logoutUser',
-      'User',
-      'Clear Promptfoo Cloud authentication',
-    ),
-    CloudConfig: mountedApiRoute(
+    Login: userRoute('post', '/login', 'loginUser', 'Authenticate with Promptfoo Cloud'),
+    Logout: userRoute('post', '/logout', 'logoutUser', 'Clear Promptfoo Cloud authentication'),
+    CloudConfig: userRoute(
       'get',
-      '/user',
       '/cloud-config',
       'getUserCloudConfig',
-      'User',
       'Get Promptfoo Cloud app config',
     ),
   },
-  Version: mountedApiRoute(
-    'get',
-    '/version',
-    '/',
-    'getVersion',
-    'Version',
-    'Check Promptfoo version and update commands',
-  ),
+  Version: versionRoute('get', '/', 'getVersion', 'Check Promptfoo version and update commands'),
   Blobs: {
-    Library: mountedApiRoute(
+    Library: blobsRoute(
       'get',
-      '/blobs',
       '/library',
       'listMediaLibrary',
-      'Blobs',
       'List media items from blob storage',
     ),
-    LibraryEvals: mountedApiRoute(
+    LibraryEvals: blobsRoute(
       'get',
-      '/blobs',
       '/library/evals',
       'listMediaLibraryEvals',
-      'Blobs',
       'List evaluations that have blob-backed media',
     ),
-    Get: mountedApiRoute(
-      'get',
-      '/blobs',
-      '/:hash',
-      'getBlob',
-      'Blobs',
-      'Fetch blob bytes or redirect to blob storage',
-    ),
+    Get: blobsRoute('get', '/:hash', 'getBlob', 'Fetch blob bytes or redirect to blob storage'),
   },
 } as const;
 

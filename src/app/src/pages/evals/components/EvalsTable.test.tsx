@@ -1,4 +1,5 @@
-import { ApiRoutes, callApiEmpty, callApiJson } from '@app/utils/api';
+import { callApiEmpty, callApiJson } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/contracts';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';

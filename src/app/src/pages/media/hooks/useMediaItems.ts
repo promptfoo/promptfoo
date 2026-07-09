@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ApiResponseError, ApiRoutes, BlobsSchemas, callApiJson } from '@app/utils/api';
+import { ApiResponseError, callApiJson } from '@app/utils/api';
 import { MEDIA_PAGE_SIZE } from '@app/utils/media';
+import { ApiRoutes, BlobsSchemas } from '@promptfoo/contracts';
 
 import type { EvalOption, MediaItem, MediaSort, MediaTypeFilter } from '../types';
 

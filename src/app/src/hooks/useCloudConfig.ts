@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { ApiRoutes, UserSchemas } from '@app/utils/api';
+import { ApiRoutes, UserSchemas } from '@promptfoo/contracts';
 import { callApiJson } from '../utils/api';
 
 export type CloudConfigData = {

@@ -21,13 +21,8 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
-import {
-  type ApiResponseError,
-  ApiRoutes,
-  callApiResult,
-  ProviderResponseSchemas,
-  type TestSessionResponse,
-} from '@app/utils/api';
+import { type ApiResponseError, callApiResult } from '@app/utils/api';
+import { ApiRoutes, ProviderResponseSchemas, type TestSessionResponse } from '@promptfoo/contracts';
 import {
   AlertCircle,
   AlertTriangle,

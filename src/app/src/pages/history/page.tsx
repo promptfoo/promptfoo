@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 import type { StandaloneEval } from '@promptfoo/util/database';

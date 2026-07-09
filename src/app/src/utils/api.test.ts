@@ -1,5 +1,5 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
-import { ApiRoutes, ServerResponseSchemas, UserSchemas } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas, UserSchemas } from '@promptfoo/contracts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiResponseError,

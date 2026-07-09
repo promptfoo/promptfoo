@@ -1,4 +1,5 @@
-import { ApiRoutes, callApiJson, callApiResult, ModelAuditSchemas } from '@app/utils/api';
+import { callApiJson, callApiResult } from '@app/utils/api';
+import { ApiRoutes, ModelAuditSchemas } from '@promptfoo/contracts';
 import { create } from 'zustand';
 
 import type { ListScansQuery } from '../../../../../types/api/modelAudit';

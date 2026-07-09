@@ -1,12 +1,7 @@
 import { useCallback } from 'react';
 
-import {
-  ApiRoutes,
-  callApiJson,
-  callApiResult,
-  EvalResponseSchemas,
-  TracesSchemas,
-} from '@app/utils/api';
+import { callApiJson, callApiResult } from '@app/utils/api';
+import { ApiRoutes, EvalResponseSchemas, TracesSchemas } from '@promptfoo/contracts';
 import type { Trace } from '@app/components/traces/TraceView';
 import type {
   ReplayEvaluationParams,

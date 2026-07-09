@@ -31,13 +31,8 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
-import {
-  ApiResponseError,
-  ApiRoutes,
-  callApiJson,
-  EvalResponseSchemas,
-  RedteamResponseSchemas,
-} from '@app/utils/api';
+import { ApiResponseError, callApiJson } from '@app/utils/api';
+import { ApiRoutes, EvalResponseSchemas, RedteamResponseSchemas } from '@promptfoo/contracts';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {

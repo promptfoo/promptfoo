@@ -11,7 +11,8 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
-import { ApiRoutes, callApiResult, ServerResponseSchemas } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import { Check, Copy } from 'lucide-react';
 import logger from '../../../../../logger';
 

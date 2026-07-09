@@ -2,55 +2,14 @@ import useApiConfig from '@app/stores/apiConfig';
 import {
   type ApiRouteContract,
   ApiRoutes,
-  BlobsSchemas,
   buildApiPath,
-  ConfigSchemas,
   type ErrorResponse,
   ErrorResponseSchema,
-  EVAL_TABLE_MAX_PAGE_SIZE,
-  type EvalOption,
   EvalResponseSchemas,
-  type GraderResult,
-  type MediaItem,
-  type MediaItemContext,
-  type MediaLibraryResponse,
-  ModelAuditSchemas,
-  ProviderResponseSchemas,
-  RedteamResponseSchemas,
-  ServerResponseSchemas,
-  type TestSessionResponse,
-  TracesSchemas,
   type UpdateEvalAuthorResponse,
   UserSchemas,
-  VersionSchemas,
 } from '@promptfoo/contracts';
 import type { ZodType } from 'zod';
-
-export type {
-  ApiRouteContract,
-  EvalOption,
-  GraderResult,
-  MediaItem,
-  MediaItemContext,
-  MediaLibraryResponse,
-  TestSessionResponse,
-  UpdateEvalAuthorResponse,
-};
-export {
-  ApiRoutes,
-  BlobsSchemas,
-  buildApiPath,
-  ConfigSchemas,
-  EVAL_TABLE_MAX_PAGE_SIZE,
-  EvalResponseSchemas,
-  ModelAuditSchemas,
-  ProviderResponseSchemas,
-  RedteamResponseSchemas,
-  ServerResponseSchemas,
-  TracesSchemas,
-  UserSchemas,
-  VersionSchemas,
-};
 
 export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();

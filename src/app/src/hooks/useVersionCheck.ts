@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ApiRoutes, callApiJson, VersionSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import {
   FINAL_RUNTIME_NOTICE_PHASE_MS,
   getRuntimeNoticeReminderIntervalDays,
   parseUtcMidnight,
 } from '@app/utils/runtimeCompatibility';
+import { ApiRoutes, VersionSchemas } from '@promptfoo/contracts';
 
 export interface RuntimeCompatibilityNotice {
   id: string;

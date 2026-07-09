@@ -27,8 +27,9 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,

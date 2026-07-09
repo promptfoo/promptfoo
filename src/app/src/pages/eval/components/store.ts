@@ -1,5 +1,6 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { ApiRoutes, callApiResult, EvalResponseSchemas } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, EvalResponseSchemas } from '@promptfoo/contracts';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,

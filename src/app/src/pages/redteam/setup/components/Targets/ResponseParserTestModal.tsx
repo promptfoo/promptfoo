@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
-import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, ProviderResponseSchemas } from '@promptfoo/contracts';
 import TransformTestDialog from './TransformTestDialog';
 
 interface ResponseParserTestModalProps {

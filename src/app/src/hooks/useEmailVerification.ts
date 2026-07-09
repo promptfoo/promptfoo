@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
-import { ApiRoutes, callApiResult, UserSchemas } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, UserSchemas } from '@promptfoo/contracts';
 import { EmailValidationStatus, UserEmailStatus } from '../../../types/email';
 
 interface EmailStatus {

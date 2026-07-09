@@ -1,4 +1,5 @@
-import { ApiRoutes, callApiResponse } from '@app/utils/api';
+import { callApiResponse } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/contracts';
 
 /**
  * Generic function to download results in a specified format

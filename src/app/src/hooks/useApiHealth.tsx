@@ -1,4 +1,5 @@
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import { useQuery } from '@tanstack/react-query';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';

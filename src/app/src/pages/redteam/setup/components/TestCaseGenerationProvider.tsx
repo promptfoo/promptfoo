@@ -10,12 +10,8 @@ import React, {
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import {
-  ApiRoutes,
-  callApiJson,
-  ProviderResponseSchemas,
-  RedteamResponseSchemas,
-} from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ProviderResponseSchemas, RedteamResponseSchemas } from '@promptfoo/contracts';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   isMultiTurnStrategy,

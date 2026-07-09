@@ -7,7 +7,8 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
-import { ApiRoutes, callApiJson, EvalResponseSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, EvalResponseSchemas } from '@promptfoo/contracts';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   countTests,

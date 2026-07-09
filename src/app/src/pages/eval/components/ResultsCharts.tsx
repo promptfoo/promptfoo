@@ -9,7 +9,8 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { EVAL_ROUTES } from '@app/constants/routes';
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import {
   BarController,
   BarElement,
