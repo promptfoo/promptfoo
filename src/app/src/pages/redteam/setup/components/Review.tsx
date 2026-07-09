@@ -52,7 +52,7 @@ import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job, RedteamRunOptions } from '@promptfoo/types';
+import type { RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -64,11 +64,6 @@ interface ReviewProps {
 interface PolicyPlugin {
   id: 'policy';
   config: { policy: Policy };
-}
-
-interface JobStatusResponse {
-  hasRunningJob: boolean;
-  jobId?: string | null;
 }
 
 interface IntentEntry {
@@ -306,13 +301,13 @@ export default function Review({
       if (hasRunningJob && serverJobId) {
         // Server has a running job - reconnect to it
         try {
-          const job = (await callApiJson(
+          const job = await callApiJson(
             ApiRoutes.Eval.GetJob,
             EvalResponseSchemas.GetJob.Response,
             {
               params: { id: serverJobId },
             },
-          )) as Job;
+          );
           setLogs(job.logs || []);
 
           if (job.status === 'in-progress') {
@@ -336,13 +331,13 @@ export default function Review({
         // We have a saved job ID but server says nothing running
         // Check if it completed while we were away
         try {
-          const job = (await callApiJson(
+          const job = await callApiJson(
             ApiRoutes.Eval.GetJob,
             EvalResponseSchemas.GetJob.Response,
             {
               params: { id: savedJobId },
             },
-          )) as Job;
+          );
           setLogs(job.logs || []);
 
           if (job.status === 'complete' && job.evalId) {
@@ -468,12 +463,12 @@ export default function Review({
     }
   }, [isRunning, apiHealthStatus]);
 
-  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+  const checkForRunningJob = async () => {
     try {
       return await callApiJson(ApiRoutes.Redteam.Status, RedteamResponseSchemas.Status.Response);
     } catch (error) {
       console.error('Error checking job status:', error);
-      return { hasRunningJob: false };
+      return { hasRunningJob: false, jobId: null };
     }
   };
 
@@ -484,13 +479,13 @@ export default function Review({
 
       const interval = window.setInterval(async () => {
         try {
-          const status = (await callApiJson(
+          const status = await callApiJson(
             ApiRoutes.Eval.GetJob,
             EvalResponseSchemas.GetJob.Response,
             {
               params: { id: jobId },
             },
-          )) as Job;
+          );
 
           if (pollingGenerationRef.current !== generation) {
             return;
