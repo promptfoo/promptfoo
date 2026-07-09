@@ -19,12 +19,16 @@ const EvalTableResponseSchema = z
       .passthrough(),
     totalCount: z.number(),
     filteredCount: z.number(),
-    filteredMetrics: z.array(z.unknown()).nullable(),
+    filteredMetrics: z
+      .array(z.unknown())
+      .nullable()
+      .optional()
+      .transform((value) => value ?? null),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),
     version: z.number(),
-    id: z.string(),
-    stats: z.unknown(),
+    id: z.string().optional(),
+    stats: z.unknown().optional(),
   })
   .passthrough();
 

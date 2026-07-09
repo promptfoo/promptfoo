@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { EvalSchemas } from '../../../src/types/api/eval';
 
 describe('Eval API schemas', () => {
+  it.each([
+    {
+      name: 'the oldest response without filtered metrics, id, or stats',
+      response: {},
+      expected: { filteredMetrics: null, id: undefined, stats: undefined },
+    },
+    {
+      name: 'a later response without stats',
+      response: { filteredMetrics: null, id: 'eval-1' },
+      expected: { filteredMetrics: null, id: 'eval-1', stats: undefined },
+    },
+    {
+      name: 'the current response',
+      response: { filteredMetrics: [], id: 'eval-1', stats: { durationMs: 42 } },
+      expected: { filteredMetrics: [], id: 'eval-1', stats: { durationMs: 42 } },
+    },
+  ])('accepts $name', ({ response, expected }) => {
+    const parsed = EvalSchemas.Table.Response.parse({
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      totalCount: 0,
+      filteredCount: 0,
+      config: {},
+      author: null,
+      version: 4,
+      ...response,
+    });
+
+    expect(parsed.filteredMetrics).toEqual(expected.filteredMetrics);
+    expect(parsed.id).toBe(expected.id);
+    expect(parsed.stats).toEqual(expected.stats);
+  });
+
   it('validates table response envelopes without deep-parsing table rows', () => {
     const body = new Proxy([{ outputs: [{ text: 'large output' }] }], {
       get(target, property, receiver) {
