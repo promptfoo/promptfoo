@@ -120,6 +120,13 @@ const rawRedteamProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:mcp-shadow',
+    create: async (_providerPath, providerOptions) => {
+      const { createMcpShadowProvider } = await import('../plugins/mcpShadow');
+      return createMcpShadowProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:indirect-web-pwn',
     create: async (_providerPath, providerOptions) => {
       const { default: RedteamIndirectWebPwnProvider } = await import('./indirectWebPwn');
