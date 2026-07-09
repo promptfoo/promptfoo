@@ -194,7 +194,7 @@ export const AddResultsRequestSchema = z.array(
           z.string(),
           z
             .object({
-              id: z.string().min(1),
+              id: z.string().optional(),
             })
             .passthrough(),
         ])

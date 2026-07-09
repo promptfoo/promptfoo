@@ -403,6 +403,73 @@ describe('Eval Routes - Zod Validation', () => {
       ]);
     });
 
+    it.each([
+      {
+        name: 'a label-only provider object',
+        storedProvider: 'stored-provider',
+        provider: { label: 'Legacy label', config: { region: 'us-east-1' } },
+        expectedProvider: {
+          id: 'stored-provider',
+          label: 'Legacy label',
+          config: { region: 'us-east-1' },
+        },
+      },
+      {
+        name: 'an empty provider id',
+        storedProvider: 'stored-provider',
+        provider: { id: '', label: 'Legacy label' },
+        expectedProvider: { id: 'stored-provider', label: 'Legacy label' },
+      },
+      {
+        name: 'no usable provider id',
+        storedProvider: undefined,
+        provider: { label: 'Legacy label' },
+        expectedProvider: { id: 'unknown', label: 'Legacy label' },
+      },
+      {
+        name: 'an explicit provider id',
+        storedProvider: 'stored-provider',
+        provider: { id: 'explicit-provider', label: 'Current label' },
+        expectedProvider: { id: 'explicit-provider', label: 'Current label' },
+      },
+    ])('normalizes $name before persistence', async ({
+      storedProvider,
+      provider,
+      expectedProvider,
+    }) => {
+      const mockSetResults = vi.fn().mockResolvedValue(undefined);
+      mockFindById.mockResolvedValue({
+        id: 'test-id',
+        config: {},
+        prompts: [
+          {
+            raw: 'Say hello',
+            label: 'Greeting',
+            ...(storedProvider ? { provider: storedProvider } : {}),
+          },
+        ],
+        setResults: mockSetResults,
+      });
+
+      const response = await api.post('/api/eval/test-id/results').send([
+        {
+          promptIdx: 0,
+          testIdx: 0,
+          success: true,
+          score: 1,
+          provider,
+        },
+      ]);
+
+      expect(response.status).toBe(204);
+      expect(mockSetResults).toHaveBeenCalledOnce();
+      expect(mockSetResults.mock.calls[0][0][0]).toMatchObject({
+        provider: expectedProvider,
+        success: true,
+        score: 1,
+      });
+    });
+
     it('should reject a prompt index that is not present in the stored eval', async () => {
       const mockSetResults = vi.fn().mockResolvedValue(undefined);
       mockFindById.mockResolvedValue({

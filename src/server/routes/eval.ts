@@ -55,7 +55,9 @@ function normalizeAddResult(eval_: Eval, result: AddResultsRequest[number]): Eva
   const provider =
     typeof result.provider === 'string'
       ? { id: result.provider || fallbackProviderId }
-      : (result.provider ?? { id: fallbackProviderId });
+      : result.provider
+        ? { ...result.provider, id: result.provider.id || fallbackProviderId }
+        : { id: fallbackProviderId };
 
   return {
     ...result,

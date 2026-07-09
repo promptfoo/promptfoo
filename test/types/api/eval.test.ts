@@ -91,6 +91,24 @@ describe('Eval API schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each([
+    { provider: { label: 'Legacy provider' }, expectedId: undefined },
+    { provider: { id: '', label: 'Legacy provider' }, expectedId: '' },
+  ])('accepts legacy provider object %# for route normalization', ({ provider, expectedId }) => {
+    const parsed = EvalSchemas.AddResults.Request.parse([
+      {
+        promptIdx: 0,
+        testIdx: 0,
+        success: true,
+        score: 1,
+        provider,
+      },
+    ]);
+
+    expect(parsed[0].provider).toMatchObject({ label: 'Legacy provider' });
+    expect(typeof parsed[0].provider === 'object' && parsed[0].provider?.id).toBe(expectedId);
+  });
+
   it('SubmitRating response schema preserves the persisted EvalResult row', () => {
     const parsed = EvalSchemas.SubmitRating.Response.parse({
       id: 'result-123',
