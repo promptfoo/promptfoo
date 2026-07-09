@@ -384,6 +384,7 @@ function writeConsumerScripts(consumerDir: string): void {
         module: 'NodeNext',
         moduleResolution: 'NodeNext',
         noEmit: true,
+        skipLibCheck: false,
         strict: true,
       },
       include: ['import-contracts.ts'],
@@ -397,6 +398,7 @@ function writeConsumerScripts(consumerDir: string): void {
         module: 'CommonJS',
         moduleResolution: 'node',
         noEmit: true,
+        skipLibCheck: false,
         strict: true,
       },
       include: ['import-contracts.ts'],
@@ -432,9 +434,24 @@ function writeConsumerScripts(consumerDir: string): void {
         module: 'Node16',
         moduleResolution: 'Node16',
         noEmit: true,
+        skipLibCheck: false,
         strict: true,
       },
       include: ['require-contracts.cts'],
+    }),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.typescript-5.6-legacy.json'),
+    JSON.stringify({
+      compilerOptions: {
+        esModuleInterop: true,
+        module: 'CommonJS',
+        moduleResolution: 'node',
+        noEmit: true,
+        skipLibCheck: false,
+        strict: true,
+      },
+      include: ['import-contracts.ts'],
     }),
   );
 }
@@ -581,11 +598,13 @@ async function main(): Promise<void> {
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const typescript56Dir = path.join(tempDir, 'typescript-5.6');
 
   try {
     fs.mkdirSync(artifactsDir);
     fs.mkdirSync(configDir);
     fs.mkdirSync(consumerDir);
+    fs.mkdirSync(typescript56Dir);
     fs.writeFileSync(consumerNpmrc, '');
 
     const packOutput = runNpm(
@@ -649,6 +668,35 @@ async function main(): Promise<void> {
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
+    fs.writeFileSync(
+      path.join(typescript56Dir, 'package.json'),
+      JSON.stringify({ name: 'promptfoo-typescript-5.6-compiler', private: true }),
+    );
+    runNpm(
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '--registry=https://registry.npmjs.org/',
+        'typescript@5.6.3',
+      ],
+      typescript56Dir,
+      { npm_config_userconfig: consumerNpmrc },
+    );
+    const typescript56Path = path.join(typescript56Dir, 'node_modules', 'typescript', 'bin', 'tsc');
+    assert.equal(
+      run(process.execPath, [typescript56Path, '--version'], consumerDir).trim(),
+      'Version 5.6.3',
+    );
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.typescript-5.6-legacy.json',
+      'tsconfig.node16-cjs.json',
+    ]) {
+      run(process.execPath, [typescript56Path, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
 

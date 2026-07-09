@@ -9,7 +9,9 @@ export const GetBlobParamsSchema = z.object({
   hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
 });
 
-export const BlobBinaryResponseSchema = z.instanceof(Uint8Array);
+// Keep the public declaration compiler-neutral. TypeScript 6 infers its generic typed-array
+// spelling here (`Uint8Array<ArrayBuffer>`), which TypeScript 5.6 consumers cannot parse.
+export const BlobBinaryResponseSchema: z.ZodType<Uint8Array> = z.instanceof(Uint8Array);
 
 export type GetBlobParams = z.infer<typeof GetBlobParamsSchema>;
 export type BlobBinaryResponse = z.infer<typeof BlobBinaryResponseSchema>;
@@ -99,8 +101,23 @@ export const MediaLibraryEvalsResponseSchema = z.object({
 export type MediaLibraryEvalsResponse = z.infer<typeof MediaLibraryEvalsResponseSchema>;
 export type EvalOption = z.infer<typeof EvalOptionSchema>;
 
+type BlobsSchemaCatalog = {
+  readonly Get: {
+    readonly Params: typeof GetBlobParamsSchema;
+    readonly BinaryResponse: z.ZodType<Uint8Array>;
+  };
+  readonly Library: {
+    readonly Query: typeof MediaLibraryQuerySchema;
+    readonly Response: typeof MediaLibraryResponseSchema;
+  };
+  readonly LibraryEvals: {
+    readonly Query: typeof MediaLibraryEvalsQuerySchema;
+    readonly Response: typeof MediaLibraryEvalsResponseSchema;
+  };
+};
+
 /** Grouped schemas for server-side validation. */
-export const BlobsSchemas = {
+export const BlobsSchemas: BlobsSchemaCatalog = {
   Get: {
     Params: GetBlobParamsSchema,
     BinaryResponse: BlobBinaryResponseSchema,
@@ -113,4 +130,4 @@ export const BlobsSchemas = {
     Query: MediaLibraryEvalsQuerySchema,
     Response: MediaLibraryEvalsResponseSchema,
   },
-} as const;
+};
