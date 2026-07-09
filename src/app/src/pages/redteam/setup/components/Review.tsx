@@ -505,12 +505,17 @@ export default function Review({
             }
           }
         } catch (error) {
-          if (error instanceof ApiResponseError && error.status === 404) {
+          if (error instanceof ApiResponseError) {
             window.clearInterval(interval);
             pollIntervalRef.current = null;
             setIsRunning(false);
             clearJob();
-            showToast('Job was interrupted. Please try again.', 'error');
+            showToast(
+              error.status === 404
+                ? 'Job was interrupted. Please try again.'
+                : `Unable to check job status: ${error.message}`,
+              'error',
+            );
             return;
           }
           console.error('Error polling job status:', error);

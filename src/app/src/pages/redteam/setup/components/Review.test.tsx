@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
+const mockShowToast = vi.hoisted(() => vi.fn());
+
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
 const renderWithProviders = (ui: React.ReactElement) => {
@@ -44,7 +46,7 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
-    showToast: vi.fn(),
+    showToast: mockShowToast,
   }),
 }));
 
@@ -91,7 +93,20 @@ vi.mock('@app/utils/api', async (importOriginal) => {
         const requestPath = queryString ? `${path}?${queryString}` : path;
         const response = await vi.mocked(callApi)(requestPath, requestInit);
         if (response.ok === false) {
-          const body = await response.json();
+          let body = { error: `Request failed (${response.status})` };
+          try {
+            const parsed: unknown = await response.json();
+            if (
+              typeof parsed === 'object' &&
+              parsed !== null &&
+              'error' in parsed &&
+              typeof parsed.error === 'string'
+            ) {
+              body = { error: parsed.error };
+            }
+          } catch {
+            // Match callApiJson's fallback for non-JSON HTTP errors.
+          }
           throw new MockApiResponseError(response.status, body, response);
         }
         return response.json();
@@ -1520,6 +1535,148 @@ Application Details:
           .filter((url) => url === '/redteam/status' || url === '/eval/job/restarted-job'),
       ).toEqual(['/redteam/status', '/eval/job/restarted-job', '/eval/job/restarted-job']);
       expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      expect(mockShowToast).toHaveBeenCalledWith('Job was interrupted. Please try again.', 'error');
+    });
+
+    it.each([
+      { label: '400 response', status: 400, error: 'Invalid job request' },
+      { label: '401 response', status: 401, error: 'Authentication required' },
+      { label: '403 response', status: 403, error: 'Job access denied' },
+      { label: '500 response', status: 500, error: 'Job status failed' },
+      { label: 'non-JSON response', status: 502, error: null },
+    ])('stops polling after a permanent $label', async ({ status, error }) => {
+      timers.useFakeTimers();
+      let jobRequests = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'terminal-error-job' }),
+          } as Response;
+        }
+        if (url === '/eval/job/terminal-error-job') {
+          jobRequests += 1;
+          if (jobRequests === 1) {
+            return {
+              ok: true,
+              json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+            } as Response;
+          }
+          return {
+            ok: false,
+            status,
+            json: async () => {
+              if (error === null) {
+                throw new SyntaxError('Unexpected token in HTTP response');
+              }
+              return { error };
+            },
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      await act(async () => {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(jobRequests).toBe(1);
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+
+      expect(jobRequests).toBe(2);
+      expect(mockClearJob).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        `Unable to check job status: ${error ?? `Request failed (${status})`}`,
+        'error',
+      );
+
+      await act(async () => {
+        await timers.advanceByAsync(5000);
+      });
+      expect(jobRequests).toBe(2);
+    });
+
+    it('retries a transient network polling error and handles the later completion', async () => {
+      timers.useFakeTimers();
+      let jobRequests = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'transient-error-job' }),
+          } as Response;
+        }
+        if (url === '/eval/job/transient-error-job') {
+          jobRequests += 1;
+          if (jobRequests === 1) {
+            return {
+              ok: true,
+              json: async () => ({ status: 'in-progress', logs: ['Running...'] }),
+            } as Response;
+          }
+          if (jobRequests === 2) {
+            throw new TypeError('Network connection interrupted');
+          }
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'completed-after-retry',
+              result: {},
+              logs: ['Complete'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      await act(async () => {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+      expect(jobRequests).toBe(2);
+      expect(mockClearJob).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+      expect(jobRequests).toBe(3);
+      expect(mockClearJob).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      expect(screen.getByRole('link', { name: /view report/i })).toHaveAttribute(
+        'href',
+        '/reports?evalId=completed-after-retry',
+      );
+
+      await act(async () => {
+        await timers.advanceByAsync(5000);
+      });
+      expect(jobRequests).toBe(3);
     });
 
     it('should show completed state when returning to completed job', async () => {
