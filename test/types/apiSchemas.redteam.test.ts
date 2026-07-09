@@ -246,7 +246,34 @@ describe('API schema red-team coverage', () => {
         reason: 'remote disabled',
         details: { request1: { prompt: 'one' } },
       });
-      expect(ProviderSchemas.TestSession.Response.safeParse({ success: true }).success).toBe(false);
+      expect(
+        ProviderSchemas.TestSession.Response.parse({
+          success: false,
+          error: 'Session parser failed',
+        }),
+      ).toEqual({ success: false, error: 'Session parser failed' });
+      expect(ProviderSchemas.TestSession.Response.parse({ success: true })).toEqual({
+        success: true,
+      });
+      expect(
+        ProviderSchemas.TestSession.Response.parse({
+          success: false,
+          details: {
+            sessionId: null,
+            request1: null,
+            request2: { sessionId: null },
+            legacyDiagnostic: { attempts: 2 },
+          },
+        }).details,
+      ).toEqual({
+        sessionId: null,
+        request1: null,
+        request2: { sessionId: null },
+        legacyDiagnostic: { attempts: 2 },
+      });
+      expect(
+        ProviderSchemas.TestSession.Response.safeParse({ message: 'missing success' }).success,
+      ).toBe(false);
     });
 
     it('keeps generator and discovery schemas from accepting empty or non-object envelopes', () => {

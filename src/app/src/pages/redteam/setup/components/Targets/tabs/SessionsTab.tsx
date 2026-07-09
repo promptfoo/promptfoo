@@ -34,6 +34,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
+import { z } from 'zod';
 import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
@@ -282,15 +283,65 @@ interface SessionsTabProps {
   onTestComplete?: (success: boolean) => void;
 }
 
-type TestResult = TestSessionResponse;
+const SessionRequestDetailsSchema = z
+  .object({
+    prompt: z.string().optional(),
+    sessionId: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const SessionTestDetailsSchema = z
+  .object({
+    sessionId: z.string().nullable().optional(),
+    sessionSource: z.string().optional(),
+    request1: SessionRequestDetailsSchema.nullable().optional(),
+    response1: z.unknown().optional(),
+    request2: SessionRequestDetailsSchema.nullable().optional(),
+    response2: z.unknown().optional(),
+    hasSessionIdTemplate: z.boolean().optional(),
+    hasSessionParser: z.boolean().optional(),
+    sessionParser: z.string().optional(),
+  })
+  .passthrough();
+
+type SessionTestDetails = z.infer<typeof SessionTestDetailsSchema>;
+
+interface TestResult {
+  success: boolean;
+  message: string;
+  reason?: string;
+  error?: string;
+  details?: SessionTestDetails;
+}
+
+function parseSessionTestDetails(details: unknown): SessionTestDetails | undefined {
+  const result = SessionTestDetailsSchema.safeParse(details);
+  return result.success ? result.data : undefined;
+}
+
+function normalizeSessionTestResult(data: TestSessionResponse): TestResult {
+  const details = parseSessionTestDetails(data.details);
+  return {
+    success: data.success,
+    message:
+      data.message ??
+      data.error ??
+      (data.success ? 'Session test completed.' : 'Session test failed.'),
+    ...(data.reason === undefined ? {} : { reason: data.reason }),
+    ...(data.error === undefined ? {} : { error: data.error }),
+    ...(details === undefined ? {} : { details }),
+  };
+}
 
 function testResultFromError(error: ApiResponseError): TestResult {
-  const message = typeof error.body.message === 'string' ? error.body.message : error.message;
+  const bodyMessage = typeof error.body.message === 'string' ? error.body.message : undefined;
+  const bodyError = typeof error.body.error === 'string' ? error.body.error : undefined;
+  const details = parseSessionTestDetails(error.body.details);
   return {
     success: false,
-    message,
-    reason: typeof error.body.error === 'string' ? error.body.error : error.message,
-    details: error.body.details as TestResult['details'],
+    message: bodyMessage ?? bodyError ?? error.message ?? 'Session test failed.',
+    reason: bodyError ?? error.message,
+    ...(details === undefined ? {} : { details }),
   };
 }
 
@@ -332,7 +383,7 @@ async function runSessionTest({
     );
 
     if (response.ok) {
-      const data: TestResult = response.data;
+      const data = normalizeSessionTestResult(response.data);
       setTestResult(data);
       setDetailsExpanded(!data.success);
       onTestComplete?.(data.success);
