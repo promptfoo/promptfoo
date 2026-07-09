@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -71,24 +72,54 @@ const CLAUDE_CODE_KEYCHAIN_SERVICE = 'Claude Code-credentials';
 const CLAUDE_CODE_CREDENTIALS_FILENAME = '.credentials.json';
 
 /**
+ * Returns the `CLAUDE_CONFIG_DIR` override when one is set, or `undefined`
+ * for the default `~/.claude` layout. A provider-scoped `env` override takes
+ * precedence over the root config / process environment, matching how other
+ * provider env vars resolve (see `AnthropicGenericProvider.getApiKey`).
+ *
+ * The raw configured value is returned without path normalization on
+ * purpose: the Claude Code CLI derives its macOS keychain service name from
+ * the exact string (see {@link resolveKeychainService}), so normalizing here
+ * would break keychain lookups for values with e.g. a trailing slash.
+ */
+function resolveConfiguredDir(env?: EnvOverrides): string | undefined {
+  return env?.CLAUDE_CONFIG_DIR || getEnvString('CLAUDE_CONFIG_DIR') || undefined;
+}
+
+/**
  * Resolves the directory Claude Code stores its config (including
  * `.credentials.json`) in. Honors `CLAUDE_CONFIG_DIR`, the same environment
  * variable the Claude Code CLI itself uses to relocate `~/.claude`, so
  * Promptfoo finds the credential file when a user has customized their
- * Claude Code config location. A provider-scoped `env` override takes
- * precedence over the root config / process environment, matching how other
- * provider env vars resolve (see `AnthropicGenericProvider.getApiKey`).
+ * Claude Code config location.
  */
 function resolveConfigDir(env?: EnvOverrides): string {
-  return (
-    env?.CLAUDE_CONFIG_DIR ||
-    getEnvString('CLAUDE_CONFIG_DIR') ||
-    path.join(os.homedir(), '.claude')
-  );
+  return resolveConfiguredDir(env) ?? path.join(os.homedir(), '.claude');
 }
 
 function resolveCredentialsPath(env?: EnvOverrides): string {
   return path.join(resolveConfigDir(env), CLAUDE_CODE_CREDENTIALS_FILENAME);
+}
+
+/**
+ * Resolves the macOS keychain service name for the Claude Code credential,
+ * mirroring the Claude Code CLI: with the default config dir it is
+ * `Claude Code-credentials`, but whenever `CLAUDE_CONFIG_DIR` is set — even
+ * to the default `~/.claude` — the CLI appends `-` plus the first 8 hex
+ * chars of sha256 of the *raw* configured value (no path normalization; a
+ * trailing slash produces a different hash). Empirically verified against
+ * claude v2.1.204 by tracing its `security find-generic-password` calls;
+ * this is an internal CLI detail that may drift, in which case the lookup
+ * misses and falls through to the credentials-file path, then to the
+ * caller's "no credential found" warning.
+ */
+function resolveKeychainService(env?: EnvOverrides): string {
+  const configuredDir = resolveConfiguredDir(env);
+  if (!configuredDir) {
+    return CLAUDE_CODE_KEYCHAIN_SERVICE;
+  }
+  const suffix = createHash('sha256').update(configuredDir).digest('hex').slice(0, 8);
+  return `${CLAUDE_CODE_KEYCHAIN_SERVICE}-${suffix}`;
 }
 
 /**
@@ -149,7 +180,7 @@ function parseJsonBlob(blob: string): ParseResult {
   return parseCredential(parsed);
 }
 
-function readFromMacosKeychain(): ClaudeCodeOAuthCredential | null {
+function readFromMacosKeychain(env?: EnvOverrides): ClaudeCodeOAuthCredential | null {
   if (process.platform !== 'darwin') {
     return null;
   }
@@ -159,7 +190,7 @@ function readFromMacosKeychain(): ClaudeCodeOAuthCredential | null {
     // stderr is silenced so denied keychain prompts do not pollute logs.
     out = execFileSync(
       'security',
-      ['find-generic-password', '-s', CLAUDE_CODE_KEYCHAIN_SERVICE, '-w'],
+      ['find-generic-password', '-s', resolveKeychainService(env), '-w'],
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 },
     );
   } catch (err) {
@@ -229,9 +260,11 @@ function readFromFile(env?: EnvOverrides): ClaudeCodeOAuthCredential | null {
  * Loads a Claude Code OAuth credential from the local environment.
  *
  * Resolution order:
- * 1. macOS keychain (`security find-generic-password -s "Claude Code-credentials"`)
- *    — only attempted on darwin. `CLAUDE_CONFIG_DIR` does not affect this
- *    step; macOS Claude Code always stores credentials in the keychain.
+ * 1. macOS keychain — only attempted on darwin. The service name mirrors the
+ *    Claude Code CLI: `Claude Code-credentials` for the default config dir,
+ *    or `Claude Code-credentials-<sha256(CLAUDE_CONFIG_DIR)[:8]>` when
+ *    `CLAUDE_CONFIG_DIR` is set (see {@link resolveKeychainService}), so each
+ *    Claude Code profile resolves to its own credential.
  * 2. `$HOME/.claude/.credentials.json` — the Linux/Windows default used by
  *    Claude Code, and a fallback on macOS when the keychain entry is missing.
  *    On Windows this resolves to `%USERPROFILE%\.claude\.credentials.json`.
@@ -250,7 +283,7 @@ function readFromFile(env?: EnvOverrides): ClaudeCodeOAuthCredential | null {
  * setups are diagnosable without enabling debug logging.
  */
 export function loadClaudeCodeCredential(env?: EnvOverrides): ClaudeCodeOAuthCredential | null {
-  return readFromMacosKeychain() ?? readFromFile(env);
+  return readFromMacosKeychain(env) ?? readFromFile(env);
 }
 
 /**
