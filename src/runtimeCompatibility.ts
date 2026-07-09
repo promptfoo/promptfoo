@@ -5,7 +5,7 @@ import {
   NODE_RECOMMENDED_VERSION_LABEL,
   NODE_RUNTIME_UPGRADE_GUIDE_URL,
   type RuntimeCompatibilityNotice,
-} from './types/runtimeCompatibility';
+} from './contracts/runtimeCompatibility';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;

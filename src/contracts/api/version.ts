@@ -1,24 +1,29 @@
 import { z } from 'zod';
+import {
+  NODE_20_RUNTIME_NOTICE_ID,
+  NODE_20_SUPPORT_END_DATE,
+  NODE_MINIMUM_UPGRADE_VERSION,
+  NODE_RECOMMENDED_VERSION_LABEL,
+  NODE_RUNTIME_UPGRADE_GUIDE_URL,
+} from '../runtimeCompatibility.js';
 
 // GET /api/version
 
 export const RuntimeCompatibilityNoticeSchema = z.object({
-  id: z.literal('node20-removal-2026-07-30'),
+  id: z.literal(NODE_20_RUNTIME_NOTICE_ID),
   kind: z.literal('runtime_deprecation'),
   runtime: z.literal('node'),
   currentVersion: z.string(),
   currentMajor: z.literal(20),
-  removalDate: z.literal('2026-07-30'),
-  minimumVersion: z.literal('22.22.0'),
-  recommendedVersion: z.literal('24 LTS'),
+  removalDate: z.literal(NODE_20_SUPPORT_END_DATE),
+  minimumVersion: z.literal(NODE_MINIMUM_UPGRADE_VERSION),
+  recommendedVersion: z.literal(NODE_RECOMMENDED_VERSION_LABEL),
   // Lock this to the published upgrade guide alongside the other policy fields.
-  documentationUrl: z.literal(
-    'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-  ),
+  documentationUrl: z.literal(NODE_RUNTIME_UPGRADE_GUIDE_URL),
 });
 
 export const RuntimeCompatibilityPolicySchema = z.object({
-  supportEndDate: z.literal('2026-07-30'),
+  supportEndDate: z.literal(NODE_20_SUPPORT_END_DATE),
 });
 
 export const VersionResponseSchema = z.object({

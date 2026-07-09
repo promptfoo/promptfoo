@@ -4,15 +4,15 @@ import { promisify } from 'util';
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt.js';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
-import { getEnvBool } from './envars';
-import logger from './logger';
-import { isUpdateBlockedByRuntime } from './runtimeCompatibility';
 import {
   NODE_20_SUPPORT_END_DATE_LABEL,
   NODE_MINIMUM_UPGRADE_VERSION,
   NODE_RECOMMENDED_VERSION_LABEL,
   NODE_RUNTIME_UPGRADE_GUIDE_URL,
-} from './types/runtimeCompatibility';
+} from './contracts/runtimeCompatibility';
+import { getEnvBool } from './envars';
+import logger from './logger';
+import { isUpdateBlockedByRuntime } from './runtimeCompatibility';
 import { getUpdateCommands } from './updates/updateCommands';
 import { fetchWithTimeout } from './util/fetch/index';
 

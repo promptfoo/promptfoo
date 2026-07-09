@@ -11,6 +11,7 @@ import * as contractsApiUser from '../../src/contracts/api/user';
 import * as contractsApiVersion from '../../src/contracts/api/version';
 import * as contractsEnv from '../../src/contracts/env';
 import * as contractsPrompts from '../../src/contracts/prompts';
+import * as contractsRuntimeCompatibility from '../../src/contracts/runtimeCompatibility';
 import * as contractsShared from '../../src/contracts/shared';
 import * as contractsTransform from '../../src/contracts/transform';
 import * as contractsValidatorPrompts from '../../src/contracts/validators/prompts';
@@ -27,6 +28,7 @@ import * as legacyApiUser from '../../src/types/api/user';
 import * as legacyApiVersion from '../../src/types/api/version';
 import * as legacyEnv from '../../src/types/env';
 import * as legacyPrompts from '../../src/types/prompts';
+import * as legacyRuntimeCompatibility from '../../src/types/runtimeCompatibility';
 import * as legacyShared from '../../src/types/shared';
 import * as legacyTransform from '../../src/types/transform';
 import * as legacyValidatorPrompts from '../../src/validators/prompts';
@@ -51,6 +53,7 @@ describe('legacy shim equivalence', () => {
     ['api/version', legacyApiVersion, contractsApiVersion],
     ['env', legacyEnv, contractsEnv],
     ['prompts', legacyPrompts, contractsPrompts],
+    ['runtimeCompatibility', legacyRuntimeCompatibility, contractsRuntimeCompatibility],
     ['shared', legacyShared, contractsShared],
     ['transform', legacyTransform, contractsTransform],
     ['validators/prompts', legacyValidatorPrompts, contractsValidatorPrompts],

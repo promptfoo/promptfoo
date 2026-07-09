@@ -14,6 +14,7 @@ export * from './blobs.js';
 export * from './env.js';
 export * from './prompts.js';
 export * from './providers.js';
+export * from './runtimeCompatibility.js';
 export * from './shared.js';
 export * from './transform.js';
 export * from './validators/prompts.js';

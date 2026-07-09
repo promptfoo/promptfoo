@@ -253,6 +253,8 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.NODE_20_RUNTIME_NOTICE_ID).toBe('node20-removal-2026-07-30');
+      expect(contractsModule.RuntimeCompatibilityNoticeSchema).toBeDefined();
       expect(contractsModule.ApiRoutes.Health.expressPath).toBe('/health');
       expect(
         contractsModule.ServerResponseSchemas.Health.Response.safeParse({
@@ -309,6 +311,8 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.NODE_20_RUNTIME_NOTICE_ID).toBe('node20-removal-2026-07-30');
+      expect(contractsModule.RuntimeCompatibilityNoticeSchema).toBeDefined();
       expect(contractsModule.ApiRoutes.Health.expressPath).toBe('/health');
       expect(
         contractsModule.ServerResponseSchemas.Health.Response.safeParse({
