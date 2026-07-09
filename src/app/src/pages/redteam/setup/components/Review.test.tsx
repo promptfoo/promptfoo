@@ -14,6 +14,17 @@ import type { ZodType } from 'zod';
 
 const mockShowToast = vi.hoisted(() => vi.fn());
 const TEST_JOB_ID = '00000000-0000-4000-8000-000000000001';
+const REPLACEMENT_JOB_ID = '00000000-0000-4000-8000-000000000002';
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
 
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
@@ -1768,6 +1779,154 @@ Application Details:
         await timers.advanceByAsync(5000);
       });
       expect(jobRequests).toBe(3);
+    });
+
+    it('ignores a stale terminal response after a replacement polling session starts', async () => {
+      timers.useFakeTimers();
+      const stalledOldRequest = createDeferred<Response>();
+      let statusRequests = 0;
+      let oldJobRequests = 0;
+      let replacementJobRequests = 0;
+
+      vi.mocked(callApi).mockImplementation((url: string) => {
+        if (url === '/redteam/status') {
+          statusRequests += 1;
+          return Promise.resolve({
+            ok: true,
+            json: async () =>
+              statusRequests === 1
+                ? { hasRunningJob: true, jobId: 'old-job' }
+                : { hasRunningJob: false, jobId: null },
+          } as Response);
+        }
+        if (url === '/eval/job/old-job') {
+          oldJobRequests += 1;
+          if (oldJobRequests === 1) {
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                status: 'in-progress',
+                progress: 1,
+                total: 3,
+                logs: ['Old job running'],
+              }),
+            } as Response);
+          }
+          if (oldJobRequests === 2) {
+            return stalledOldRequest.promise;
+          }
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            json: async () => ({ error: 'Old polling session failed' }),
+          } as Response);
+        }
+        if (url === '/redteam/run') {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ id: REPLACEMENT_JOB_ID }),
+          } as Response);
+        }
+        if (url === `/eval/job/${REPLACEMENT_JOB_ID}`) {
+          replacementJobRequests += 1;
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              progress: replacementJobRequests,
+              total: 3,
+              logs: [`Replacement poll ${replacementJobRequests}`],
+            }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+      });
+
+      await act(async () => {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(oldJobRequests).toBe(1);
+
+      act(() => {
+        timers.advanceBy(1000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(oldJobRequests).toBe(2);
+
+      act(() => {
+        timers.advanceBy(1000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(oldJobRequests).toBe(3);
+      expect(mockClearJob).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'Unable to check job status: Old polling session failed',
+        'error',
+      );
+
+      clickElement(screen.getByRole('button', { name: /run now/i }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mockSetJob).toHaveBeenLastCalledWith(REPLACEMENT_JOB_ID);
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+
+      act(() => {
+        timers.advanceBy(1000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(replacementJobRequests).toBe(1);
+      expect(screen.getByText('Replacement poll 1')).toBeInTheDocument();
+
+      await act(async () => {
+        stalledOldRequest.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'complete',
+            result: null,
+            evalId: null,
+            logs: ['Stale old completion'],
+          }),
+        } as Response);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockClearJob).toHaveBeenCalledTimes(1);
+      expect(mockShowToast).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('Stale old completion')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+
+      act(() => {
+        timers.advanceBy(1000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(replacementJobRequests).toBe(2);
+      expect(screen.getByText('Replacement poll 2')).toBeInTheDocument();
     });
 
     it('should show completed state when returning to completed job', async () => {

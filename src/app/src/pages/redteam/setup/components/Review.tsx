@@ -172,6 +172,14 @@ export default function Review({
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
+  const pollingGenerationRef = useRef(0);
+  const invalidatePolling = useCallback(() => {
+    pollingGenerationRef.current += 1;
+    if (pollIntervalRef.current !== null) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -471,11 +479,8 @@ export default function Review({
 
   const startPolling = useCallback(
     (jobId: string) => {
-      // Clear any existing interval
-      if (pollIntervalRef.current) {
-        window.clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
+      invalidatePolling();
+      const generation = pollingGenerationRef.current;
 
       const interval = window.setInterval(async () => {
         try {
@@ -487,13 +492,16 @@ export default function Review({
             },
           )) as Job;
 
+          if (pollingGenerationRef.current !== generation) {
+            return;
+          }
+
           if (status.logs) {
             setLogs(status.logs);
           }
 
           if (status.status === 'complete' || status.status === 'error') {
-            window.clearInterval(interval);
-            pollIntervalRef.current = null;
+            invalidatePolling();
             setIsRunning(false);
             clearJob();
 
@@ -521,6 +529,10 @@ export default function Review({
             }
           }
         } catch (error) {
+          if (pollingGenerationRef.current !== generation) {
+            return;
+          }
+
           const errorMessage = getTerminalPollingErrorMessage(error);
           if (errorMessage === null) {
             // Fetch reports transient network failures as TypeError. Keep polling so a later
@@ -529,8 +541,7 @@ export default function Review({
             return;
           }
 
-          window.clearInterval(interval);
-          pollIntervalRef.current = null;
+          invalidatePolling();
           setIsRunning(false);
           clearJob();
           showToast(errorMessage, 'error');
@@ -539,7 +550,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast, signalEvalCompleted],
+    [clearJob, invalidatePolling, recordEvent, showToast, signalEvalCompleted],
   );
 
   const handleRunWithSettings = async () => {
@@ -573,11 +584,8 @@ export default function Review({
       return;
     }
 
-    // Clear any existing polling interval before starting a new job
-    if (pollIntervalRef.current) {
-      window.clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
+    // Invalidate pending callbacks before starting a replacement job.
+    invalidatePolling();
 
     recordEvent('feature_used', {
       feature: 'redteam_config_run',
@@ -638,21 +646,13 @@ export default function Review({
     try {
       await callApiJson(ApiRoutes.Redteam.Cancel, RedteamResponseSchemas.Cancel.Response);
 
-      if (pollIntervalRef.current) {
-        window.clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-
+      invalidatePolling();
       setIsRunning(false);
       clearJob();
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       if (error instanceof ApiResponseError && error.status === 400) {
-        if (pollIntervalRef.current) {
-          window.clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-
+        invalidatePolling();
         setIsRunning(false);
         clearJob();
         showToast('No running job was found. You can start a new evaluation.', 'warning');
@@ -678,11 +678,9 @@ export default function Review({
 
   useEffect(() => {
     return () => {
-      if (pollIntervalRef.current) {
-        window.clearInterval(pollIntervalRef.current);
-      }
+      invalidatePolling();
     };
-  }, []);
+  }, [invalidatePolling]);
 
   return (
     <PageWrapper title="Review & Run" onBack={onBack}>
