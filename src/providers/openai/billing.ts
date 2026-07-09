@@ -5,6 +5,7 @@ import type { ProviderConfig } from '../shared';
 type OpenAITextRates = {
   input: number;
   cachedInput?: number;
+  cacheWriteInput?: number;
   output?: number;
 };
 
@@ -25,6 +26,7 @@ export type OpenAIProcessingTier = 'standard' | 'batch' | 'flex' | 'priority';
 export type OpenAIBillingUsage = {
   totalInputTokens: number;
   cachedInputTokens: number;
+  cacheWriteInputTokens: number;
   cachedTextInputTokens: number;
   cachedAudioInputTokens: number;
   cachedImageInputTokens: number;
@@ -59,7 +61,7 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 }
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
-  { models: ['gpt-5.6-sol'], rates: perMillion(0.5) },
+  { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.5) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.25) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.1) },
   { models: ['chat-latest'], rates: perMillion(0.5) },
@@ -113,11 +115,18 @@ const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
 ]);
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.5) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.2) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
 ]);
 
 const FLEX_SUPPORTED_TEXT_MODELS = new Set([
+  'gpt-5.6',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
   'gpt-5.5',
   'gpt-5.5-2026-04-23',
   'gpt-5.5-pro',
@@ -152,6 +161,33 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
 ]);
 
 const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['gpt-5.6', 'gpt-5.6-sol'],
+    rates: {
+      input: perMillion(10),
+      cachedInput: perMillion(1),
+      cacheWriteInput: perMillion(12.5),
+      output: perMillion(60),
+    },
+  },
+  {
+    models: ['gpt-5.6-terra'],
+    rates: {
+      input: perMillion(5),
+      cachedInput: perMillion(0.5),
+      cacheWriteInput: perMillion(6.25),
+      output: perMillion(30),
+    },
+  },
+  {
+    models: ['gpt-5.6-luna'],
+    rates: {
+      input: perMillion(2),
+      cachedInput: perMillion(0.2),
+      cacheWriteInput: perMillion(2.5),
+      output: perMillion(12),
+    },
+  },
   {
     models: ['gpt-5.5', 'gpt-5.5-2026-04-23'],
     rates: { input: perMillion(12.5), cachedInput: perMillion(1.25), output: perMillion(75) },
@@ -365,6 +401,8 @@ const ALL_TEXT_MODELS = OPENAI_BILLING_MODELS;
 
 const TEXT_MODELS_BY_ID = new Map(ALL_TEXT_MODELS.map((model) => [model.id, model]));
 
+const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+
 type OpenAIUsageParts = {
   usage: any;
   inputDetails: any;
@@ -449,7 +487,36 @@ function getBaseTextRates(
     cachedInput:
       (longContext ? LONG_CONTEXT_CACHED_INPUT_RATES[modelName] : undefined) ??
       STANDARD_CACHED_INPUT_RATES[modelName],
+    ...(GPT_5_6_MODELS.has(modelName)
+      ? { cacheWriteInput: (longContext?.input ?? model.cost.input) * 1.25 }
+      : {}),
     output: longContext?.output ?? model.cost.output,
+  };
+}
+
+function applyLongContextRates(
+  modelName: string,
+  rates: OpenAITextRates,
+  totalInputTokens: number,
+): OpenAITextRates {
+  const model = TEXT_MODELS_BY_ID.get(modelName);
+  const cost = model?.cost;
+  const longContext = cost?.longContext;
+  if (!cost || !longContext || totalInputTokens <= longContext.threshold) {
+    return rates;
+  }
+
+  const inputMultiplier = longContext.input / cost.input;
+  const outputMultiplier = longContext.output / cost.output;
+  return {
+    input: rates.input * inputMultiplier,
+    ...(rates.cachedInput === undefined
+      ? {}
+      : { cachedInput: rates.cachedInput * inputMultiplier }),
+    ...(rates.cacheWriteInput === undefined
+      ? {}
+      : { cacheWriteInput: rates.cacheWriteInput * inputMultiplier }),
+    ...(rates.output === undefined ? {} : { output: rates.output * outputMultiplier }),
   };
 }
 
@@ -491,7 +558,9 @@ function getModelRates(
   }
 
   if (tier === 'priority' && PRIORITY_TEXT_RATES[modelName]) {
-    return { text: PRIORITY_TEXT_RATES[modelName] };
+    return {
+      text: applyLongContextRates(modelName, PRIORITY_TEXT_RATES[modelName], totalInputTokens),
+    };
   }
 
   const text = getBaseTextRates(modelName, totalInputTokens);
@@ -505,6 +574,9 @@ function getModelRates(
       ? {
           input: text.input * 0.5,
           ...(text.cachedInput === undefined ? {} : { cachedInput: text.cachedInput * 0.5 }),
+          ...(text.cacheWriteInput === undefined
+            ? {}
+            : { cacheWriteInput: text.cacheWriteInput * 0.5 }),
           ...(text.output === undefined ? {} : { output: text.output * 0.5 }),
         }
       : text;
@@ -559,6 +631,9 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
   return {
     totalInputTokens,
     cachedInputTokens: getNumericValue(inputDetails.cached_tokens ?? usage.cached_input_tokens),
+    cacheWriteInputTokens: getNumericValue(
+      inputDetails.cache_write_tokens ?? usage.cache_write_input_tokens,
+    ),
     cachedTextInputTokens: getNumericValue(cachedInputDetails.text_tokens),
     cachedAudioInputTokens: getNumericValue(cachedInputDetails.audio_tokens),
     cachedImageInputTokens: getNumericValue(cachedInputDetails.image_tokens),
@@ -634,12 +709,22 @@ function calculateTextCost(
 ): number {
   const textInputCost = config.inputCost ?? config.cost ?? rates.input;
   const cachedInputCost = config.inputCost ?? config.cost ?? rates.cachedInput ?? textInputCost;
+  const cacheWriteInputCost =
+    config.inputCost ?? config.cost ?? rates.cacheWriteInput ?? textInputCost;
   const outputCost = config.outputCost ?? config.cost ?? rates.output ?? 0;
-  const uncachedTextInputTokens = Math.max(usage.textInputTokens - cachedTextInputTokens, 0);
+  const cacheWriteInputTokens = Math.min(
+    usage.cacheWriteInputTokens,
+    Math.max(usage.textInputTokens - cachedTextInputTokens, 0),
+  );
+  const uncachedTextInputTokens = Math.max(
+    usage.textInputTokens - cachedTextInputTokens - cacheWriteInputTokens,
+    0,
+  );
 
   return (
     uncachedTextInputTokens * textInputCost +
     cachedTextInputTokens * cachedInputCost +
+    cacheWriteInputTokens * cacheWriteInputCost +
     usage.textOutputTokens * outputCost
   );
 }

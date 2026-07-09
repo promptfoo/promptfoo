@@ -1650,14 +1650,17 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
-        'max',
-        'ultra',
-      ] as const)('should pass GPT-5.6 %s reasoning to thread options', async (effort) => {
+        ['gpt-5.6-sol', 'max'],
+        ['gpt-5.6-sol', 'ultra'],
+        ['gpt-5.6-terra', 'max'],
+        ['gpt-5.6-terra', 'ultra'],
+        ['gpt-5.6-luna', 'max'],
+      ] as const)('should pass %s %s reasoning to thread options', async (model, effort) => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-5.6-sol',
+            model,
             model_reasoning_effort: effort,
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -1667,7 +1670,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'gpt-5.6-sol',
+            model,
             modelReasoningEffort: effort,
           }),
         );

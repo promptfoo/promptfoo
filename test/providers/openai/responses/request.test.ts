@@ -305,6 +305,7 @@ describe('OpenAiResponsesProvider request building', () => {
       config: {
         apiKey: 'test-key',
         prompt_cache_key: 'shared-prefix',
+        prompt_cache_options: { mode: 'explicit', ttl: '30m' },
         prompt_cache_retention: '24h',
         include: ['web_search_call.results', 'reasoning.encrypted_content'],
       },
@@ -313,6 +314,7 @@ describe('OpenAiResponsesProvider request building', () => {
     const { body } = await provider.getOpenAiBody('Test prompt');
 
     expect(body.prompt_cache_key).toBe('shared-prefix');
+    expect(body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '30m' });
     expect(body.prompt_cache_retention).toBe('24h');
     expect(body.include).toEqual(['web_search_call.results', 'reasoning.encrypted_content']);
   });

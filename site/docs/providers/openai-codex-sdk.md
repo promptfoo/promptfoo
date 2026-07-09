@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-The OpenAI Codex SDK provider requires the `@openai/codex-sdk` package to be installed separately:
+The OpenAI Codex SDK provider requires the `@openai/codex-sdk` package to be installed separately. GPT-5.6 requires version 0.144.0 or later:
 
 ```bash
-npm install @openai/codex-sdk
+npm install @openai/codex-sdk@^0.144.0
 ```
 
 Use Node.js `^20.20.0` or `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -260,7 +260,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-The SDK supports various OpenAI models. GPT-5.5 remains the broadly available default. If your account has GPT-5.6 preview access, select one of the public preview identifiers:
+GPT-5.6 is the current model family. Choose `gpt-5.6-sol` for frontier capability, `gpt-5.6-terra` for balanced cost and performance, or `gpt-5.6-luna` for efficient high-volume work:
 
 ```yaml
 providers:
@@ -272,8 +272,8 @@ providers:
 
 Supported models include:
 
-- **GPT-5.6** - Limited-preview tiers (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`)
-- **GPT-5.5** - Latest frontier model for professional work (`gpt-5.5`)
+- **GPT-5.6** - Current family (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`)
+- **GPT-5.5** - Previous frontier model for professional work (`gpt-5.5`)
 - **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
 - **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
 - **GPT-5.4 Pro** - Previous higher-capacity variant (`gpt-5.4-pro`)
@@ -285,7 +285,7 @@ Supported models include:
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
-GPT-5.6 and GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. GPT-5.6 remains limited to accounts enabled by OpenAI. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
+GPT-5.6 and GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
 
 ### Mini Models
 
@@ -620,22 +620,22 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                                     | Supported Models                                                                                              |
-| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                     |
-| `low`     | Light reasoning, faster responses               | All models                                                                                                    |
-| `medium`  | Balanced (default)                              | All models                                                                                                    |
-| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                    |
-| `xhigh`   | Extra-high reasoning depth                      | gpt-5.6, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
-| `max`     | Deepest single-agent reasoning                  | gpt-5.6-sol                                                                                                   |
-| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-5.6-sol                                                                                                   |
+| Level     | Description                                     | Supported Models                                                                                                                               |
+| --------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                                      |
+| `low`     | Light reasoning, faster responses               | All models                                                                                                                                     |
+| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                                     |
+| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                                     |
+| `xhigh`   | Extra-high reasoning depth                      | gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
+| `max`     | Deepest single-agent reasoning                  | gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                                                       |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-5.6-sol, gpt-5.6-terra                                                                                                                     |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
-`max` and `ultra` are public GPT-5.6 preview options. `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value.
+`ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value.
 
-:::note `max`/`ultra` depend on the Codex runtime catalog
-`max` and `ultra` only take effect when the installed Codex runtime recognizes the selected GPT-5.6 model for your account. If the bundled Codex model catalog does not include GPT-5.6, Codex **silently falls back to its default reasoning** — the value is ignored and **no error is raised**, so an eval may run at a lower reasoning level than requested. Confirm the effective reasoning with request tracing. For `max`, the [Responses API](/docs/providers/openai#gpt-56-limited-preview) path (`openai:responses:gpt-5.6-sol`) applies it directly and is the more reliable option.
+:::note GPT-5.6 requires Codex 0.144.0 or later
+Use `@openai/codex-sdk` 0.144.0 or later. If optional dependencies are omitted, install that version explicitly. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:responses:gpt-5.6-sol`.
 :::
 
 ## Additional Directories

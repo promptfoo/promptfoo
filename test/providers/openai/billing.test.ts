@@ -16,6 +16,7 @@ describe('OpenAI billing helpers', () => {
           image_tokens: 194,
           audio_tokens: 6,
           cached_tokens: 12,
+          cache_write_tokens: 5,
         },
         output_tokens_details: {
           text_tokens: 180,
@@ -26,6 +27,7 @@ describe('OpenAI billing helpers', () => {
     ).toEqual({
       totalInputTokens: 220,
       cachedInputTokens: 12,
+      cacheWriteInputTokens: 5,
       cachedTextInputTokens: 0,
       cachedAudioInputTokens: 0,
       cachedImageInputTokens: 0,
@@ -62,6 +64,7 @@ describe('OpenAI billing helpers', () => {
     ).toEqual({
       totalInputTokens: 30,
       cachedInputTokens: 4,
+      cacheWriteInputTokens: 0,
       cachedTextInputTokens: 3,
       cachedAudioInputTokens: 1,
       cachedImageInputTokens: 0,
@@ -116,25 +119,51 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 0.5 + 500 * 0.05 + 1_000 * 4) / 1e6, 10);
   });
 
-  it('prices GPT-5.6 preview cached input at the published 90% discount', () => {
+  it.each([
+    ['gpt-5.6', 5, 0.5, 30],
+    ['gpt-5.6-sol', 5, 0.5, 30],
+    ['gpt-5.6-terra', 2.5, 0.25, 15],
+    ['gpt-5.6-luna', 1, 0.1, 6],
+  ])('prices %s cached input at the published 90%% discount', (model, inputRate, cachedRate, outputRate) => {
     const usage = {
       prompt_tokens: 2_000,
       completion_tokens: 1_000,
       prompt_tokens_details: { cached_tokens: 500 },
     };
 
-    expect(calculateOpenAIUsageCost('gpt-5.6-sol', {}, usage)).toBeCloseTo(
-      (1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6,
+    expect(calculateOpenAIUsageCost(model, {}, usage)).toBeCloseTo(
+      (1_500 * inputRate + 500 * cachedRate + 1_000 * outputRate) / 1e6,
       10,
     );
-    expect(calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage)).toBeCloseTo(
-      (1_500 * 2.5 + 500 * 0.25 + 1_000 * 15) / 1e6,
-      10,
-    );
-    expect(calculateOpenAIUsageCost('gpt-5.6-luna', {}, usage)).toBeCloseTo(
-      (1_500 * 1 + 500 * 0.1 + 1_000 * 6) / 1e6,
-      10,
-    );
+  });
+
+  it('prices GPT-5.6 explicit cache writes at 1.25x input', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5.6',
+        {},
+        {
+          input_tokens: 2_000,
+          output_tokens: 1_000,
+          input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+        },
+      ),
+    ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
+  });
+
+  it('uses GPT-5.6 Flex and Priority rates, including long-context multipliers', () => {
+    const usage = {
+      input_tokens: 300_000,
+      output_tokens: 1_000,
+      input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'flex' }),
+    ).toBeCloseTo((150_000 * 2.5 + 100_000 * 0.25 + 50_000 * 3.125 + 1_000 * 11.25) / 1e6, 10);
+    expect(
+      calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'priority' }),
+    ).toBeCloseTo((150_000 * 10 + 100_000 * 1 + 50_000 * 12.5 + 1_000 * 45) / 1e6, 10);
   });
 
   it('prices chat-latest cached input at the published discount', () => {

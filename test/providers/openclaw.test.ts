@@ -781,14 +781,14 @@ describe('OpenClaw Provider', () => {
     it('should set OpenClaw context headers from typed config', () => {
       const provider = new OpenClawChatProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.4',
+          backend_model: 'openai/gpt-5.6-terra',
           message_channel: 'slack',
           account_id: 'work',
           scopes: ['operator.read', 'operator.write'],
         },
       });
 
-      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.6-terra');
       expect(provider.config.headers?.['x-openclaw-message-channel']).toBe('slack');
       expect(provider.config.headers?.['x-openclaw-account-id']).toBe('work');
       expect(provider.config.headers?.['x-openclaw-scopes']).toBe('operator.read,operator.write');
@@ -797,12 +797,12 @@ describe('OpenClaw Provider', () => {
     it('should prefer typed OpenClaw context config over custom header values', () => {
       const provider = new OpenClawChatProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.4',
+          backend_model: 'openai/gpt-5.6-terra',
           headers: { 'x-openclaw-model': 'stale-model' },
         },
       });
 
-      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.6-terra');
     });
 
     it('should price usage from an explicit OpenAI backend model override', async () => {
@@ -819,7 +819,7 @@ describe('OpenClaw Provider', () => {
 
       const provider = new OpenClawChatProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.4-mini',
+          backend_model: 'openai/gpt-5.6-terra',
           gateway_url: 'http://test:18789',
         },
       });
@@ -976,7 +976,7 @@ describe('OpenClaw Provider', () => {
 
       const provider = new OpenClawResponsesProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.4-mini',
+          backend_model: 'openai/gpt-5.6-terra',
           gateway_url: 'http://test:18789',
         },
       });

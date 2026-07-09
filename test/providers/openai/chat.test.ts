@@ -2052,6 +2052,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o', {
         config: {
           prompt_cache_key: 'shared-prefix',
+          prompt_cache_options: { mode: 'explicit', ttl: '30m' },
           prompt_cache_retention: 'in_memory',
         },
       });
@@ -2059,6 +2060,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const { body } = await provider.getOpenAiBody('Test prompt');
 
       expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '30m' });
       expect(body.prompt_cache_retention).toBe('in_memory');
     });
 
@@ -2121,6 +2123,22 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.reasoning_effort).toBeUndefined();
+    });
+
+    it.each([
+      'gpt-5.6',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+    ])('should forward max reasoning_effort for %s', async (model) => {
+      const provider = new OpenAiChatCompletionProvider(model, {
+        config: { reasoning_effort: 'max' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning_effort).toBe('max');
+      expect(body.temperature).toBeUndefined();
     });
 
     it('should handle o4-mini with reasoning_effort and service_tier', async () => {
