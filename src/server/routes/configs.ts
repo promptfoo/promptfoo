@@ -1,10 +1,10 @@
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
+import { ConfigSchemas } from '../../contracts/api/configs';
 import { ApiRoutes } from '../../contracts/api/routes';
 import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
-import { ConfigSchemas } from '../../types/api/configs';
 import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 

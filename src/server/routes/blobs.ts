@@ -2,6 +2,7 @@ import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
 import { getBlobByHash, getBlobUrl } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
+import { BlobsSchemas } from '../../contracts/api/blobs';
 import { ApiRoutes } from '../../contracts/api/routes';
 import { getDb } from '../../database';
 import {
@@ -11,7 +12,6 @@ import {
   evalsTable,
 } from '../../database/tables';
 import logger from '../../logger';
-import { BlobsSchemas } from '../../types/api/blobs';
 import { replyError, replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 

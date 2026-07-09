@@ -2,23 +2,23 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ErrorResponseSchema } from '../../../src/contracts/api/common';
+import { ConfigSchemas } from '../../../src/contracts/api/configs';
+import { MediaSchemas } from '../../../src/contracts/api/media';
+import { ModelAuditSchemas } from '../../../src/contracts/api/modelAudit';
+import { TracesSchemas } from '../../../src/contracts/api/traces';
+import { UserSchemas } from '../../../src/contracts/api/user';
+import { VersionSchemas } from '../../../src/contracts/api/version';
 import {
   createServerOpenApiDocument,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
-import { ErrorResponseSchema } from '../../../src/types/api/common';
-import { ConfigSchemas } from '../../../src/types/api/configs';
 import { EvalSchemas } from '../../../src/types/api/eval';
-import { MediaSchemas } from '../../../src/types/api/media';
-import { ModelAuditSchemas } from '../../../src/types/api/modelAudit';
 import { ProviderSchemas } from '../../../src/types/api/providers';
 import { RedteamSchemas } from '../../../src/types/api/redteam';
 import { ServerSchemas } from '../../../src/types/api/server';
-import { TracesSchemas } from '../../../src/types/api/traces';
-import { UserSchemas } from '../../../src/types/api/user';
-import { VersionSchemas } from '../../../src/types/api/version';
 import type { Express } from 'express';
 import type { ZodType } from 'zod';
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
+import { ErrorResponseSchema } from '../../contracts/api/common';
 import logger from '../../logger';
-import { ErrorResponseSchema } from '../../types/api/common';
 import type { Response } from 'express';
 
 const MAX_CAUSE_DEPTH = 4;

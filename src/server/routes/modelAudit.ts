@@ -5,11 +5,11 @@ import path from 'path';
 import { StringDecoder } from 'string_decoder';
 
 import { Router } from 'express';
+import { ModelAuditSchemas } from '../../contracts/api/modelAudit';
 import { ApiRoutes } from '../../contracts/api/routes';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
-import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import { checkModelAuditInstalled } from '../../util/modelAuditInstall';
 import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';

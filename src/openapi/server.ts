@@ -8,19 +8,19 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { VERSION } from '../constants';
+import { BlobsSchemas } from '../contracts/api/blobs';
+import { ErrorResponseSchema } from '../contracts/api/common';
+import { ConfigSchemas } from '../contracts/api/configs';
+import { MediaSchemas } from '../contracts/api/media';
+import { ModelAuditSchemas } from '../contracts/api/modelAudit';
 import { type ApiRouteContract, ApiRoutes } from '../contracts/api/routes';
-import { BlobsSchemas } from '../types/api/blobs';
-import { ErrorResponseSchema } from '../types/api/common';
-import { ConfigSchemas } from '../types/api/configs';
+import { TracesSchemas } from '../contracts/api/traces';
+import { UserSchemas } from '../contracts/api/user';
+import { VersionSchemas } from '../contracts/api/version';
 import { EvalSchemas } from '../types/api/eval';
-import { MediaSchemas } from '../types/api/media';
-import { ModelAuditSchemas } from '../types/api/modelAudit';
 import { ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
 import { ServerSchemas } from '../types/api/server';
-import { TracesSchemas } from '../types/api/traces';
-import { UserSchemas } from '../types/api/user';
-import { VersionSchemas } from '../types/api/version';
 
 extendZodWithOpenApi(z);
 

@@ -5,10 +5,10 @@
  */
 
 import express from 'express';
+import { MediaSchemas } from '../../contracts/api/media';
 import { ApiRoutes } from '../../contracts/api/routes';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
-import { MediaSchemas } from '../../types/api/media';
 import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 

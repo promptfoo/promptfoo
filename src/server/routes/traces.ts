@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { ApiRoutes } from '../../contracts/api/routes';
+import { TracesSchemas } from '../../contracts/api/traces';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
-import { TracesSchemas } from '../../types/api/traces';
 import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 

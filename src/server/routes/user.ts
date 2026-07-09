@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ApiRoutes } from '../../contracts/api/routes';
+import { UserSchemas } from '../../contracts/api/user';
 import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
@@ -12,7 +13,6 @@ import {
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { UserSchemas } from '../../types/api/user';
 import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
