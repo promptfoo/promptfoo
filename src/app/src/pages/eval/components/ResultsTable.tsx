@@ -801,7 +801,7 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
-function getManualRatingUpdate({
+export function getManualRatingUpdate({
   existingOutput,
   isPass,
   score,
@@ -847,11 +847,13 @@ function getManualRatingUpdate({
       finalScore = averageComponentResultScore(countedResults, finalScore);
     } else if (componentResults.length > 0) {
       // Every remaining assertion is metric-only. Mirror the server-side
-      // aggregation for all-metricOnly tests without a threshold (pass, with
-      // an aggregate score of 0) so clearing the rating doesn't leave the
-      // stale manual override in place.
-      finalPass = true;
+      // aggregation so clearing the rating doesn't leave the stale manual
+      // override in place: the aggregate score is 0 and, with nothing left to
+      // fail, the test passes unless a numeric test-level threshold demands
+      // otherwise (pass = score >= threshold, same gate as AssertionsResult).
+      const threshold = existingOutput.testCase?.threshold;
       finalScore = 0;
+      finalPass = typeof threshold === 'number' && !Number.isNaN(threshold) ? threshold <= 0 : true;
     }
 
     return {
