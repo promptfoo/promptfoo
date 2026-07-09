@@ -318,6 +318,241 @@ export async function matchesContextRelevance(
   };
 }
 
+type FaithfulnessVerdict = 'yes' | 'no' | 'unknown';
+
+interface ParsedFaithfulnessVerdict {
+  ordinal?: number;
+  verdict: FaithfulnessVerdict;
+}
+
+const faithfulnessEntryPrefix =
+  /^(?:(?:(?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]|verdict\s*:)\s*)+/;
+
+function parseFaithfulnessVerdict(
+  value: string,
+  requireExplicitEntry = false,
+): FaithfulnessVerdict | undefined {
+  const trimmed = value.trim();
+  const hasBulletPrefix = /^(?:[-+*\u2013\u2014\u2022]\s+)/u.test(trimmed);
+  let normalized = trimmed.replace(/^[^\p{L}\p{N}]*/u, '');
+  const hasEntryPrefix = hasBulletPrefix || faithfulnessEntryPrefix.test(normalized);
+  normalized = normalized.replace(faithfulnessEntryPrefix, '').replace(/^[^\p{L}]*/u, '');
+
+  const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1] as 'yes' | 'no' | undefined;
+  if (verdict && !requireExplicitEntry) {
+    return verdict;
+  }
+  const suffix = verdict ? normalized.slice(verdict.length).trim() : '';
+  if (
+    verdict &&
+    (hasEntryPrefix || /^(?:$|[^\p{L}\p{N}]+$|because\b|[:(\[\-\u2013\u2014])/u.test(suffix))
+  ) {
+    return verdict;
+  }
+  const unwrapped = normalized.match(/^.*\p{L}/su)?.[0] ?? '';
+  const unknownMatch =
+    /^(?:maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}])/u.exec(
+      unwrapped,
+    );
+  const unknownSuffix = unknownMatch ? unwrapped.slice(unknownMatch[0].length).trim() : '';
+  const isKnownUnknown = Boolean(
+    unknownMatch && /^(?:$|[:(\[\-\u2013\u2014])/u.test(unknownSuffix),
+  );
+  if (requireExplicitEntry) {
+    return hasEntryPrefix || isKnownUnknown ? 'unknown' : undefined;
+  }
+
+  // A labelled or compact value is still an ordered slot, even when it is unknown.
+  const isCompactUnknown =
+    !/^.$/u.test(unwrapped) && /^(?=.*\p{L})[\p{L}\p{N}]+(?:[/_-][\p{L}\p{N}]+)*$/u.test(unwrapped);
+  return hasEntryPrefix || isCompactUnknown ? 'unknown' : undefined;
+}
+
+function getFaithfulnessOrdinal(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (/^[^\p{L}\p{N}]*[+\-\u2212]\d+\s*[-\u2013\u2014.):\]]/u.test(trimmed)) {
+    return Number.NaN;
+  }
+  const normalized = trimmed.replace(/^[^\p{L}\p{N}]*/u, '');
+  const ordinal = /^(?:statement\s+)?(\d+)\s*[-\u2013\u2014.):\]]/u.exec(normalized)?.[1];
+  return ordinal ? Number(ordinal) : undefined;
+}
+
+function hasFaithfulnessVerdictExplanation(value: string): boolean {
+  let normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
+  normalized = normalized.replace(faithfulnessEntryPrefix, '').replace(/^[^\p{L}]*/u, '');
+  const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1];
+  return Boolean(verdict && /\p{L}/u.test(normalized.slice(verdict.length)));
+}
+
+function* getFaithfulnessVerdictChunks(value: string): Generator<string> {
+  const entryStarts = [
+    'yes',
+    'no',
+    'maybe',
+    'perhaps',
+    'unknown',
+    'unclear',
+    'undetermined',
+    'n/a',
+    'not sure',
+  ];
+  let chunkStart = 0;
+  let hasVerdictExplanation: boolean | undefined;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (character !== '.' && character !== '\r' && character !== '\n') {
+      continue;
+    }
+    if (character === '.') {
+      const previous = value[index - 1] ?? '';
+      const next = value[index + 1] ?? '';
+      if (/[\p{L}\p{N}]/u.test(previous) && /[\p{L}\p{N}]/u.test(next)) {
+        let tokenStart = index - 1;
+        while (tokenStart > chunkStart && /[\p{L}\p{N}]/u.test(value[tokenStart - 1])) {
+          tokenStart--;
+        }
+        const leftToken = value.slice(tokenStart, index);
+        const startsEntry = entryStarts.some(
+          (entry) =>
+            value.startsWith(entry, index + 1) &&
+            !/[\p{L}\p{N}]/u.test(value[index + entry.length + 1] ?? ''),
+        );
+        const followsVerdict = leftToken === 'yes' || leftToken === 'no';
+        if (!followsVerdict && !startsEntry) {
+          continue;
+        }
+        hasVerdictExplanation ??= hasFaithfulnessVerdictExplanation(value.slice(chunkStart, index));
+        if (hasVerdictExplanation) {
+          continue;
+        }
+      }
+    }
+    if (index > chunkStart) {
+      yield value.slice(chunkStart, index);
+    }
+    chunkStart = index + 1;
+    hasVerdictExplanation = undefined;
+  }
+  if (chunkStart < value.length) {
+    yield value.slice(chunkStart);
+  }
+}
+
+function parseCommaSeparatedFaithfulnessVerdicts(
+  chunk: string,
+  expectedCount: number,
+): ParsedFaithfulnessVerdict[] | null | undefined {
+  if (!chunk.includes(',') && !chunk.includes(' and ')) {
+    return undefined;
+  }
+
+  const parsedVerdicts: ParsedFaithfulnessVerdict[] = [];
+  let hasConjunction = false;
+  for (const match of chunk.matchAll(/[^,]+/g)) {
+    const value = match[0].trim();
+    const values = value.startsWith('and ') ? [value.slice(4)] : [value];
+    hasConjunction ||= values[0] !== value;
+    if (values[0] === value && !parseFaithfulnessVerdict(value, true)) {
+      const conjunctionIndex = value.lastIndexOf(' and ');
+      if (conjunctionIndex >= 0) {
+        values.splice(0, 1, value.slice(0, conjunctionIndex), value.slice(conjunctionIndex + 5));
+        hasConjunction = true;
+      }
+    }
+    for (const entry of values) {
+      const verdict = parseFaithfulnessVerdict(entry, true);
+      if (!verdict) {
+        return hasConjunction ? null : undefined;
+      }
+      parsedVerdicts.push({ ordinal: getFaithfulnessOrdinal(entry), verdict });
+      if (parsedVerdicts.length > expectedCount) {
+        return null;
+      }
+    }
+  }
+  if (hasConjunction && parsedVerdicts.length !== expectedCount) {
+    return null;
+  }
+  return parsedVerdicts.length > 1 ? parsedVerdicts : undefined;
+}
+
+function parseFinalFaithfulnessVerdicts(
+  output: string,
+  marker: string,
+  expectedCount: number,
+): FaithfulnessVerdict[] | undefined {
+  const markerIndex = output.indexOf(marker);
+  if (markerIndex < 0 || output.indexOf(marker, markerIndex + marker.length) >= 0) {
+    return undefined;
+  }
+
+  const finalVerdicts = output
+    .slice(markerIndex + marker.length)
+    .replace(
+      /\s((?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]\s*)(?=[^\p{L}\p{N}]*(?:yes|no|maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}]))/gu,
+      '\n$1',
+    );
+  const parsedVerdicts: FaithfulnessVerdict[] = [];
+  const seenOrdinals = new Set<number>();
+  let pendingOrdinal: string | undefined;
+  const addOrdinal = (explicitOrdinal: number | undefined): boolean => {
+    if (explicitOrdinal === undefined) {
+      return true;
+    }
+    if (
+      !Number.isSafeInteger(explicitOrdinal) ||
+      explicitOrdinal < 1 ||
+      explicitOrdinal > expectedCount ||
+      seenOrdinals.has(explicitOrdinal)
+    ) {
+      return false;
+    }
+    seenOrdinals.add(explicitOrdinal);
+    return true;
+  };
+
+  // Keep ordered slots and only accept a comma list when every item looks like an entry.
+  // Duplicate markers or ordinals and excess entries are ambiguous, so fail closed.
+  for (const value of getFaithfulnessVerdictChunks(finalVerdicts)) {
+    const ordinal = /^\s*((?:statement\s+)?\d+)\s*$/.exec(value)?.[1];
+    if (ordinal) {
+      pendingOrdinal = ordinal;
+      continue;
+    }
+
+    const chunk = pendingOrdinal ? `${pendingOrdinal}) ${value}` : value;
+    pendingOrdinal = undefined;
+    const commaVerdicts = parseCommaSeparatedFaithfulnessVerdicts(chunk, expectedCount);
+    if (commaVerdicts === null) {
+      return undefined;
+    }
+    if (commaVerdicts) {
+      for (const { ordinal: explicitOrdinal, verdict } of commaVerdicts) {
+        if (!addOrdinal(explicitOrdinal)) {
+          return undefined;
+        }
+        parsedVerdicts.push(verdict);
+        if (parsedVerdicts.length > expectedCount) {
+          return undefined;
+        }
+      }
+    } else {
+      if (!addOrdinal(getFaithfulnessOrdinal(chunk))) {
+        return undefined;
+      }
+      const verdict = parseFaithfulnessVerdict(chunk);
+      if (verdict) {
+        parsedVerdicts.push(verdict);
+      }
+    }
+    if (parsedVerdicts.length > expectedCount) {
+      return undefined;
+    }
+  }
+  return parsedVerdicts;
+}
+
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
@@ -402,17 +637,21 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  let finalAnswer = 'Final verdict for each statement in order:';
-  finalAnswer = finalAnswer.toLowerCase();
-  let verdicts = resp.output.toLowerCase().trim();
+  const finalAnswer = 'final verdict for each statement in order:';
+  const verdicts = resp.output
+    .toLowerCase()
+    .trim()
+    .replace(/final verdict for each statement in order\s*:/gu, finalAnswer);
   let score = 0;
   if (statements.length > 0) {
     if (verdicts.includes(finalAnswer)) {
-      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-      if (parsedVerdicts.length > 0) {
-        score =
-          1 - parsedVerdicts.filter((answer) => !answer.includes('yes')).length / statements.length;
+      const parsedVerdicts = parseFinalFaithfulnessVerdicts(
+        verdicts,
+        finalAnswer,
+        statements.length,
+      );
+      if (parsedVerdicts) {
+        score = parsedVerdicts.filter((verdict) => verdict === 'yes').length / statements.length;
       }
     } else {
       const noVerdictCount = verdicts.split('verdict: no').length - 1;
