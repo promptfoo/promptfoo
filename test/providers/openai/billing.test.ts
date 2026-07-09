@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateObservableOpenAIToolCost,
   calculateOpenAIUsageCost,
+  calculateOpenAIUsageCostFromTokenUsage,
   extractOpenAIBillingUsage,
 } from '../../../src/providers/openai/billing';
 
@@ -148,6 +149,27 @@ describe('OpenAI billing helpers', () => {
           input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
         },
       ),
+    ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
+  });
+
+  it('omits GPT-5.6 cost when summarized usage lacks cache-write tokens', () => {
+    expect(
+      calculateOpenAIUsageCostFromTokenUsage('gpt-5.6-sol', {
+        prompt: 2_000,
+        completion: 1_000,
+        cached: 500,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('prices GPT-5.6 summarized usage when cache-write tokens are known', () => {
+    expect(
+      calculateOpenAIUsageCostFromTokenUsage('gpt-5.6-sol', {
+        prompt: 2_000,
+        completion: 1_000,
+        cached: 500,
+        completionDetails: { cacheCreationInputTokens: 250 },
+      }),
     ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
   });
 

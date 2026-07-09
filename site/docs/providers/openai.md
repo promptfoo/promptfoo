@@ -546,7 +546,7 @@ OpenAI [launched GPT-5.6 for general availability](https://openai.com/index/gpt-
 | `gpt-5.6-terra` | Balanced                | $2.50 / 1M | $0.25 / 1M   | $15.00 / 1M |
 | `gpt-5.6-luna`  | Fast and cost-efficient | $1.00 / 1M | $0.10 / 1M   | $6.00 / 1M  |
 
-GPT-5.6 supports `max` reasoning. With Sol, use `reasoning.mode: pro` for Pro mode. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
+GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
 Prompt-cache reads receive a 90% discount, and explicit cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`. Requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 

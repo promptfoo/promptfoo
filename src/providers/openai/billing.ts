@@ -434,6 +434,9 @@ export type OpenAITokenUsageSummary = {
   prompt?: number;
   completion?: number;
   cached?: number;
+  completionDetails?: {
+    cacheCreationInputTokens?: number;
+  };
 };
 
 export function calculateOpenAIUsageCostFromTokenUsage(
@@ -441,6 +444,11 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   tokenUsage: OpenAITokenUsageSummary | undefined,
 ): number | undefined {
   if (!modelName || !tokenUsage) {
+    return undefined;
+  }
+
+  const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
+  if (GPT_5_6_MODELS.has(modelName) && cacheWriteTokens === undefined) {
     return undefined;
   }
 
@@ -452,6 +460,7 @@ export function calculateOpenAIUsageCostFromTokenUsage(
       completion_tokens: tokenUsage.completion,
       prompt_tokens_details: {
         cached_tokens: tokenUsage.cached ?? 0,
+        ...(cacheWriteTokens === undefined ? {} : { cache_write_tokens: cacheWriteTokens }),
       },
     },
   );

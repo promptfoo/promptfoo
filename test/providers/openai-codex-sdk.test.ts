@@ -2831,6 +2831,7 @@ describe('OpenAICodexSDKProvider', () => {
 
     describe('GPT-5.2 through GPT-5.6 models', () => {
       it.each([
+        'gpt-5.6',
         'gpt-5.6-sol',
         'gpt-5.6-terra',
         'gpt-5.6-luna',
@@ -2842,7 +2843,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(provider.config.model).toBe(model);
       });
 
-      it('should calculate cost for gpt-5.6-sol with cached input tokens', async () => {
+      it('should omit gpt-5.6 cost when Codex does not report cache-write tokens', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
@@ -2858,7 +2859,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBeCloseTo(0.03775, 6);
+        expect(result.cost).toBeUndefined();
       });
 
       it('should recognize gpt-5.5 as a known model', () => {

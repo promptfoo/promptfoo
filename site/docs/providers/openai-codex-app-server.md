@@ -36,19 +36,19 @@ Use this provider when the thing being tested depends on app-server-only behavio
 
 ## What Promptfoo Can and Can't Evaluate
 
-| Eval surface                                    | Supported? | Notes                                                                                            |
-| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                       |
-| Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                             |
-| JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                          |
-| Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`; cost needs a known model id.               |
-| Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                       |
-| Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                 |
-| Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized. |
-| Deep app-server tracing                         | Yes        | Enable `deep_tracing` to inject OTEL env vars into a fresh app-server process per row.           |
-| Live partial output in assertions               | No         | Promptfoo receives the final provider response after the turn completes.                         |
-| Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                              |
-| WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                |
+| Eval surface                                    | Supported? | Notes                                                                                                                                       |
+| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                                                                  |
+| Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                                                                        |
+| JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                                                                     |
+| Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`; GPT-5.6 cost stays undefined because the protocol does not report cache-write tokens. |
+| Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                                                                  |
+| Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                                                            |
+| Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized.                                            |
+| Deep app-server tracing                         | Yes        | Enable `deep_tracing` to inject OTEL env vars into a fresh app-server process per row.                                                      |
+| Live partial output in assertions               | No         | Promptfoo receives the final provider response after the turn completes.                                                                    |
+| Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                                                                         |
+| WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                                                           |
 
 When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
 
