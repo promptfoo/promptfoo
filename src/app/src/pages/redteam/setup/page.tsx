@@ -67,7 +67,7 @@ export { SIDEBAR_WIDTH };
 interface SavedConfig {
   id: string;
   name: string;
-  updatedAt: string;
+  updatedAt: string | number;
 }
 
 const readFileAsText = (file: File): Promise<string> => {
@@ -121,7 +121,7 @@ export default function RedTeamSetupPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Add new state for tracking the config date
-  const [configDate, setConfigDate] = useState<string | null>(null);
+  const [configDate, setConfigDate] = useState<string | number | null>(null);
 
   const lastSavedConfig = useRef<string>('');
 
@@ -241,7 +241,7 @@ export default function RedTeamSetupPage() {
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
       setConfigName(configName);
-      setConfigDate(String(data.createdAt));
+      setConfigDate(data.createdAt);
     } catch (error) {
       console.error('Failed to save configuration', error);
       toast.showToast(
@@ -265,7 +265,7 @@ export default function RedTeamSetupPage() {
       const configs: SavedConfig[] = data.configs.map(({ id, name, updatedAt }) => ({
         id,
         name,
-        updatedAt: String(updatedAt),
+        updatedAt,
       }));
       setSavedConfigs(
         configs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
@@ -288,7 +288,7 @@ export default function RedTeamSetupPage() {
 
       setFullConfig(data.config as Config);
       setConfigName(data.name);
-      setConfigDate(String(data.updatedAt));
+      setConfigDate(data.updatedAt);
       lastSavedConfig.current = JSON.stringify(data.config);
       setHasUnsavedChanges(false);
 
