@@ -313,6 +313,31 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Real assertion failed');
       expect(result.namedScores!['guardrail_flags']).toBe(0);
     });
+
+    it('should mark a failing metricOnly result that has no assertion object (e.g. a grader failure)', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      // A metricOnly model-graded assertion whose grader hits a transport or
+      // parse failure returns a GradingResult without an `assertion` object.
+      // It must still be marked so downstream stats exclude it, rather than
+      // leaking into assertFailCount.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader request failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'grader_metric',
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.componentResults![0].assertion?.metricOnly).toBe(true);
+    });
   });
 
   describe('testResult', () => {

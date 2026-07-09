@@ -130,7 +130,9 @@ function formatSingleResult(
     // excluded from assertion pass/fail stats.
     const countedResults = componentResults.filter((r) => !r.assertion?.metricOnly);
     assertions = {
-      totalAssertions: result.testCase.assert?.length || 0,
+      // Derived from countedResults so the trio reconciles: metric-only
+      // assertions are excluded from all three counts, not just passed/failed.
+      totalAssertions: countedResults.length,
       passedAssertions: countedResults.filter((r) => r.pass).length,
       failedAssertions: countedResults.filter((r) => !r.pass).length,
       componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({

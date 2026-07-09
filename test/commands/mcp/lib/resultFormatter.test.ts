@@ -53,8 +53,11 @@ describe('formatEvaluationResults', () => {
     const { results } = formatEvaluationResults(summary);
 
     expect(results).toHaveLength(1);
-    // The failing metricOnly counter must not surface as a failed assertion.
+    // The failing metricOnly counter must not surface as a failed assertion,
+    // and the total must reconcile with passed + failed (not include the
+    // metricOnly assertion via testCase.assert length).
     expect(results[0].assertions).toMatchObject({
+      totalAssertions: 1,
       passedAssertions: 1,
       failedAssertions: 0,
     });

@@ -36,7 +36,13 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
 function withMetricOnlyMarkers(result: GradingResult): GradingResult {
   return {
     ...result,
-    ...(result.assertion && { assertion: { ...result.assertion, metricOnly: true } }),
+    // Always stamp the marker, even when the result has no assertion object
+    // (e.g. a model-graded metricOnly assertion whose grader failed) — spreading
+    // undefined yields `{ metricOnly: true }`, which every downstream filter
+    // tolerates (they read `assertion?.metricOnly` / `assertion?.type`). This
+    // function is only called for metricOnly results. The cast covers the
+    // grader-failure case where no `type` is present.
+    assertion: { ...result.assertion, metricOnly: true } as GradingResult['assertion'],
     ...(result.componentResults && {
       componentResults: result.componentResults.map((child) => ({
         ...child,
