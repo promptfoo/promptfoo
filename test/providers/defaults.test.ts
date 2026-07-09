@@ -206,11 +206,11 @@ describe('Provider override tests', () => {
 
     // xAI has no public embeddings/moderation API, so we fall back to OpenAI for those.
     expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
-    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.5');
   });
 
   it('should use Codex SDK providers when ChatGPT/Codex credentials exist without API provider keys', async () => {
@@ -259,7 +259,7 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.5');
     expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
   });
 
@@ -303,11 +303,11 @@ describe('Provider override tests', () => {
     const providers = await getDefaultProviders(envOverrides);
 
     expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
-    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.5');
+    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.5');
   });
 
   it('should prefer Mistral defaults over xAI defaults when both keys exist', async () => {
@@ -318,7 +318,7 @@ describe('Provider override tests', () => {
 
     expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
-    expect(providers.gradingProvider.id()).not.toBe('xai:grok-4.3');
+    expect(providers.gradingProvider.id()).not.toBe('xai:grok-4.5');
   });
 
   it('should not use Mistral providers when OpenAI credentials exist', async () => {

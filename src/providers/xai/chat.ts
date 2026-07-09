@@ -120,6 +120,22 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 // reports per-token prices in "ticks" (1 tick = $1e-10). The same scale is used
 // by `usage.cost_in_usd_ticks` on chat/responses results.
 export const XAI_CHAT_MODELS: XAIModel[] = [
+  // Grok 4.5 Models (500K context; flagship model recommended by xAI's catalog)
+  {
+    id: 'grok-4.5',
+    cost: {
+      input: 2.0 / 1e6,
+      output: 6.0 / 1e6,
+      cache_read: 0.5 / 1e6,
+      longContext: {
+        threshold: 200_000,
+        input: 4.0 / 1e6,
+        output: 12.0 / 1e6,
+        cache_read: 1.0 / 1e6,
+      },
+    },
+    aliases: ['grok-4.5-latest', 'grok-build-latest'],
+  },
   // Grok 4.20 Models
   {
     id: 'grok-4.20-0309-reasoning',
@@ -188,7 +204,7 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
     },
-    aliases: ['grok-4.3-latest'],
+    aliases: ['grok-4.3-latest', 'grok-latest'],
   },
   // Grok 4.1 Fast Models (2M context window)
   {
@@ -374,9 +390,15 @@ export const GROK_3_MINI_MODELS = [
 ];
 
 // Models that support reasoning_effort on the chat-completions-compatible API.
+// grok-4.5 accepts `low`, `medium`, and `high` but rejects `none` (verified live
+// 2026-07-09); grok-4.3 additionally accepts `none`.
 export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-4.5',
+  'grok-4.5-latest',
+  'grok-build-latest',
   'grok-4.3',
   'grok-4.3-latest',
+  'grok-latest',
   'grok-3-mini-beta',
   'grok-3-mini',
   'grok-3-mini-latest',
@@ -387,6 +409,10 @@ export const GROK_REASONING_EFFORT_MODELS = [
 
 // All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
+  // Grok 4.5
+  'grok-4.5',
+  'grok-4.5-latest',
+  'grok-build-latest',
   // Grok 4.20
   'grok-4.20-0309-reasoning',
   'grok-4.20-reasoning',
@@ -414,6 +440,7 @@ export const GROK_REASONING_MODELS = [
   // Grok 4.3
   'grok-4.3',
   'grok-4.3-latest',
+  'grok-latest',
   // Grok 4.1 Fast reasoning
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast',
@@ -443,6 +470,10 @@ export const GROK_REASONING_MODELS = [
 
 // Grok-4+ models that have specific sampling-parameter restrictions.
 export const GROK_4_MODELS = [
+  // Grok 4.5 (rejects presence_penalty, frequency_penalty, and stop; verified live 2026-07-09)
+  'grok-4.5',
+  'grok-4.5-latest',
+  'grok-build-latest',
   // Grok 4.20
   'grok-4.20-0309-reasoning',
   'grok-4.20-reasoning',
@@ -479,6 +510,7 @@ export const GROK_4_MODELS = [
   // Grok 4.3
   'grok-4.3',
   'grok-4.3-latest',
+  'grok-latest',
   // Grok 4.1 Fast
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast',
@@ -509,15 +541,28 @@ export function calculateXAICost(
   completionTokens?: number,
   reasoningTokens?: number,
   cachedTokens?: number,
+  options?: {
+    /**
+     * Set when `completion_tokens` EXCLUDES reasoning tokens, so reasoning must be
+     * billed on top at the output rate. xAI's chat-completions endpoint reports
+     * tokens this way (total_tokens = prompt + completion + reasoning) and bills
+     * reasoning at the output rate — verified live against `usage.cost_in_usd_ticks`
+     * for grok-4.5, grok-4.3, grok-4.20, and grok-build-0.1 on 2026-07-09. The
+     * Responses API keeps the OpenAI convention (`output_tokens` includes
+     * reasoning), so it must NOT set this flag or reasoning is double-counted.
+     */
+    reasoningBilledSeparately?: boolean;
+  },
 ): number | undefined {
-  // xAI follows the OpenAI token convention: completion/output tokens already
-  // INCLUDE reasoning tokens (reasoning is a sub-breakdown, not a separate
-  // addend). Bill completion tokens at the output rate exactly like
-  // calculateOpenAICost; adding reasoningTokens on top double-counts them.
-  // Fall back to reasoning tokens only when the API reports zero completion
-  // tokens (a reasoning-only turn) so it is not billed as free.
   const completion = completionTokens ?? 0;
-  const billableOutputTokens = completion > 0 ? completion : (reasoningTokens ?? 0);
+  // Default (Responses API / OpenAI convention): completion tokens already include
+  // reasoning tokens; bill completion at the output rate and fall back to reasoning
+  // tokens only for a reasoning-only turn so it is not billed as free.
+  const billableOutputTokens = options?.reasoningBilledSeparately
+    ? completion + (reasoningTokens ?? 0)
+    : completion > 0
+      ? completion
+      : (reasoningTokens ?? 0);
   if (promptTokens == null || billableOutputTokens <= 0) {
     return undefined;
   }
@@ -696,8 +741,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       if (response.tokenUsage && !response.cached) {
         // The OpenAI base provider normalizes xAI's OpenAI-compatible usage
         // details but does not surface `usage.cost_in_usd_ticks`. Fall back to
-        // local pricing math. Completion tokens already include reasoning tokens,
-        // so they are not added on top.
+        // local pricing math. The chat-completions endpoint reports reasoning
+        // tokens separately from completion tokens and bills them at the output
+        // rate (see calculateXAICost), so they are added on top here.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
         const cachedTokens = response.tokenUsage.completionDetails?.cacheReadInputTokens ?? 0;
         response.cost = calculateXAICost(
@@ -707,6 +753,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
           response.tokenUsage.completion,
           reasoningTokens,
           cachedTokens,
+          { reasoningBilledSeparately: true },
         );
       }
 

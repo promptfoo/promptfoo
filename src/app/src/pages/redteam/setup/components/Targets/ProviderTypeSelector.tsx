@@ -753,7 +753,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-4.20-reasoning',
+          id: 'xai:grok-4.5',
           config: {},
           label: currentLabel,
         },

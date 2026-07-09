@@ -446,7 +446,7 @@ describe('webSearchUtils', () => {
 
     it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'xai:responses:grok-4.3',
+        id: () => 'xai:responses:grok-4.5',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -459,7 +459,7 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'xai:responses:grok-4.3',
+        'xai:responses:grok-4.5',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({

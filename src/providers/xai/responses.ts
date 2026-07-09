@@ -263,7 +263,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Reasoning configuration for Grok 4.3 or multi-agent models */
+  /** Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models */
   reasoning?: {
     effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };

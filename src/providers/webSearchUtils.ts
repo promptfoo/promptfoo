@@ -181,10 +181,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.3 with Responses API web search
+  // xAI Grok 4.5 with Responses API web search
   const loadXaiWebSearch = async () => {
     try {
-      return await loadApiProvider('xai:responses:grok-4.3', {
+      return await loadApiProvider('xai:responses:grok-4.5', {
         options: {
           config: { tools: [{ type: 'web_search' }] },
         },

@@ -1,7 +1,20 @@
 ---
 title: xAI (Grok) Provider
-description: Use xAI Grok models for text, image, video, and voice workflows, including Grok 4.3, Grok Imagine, regional endpoints, and Responses API tools.
-keywords: [xai, grok, grok-4.3, grok-imagine-image, grok-4, grok-3, reasoning, vision, llm, agentic]
+description: Use xAI Grok models for text, image, video, and voice workflows, including Grok 4.5, Grok 4.3, Grok Imagine, regional endpoints, and Responses API tools.
+keywords:
+  [
+    xai,
+    grok,
+    grok-4.5,
+    grok-4.3,
+    grok-imagine-image,
+    grok-4,
+    grok-3,
+    reasoning,
+    vision,
+    llm,
+    agentic,
+  ]
 ---
 
 # xAI (Grok)
@@ -20,18 +33,25 @@ When xAI is the selected fallback provider family, Promptfoo can use xAI default
 
 ## Supported Models
 
-The xAI provider includes support for the following model formats. xAI's public model catalog currently recommends `grok-4.3` for general chat and coding workloads; consult the catalog when choosing a new default for a long-lived integration.
+The xAI provider includes support for the following model formats. xAI's public model catalog currently recommends `grok-4.5` for chat, coding, and agentic workloads; consult the catalog when choosing a new default for a long-lived integration.
 
 :::caution Legacy xAI model aliases
 
-xAI periodically retires older model slugs and keeps them working by redirecting them to newer replacements. As of the May 15, 2026 (12:00 PM PT) retirement, requests to `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-4-0709`, `grok-code-fast-1`, and `grok-3` (including the `*-beta`, `*-fast`, and `*-latest` aliases on each of those families) are redirected to `grok-4.3` — reasoning variants run with `low` reasoning effort, non-reasoning variants run with `none` — and billed at standard Grok 4.3 pricing. The `grok-imagine-image-pro` slug is similarly redirected to xAI's quality image model. For new configs, prefer current catalog models such as `grok-4.3` or `grok-imagine-image-quality` directly.
+xAI periodically retires older model slugs and keeps them working by redirecting them to newer replacements. As of the May 15, 2026 (12:00 PM PT) retirement, requests to `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-4-0709`, `grok-code-fast-1`, and `grok-3` (including the `*-beta`, `*-fast`, and `*-latest` aliases on each of those families) are redirected to `grok-4.3` — reasoning variants run with `low` reasoning effort, non-reasoning variants run with `none` — and billed at standard Grok 4.3 pricing. The `grok-imagine-image-pro` slug is similarly redirected to xAI's quality image model. For new configs, prefer current catalog models such as `grok-4.5`, `grok-4.3`, or `grok-imagine-image-quality` directly.
 
 :::
+
+### Grok 4.5 Models
+
+- `xai:grok-4.5` - Flagship reasoning model for coding, agentic tasks, and knowledge work (500K context, text and image input)
+- `xai:grok-4.5-latest` - Alias for the Grok 4.5 family
+- `xai:grok-build-latest` - Alias for the Grok 4.5 family (default model in Grok Build)
 
 ### Grok 4.3 Models
 
 - `xai:grok-4.3` - General-purpose reasoning model
 - `xai:grok-4.3-latest` - Alias for the Grok 4.3 family
+- `xai:grok-latest` - Alias for the Grok 4.3 family
 
 ### Grok 4.20 Models
 
@@ -112,10 +132,10 @@ Promptfoo uses xAI's model-specific cache-read rate by default. Custom pricing c
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: xai:grok-4.3
+  - id: xai:grok-4.5
     config:
       temperature: 0.7
-      reasoning_effort: 'high' # none, low, medium, or high
+      reasoning_effort: 'high' # low, medium, or high (grok-4.3 also accepts none)
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
 
@@ -123,7 +143,9 @@ providers:
 
 Multiple Grok models support reasoning capabilities:
 
-**Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
+**Grok 4.5**: Flagship reasoning model recommended by xAI's public model catalog. Chat requests can set `reasoning_effort` to `low`, `medium`, or `high` (defaults to `high`); `none` is not supported. Responses API requests use `reasoning.effort`.
+
+**Grok 4.3**: General-purpose reasoning model. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
 
 **Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
 
@@ -131,9 +153,29 @@ Multiple Grok models support reasoning capabilities:
 - Web search via `search_parameters`
 - Fast inference with built-in reasoning
 
+### Grok 4.5 Specific Behavior
+
+Grok 4.5 is xAI's flagship model for coding, agentic tasks, and knowledge work:
+
+- **500K context window** with text and image input
+- **Configurable reasoning**: `reasoning_effort` accepts `low`, `medium`, or `high` (defaults to `high`); `none` is rejected
+- **Long-context pricing**: requests above 200K input tokens are billed at a higher rate ($4/M input, $12/M output instead of $2/M and $6/M); Promptfoo's cost tracking applies the correct tier automatically
+- **Unsupported parameters**: `presence_penalty`, `frequency_penalty`, and `stop` are rejected, and Promptfoo strips them automatically
+- **Server-side tools**: use `xai:responses:grok-4.5` for web search, X search, code execution, and MCP
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:grok-4.5
+    config:
+      temperature: 0.7
+      reasoning_effort: medium
+      max_completion_tokens: 4096
+```
+
 ### Grok 4.3 Specific Behavior
 
-Grok 4.3 is the best starting point for general text workflows:
+Grok 4.3 is a general-purpose alternative for text workflows:
 
 - **Responses API recommended**: Use `xai:responses:grok-4.3` for server-side tools, multi-turn state, and newer xAI capabilities
 - **Configurable reasoning**: `reasoning_effort` defaults to xAI's `low` mode; set `none`, `medium`, or `high` when the workload calls for it
@@ -375,31 +417,32 @@ tests:
 
 #### Responses API Configuration
 
-| Parameter              | Type    | Description                                                |
-| ---------------------- | ------- | ---------------------------------------------------------- |
-| `temperature`          | number  | Sampling temperature (0-2)                                 |
-| `max_output_tokens`    | number  | Maximum tokens to generate                                 |
-| `max_tool_calls`       | number  | Maximum tool calls for one request                         |
-| `top_p`                | number  | Nucleus sampling parameter                                 |
-| `tools`                | array   | Agent tools to enable                                      |
-| `tool_choice`          | string  | Tool selection mode: auto, required, none                  |
-| `parallel_tool_calls`  | boolean | Allow parallel tool execution                              |
-| `stream`               | boolean | Request streamed response deltas                           |
-| `instructions`         | string  | System-level instructions                                  |
-| `previous_response_id` | string  | For multi-turn conversations                               |
-| `store`                | boolean | Store response for later retrieval                         |
-| `include`              | array   | Additional response data to return                         |
-| `reasoning`            | object  | Reasoning configuration for Grok 4.3 or multi-agent models |
-| `response_format`      | object  | JSON schema for structured output                          |
-| `cost`                 | number  | Per-token input and output cost override                   |
-| `inputCost`            | number  | Per-token input cost override                              |
-| `outputCost`           | number  | Per-token output cost override                             |
-| `cacheReadCost`        | number  | Per-token cached-input cost override                       |
+| Parameter              | Type    | Description                                                           |
+| ---------------------- | ------- | --------------------------------------------------------------------- |
+| `temperature`          | number  | Sampling temperature (0-2)                                            |
+| `max_output_tokens`    | number  | Maximum tokens to generate                                            |
+| `max_tool_calls`       | number  | Maximum tool calls for one request                                    |
+| `top_p`                | number  | Nucleus sampling parameter                                            |
+| `tools`                | array   | Agent tools to enable                                                 |
+| `tool_choice`          | string  | Tool selection mode: auto, required, none                             |
+| `parallel_tool_calls`  | boolean | Allow parallel tool execution                                         |
+| `stream`               | boolean | Request streamed response deltas                                      |
+| `instructions`         | string  | System-level instructions                                             |
+| `previous_response_id` | string  | For multi-turn conversations                                          |
+| `store`                | boolean | Store response for later retrieval                                    |
+| `include`              | array   | Additional response data to return                                    |
+| `reasoning`            | object  | Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models |
+| `response_format`      | object  | JSON schema for structured output                                     |
+| `cost`                 | number  | Per-token input and output cost override                              |
+| `inputCost`            | number  | Per-token input cost override                                         |
+| `outputCost`           | number  | Per-token output cost override                                        |
+| `cacheReadCost`        | number  | Per-token cached-input cost override                                  |
 
 #### Supported Models
 
 The Responses API works with current Grok models, including:
 
+- `grok-4.5` (recommended)
 - `grok-4.3`
 - `grok-4.20-reasoning`
 - `grok-4.20-non-reasoning`
