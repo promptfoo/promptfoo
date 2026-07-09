@@ -1459,6 +1459,7 @@ Application Details:
     });
 
     it('should clear a reconnected job when it disappears during polling', async () => {
+      timers.useFakeTimers();
       let jobRequests = 0;
       vi.mocked(callApi).mockImplementation(async (url: string) => {
         if (url === '/redteam/status') {
@@ -1484,25 +1485,40 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      renderWithProviders(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      await act(async () => {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
       });
 
-      await waitFor(
-        () => {
-          expect(mockClearJob).toHaveBeenCalled();
-        },
-        { timeout: 2000 },
-      );
+      expect(jobRequests).toBe(1);
+      expect(mockClearJob).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      expect(
+        vi
+          .mocked(callApi)
+          .mock.calls.map(([url]) => url)
+          .filter((url) => url === '/redteam/status' || url === '/eval/job/restarted-job'),
+      ).toEqual(['/redteam/status', '/eval/job/restarted-job']);
 
+      await act(async () => {
+        await timers.advanceByAsync(1000);
+      });
+
+      expect(jobRequests).toBe(2);
+      expect(mockClearJob).toHaveBeenCalledTimes(1);
+      expect(
+        vi
+          .mocked(callApi)
+          .mock.calls.map(([url]) => url)
+          .filter((url) => url === '/redteam/status' || url === '/eval/job/restarted-job'),
+      ).toEqual(['/redteam/status', '/eval/job/restarted-job', '/eval/job/restarted-job']);
       expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
     });
 
