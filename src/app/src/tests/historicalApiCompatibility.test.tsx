@@ -7,7 +7,19 @@ import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { callApiJson } from '@app/utils/api';
 import { ApiRoutes, EvalResponseSchemas } from '@promptfoo/contracts';
 import { act, render, renderHook, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const initialApiConfigState = useApiConfig.getState();
+const initialModelAuditConfigState = useModelAuditConfigStore.getState();
+const initialModelAuditHistoryState = useModelAuditHistoryStore.getState();
+
+function resetStores() {
+  act(() => {
+    useApiConfig.setState(initialApiConfigState, true);
+    useModelAuditConfigStore.setState(initialModelAuditConfigState, true);
+    useModelAuditHistoryStore.setState(initialModelAuditHistoryState, true);
+  });
+}
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -18,25 +30,11 @@ function jsonResponse(body: unknown): Response {
 
 describe('historical API responses through real typed clients', () => {
   beforeEach(() => {
-    useApiConfig.getState().setApiBaseUrl('');
-    useModelAuditConfigStore.setState({
-      installationStatus: {
-        checking: false,
-        installed: null,
-        error: null,
-        cwd: null,
-      },
-    });
-    useModelAuditHistoryStore.setState({
-      historicalScans: [],
-      isLoadingHistory: false,
-      historyError: null,
-      totalCount: 0,
-      pageSize: 25,
-      currentPage: 0,
-      sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
-    });
+    resetStores();
+  });
+
+  afterEach(() => {
+    resetStores();
   });
 
   it('keeps an installed ModelAudit CLI available when version is omitted', async () => {
