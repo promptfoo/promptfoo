@@ -67,6 +67,7 @@ describe('ResponsesProcessor', () => {
           total_tokens: 21,
           input_tokens_details: {
             cached_tokens: 3,
+            cache_write_tokens: 2,
           },
           output_tokens_details: {
             reasoning_tokens: 4,
@@ -88,6 +89,7 @@ describe('ResponsesProcessor', () => {
           acceptedPrediction: 2,
           rejectedPrediction: 1,
           cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 2,
         },
       });
     });

@@ -39,6 +39,32 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
+function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] | undefined {
+  const outputTokenDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
+  const cachedInputTokens =
+    usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
+  const cacheWriteInputTokens =
+    usage.prompt_tokens_details?.cache_write_tokens ??
+    usage.input_tokens_details?.cache_write_tokens ??
+    0;
+
+  if (!outputTokenDetails && cachedInputTokens <= 0 && cacheWriteInputTokens <= 0) {
+    return undefined;
+  }
+
+  return {
+    ...(outputTokenDetails
+      ? {
+          reasoning: outputTokenDetails.reasoning_tokens,
+          acceptedPrediction: outputTokenDetails.accepted_prediction_tokens,
+          rejectedPrediction: outputTokenDetails.rejected_prediction_tokens,
+        }
+      : {}),
+    ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
+    ...(cacheWriteInputTokens > 0 ? { cacheCreationInputTokens: cacheWriteInputTokens } : {}),
+  };
+}
+
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
@@ -49,34 +75,14 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
       const totalTokens = data.usage.total_tokens || promptTokens + completionTokens;
-      const outputTokenDetails =
-        data.usage.completion_tokens_details ?? data.usage.output_tokens_details;
-      const cachedInputTokens =
-        data.usage.prompt_tokens_details?.cached_tokens ??
-        data.usage.input_tokens_details?.cached_tokens ??
-        0;
+      const completionDetails = getCompletionTokenDetails(data.usage);
 
       return {
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,
         numRequests: 1,
-        ...(outputTokenDetails
-          ? {
-              completionDetails: {
-                reasoning: outputTokenDetails.reasoning_tokens,
-                acceptedPrediction: outputTokenDetails.accepted_prediction_tokens,
-                rejectedPrediction: outputTokenDetails.rejected_prediction_tokens,
-                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-              },
-            }
-          : cachedInputTokens > 0
-            ? {
-                completionDetails: {
-                  cacheReadInputTokens: cachedInputTokens,
-                },
-              }
-            : {}),
+        ...(completionDetails ? { completionDetails } : {}),
       };
     }
   }

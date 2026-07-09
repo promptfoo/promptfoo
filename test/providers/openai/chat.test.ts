@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -88,6 +89,49 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+    });
+
+    it('should record GPT-5.6 cache writes in the chat span', async () => {
+      const spanAttributes: Record<string, unknown> = {};
+      const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+          callback({
+            setAttribute: (key: string, value: unknown) => {
+              spanAttributes[key] = value;
+            },
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          }),
+      } as any);
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: {
+            total_tokens: 10,
+            prompt_tokens: 5,
+            completion_tokens: 5,
+            prompt_tokens_details: { cached_tokens: 2, cache_write_tokens: 3 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-5.6');
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage?.completionDetails).toMatchObject({
+          cacheReadInputTokens: 2,
+          cacheCreationInputTokens: 3,
+        });
+        expect(spanAttributes['gen_ai.usage.cache_read_input_tokens']).toBe(2);
+        expect(spanAttributes['gen_ai.usage.cache_creation_input_tokens']).toBe(3);
+      } finally {
+        getTracerSpy.mockRestore();
+      }
     });
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {
