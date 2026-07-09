@@ -7,9 +7,9 @@
  * Prerequisites: Run `npm run build` before running these tests.
  *
  * NOTE: These tests are gated on a built `dist/` and become `describe.skip` when it is absent.
- * The `integration-tests` CI job does not build, so they are skipped there and run only locally
- * after `npm run build`. The published artifacts themselves are independently verified in CI by
- * the build-and-pack `test:package-artifact` job (see scripts/testPackageArtifact.ts).
+ * In CI, the non-building `integration-tests` job skips them, while the `build` job runs them after
+ * `npm run build`. The separate `test:package-artifact` step verifies the packed npm artifact (see
+ * scripts/testPackageArtifact.ts).
  */
 
 import fs from 'fs';
@@ -21,7 +21,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const distDir = path.resolve(__dirname, '../../dist/src');
 const buildExists = fs.existsSync(distDir);
 
-// Skip all tests if build doesn't exist (e.g., in CI Jest run before build)
+// Skip all tests if the build does not exist (for example, in a non-building Vitest test job).
 const describeIfBuildExists = buildExists ? describe : describe.skip;
 
 const contractsRuntimeBudgetBytes = {
