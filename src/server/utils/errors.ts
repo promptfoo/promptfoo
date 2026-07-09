@@ -12,6 +12,22 @@ type ErrorResponseBody = {
   [key: string]: unknown;
 };
 
+type ErrorResponseExtras = {
+  error?: never;
+  details?: unknown;
+  suggestion?: string;
+  success?: false;
+  [key: string]: unknown;
+};
+
+type ValidationErrorResponseExtras = {
+  error?: never;
+  details?: never;
+  suggestion?: string;
+  success?: false;
+  [key: string]: unknown;
+};
+
 /**
  * Build a logger-safe context object from an unknown error value.
  *
@@ -83,9 +99,9 @@ export function replyError(
   res: Response,
   status: number,
   publicMessage: string,
-  extras: Omit<ErrorResponseBody, 'error'> = {},
+  extras: ErrorResponseExtras = {},
 ): void {
-  safeRespond(res, status, { error: publicMessage, ...extras });
+  safeRespond(res, status, { ...extras, error: publicMessage });
 }
 
 /**
@@ -124,7 +140,7 @@ export function sendError(
 export function replyValidationError(
   res: Response,
   error: z.ZodError,
-  extras: Omit<ErrorResponseBody, 'error' | 'details'> = {},
+  extras: ValidationErrorResponseExtras = {},
 ): void {
   replyError(res, 400, z.prettifyError(error), {
     ...extras,

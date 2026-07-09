@@ -46,6 +46,21 @@ describe('server/utils/errors', () => {
       });
       expect(logger.error).not.toHaveBeenCalled();
     });
+
+    it('does not let untyped extras override the canonical public message', () => {
+      const { res, status, json } = createResponseMock();
+
+      replyError(res, 400, 'Sanitized public message', {
+        error: 'unsanitized internal detail',
+        suggestion: 'Try again',
+      } as never);
+
+      expect(status).toHaveBeenCalledWith(400);
+      expect(json).toHaveBeenCalledWith({
+        error: 'Sanitized public message',
+        suggestion: 'Try again',
+      });
+    });
   });
 
   describe('sendError', () => {
