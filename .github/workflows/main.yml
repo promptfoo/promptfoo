@@ -232,9 +232,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: |
@@ -304,9 +306,11 @@ jobs:
         with:
           python-version: '3.13'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -373,9 +377,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -404,9 +410,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
       - name: Install Root Dependencies
@@ -442,9 +450,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -493,9 +503,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -537,9 +549,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -572,9 +586,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -612,9 +628,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -707,9 +725,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -735,9 +755,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
