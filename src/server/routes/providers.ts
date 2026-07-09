@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { ApiRoutes } from '../../contracts/api/routes';
 import { getEnvString } from '../../envars';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -11,7 +12,6 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
-import { ApiRoutes } from '../../types/api/routes';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getAvailableProviders } from '../config/serverConfig';
 import { replyError, replyValidationError, sendError } from '../utils/errors';

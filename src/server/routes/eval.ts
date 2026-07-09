@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { ApiRoutes } from '../../contracts/api/routes';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { type AddResultsRequest, EvalSchemas } from '../../types/api/eval';
-import { ApiRoutes } from '../../types/api/routes';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,

@@ -11,6 +11,7 @@ import path from 'node:path';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
+import { ApiMounts, ApiRoutes } from '../contracts/api/routes';
 import {
   hasDeleteComponent,
   hasUnscopedUpdate,
@@ -29,7 +30,6 @@ import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
-import { ApiMounts, ApiRoutes } from '../types/api/routes';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {

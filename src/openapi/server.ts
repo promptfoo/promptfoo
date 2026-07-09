@@ -8,6 +8,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { VERSION } from '../constants';
+import { type ApiRouteContract, ApiRoutes } from '../contracts/api/routes';
 import { BlobsSchemas } from '../types/api/blobs';
 import { ErrorResponseSchema } from '../types/api/common';
 import { ConfigSchemas } from '../types/api/configs';
@@ -16,7 +17,6 @@ import { MediaSchemas } from '../types/api/media';
 import { ModelAuditSchemas } from '../types/api/modelAudit';
 import { ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
-import { type ApiRouteContract, ApiRoutes } from '../types/api/routes';
 import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
 import { UserSchemas } from '../types/api/user';

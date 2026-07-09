@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import cliState from '../../cliState';
+import { ApiRoutes } from '../../contracts/api/routes';
 import logger from '../../logger';
 import {
   DATASET_EXEMPT_PLUGINS,
@@ -20,7 +21,6 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
-import { ApiRoutes } from '../../types/api/routes';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
 import { evalJobService } from '../services/evalJobService';

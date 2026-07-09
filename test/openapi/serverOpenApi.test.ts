@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { ALL_API_ROUTES, ApiRoutes, buildApiPath } from '../../src/contracts/api/routes';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
-import { ALL_API_ROUTES, ApiRoutes, buildApiPath } from '../../src/types/api/routes';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
 const ROOT_SERVER_FILE = 'src/server/server.ts';
