@@ -4,6 +4,7 @@ import * as path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { pluginOptions } from '../src/validators/redteam';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -161,6 +162,27 @@ describe('config-schema.json', () => {
 
       const biasCount = plugins.filter((p) => p === 'bias').length;
       expect(biasCount).toBe(1);
+    });
+
+    it('should match the runtime redteam plugin options', () => {
+      const findPluginEnum = (obj: any): string[] | null => {
+        if (obj && typeof obj === 'object') {
+          if (Array.isArray(obj.enum) && obj.enum.includes('bias')) {
+            return obj.enum;
+          }
+
+          for (const value of Object.values(obj)) {
+            const result = findPluginEnum(value);
+            if (result) {
+              return result;
+            }
+          }
+        }
+
+        return null;
+      };
+
+      expect(findPluginEnum(schema)).toEqual(pluginOptions);
     });
   });
 

@@ -16,6 +16,7 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
+  ENERGY_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   getDefaultNFanout,
@@ -394,6 +395,7 @@ const categories = {
   medical: MEDICAL_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
+  energy: ENERGY_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
   'teen-safety': TEEN_SAFETY_PLUGINS,
@@ -1199,7 +1201,7 @@ export async function synthesize({
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+      plugins.push(...categoryPlugins.map((p) => ({ ...plugin, id: p })));
     }
   }
 
