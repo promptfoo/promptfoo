@@ -579,6 +579,15 @@ describe('MetaMessagesProvider', () => {
     }
   });
 
+  it('hides encrypted redacted_thinking output by default (showThinking: false)', () => {
+    const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
+    expect((provider as any).config.showThinking).toBe(false);
+    const explicit = createMetaProvider('meta:messages:muse-spark-1.1', {
+      config: { showThinking: true },
+    }) as MetaMessagesProvider;
+    expect((explicit as any).config.showThinking).toBe(true);
+  });
+
   it('does not log the unknown-Anthropic-model warning for Muse models', async () => {
     const logger = (await import('../../src/logger')).default;
     vi.mocked(logger.warn).mockClear();

@@ -16,7 +16,7 @@ This provider is for the Meta **Model** API at `api.meta.ai` (Muse models). For 
 ## Setup
 
 1. Create an API key from the API keys tab on the [Meta Model API dashboard](https://dev.meta.ai/).
-2. Set the `META_API_KEY` environment variable or specify `apiKey` in your config. The provider also reads `MODEL_API_KEY` — the variable Meta's official SDKs use — as a fallback; `META_API_KEY` takes precedence.
+2. Set the `MODEL_API_KEY` environment variable — Meta's default, the same variable its official SDKs and quickstart use — or specify `apiKey` in your config. The provider also reads `META_API_KEY` as a promptfoo-specific override that takes precedence when both are set (useful for isolating the key per provider).
 
 ```yaml
 providers:
@@ -88,6 +88,8 @@ providers:
 
 The provider extends the [Anthropic provider](/docs/providers/anthropic/), so its options (`max_tokens`, `tools`, image and document content blocks, etc.) apply. Authentication uses your Meta key as a bearer token (`Authorization: Bearer`), matching Meta's docs — Anthropic-scoped settings like `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and Claude Code OAuth credentials are deliberately ignored on this surface.
 
+Muse Spark's reasoning arrives on this surface as encrypted `redacted_thinking` blocks, so the provider defaults `showThinking` to `false` to keep the ciphertext out of graded output.
+
 ## Using with coding-agent providers
 
 Meta positions Muse Spark as a backend for coding agents, and promptfoo's agentic providers can evaluate those setups end to end:
@@ -102,7 +104,7 @@ providers:
       apiKeyRequired: false
       env:
         ANTHROPIC_BASE_URL: https://api.meta.ai
-        ANTHROPIC_AUTH_TOKEN: '{{env.META_API_KEY}}'
+        ANTHROPIC_AUTH_TOKEN: '{{env.MODEL_API_KEY}}'
         ANTHROPIC_MODEL: muse-spark-1.1
         ANTHROPIC_DEFAULT_OPUS_MODEL: muse-spark-1.1
         ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.1

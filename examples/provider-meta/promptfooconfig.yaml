@@ -4,11 +4,11 @@ description: Meta Model API (Muse Spark) provider demo
 prompts:
   - 'In one sentence, summarise: {{passage}}'
 
-# Both providers run on a single `META_API_KEY` (or Meta's official
-# `MODEL_API_KEY`). Muse Spark 1.1 is a reasoning model: reasoning_effort
-# controls how much it thinks before answering, and reasoning tokens bill at
-# the output rate. Comparing minimal vs high shows the latency/quality
-# trade-off on the same model.
+# Both providers run on a single `MODEL_API_KEY` (Meta's default env var; the
+# promptfoo-specific `META_API_KEY` also works and takes precedence). Muse
+# Spark 1.1 is a reasoning model: reasoning_effort controls how much it thinks
+# before answering, and reasoning tokens bill at the output rate. Comparing
+# minimal vs high shows the latency/quality trade-off on the same model.
 providers:
   - id: meta:muse-spark-1.1
     label: 'Muse Spark 1.1 (minimal reasoning)'
@@ -27,8 +27,10 @@ tests:
         intricate analogue computer, with dozens of geared dials that tracked the Sun and Moon, predicted
         eclipses, and modelled the irregular motion of the lunar orbit using an epicyclic gear train.
     assert:
-      - type: icontains
-        value: Antikythera
+      # At minimal reasoning effort the model may paraphrase rather than name
+      # the mechanism, so accept any of the passage's key nouns.
+      - type: icontains-any
+        value: [Antikythera, shipwreck, bronze]
       - type: icontains-any
         value: [mechanism, computer, gears, astronomical]
   - vars:

@@ -22,8 +22,10 @@ const META_API_BASE_URL = 'https://api.meta.ai/v1';
 // Anthropic SDK appends /v1/messages itself.
 const META_MESSAGES_API_BASE_URL = 'https://api.meta.ai';
 const META_API_KEY_ENVAR = 'META_API_KEY';
-// Meta's official SDKs and docs read MODEL_API_KEY; honor it as a fallback so a
-// key set up per the Meta Model API quickstart works without renaming.
+// MODEL_API_KEY is Meta's default: it's what the official SDKs, docs, and
+// quickstart use, so it's the variable we document and recommend. META_API_KEY
+// is a promptfoo-specific override that wins when both are set, for users who
+// need to isolate the key per provider.
 const META_OFFICIAL_KEY_ENVAR = 'MODEL_API_KEY';
 const DEFAULT_META_MODEL = 'muse-spark-1.1';
 
@@ -116,7 +118,7 @@ function missingMetaApiKeyMessage(config: MetaKeyConfig): string {
   const envar =
     config.apiKeyEnvar && config.apiKeyEnvar !== META_API_KEY_ENVAR
       ? config.apiKeyEnvar
-      : `${META_API_KEY_ENVAR} (or ${META_OFFICIAL_KEY_ENVAR})`;
+      : `${META_OFFICIAL_KEY_ENVAR} (or ${META_API_KEY_ENVAR})`;
   return (
     `Meta Model API key is not set. Set the ${envar} environment variable ` +
     'or add `apiKey` to the provider config.'
@@ -512,6 +514,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     const resolvedConfig: MetaMessagesConfig = {
       ...metaConfig,
       apiBaseUrl: metaConfig.apiBaseUrl ?? META_MESSAGES_API_BASE_URL,
+      // Muse reasoning arrives as encrypted redacted_thinking blocks on this
+      // surface; surfacing that ciphertext would pollute graded output, so
+      // hide thinking by default (overridable with showThinking: true).
+      showThinking: metaConfig.showThinking ?? false,
     };
 
     super(modelName, {
