@@ -136,6 +136,26 @@ describe('matchesContextRecall', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('should prefer the resolved context over vars.context in the grader prompt', async () => {
+    const rawContext = 'RAW_CONTEXT_ALPHA';
+    const transformedContext = 'TRANSFORMED_CONTEXT_BETA';
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Ground truth sentence [Attributed]',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await matchesContextRecall(transformedContext, 'Ground truth sentence', 0.5, undefined, {
+      context: rawContext,
+    });
+
+    const graderPrompt = String(mockCallApi.mock.calls[0][0]);
+    expect(graderPrompt).toContain(transformedContext);
+    expect(graderPrompt).not.toContain(rawContext);
+  });
+
   describe('Preamble Filtering (Issue #1506)', () => {
     it('should ignore preamble text and only count classification lines', async () => {
       const context = 'The service owner must sign the DR plan.';
