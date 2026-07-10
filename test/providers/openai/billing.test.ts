@@ -129,7 +129,7 @@ describe('OpenAI billing helpers', () => {
     const usage = {
       prompt_tokens: 2_000,
       completion_tokens: 1_000,
-      prompt_tokens_details: { cached_tokens: 500 },
+      prompt_tokens_details: { cached_tokens: 500, cache_write_tokens: 0 },
     };
 
     expect(calculateOpenAIUsageCost(model, {}, usage)).toBeCloseTo(
@@ -150,6 +150,53 @@ describe('OpenAI billing helpers', () => {
         },
       ),
     ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
+  });
+
+  it.each([
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ])('omits %s cost when raw usage lacks cache-write tokens', (model) => {
+    expect(
+      calculateOpenAIUsageCost(
+        model,
+        {},
+        {
+          input_tokens: 2_000,
+          output_tokens: 1_000,
+          input_tokens_details: { cached_tokens: 500 },
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('uses a custom GPT-5.6 input cost when cache-write tokens are unavailable', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5.6',
+        { inputCost: 2 / 1e6 },
+        {
+          input_tokens: 2_000,
+          output_tokens: 1_000,
+          input_tokens_details: { cached_tokens: 500 },
+        },
+      ),
+    ).toBeCloseTo((2_000 * 2 + 1_000 * 30) / 1e6, 10);
+  });
+
+  it('accepts an explicit top-level zero cache-write count for GPT-5.6', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5.6-terra',
+        {},
+        {
+          input_tokens: 2_000,
+          output_tokens: 1_000,
+          cache_write_input_tokens: 0,
+        },
+      ),
+    ).toBeCloseTo((2_000 * 2.5 + 1_000 * 15) / 1e6, 10);
   });
 
   it.each([

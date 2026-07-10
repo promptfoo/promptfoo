@@ -548,7 +548,7 @@ OpenAI [launched GPT-5.6 for general availability](https://openai.com/index/gpt-
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
-Prompt-cache reads receive a 90% discount, and explicit cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
+Prompt-cache reads receive a 90% discount, and explicit cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:

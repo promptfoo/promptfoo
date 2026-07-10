@@ -819,7 +819,7 @@ describe('OpenClaw Provider', () => {
 
       const provider = new OpenClawChatProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.6-terra',
+          backend_model: 'openai/gpt-5.4-mini',
           gateway_url: 'http://test:18789',
         },
       });
@@ -827,6 +827,30 @@ describe('OpenClaw Provider', () => {
       const result = await provider.callApi('price me');
 
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'priced' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawChatProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.6-terra',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('price me');
+
+      expect(result.cost).toBeUndefined();
     });
   });
 
@@ -976,7 +1000,7 @@ describe('OpenClaw Provider', () => {
 
       const provider = new OpenClawResponsesProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.6-terra',
+          backend_model: 'openai/gpt-5.4-mini',
           gateway_url: 'http://test:18789',
         },
       });
@@ -984,6 +1008,36 @@ describe('OpenClaw Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.6-terra',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).not.toHaveProperty('cost');
     });
 
     it('should infer hidden cached input from OpenClaw Responses totals', async () => {

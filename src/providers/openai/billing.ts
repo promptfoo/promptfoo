@@ -466,6 +466,18 @@ function getOpenAIUsageParts(rawUsage: any): OpenAIUsageParts {
   };
 }
 
+function getReportedCacheWriteInputTokens({
+  usage,
+  inputDetails,
+}: OpenAIUsageParts): number | undefined {
+  for (const value of [inputDetails.cache_write_tokens, usage.cache_write_input_tokens]) {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export type OpenAITokenUsageSummary = {
   prompt?: number;
   completion?: number;
@@ -624,7 +636,8 @@ function getNumericValue(value: unknown): number {
 }
 
 export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
-  const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
+  const usageParts = getOpenAIUsageParts(rawUsage);
+  const { usage, inputDetails, outputDetails } = usageParts;
 
   const totalOutputTokens = getNumericValue(usage.completion_tokens ?? usage.output_tokens);
   const reportedInputTokens = getNumericValue(usage.prompt_tokens ?? usage.input_tokens);
@@ -652,9 +665,7 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
   return {
     totalInputTokens,
     cachedInputTokens: getNumericValue(inputDetails.cached_tokens ?? usage.cached_input_tokens),
-    cacheWriteInputTokens: getNumericValue(
-      inputDetails.cache_write_tokens ?? usage.cache_write_input_tokens,
-    ),
+    cacheWriteInputTokens: getReportedCacheWriteInputTokens(usageParts) ?? 0,
     cachedTextInputTokens: getNumericValue(cachedInputDetails.text_tokens),
     cachedAudioInputTokens: getNumericValue(cachedInputDetails.audio_tokens),
     cachedImageInputTokens: getNumericValue(cachedInputDetails.image_tokens),
@@ -791,6 +802,7 @@ export function calculateOpenAIUsageCost(
     return undefined;
   }
 
+  const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
   const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
@@ -810,7 +822,17 @@ export function calculateOpenAIUsageCost(
     return 0;
   }
 
-  const { hasOutputBreakdown } = getOpenAIUsageParts(rawUsage);
+  const textInputCost = config.inputCost ?? config.cost ?? rates.text.input;
+  const cacheWriteInputCost =
+    config.inputCost ?? config.cost ?? rates.text.cacheWriteInput ?? textInputCost;
+  if (
+    cacheWriteInputCost !== textInputCost &&
+    getReportedCacheWriteInputTokens(usageParts) === undefined
+  ) {
+    return undefined;
+  }
+
+  const { hasOutputBreakdown } = usageParts;
 
   if (
     rates.image?.output &&
