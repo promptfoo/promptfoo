@@ -60,7 +60,12 @@ import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
-import { PartialGenerationError, ProbeLimitExceededError } from '../types';
+import { trustRemoteGeneratedTestVars } from '../remoteTestProvenance';
+import {
+  PartialGenerationError,
+  ProbeLimitExceededError,
+  RemoteRedteamAssertionContractError,
+} from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -630,6 +635,38 @@ async function doGenerateRedteamInternal(
     `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
   );
 
+  /**
+   * Cleans up the provider after redteam generation completes.
+   * This should always be called before returning, since providers are
+   * re-initialized when running the red team. Cleanup is particularly
+   * important for MCP servers to release resources and prevent memory leaks.
+   */
+  const cleanupProvider = async (): Promise<void> => {
+    try {
+      logger.debug('Cleaning up provider');
+      const provider = testSuite.providers[0] as ApiProvider;
+      if (provider && typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+    }
+  };
+
+  const synthesizeWithCleanup = async (synthesizeOptions: SynthesizeOptions) => {
+    try {
+      return await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+        synthesize(synthesizeOptions),
+      );
+    } catch (error) {
+      await cleanupProvider();
+      throw error;
+    }
+  };
+
   // Extract MCP tools information and add it after purpose templating is resolved.
   const rootPurpose = parsedConfig.data.purpose;
   let purposeDetails = '';
@@ -687,26 +724,21 @@ async function doGenerateRedteamInternal(
         testSuite,
       });
 
-      const contextResult = await withGenerationConcurrency(
-        config.maxConcurrency,
-        config.delay,
-        () =>
-          synthesize({
-            ...parsedConfig.data,
-            inputs: targetInputs,
-            purpose: contextPurpose,
-            numTests: config.numTests,
-            prompts: testSuite.prompts.map((prompt) => prompt.raw),
-            maxConcurrency: config.maxConcurrency,
-            delay: config.delay,
-            abortSignal: options.abortSignal,
-            redteamGenerationContext,
-            cloudTargetDatabaseId,
-            targetIds,
-            showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: augmentedTestGenerationInstructions,
-          } as SynthesizeOptions),
-      );
+      const contextResult = await synthesizeWithCleanup({
+        ...parsedConfig.data,
+        inputs: targetInputs,
+        purpose: contextPurpose,
+        numTests: config.numTests,
+        prompts: testSuite.prompts.map((prompt) => prompt.raw),
+        maxConcurrency: config.maxConcurrency,
+        delay: config.delay,
+        abortSignal: options.abortSignal,
+        redteamGenerationContext,
+        cloudTargetDatabaseId,
+        targetIds,
+        showProgressBar: options.progressBar !== false,
+        testGenerationInstructions: augmentedTestGenerationInstructions,
+      } as SynthesizeOptions);
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
@@ -716,19 +748,22 @@ async function doGenerateRedteamInternal(
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
+      const taggedTests = contextResult.testCases.map((test: any) => {
+        const metadata = {
           ...test.metadata,
           purpose: contextResult.purpose,
           contextId: context.id,
           contextVars: context.vars,
-        },
-      }));
+        };
+        return {
+          ...test,
+          vars: {
+            ...test.vars,
+            ...(context.vars || {}),
+          },
+          metadata: trustRemoteGeneratedTestVars(metadata, Object.keys(context.vars ?? {})),
+        };
+      });
 
       redteamTests = redteamTests.concat(taggedTests);
 
@@ -756,23 +791,21 @@ async function doGenerateRedteamInternal(
       rootPurpose,
       testSuite,
     });
-    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-      synthesize({
-        ...parsedConfig.data,
-        inputs: targetInputs,
-        purpose: effectivePurpose,
-        numTests: config.numTests,
-        prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
-        abortSignal: options.abortSignal,
-        redteamGenerationContext,
-        cloudTargetDatabaseId,
-        targetIds,
-        showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
-      } as SynthesizeOptions),
-    );
+    const result = await synthesizeWithCleanup({
+      ...parsedConfig.data,
+      inputs: targetInputs,
+      purpose: effectivePurpose,
+      numTests: config.numTests,
+      prompts: testSuite.prompts.map((prompt) => prompt.raw),
+      maxConcurrency: config.maxConcurrency,
+      delay: config.delay,
+      abortSignal: options.abortSignal,
+      redteamGenerationContext,
+      cloudTargetDatabaseId,
+      targetIds,
+      showProgressBar: options.progressBar !== false,
+      testGenerationInstructions: augmentedTestGenerationInstructions,
+    } as SynthesizeOptions);
 
     redteamTests = result.testCases;
     purpose = result.purpose;
@@ -780,27 +813,6 @@ async function doGenerateRedteamInternal(
     finalInjectVar = result.injectVar;
     failedPlugins = result.failedPlugins;
   }
-
-  /**
-   * Cleans up the provider after redteam generation completes.
-   * This should always be called before returning, since providers are
-   * re-initialized when running the red team. Cleanup is particularly
-   * important for MCP servers to release resources and prevent memory leaks.
-   */
-  const cleanupProvider = async (): Promise<void> => {
-    try {
-      logger.debug('Cleaning up provider');
-      const provider = testSuite.providers[0] as ApiProvider;
-      if (provider && typeof provider.cleanup === 'function') {
-        const cleanupResult = provider.cleanup();
-        if (cleanupResult instanceof Promise) {
-          await cleanupResult;
-        }
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-    }
-  };
 
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
@@ -1165,6 +1177,8 @@ export function redteamGenerateCommand(
           });
         } else if (error instanceof ConfigResolutionError) {
           logConfigResolutionError(error);
+        } else if (error instanceof RemoteRedteamAssertionContractError) {
+          logger.error(error.message);
         } else if (
           !(error instanceof EmailValidationError) &&
           !(error instanceof ProbeLimitExceededError)

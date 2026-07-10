@@ -22,7 +22,11 @@ import { extractA2AAgentCardInfo } from '../../../src/redteam/extraction/a2aAgen
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
+import {
+  PartialGenerationError,
+  ProbeLimitExceededError,
+  UnsupportedRemoteRedteamAssertionsError,
+} from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -989,6 +993,25 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(mockProvider.cleanup!).toHaveBeenCalledWith();
+  });
+
+  it('should cleanup provider when synthesis rejects a remote assertion contract', async () => {
+    const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+      'promptfoo:redteam:future-remote-plugin',
+    ]);
+    vi.mocked(synthesize).mockRejectedValue(contractError);
+
+    await expect(
+      doGenerateRedteam({
+        output: 'test-output.json',
+        inRedteamRun: false,
+        cache: false,
+        defaultConfig: {},
+        write: false,
+        config: 'test-config.yaml',
+      }),
+    ).rejects.toBe(contractError);
+    expect(mockProvider.cleanup).toHaveBeenCalledOnce();
   });
 
   it('should handle provider cleanup errors gracefully', async () => {
@@ -3944,6 +3967,27 @@ describe('redteam generate command with target option', () => {
     expect(process.exitCode).toBe(1);
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith('Please verify your email address and try again.');
+  });
+
+  it('should report remote assertion contract errors without a stack trace', async () => {
+    const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+      'promptfoo:redteam:future-remote-plugin',
+    ]);
+    vi.mocked(synthesize).mockRejectedValueOnce(contractError);
+
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--purpose',
+      'Test purpose',
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    expect(logger.error).toHaveBeenCalledWith(contractError.message);
+    expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining(contractError.stack!));
+    expect(process.exitCode).toBe(1);
   });
 
   it('should accept -t/--target option in generate command', async () => {

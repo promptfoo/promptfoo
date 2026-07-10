@@ -1114,6 +1114,38 @@ describe('shared redteam provider utilities', () => {
       expect(iterationContext?.vars).toEqual({ goal: 'test!!' });
     });
 
+    it('propagates only changed transform vars into remote provenance', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const outer: CallApiContextParams = {
+        prompt: { raw: 'x', label: 'x' },
+        vars: {},
+        test: {
+          metadata: {
+            __promptfooRemoteGenerated: {
+              metadata: [],
+              unsafeRenderVars: ['prompt'],
+              vars: ['prompt'],
+            },
+          },
+        },
+      };
+      const iterationContext = await createIterationContext({
+        originalVars: { prompt: attack, trusted: '{{ 6 * 7 }}' },
+        transformVarsConfig: (vars) => ({
+          ...(vars as Record<string, unknown>),
+          copiedAttack: (vars as Record<string, unknown>).prompt,
+        }),
+        context: outer,
+        iterationNumber: 1,
+      });
+
+      expect(iterationContext?.test?.metadata?.__promptfooRemoteGenerated).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['prompt', 'copiedAttack'],
+        vars: ['prompt', 'copiedAttack'],
+      });
+    });
+
     it('rethrows errors from a TransformFunction so iterations surface user bugs', async () => {
       const throwingTransform = () => {
         throw new Error('user function boom');

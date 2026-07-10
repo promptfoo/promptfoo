@@ -3,6 +3,7 @@ import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
+import { setRemoteGeneratedTestProvenance } from '../../remoteTestProvenance';
 import {
   extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
@@ -112,7 +113,8 @@ export async function getHarmfulTests(
       const testCase = createTestCase(injectVar, processedPrompt, plugin);
 
       // Merge additional vars from JSON parsing
-      if (Object.keys(additionalVars).length > 0) {
+      const additionalVarNames = Object.keys(additionalVars);
+      if (additionalVarNames.length > 0) {
         testCase.vars = {
           ...testCase.vars,
           ...additionalVars,
@@ -124,6 +126,21 @@ export async function getHarmfulTests(
           ...testCase.metadata,
           inputMaterialization: additionalMetadata,
         };
+      }
+
+      // These secondary inputs are materialized from the remote unaligned-harmful
+      // provider's JSON output, exactly like the aligned remote path. Mark them (and the
+      // primary injection variable) as remote-derived so the evaluator skips local
+      // rendering; otherwise a remote-supplied `{{env.SECRET}}`, `file://`, or `package:`
+      // value would be resolved locally before the target call. Basic (non-strategy)
+      // harmful tests only skip the inject var by default, so the multi-input case needs
+      // explicit provenance.
+      if (additionalVarNames.length > 0) {
+        testCase.metadata = setRemoteGeneratedTestProvenance(testCase.metadata ?? {}, {
+          metadata: [],
+          unsafeRenderVars: [injectVar, ...additionalVarNames],
+          vars: [],
+        });
       }
 
       return testCase;

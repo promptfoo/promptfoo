@@ -12,6 +12,7 @@ import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
 } from '../inputVariables';
+import { getRemoteGeneratedRenderSkipVars } from '../remoteTestProvenance';
 import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -363,7 +364,10 @@ async function runRedteamConversation({
         },
         filters,
         targetProvider,
-        [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+        getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
+          injectVar,
+          ...Object.keys(currentRenderInputVars ?? {}),
+        ]),
       );
 
       const targetContext = iterationContext

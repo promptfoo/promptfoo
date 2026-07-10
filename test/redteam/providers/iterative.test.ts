@@ -899,6 +899,65 @@ describe('RedteamIterativeProvider', () => {
       expect(sessionIds[1]).not.toBe(sessionIds[2]);
       expect(sessionIds[0]).not.toBe(sessionIds[2]);
     });
+
+    it('keeps late transform copies literal while rendering unchanged trusted vars', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const mockTest: AtomicTestCase = {
+        metadata: {
+          __promptfooRemoteGenerated: {
+            metadata: [],
+            unsafeRenderVars: ['test'],
+            vars: [],
+          },
+        },
+        options: {
+          transformVars: '{ ...vars, lateCopy: vars.test }',
+        },
+        vars: { test: attack, trusted: '{{ 6 * 7 }}' },
+      };
+      const targetPrompts: string[] = [];
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt) => {
+        targetPrompts.push(prompt);
+        return { output: 'mock target response' };
+      });
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test', prompt: 'safe candidate' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      await runRedteamConversation({
+        context: {
+          prompt: {
+            raw: 'LATE={{lateCopy}} TRUSTED={{trusted}} PRIMARY={{test}}',
+            label: 'test',
+          },
+          test: mockTest,
+          vars: { test: attack, trusted: '{{ 6 * 7 }}' },
+        },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: {
+          raw: 'LATE={{lateCopy}} TRUSTED={{trusted}} PRIMARY={{test}}',
+          label: 'test',
+        },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: mockTest,
+        vars: { test: attack, trusted: '{{ 6 * 7 }}' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(targetPrompts).toEqual([`LATE=${attack} TRUSTED=42 PRIMARY=safe candidate`]);
+    });
   });
 
   describe('Token Counting', () => {

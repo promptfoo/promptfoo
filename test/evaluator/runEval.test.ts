@@ -715,6 +715,89 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it.each([
+    { displayVar: 'image_text', strategyId: 'image' },
+    { displayVar: 'video_text', strategyId: 'video' },
+    { displayVar: 'embeddedInjection', strategyId: 'indirect-web-pwn' },
+    {
+      displayVar: 'embeddedInjection',
+      strategyId: 'jailbreak:hydra/indirect-web-pwn',
+    },
+    {
+      displayVar: 'video_text',
+      strategyConfig: { steps: ['hydra', { id: 'video' }] },
+      strategyId: 'layer/custom',
+    },
+  ])('should skip rendering $strategyId legacy display variable $displayVar', async ({
+    displayVar,
+    strategyConfig,
+    strategyId,
+  }) => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Safe encoded payload',
+          [displayVar]: 'Copied attack text: {{missing | trim}}',
+        },
+        metadata: {
+          pluginConfig: {},
+          pluginId: 'ssrf',
+          ...(strategyConfig ? { strategyConfig } : {}),
+          strategyId,
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { injectVar: 'prompt' },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('Safe encoded payload');
+  });
+
+  it('should skip rendering arbitrary strategy variables marked as unsafe remote payloads', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Safe transformed payload',
+          copiedAttack: 'Copied attack text: {{missing | trim}}',
+        },
+        metadata: {
+          __promptfooRemoteGenerated: {
+            metadata: [],
+            unsafeRenderVars: ['prompt', 'copiedAttack'],
+            vars: [],
+          },
+          pluginConfig: {},
+          pluginId: 'ssrf',
+          strategyId: 'file://custom-copy.js',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { injectVar: 'prompt' },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('Safe transformed payload');
+  });
+
   it('should fail before calling the provider when redteam maxCharsPerMessage is exceeded', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
 

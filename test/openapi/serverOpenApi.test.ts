@@ -86,6 +86,7 @@ describe('server OpenAPI generation', () => {
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
     const listBlobLibraryOperation = paths['/api/blobs/library']?.get as any;
     const modelAuditScanOperation = paths['/api/model-audit/scan']?.post as any;
+    const generateRedteamTestOperation = paths['/api/redteam/generate-test']?.post as any;
     const shareResultOperation = paths['/api/results/share']?.post as any;
     const userEmailStatusOperation = paths['/api/user/email/status']?.get as any;
     const includeProvidersParam = paths['/api/results']?.get?.parameters?.find(
@@ -156,6 +157,20 @@ describe('server OpenAPI generation', () => {
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
     ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
+    expect(generateRedteamTestOperation?.responses['502']).toEqual(
+      expect.objectContaining({
+        description: 'Remote generation compatibility error',
+        content: {
+          'application/json': {
+            schema: expect.objectContaining({
+              properties: expect.objectContaining({ error: { type: 'string' } }),
+              required: expect.arrayContaining(['error']),
+              type: 'object',
+            }),
+          },
+        },
+      }),
+    );
   });
 
   it('emits representative inline DTO schemas', () => {

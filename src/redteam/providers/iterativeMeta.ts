@@ -24,6 +24,7 @@ import {
   buildRemoteMaterializationContextVars,
   buildRemoteMaterializedInputVariables,
 } from '../remoteMaterialization';
+import { getRemoteGeneratedRenderSkipVars } from '../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -412,7 +413,10 @@ export async function runMetaAgentRedteam({
       updatedVars,
       filters,
       targetProvider,
-      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
+        injectVar,
+        ...Object.keys(currentRenderInputVars ?? {}),
+      ]),
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {

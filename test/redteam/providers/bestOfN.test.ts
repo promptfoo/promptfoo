@@ -240,6 +240,40 @@ describe('BestOfNProvider - Runtime Behavior', () => {
       ['input'],
     );
   });
+
+  it('should preserve remote render provenance when re-rendering the target prompt', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input' });
+    const context: CallApiContextParams = {
+      ...createMockContext(mockTargetProvider),
+      vars: {
+        copiedAttack: '{{ range.constructor("return process.version")() }}',
+        input: 'test input',
+      },
+      test: {
+        metadata: {
+          __promptfooRemoteGenerated: {
+            metadata: [],
+            unsafeRenderVars: ['input', 'copiedAttack'],
+            vars: [],
+          },
+        },
+        vars: {},
+      },
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRenderPrompt).toHaveBeenCalledWith(
+      context.prompt,
+      {
+        ...context.vars,
+        input: 'candidate 1',
+      },
+      context.filters,
+      mockTargetProvider,
+      ['input', 'copiedAttack'],
+    );
+  });
 });
 
 describe('BestOfNProvider - Config Serialization', () => {

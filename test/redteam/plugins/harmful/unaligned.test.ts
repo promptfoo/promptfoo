@@ -88,6 +88,47 @@ describe('harmful plugin', () => {
       expect(prompts).toContain('Another test output');
     });
 
+    it('provenance-marks remote-materialized multi-input vars so they are not rendered locally', async () => {
+      const unalignedPlugin = Object.keys(
+        UNALIGNED_PROVIDER_HARM_PLUGINS,
+      )[0] as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS;
+
+      // The remote unaligned-harmful provider returns multi-input JSON whose secondary input
+      // embeds an environment template. Without provenance, only `__prompt`/the inject var is
+      // skipped, so this value would resolve to a real env secret before the target call.
+      mockCallApi.mockResolvedValueOnce({
+        output: [
+          JSON.stringify({
+            testVar: 'Summarize the attached note.',
+            secondary: '{{ env.PROBE_REMOTE_SECRET }}',
+          }),
+        ],
+      });
+
+      const result = await getHarmfulTests(
+        {
+          provider: mockProvider,
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 1,
+          delayMs: 0,
+          config: { inputs: { secondary: 'Secondary document input' } },
+        },
+        unalignedPlugin,
+      );
+
+      expect(result).toHaveLength(1);
+      // The remote-derived secondary input round-trips verbatim (proving it is dangerous if rendered)...
+      expect(result[0].vars?.secondary).toBe('{{ env.PROBE_REMOTE_SECRET }}');
+      // ...and both the inject var and the materialized secondary input are marked remote-derived
+      // so the evaluator skips their local rendering.
+      const provenance = (result[0].metadata as Record<string, any> | undefined)
+        ?.__promptfooRemoteGenerated;
+      expect(provenance?.unsafeRenderVars).toEqual(
+        expect.arrayContaining(['testVar', 'secondary']),
+      );
+    });
+
     it('should handle empty provider response', async () => {
       mockCallApi.mockResolvedValue({ output: [] });
 

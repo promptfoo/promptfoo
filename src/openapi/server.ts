@@ -969,6 +969,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('TestCaseGenerationResponse', RedteamSchemas.GenerateTest.Response),
       400: validationError(),
       500: serverError(),
+      502: errorResponse('Remote generation compatibility error'),
     },
   });
 
