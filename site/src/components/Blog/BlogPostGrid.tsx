@@ -36,8 +36,7 @@ export default function BlogPostGrid({
   return (
     <div className={styles.blogPostGridContainer}>
       <h2 className={styles.blogPostGridTitle} data-is-paginated={isPaginatedPage}>
-        {mainTitle}
-        {pageNumber && ' '}
+        {pageNumber ? `${mainTitle} ` : mainTitle}
         {pageNumber}
       </h2>
       <div className={styles.blogPostGrid}>
