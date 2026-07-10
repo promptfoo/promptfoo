@@ -342,6 +342,10 @@ type EnvVars = {
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
 
+  // Meta Model API (Muse); MODEL_API_KEY is the env var Meta's official SDKs read
+  META_API_KEY?: string;
+  MODEL_API_KEY?: string;
+
   // Mistral
   MISTRAL_MAX_TOKENS?: string;
   MISTRAL_TEMPERATURE?: string;
