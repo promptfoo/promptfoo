@@ -131,6 +131,45 @@ describe('handleContextFaithfulness', () => {
     );
   });
 
+  it('should project grader vars while preserving the resolved context input', async () => {
+    const mockResult = { pass: true, score: 1, reason: 'ok' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('resolved context');
+
+    await handleContextFaithfulness({
+      assertion: {
+        type: 'context-faithfulness',
+        graderVars: ['audience'],
+      },
+      test: {
+        vars: {
+          query: 'test query',
+          context: 'ambient context',
+          audience: 'expert',
+          secret: 'excluded',
+        },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      assertionValueContext: {},
+      inverse: false,
+      outputString: 'test output',
+      providerResponse: null,
+    } as any);
+
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'test query',
+      'test output',
+      'resolved context',
+      0,
+      {},
+      { audience: 'expert' },
+      undefined,
+    );
+  });
+
   it('should throw error when test.vars is undefined', async () => {
     await expect(
       handleContextFaithfulness({

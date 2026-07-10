@@ -40,7 +40,7 @@ describe('handleAgentRubric', () => {
     vi.resetAllMocks();
   });
 
-  it('passes rubric inputs to the agent matcher', async () => {
+  it('projects grader vars while preserving rubric inputs', async () => {
     const result: GradingResult = {
       pass: true,
       score: 1,
@@ -48,13 +48,28 @@ describe('handleAgentRubric', () => {
     };
     mockMatchesAgentRubric.mockResolvedValue(result);
 
-    await expect(handleAgentRubric(params)).resolves.toEqual(result);
+    const projectionParams: AssertionParams = {
+      ...params,
+      assertion: {
+        ...params.assertion,
+        graderVars: ['audience'],
+      },
+      test: {
+        vars: {
+          audience: 'enterprise',
+          expected_fix_patch: '<large patch>',
+        },
+        options: {},
+      },
+    };
+
+    await expect(handleAgentRubric(projectionParams)).resolves.toEqual(result);
     expect(mockMatchesAgentRubric).toHaveBeenCalledWith(
       'Verify the claimed change',
       'Implemented',
       {},
-      {},
-      params.assertion,
+      { audience: 'enterprise' },
+      projectionParams.assertion,
       undefined,
     );
   });

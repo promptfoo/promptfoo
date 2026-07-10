@@ -50,6 +50,34 @@ const defaultParams = {
 };
 
 describe('handleConversationRelevance', () => {
+  it('should project graderVars before rendering a custom rubric prompt', async () => {
+    const callApi = vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'yes' }),
+    });
+    const provider = createFactoryProvider({ callApi });
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+        graderVars: ['allowed', 'messages'],
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The weather is sunny today.',
+      test: {
+        vars: { allowed: 'VISIBLE', secret: 'SENSITIVE' },
+        options: {
+          provider,
+          rubricPrompt: 'allowed={{ allowed }} secret={{ secret }} messages={{ messages }}',
+        },
+      },
+    };
+
+    await handleConversationRelevance(params);
+
+    expect(callApi.mock.calls[0][0]).toContain('allowed=VISIBLE secret= messages=');
+    expect(callApi.mock.calls[0][0]).not.toContain('SENSITIVE');
+  });
+
   it('should handle single message pairs', async () => {
     const params: AssertionParams = {
       ...defaultParams,

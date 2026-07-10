@@ -125,6 +125,34 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('makes resolved context available to the first custom rubric prompt', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+
+    await matchesContextFaithfulness(
+      'Query text',
+      'Output text',
+      'Resolved context text',
+      0.5,
+      {
+        rubricPrompt: [
+          'Question: {{question}}\nAnswer: {{answer}}\nContext: {{context}}',
+          'Context: {{context}}\nStatements: {{statements}}',
+        ],
+      },
+      { audience: 'expert' },
+    );
+
+    expect(callApiSpy.mock.calls[0][0]).toContain('Context: Resolved context text');
+    expect(callApiSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          context: 'Resolved context text',
+          audience: 'expert',
+        }),
+      }),
+    );
+  });
+
   it('should fail when no verdict markers are returned', async () => {
     const query = 'Query text';
     const output = 'Output text';

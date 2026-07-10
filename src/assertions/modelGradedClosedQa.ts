@@ -1,5 +1,6 @@
 import { matchesClosedQa } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
+import { getGraderVars } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -26,7 +27,7 @@ export const handleModelGradedClosedQa = async ({
       renderedValue,
       outputString,
       test.options,
-      test.vars,
+      getGraderVars(assertion, test.vars),
       providerCallContext,
     )),
   };

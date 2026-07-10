@@ -215,4 +215,32 @@ describe('handleSearchRubric', () => {
     expect(calls[0][2]).toEqual({ provider: 'anthropic:messages:claude-opus-4-6' });
     expect(calls[0][3]).toEqual({ city: 'New York' });
   });
+
+  it('should project grader vars before calling matchesSearchRubric', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'search-rubric',
+        value: 'test rubric',
+        graderVars: ['city'],
+      } as Assertion,
+      renderedValue: 'test rubric',
+      test: {
+        vars: { city: 'Tokyo', secret: 'excluded' },
+      },
+    };
+    mockMatchesSearchRubric.mockResolvedValue({ pass: true, score: 1, reason: 'test' });
+
+    await handleSearchRubric(params);
+
+    expect(mockMatchesSearchRubric).toHaveBeenCalledWith(
+      'test rubric',
+      'The weather in Tokyo is sunny',
+      undefined,
+      { city: 'Tokyo' },
+      params.assertion,
+      undefined,
+      undefined,
+    );
+  });
 });

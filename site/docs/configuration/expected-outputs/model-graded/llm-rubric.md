@@ -170,6 +170,8 @@ for the full metric list.
 
 For more control over the `llm-rubric` evaluation, you can set a custom prompt using the `rubricPrompt` property:
 
+Use [`graderVars`](./index.md#limiting-variables-sent-to-graders) to allowlist which test variables are available to the judge and custom rubric prompt.
+
 ```yaml
 defaultTest:
   options:

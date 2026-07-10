@@ -729,6 +729,10 @@ export const AssertionSchema = z.object({
   // Override the grading rubric
   rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
+  // Limit test variables passed to model graders. Built-in grader inputs
+  // such as output, rubric, and criteria are always included.
+  graderVars: z.array(z.string()).optional(),
+
   // Tag this assertion result as a named metric
   metric: z.string().optional(),
 

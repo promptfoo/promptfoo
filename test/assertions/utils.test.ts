@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coerceString,
   getFinalTest,
+  getGraderVars,
   loadFromJavaScriptFile,
   processFileReference,
 } from '../../src/assertions/utils';
@@ -110,6 +111,33 @@ describe('coerceString', () => {
   it('should handle empty object', () => {
     const input = {};
     expect(coerceString(input)).toBe('{}');
+  });
+});
+
+describe('getGraderVars', () => {
+  it.each([
+    ['agent-rubric', ['output', 'rubric']],
+    ['conversation-relevance', ['messages']],
+    ['factuality', ['input', 'ideal', 'completion']],
+    ['llm-rubric', ['output', 'rubric']],
+    ['not-llm-rubric', ['output', 'rubric']],
+    ['not-factuality', ['input', 'ideal', 'completion']],
+    ['model-graded-closedqa', ['input', 'criteria', 'completion']],
+    ['model-graded-factuality', ['input', 'ideal', 'completion']],
+    ['context-faithfulness', ['question', 'answer', 'context', 'statements']],
+    ['context-recall', ['context', 'groundTruth']],
+    ['search-rubric', ['output', 'rubric']],
+    ['select-best', ['criteria', 'outputs']],
+    ['trajectory:goal-success', ['goal', 'output', 'trajectory']],
+  ] as const)('does not allow %s vars to shadow grader built-ins', (type, builtins) => {
+    const vars = Object.fromEntries([
+      ...builtins.map((name) => [name, `user-${name}`]),
+      ['audience', 'security-reviewer'],
+    ]);
+
+    expect(
+      getGraderVars({ type, graderVars: [...builtins, 'audience'] } as Assertion, vars),
+    ).toEqual({ audience: 'security-reviewer' });
   });
 });
 
