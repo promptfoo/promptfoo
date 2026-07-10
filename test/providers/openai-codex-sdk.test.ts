@@ -7,7 +7,12 @@ import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
+import {
+  getCodexProviderError,
+  isCodexSandboxError,
+} from '../../src/providers/openai/codexExecutionHealth';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -117,6 +122,31 @@ describe('OpenAICodexSDKProvider', () => {
     });
     mockStartThread.mockReturnValue(mockThread);
     mockResumeThread.mockReturnValue(mockThread);
+    mockRunStreamed.mockImplementation(function (this: { run: typeof mockRun }, prompt, options) {
+      const responsePromise = this.run(prompt, options);
+      return Promise.resolve({
+        events: (async function* () {
+          const response = await responsePromise;
+          for (const item of response.items ?? []) {
+            yield { type: 'item.completed', item };
+          }
+          if (
+            typeof response.finalResponse === 'string' &&
+            !response.items?.some((item: any) => item.type === 'agent_message')
+          ) {
+            yield {
+              type: 'item.completed',
+              item: {
+                id: 'mock-final-response',
+                type: 'agent_message',
+                text: response.finalResponse,
+              },
+            };
+          }
+          yield { type: 'turn.completed', usage: response.usage };
+        })(),
+      });
+    });
 
     // Mock importModule to return our mock SDK
     mockImportModule.mockResolvedValue(mockCodexSDK);
@@ -139,6 +169,35 @@ describe('OpenAICodexSDKProvider', () => {
     restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
     restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
+  });
+
+  describe('structured execution-health errors', () => {
+    it.each([
+      { status: 429 },
+      { code: 'rate_limit_exceeded' },
+      { kind: 'sandbox_error' },
+    ])('should ignore unrelated nested data payloads: %j', (data) => {
+      const error = { message: 'tool failed', data };
+
+      expect(getCodexProviderError(error)).toBeUndefined();
+      expect(isCodexSandboxError(error)).toBe(false);
+    });
+
+    it('should accept an explicitly tagged nested Codex error envelope', () => {
+      const error = {
+        message: 'request failed',
+        data: {
+          codex_error_info: { type: 'SandboxError' },
+          code: 'sandbox_error',
+        },
+      };
+
+      expect(getCodexProviderError(error)).toEqual({
+        code: 'sandbox_error',
+        kind: 'SandboxError',
+      });
+      expect(isCodexSandboxError(error)).toBe(true);
+    });
   });
 
   describe('constructor', () => {
@@ -316,6 +375,14 @@ describe('OpenAICodexSDKProvider', () => {
             cached: 5,
           },
           cost: undefined,
+          metadata: {
+            executionHealth: {
+              schemaVersion: 1,
+              toolExitCodes: [],
+              droppedEvents: [],
+              sandboxFailure: false,
+            },
+          },
           raw: expect.any(String),
           sessionId: 'test-thread-123',
         });
@@ -326,6 +393,42 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
+      it('should return structured command exit codes without classifying command prose', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Done', undefined, [
+            {
+              id: 'cmd-success',
+              type: 'command_execution',
+              status: 'completed',
+              exit_code: 0,
+              aggregated_output: '429 Could not resolve host ECONNREFUSED bwrap Landlock',
+            },
+            {
+              id: 'cmd-failed',
+              type: 'command_execution',
+              status: 'failed',
+              exit_code: 2,
+              aggregated_output: 'source fixture says Could not resolve host',
+            },
+          ]),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Inspect fixtures');
+
+        expect(result.metadata?.executionHealth).toEqual({
+          schemaVersion: 1,
+          toolExitCodes: [
+            { itemId: 'cmd-success', exitCode: 0 },
+            { itemId: 'cmd-failed', exitCode: 2 },
+          ],
+          droppedEvents: [],
+          sandboxFailure: false,
+        });
       });
 
       it('should preserve Codex reasoning token usage details', async () => {
@@ -444,14 +547,43 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.error).toBe(
           'Error calling OpenAI Codex SDK: Unable to read /tmp/tpm/output.json',
         );
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
+        expect(result.metadata?.http).toBeUndefined();
+        expect(result.metadata?.executionHealth?.providerError).toBeUndefined();
+      });
+
+      it('should classify terminal SDK rate-limit prose without treating it as provider metadata', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(
+            new Error('Fixture mentions HTTP 429, Could not resolve host, and ECONNREFUSED'),
+            { retryAfterMs: 1250 },
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.http).toEqual({
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after-ms': '1250' },
+        });
+        expect(result.metadata?.executionHealth?.providerError).toBeUndefined();
+        expect(result.metadata?.executionHealth?.sandboxFailure).toBe(false);
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
       });
 
       it('should expose transient TPM throttles with scheduler retry timing', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(
-          new Error(
-            'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 1.25s.',
+          Object.assign(
+            new Error(
+              'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 1.25s.',
+            ),
+            { status: 429, code: 'rate_limit_exceeded', retryAfterMs: 1250 },
           ),
         );
 
@@ -462,21 +594,48 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
         expect(result.error).toContain('Please try again in 1.25s.');
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           rateLimitKind: 'rate_limit',
           http: {
             status: 429,
             statusText: 'Too Many Requests',
             headers: { 'retry-after-ms': '1250' },
           },
+          executionHealth: {
+            providerError: { code: 'rate_limit_exceeded', httpStatusCode: 429 },
+          },
         });
+      });
+
+      it('should classify a numeric provider code 429 without relying on prose', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('request rejected'), {
+            code: 429,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toMatchObject({
+          rateLimitKind: 'rate_limit',
+          http: { status: 429 },
+          executionHealth: { providerError: { code: 429 } },
+        });
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
       });
 
       it('should use a one-minute retry delay for TPM throttles without an SDK reset hint', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(
-          new Error(
-            'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000.',
+          Object.assign(
+            new Error(
+              'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000.',
+            ),
+            { status: 429, code: 'rate_limit_exceeded' },
           ),
         );
 
@@ -485,7 +644,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Test prompt');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           rateLimitKind: 'rate_limit',
           http: {
             status: 429,
@@ -498,8 +657,11 @@ describe('OpenAICodexSDKProvider', () => {
       it('should classify hard quota exhaustion as non-retryable', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(
-          new Error(
-            'insufficient_quota: You exceeded your current quota. Please check your plan and billing details.',
+          Object.assign(
+            new Error(
+              'insufficient_quota: You exceeded your current quota. Please check your plan and billing details.',
+            ),
+            { code: 'insufficient_quota' },
           ),
         );
 
@@ -510,7 +672,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
         expect(result.error).toContain('Retries will not help');
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           rateLimitKind: 'quota',
           http: {
             status: 429,
@@ -663,7 +825,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Use the token-skill skill');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           skillCalls: [
             {
               name: 'token-skill',
@@ -693,7 +855,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Use the token-skill skill');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           skillCalls: [
             {
               name: 'token-skill',
@@ -731,7 +893,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Use the token-skill skill');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           skillCalls: [
             {
               name: 'token-skill',
@@ -761,7 +923,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read all skills');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
       it('should ignore absolute .agents skill paths outside the current repo root', async () => {
@@ -783,7 +945,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read another repo skill');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
       it('should not infer skillCalls from directory listings without a direct SKILL.md command read', async () => {
@@ -806,7 +968,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('List the available files');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
       it('should omit skillCalls when no skill files are read', async () => {
@@ -833,7 +995,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('What is 2 + 2?');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
       it('should infer skillCalls from custom CODEX_HOME skill directories', async () => {
@@ -860,7 +1022,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Use the home skill');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           skillCalls: [
             {
               name: 'home-skill',
@@ -896,7 +1058,7 @@ describe('OpenAICodexSDKProvider', () => {
           });
           const result = await provider.callApi('Use the profile skill');
 
-          expect(result.metadata).toEqual({
+          expect(result.metadata).toMatchObject({
             skillCalls: [
               {
                 name: 'profile-skill',
@@ -944,7 +1106,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Use the token-skill skill');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           attemptedSkillCalls: [
             {
               name: 'token-skill',
@@ -975,7 +1137,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read the unrelated SKILL file');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
       it('should ignore arbitrary hidden .codex skill paths outside the configured home root', async () => {
@@ -998,7 +1160,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read the unrelated hidden Codex skill file');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.skillCalls).toBeUndefined();
       });
     });
 
@@ -1439,7 +1601,9 @@ describe('OpenAICodexSDKProvider', () => {
 
         abortController.abort();
 
-        await expect(secondCall).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        await expect(secondCall).resolves.toMatchObject({
+          error: 'OpenAI Codex SDK call aborted',
+        });
         expect(mockRun).toHaveBeenCalledTimes(1);
 
         const thirdCall = provider.callApi('What did I ask you to remember?', {
@@ -1884,6 +2048,9 @@ describe('OpenAICodexSDKProvider', () => {
             error: {
               message:
                 'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 250ms.',
+              status: 429,
+              code: 'rate_limit_exceeded',
+              retryAfterMs: 250,
             },
           };
         };
@@ -1896,7 +2063,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Test prompt');
 
-        expect(result.metadata).toEqual({
+        expect(result.metadata).toMatchObject({
           rateLimitKind: 'rate_limit',
           http: {
             status: 429,
@@ -1956,6 +2123,78 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
         expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
+        expect(result.metadata?.executionHealth?.providerError).toBeUndefined();
+      });
+
+      it('should read structured retry hints from nested errors and Codex fields', async () => {
+        const nestedMsEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Rate limited',
+              status: 429,
+              data: { headers: { 'retry-after-ms': '750' } },
+            },
+          };
+        };
+        const nestedSecondsEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Rate limited',
+              status: 429,
+              cause: { headers: { 'retry-after': '2' } },
+            },
+          };
+        };
+        const codexSecondsEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Rate limited',
+              status: 429,
+              retry_after_seconds: 1.5,
+            },
+          };
+        };
+
+        mockRunStreamed
+          .mockResolvedValueOnce({ events: nestedMsEvents() })
+          .mockResolvedValueOnce({ events: nestedSecondsEvents() })
+          .mockResolvedValueOnce({ events: codexSecondsEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const nestedMsResult = await provider.callApi('Test nested millisecond hint');
+        const nestedSecondsResult = await provider.callApi('Test nested second hint');
+        const codexSecondsResult = await provider.callApi('Test Codex second hint');
+
+        expect(nestedMsResult.metadata?.http?.headers).toEqual({ 'retry-after-ms': '750' });
+        expect(nestedSecondsResult.metadata?.http?.headers).toEqual({ 'retry-after-ms': '2000' });
+        expect(codexSecondsResult.metadata?.http?.headers).toEqual({ 'retry-after-ms': '1500' });
+      });
+
+      it('should tolerate cycles in structured retry metadata', async () => {
+        const terminalError: Record<string, unknown> = {
+          type: 'error',
+          message: 'exceeded retry limit, last status: 429 Too Many Requests',
+        };
+        terminalError.cause = terminalError;
+        const mockEvents = async function* () {
+          yield terminalError;
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test cyclic retry metadata');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
       });
 
       it('should preserve TPM context when a stream later fails generically', async () => {
@@ -1965,6 +2204,8 @@ describe('OpenAICodexSDKProvider', () => {
             type: 'error',
             message:
               'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000',
+            status: 429,
+            code: 'rate_limit_exceeded',
           };
           yield {
             type: 'turn.failed',
@@ -1983,6 +2224,32 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
         expect(result.error).toContain('Turn terminated after reconnect attempts');
         expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
+      });
+
+      it('should preserve structured context when the event iterator throws', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message: 'Rate limit reached',
+            status: 429,
+            code: 'rate_limit_exceeded',
+          };
+          throw new Error('Codex process exited after reconnect attempts');
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toMatchObject({
+          rateLimitKind: 'rate_limit',
+          executionHealth: {
+            providerError: { code: 'rate_limit_exceeded', httpStatusCode: 429 },
+          },
+        });
       });
     });
 
@@ -3293,6 +3560,103 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Codex turn failed: Model overloaded');
+      });
+
+      it('should classify sandbox failures only from a structured discriminator', async () => {
+        const structuredFailure = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'Sandbox setup failed',
+              code: 'sandbox_error',
+              codex_error_info: { type: 'SandboxError' },
+            },
+          };
+        };
+        const proseOnlyFailure = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: { message: 'Sandbox setup failed' },
+          };
+        };
+        const recoveredStructuredFailure = async function* () {
+          yield {
+            type: 'error',
+            message: 'Sandbox setup failed',
+            code: 'sandbox_error',
+            codex_error_info: { type: 'SandboxError' },
+          };
+          yield { type: 'turn.completed', usage: undefined };
+        };
+
+        mockRunStreamed
+          .mockResolvedValueOnce({ events: structuredFailure() })
+          .mockResolvedValueOnce({ events: proseOnlyFailure() })
+          .mockResolvedValueOnce({ events: recoveredStructuredFailure() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const structuredResult = await provider.callApi('Test structured failure');
+        const proseOnlyResult = await provider.callApi('Test prose-only failure');
+        const recoveredResult = await provider.callApi('Test recovered structured failure');
+
+        expect(structuredResult.metadata?.executionHealth).toMatchObject({
+          providerError: { code: 'sandbox_error', kind: 'SandboxError' },
+          sandboxFailure: true,
+        });
+        expect(proseOnlyResult.metadata?.executionHealth).toMatchObject({
+          sandboxFailure: false,
+        });
+        expect(proseOnlyResult.metadata?.executionHealth?.providerError).toBeUndefined();
+        expect(recoveredResult.error).toBeUndefined();
+        expect(recoveredResult.metadata?.executionHealth).toMatchObject({
+          sandboxFailure: false,
+        });
+        expect(recoveredResult.metadata?.executionHealth?.providerError).toBeUndefined();
+      });
+
+      it('preserves completed and unclosed items when a turn fails', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'item.completed',
+            item: {
+              id: 'cmd-complete',
+              type: 'command_execution',
+              status: 'failed',
+              exit_code: 2,
+              aggregated_output: 'fixture says ECONNREFUSED',
+            },
+          };
+          yield {
+            type: 'item.started',
+            item: { id: 'cmd-unclosed', type: 'command_execution', command: 'pwd' },
+          };
+          yield {
+            type: 'turn.failed',
+            error: {
+              message: 'event stream transport failed',
+              code: 'stream_transport_failed',
+            },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('event stream transport failed');
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(result.metadata?.executionHealth).toEqual({
+          schemaVersion: 1,
+          toolExitCodes: [{ itemId: 'cmd-complete', exitCode: 2 }],
+          providerError: { code: 'stream_transport_failed' },
+          droppedEvents: [{ itemId: 'cmd-unclosed', itemType: 'command_execution' }],
+          sandboxFailure: false,
+        });
       });
 
       it('should return stream error events that reach end-of-stream without completion', async () => {

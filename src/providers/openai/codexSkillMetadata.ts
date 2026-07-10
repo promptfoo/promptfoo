@@ -1,6 +1,6 @@
 import path from 'path';
 
-import type { SkillCallEntry } from '../../types/index';
+import type { SkillCallEntry } from './codexTypes';
 
 export interface CodexSkillPathCandidate {
   name: string;

@@ -4,15 +4,24 @@ import {
   isProviderResponseRateLimited,
   isTransientConnectionError,
 } from '../../src/scheduler/types';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 
 import type { ProviderResponse } from '../../src/types/providers';
 
 describe('isProviderResponseRateLimited', () => {
   describe('HTTP status detection', () => {
-    it('should detect 429 status in metadata.http.status', () => {
+    it('should prefer a structured 429 over execution health', () => {
       const result: ProviderResponse = {
         output: 'error',
-        metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+        metadata: {
+          http: { status: 429, statusText: 'Too Many Requests', headers: {} },
+          executionHealth: {
+            schemaVersion: 1,
+            toolExitCodes: [],
+            droppedEvents: [],
+            sandboxFailure: false,
+          },
+        },
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
@@ -22,6 +31,15 @@ describe('isProviderResponseRateLimited', () => {
         output: 'success',
         metadata: { http: { status: 200, statusText: 'OK', headers: {} } },
       };
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
+
+    it('should not retry a quota response just because it also has HTTP 429', () => {
+      const result: ProviderResponse = {
+        error: 'Quota exceeded: HTTP 429 Too Many Requests',
+        metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+      };
+
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
   });
@@ -49,6 +67,34 @@ describe('isProviderResponseRateLimited', () => {
       };
       expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
+
+    it('should not reinterpret prose when structured execution health is present', () => {
+      const result: ProviderResponse = {
+        error: 'Fixture mentions HTTP 429, rate limit, and too many requests',
+        metadata: {
+          executionHealth: {
+            schemaVersion: 1,
+            toolExitCodes: [],
+            droppedEvents: [],
+            sandboxFailure: false,
+          },
+          rateLimitKind: 'not_rate_limit',
+        },
+      };
+
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
+
+    it('should not let an unrelated executionHealth shape disable generic provider retries', () => {
+      const result: ProviderResponse = {
+        error: 'HTTP 429: Too Many Requests',
+        metadata: {
+          executionHealth: { status: 'degraded' } as any,
+        },
+      };
+
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+    });
   });
 
   describe('Thrown error detection', () => {
@@ -75,6 +121,13 @@ describe('isProviderResponseRateLimited', () => {
 
     it('should handle undefined error gracefully', () => {
       expect(isProviderResponseRateLimited(undefined, undefined)).toBe(false);
+    });
+
+    it('should conservatively retry future structured rate-limit kinds', () => {
+      const error = new HttpRateLimitError({ status: 429 });
+      (error as unknown as { kind: string }).kind = 'concurrent_limit';
+
+      expect(isProviderResponseRateLimited(undefined, error)).toBe(true);
     });
   });
 

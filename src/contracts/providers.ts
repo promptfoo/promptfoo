@@ -35,6 +35,37 @@ export interface ImageOutput {
   mimeType?: string;
 }
 
+export interface CodexToolExitCode {
+  itemId?: string;
+  exitCode: number;
+}
+
+export interface CodexProviderError {
+  code?: string | number;
+  kind?: string;
+  httpStatusCode?: number;
+}
+
+export interface CodexDroppedEvent {
+  itemId: string;
+  itemType?: string;
+}
+
+/**
+ * Versioned execution diagnostics returned by the Codex SDK provider.
+ *
+ * Classifications in this envelope come only from structured provider data or
+ * protocol lifecycle observations. Command output and error prose are not
+ * interpreted as machine-readable failure signals.
+ */
+export interface CodexExecutionHealth {
+  schemaVersion: 1;
+  toolExitCodes: CodexToolExitCode[];
+  providerError?: CodexProviderError;
+  droppedEvents: CodexDroppedEvent[];
+  sandboxFailure: boolean;
+}
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -61,6 +92,7 @@ export interface ProviderResponse {
   latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
+    executionHealth?: CodexExecutionHealth;
     http?: {
       status: number;
       statusText: string;

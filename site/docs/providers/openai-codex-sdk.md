@@ -32,11 +32,11 @@ You can reference this provider using either base ID, and you can inline the mod
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                            |
 | Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                         |
-| Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                   |
+| Shell/MCP/search/file trajectories | Yes        | The raw turn payload contains completed items. `metadata.executionHealth` summarizes command exit codes and protocol failures only. Enable `enable_streaming` for item- and turn-level spans, and `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                            |
 | Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                 |
 | Multi-turn thread persistence      | Partial    | `persist_threads` pools by prompt template + config, not by rendered prompt values. `deep_tracing` disables thread persistence.                                                                                                                                                                                                                                   |
 | Embeddings/moderation/image APIs   | No         | Use the standard `openai:*` providers for those API surfaces.                                                                                                                                                                                                                                                                                                     |
-| Live partial-token streaming       | No         | `enable_streaming` is used to aggregate Codex events and emit traces; promptfoo still receives the final response after the turn completes.                                                                                                                                                                                                                       |
+| Live partial-token streaming       | No         | The provider aggregates Codex events internally. `enable_streaming` adds event-level traces; promptfoo still receives the final response after the turn completes.                                                                                                                                                                                                |
 | Sampling knobs                     | Limited    | `model_reasoning_effort` is supported. Direct `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed by this provider.                                                                                                                                                                                                                      |
 
 ## Installation
@@ -234,10 +234,10 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `output_schema`          | object   | JSON schema for structured responses                                                                 | None                 |
 | `cli_env`                | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
 | `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
-| `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
+| `enable_streaming`       | boolean  | Emit item- and turn-level OpenTelemetry spans from the internal event stream                         | false                |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
 
-During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
+Codex SDK throttles participate in promptfoo's adaptive rate-limit scheduler using structured HTTP status, error code, or retry-delay fields when available. The currently pinned Codex exec protocol reports terminal throttles as message-only stream errors, so promptfoo also recognizes rate-limit prose at that terminal SDK boundary. Command output and successful intermediate events are never classified as throttles. Transient throttles without a reset hint use a 60-second delay; hard-quota errors are returned without retrying.
 
 ### Sandbox Modes
 
@@ -405,7 +405,7 @@ providers:
       enable_streaming: true
 ```
 
-When streaming is enabled, the provider processes events like `item.completed` and `turn.completed` to build the final response and emit spans. Promptfoo still waits for the turn to finish before returning `response.output`; this setting does not provide a token-by-token callback stream to assertions.
+The provider always processes events like `item.completed` and `turn.completed` to build the final response and execution-health metadata. When `enable_streaming` is true, it also emits item- and turn-level spans. Promptfoo still waits for the turn to finish before returning `response.output`; this setting does not provide a token-by-token callback stream to assertions.
 
 ## Tracing and Observability
 
@@ -431,7 +431,7 @@ providers:
       enable_streaming: true
 ```
 
-With streaming enabled, the provider creates spans for:
+With event tracing enabled, the provider creates spans for:
 
 - **Provider-level calls** - Overall request timing and token usage
 - **SDK turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes.
@@ -694,6 +694,22 @@ providers:
         CODEX_HOME: ./sample-codex-home
 ```
 
+## Execution health
+
+Codex responses include `response.metadata.executionHealth` with a small, versioned summary:
+
+| Field            | Description                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`  | Contract version. Currently `1`.                                                                                                             |
+| `toolExitCodes`  | Numeric exit codes for completed command items. A nonzero exit is not a provider failure.                                                    |
+| `providerError`  | Reserved for a terminal provider error's structured code, kind, and HTTP status. The current exec JSONL protocol does not emit these fields. |
+| `droppedEvents`  | Items that started but did not receive a completion event.                                                                                   |
+| `sandboxFailure` | Reserved for an explicit Codex sandbox discriminator. The current exec JSONL protocol does not emit one.                                     |
+
+Promptfoo does not infer these fields from command output or error prose. `toolExitCodes` covers completed commands with numeric exit codes; it does not summarize other failed item types. Confirmed skill usage remains available separately in `response.metadata.skillCalls`.
+
+The `CodexExecutionHealth` type is exported from `promptfoo/contracts`.
+
 ## Skills
 
 Codex loads [agent skills](https://developers.openai.com/codex/skills) from `.agents/skills/` directories in the `working_dir` hierarchy. Promptfoo does not enable skills via a provider-specific toggle; instead, you point `working_dir` at a repository that already contains the skill files you want Codex to discover.
@@ -927,7 +943,7 @@ This works because all three test cases render from the same prompt template (`{
 
 - This provider implements `callApi` only. It does not implement embeddings, classification, moderation, image, video, transcription, or realtime APIs.
 - Prompt input arrays are supported only for Codex `text` and `local_image` items. Remote image URLs and other SDK item types are not forwarded by this provider.
-- The provider returns a final response after the Codex turn completes. `enable_streaming` is for event aggregation and tracing, not live partial output in assertions.
+- The provider returns a final response after the Codex turn completes. `enable_streaming` adds event-level tracing, not live partial output in assertions.
 - `output_schema` does not change the response type exposed to promptfoo assertions. `response.output` remains a string.
 - `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed as first-class provider config fields.
 - Cost is estimated only for known model names. If you omit `config.model` or use an unknown model, `response.cost` is undefined.

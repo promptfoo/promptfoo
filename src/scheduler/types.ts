@@ -41,8 +41,11 @@ export function isProviderResponseRateLimited(
   if (result?.metadata?.rateLimitKind === 'rate_limit') {
     return true;
   }
-  if (isHttpRateLimitError(error) && error.kind === 'quota') {
+  if (result?.metadata?.rateLimitKind === 'not_rate_limit') {
     return false;
+  }
+  if (isHttpRateLimitError(error)) {
+    return error.kind !== 'quota';
   }
   // String fallback for providers that fold the structured error into
   // `error: formatRateLimitErrorMessage(...)`. The "Quota exceeded:"
@@ -57,12 +60,12 @@ export function isProviderResponseRateLimited(
   if (error?.message?.includes('Quota exceeded:')) {
     return false;
   }
-
+  if (result?.metadata?.http?.status === 429) {
+    return true;
+  }
   return Boolean(
-    // Check HTTP status code (most reliable)
-    result?.metadata?.http?.status === 429 ||
-      // Check error field in response
-      result?.error?.includes?.('429') ||
+    // Check error field in response
+    result?.error?.includes?.('429') ||
       result?.error?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
       error?.message?.includes('429') ||
