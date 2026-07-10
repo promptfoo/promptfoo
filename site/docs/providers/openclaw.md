@@ -61,10 +61,10 @@ OpenClaw exposes five provider types, each targeting a different gateway API sur
 
 | Provider    | Format                         | API                    | Use Case                                             |
 | ----------- | ------------------------------ | ---------------------- | ---------------------------------------------------- |
-| Chat        | `openclaw:main`                | `/v1/chat/completions` | Standard chat completions (default)                  |
-| Responses   | `openclaw:responses:main`      | `/v1/responses`        | OpenResponses-compatible API with item-based inputs  |
-| Embeddings  | `openclaw:embedding:main`      | `/v1/embeddings`       | OpenAI-compatible embeddings through an agent target |
-| Agent       | `openclaw:agent:main`          | WebSocket RPC          | Full agent streaming via native WS protocol          |
+| Chat        | `openclaw`                     | `/v1/chat/completions` | Standard chat completions (default)                  |
+| Responses   | `openclaw:responses`           | `/v1/responses`        | OpenResponses-compatible API with item-based inputs  |
+| Embeddings  | `openclaw:embedding`           | `/v1/embeddings`       | OpenAI-compatible embeddings through an agent target |
+| Agent       | `openclaw:agent`               | WebSocket RPC          | Full agent streaming via native WS protocol          |
 | Tool Invoke | `openclaw:tools:sessions_list` | `/tools/invoke`        | Direct tool invocation for stable built-in tools     |
 
 ### Chat (default)
@@ -72,12 +72,29 @@ OpenClaw exposes five provider types, each targeting a different gateway API sur
 Uses the OpenAI-compatible chat completions endpoint. This is the default when no keyword is specified.
 Requires `gateway.http.endpoints.chatCompletions.enabled=true`.
 
-- `openclaw` - Uses the default agent
+- `openclaw` - Uses the configured default agent
 - `openclaw:main` - Explicitly targets the main agent
 - `openclaw:<agent-id>` - Targets a specific agent by ID
 
-Promptfoo sends OpenClaw's current slash-style model id (`openclaw/<agent-id>`) to the gateway
-while keeping the `openclaw:<agent-id>` promptfoo provider syntax for compatibility.
+Promptfoo sends OpenClaw's slash-style model ids to the gateway while keeping the
+`openclaw:<agent-id>` promptfoo syntax:
+
+- bare `openclaw` uses the stable upstream alias `openclaw/default`
+- `openclaw:main` uses `openclaw/main`
+- `openclaw:<agent-id>` uses `openclaw/<agent-id>`
+
+That distinction matters when an OpenClaw installation changes its configured default agent away
+from `main`.
+
+Only an omitted agent selector means configured default. For example, `openclaw:default` explicitly
+targets an agent whose ID is `default`; the same rule applies to Responses, Embeddings, and WS Agent
+provider forms.
+
+:::note[Compatibility]
+Older Promptfoo versions routed bare OpenClaw provider forms to `main` and reported provider IDs
+ending in `:main`. Use an explicit `:main` suffix to retain that routing. Bare forms now appear with
+bare provider IDs in results, so update any filters or reporting keyed to the old IDs.
+:::
 
 ### Responses
 
@@ -96,7 +113,7 @@ default and requires enabling in gateway config:
 }
 ```
 
-- `openclaw:responses` - Default agent via Responses API
+- `openclaw:responses` - Configured default agent via Responses API
 - `openclaw:responses:main` - Explicit agent ID
 - `openclaw:responses:<agent-id>` - Custom agent
 
@@ -117,7 +134,7 @@ Promptfoo includes a stable device identity, signs the gateway `connect.challeng
 issued `hello-ok.auth.deviceToken` values, and retries once with a cached device token when the
 gateway reports an `AUTH_TOKEN_MISMATCH`.
 
-- `openclaw:agent` - Default agent via WS
+- `openclaw:agent` - Configured default agent via WS
 - `openclaw:agent:main` - Explicit agent ID
 - `openclaw:agent:<agent-id>` - Custom agent
 
@@ -156,7 +173,7 @@ includes:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openclaw:main
+  - openclaw
 ```
 
 ### Explicit Configuration
@@ -191,35 +208,35 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openclaw:main
+  - openclaw
 ```
 
 ## Config Options
 
-| Config Property      | Environment Variable      | Description                                                                              |
-| -------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
-| gateway_url          | OPENCLAW_GATEWAY_URL      | Gateway URL (default: auto-detected)                                                     |
-| -                    | OPENCLAW_GATEWAY_PORT     | Local gateway port override used when `gateway_url` is unset                             |
-| auth_token           | OPENCLAW_GATEWAY_TOKEN    | Gateway bearer secret for token auth mode                                                |
-| auth_password        | OPENCLAW_GATEWAY_PASSWORD | Gateway bearer secret for password auth mode                                             |
-| backend_model        | -                         | Backend model override sent as `x-openclaw-model`                                        |
-| model_override       | -                         | Alias for `backend_model`                                                                |
-| message_channel      | -                         | Channel context sent as `x-openclaw-message-channel` and WS `channel`                    |
-| account_id           | -                         | Account context sent as `x-openclaw-account-id` and WS `accountId`                       |
-| scopes               | -                         | WS operator scopes and optional HTTP `x-openclaw-scopes` context                         |
-| session_key          | -                         | Session identifier for continuity; otherwise WS uses an isolated per-call session        |
-| thinking_level       | -                         | WS Agent reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive` |
-| extra_system_prompt  | -                         | WS Agent-only extra system prompt injected as `extraSystemPrompt`                        |
-| device_identity_path | -                         | WS Agent device keypair path (default: promptfoo config directory)                       |
-| device_auth_path     | -                         | WS Agent issued-device-token cache path (default: promptfoo config directory)            |
-| device_token         | -                         | Explicit WS device token for paired-device auth                                          |
-| device_family        | -                         | Optional device metadata included in the signed WS device payload                        |
-| disable_device_auth  | -                         | WS Agent break-glass option to omit device identity                                      |
-| ws_headers           | -                         | Additional headers for WebSocket connects                                                |
-| headers              | -                         | Additional HTTP headers, also used by WS unless overridden by `ws_headers`               |
-| action               | -                         | Tool Invoke-only sub-action forwarded as `body.action`                                   |
-| dry_run              | -                         | Tool Invoke-only dry-run hint forwarded as `body.dryRun`                                 |
-| timeoutMs            | -                         | Client timeout in milliseconds for WS Agent waits and Tool Invoke HTTP requests          |
+| Config Property      | Environment Variable      | Description                                                                                                                                                     |
+| -------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| gateway_url          | OPENCLAW_GATEWAY_URL      | Gateway URL (default: auto-detected)                                                                                                                            |
+| -                    | OPENCLAW_GATEWAY_PORT     | Local gateway port override used when `gateway_url` is unset                                                                                                    |
+| auth_token           | OPENCLAW_GATEWAY_TOKEN    | Gateway bearer secret for token auth mode                                                                                                                       |
+| auth_password        | OPENCLAW_GATEWAY_PASSWORD | Gateway bearer secret for password auth mode                                                                                                                    |
+| backend_model        | -                         | Backend model override sent as `x-openclaw-model`                                                                                                               |
+| model_override       | -                         | Alias for `backend_model`                                                                                                                                       |
+| message_channel      | -                         | Channel context sent as `x-openclaw-message-channel` and WS `channel`                                                                                           |
+| account_id           | -                         | Account context sent as `x-openclaw-account-id` and WS `accountId`                                                                                              |
+| scopes               | -                         | WS operator scopes and optional HTTP `x-openclaw-scopes` context                                                                                                |
+| session_key          | -                         | Session identifier; unscoped keys for explicit agents are scoped automatically, except the `global` and `unknown` sentinels which always pass through unchanged |
+| thinking_level       | -                         | WS Agent reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive`                                                                        |
+| extra_system_prompt  | -                         | WS Agent-only extra system prompt injected as `extraSystemPrompt`                                                                                               |
+| device_identity_path | -                         | WS Agent device keypair path (default: promptfoo config directory)                                                                                              |
+| device_auth_path     | -                         | WS Agent issued-device-token cache path (default: promptfoo config directory)                                                                                   |
+| device_token         | -                         | Explicit WS device token for paired-device auth                                                                                                                 |
+| device_family        | -                         | Optional device metadata included in the signed WS device payload                                                                                               |
+| disable_device_auth  | -                         | WS Agent break-glass option to omit device identity                                                                                                             |
+| ws_headers           | -                         | Additional headers for WebSocket connects                                                                                                                       |
+| headers              | -                         | Additional HTTP headers, also used by WS unless overridden by `ws_headers`                                                                                      |
+| action               | -                         | Tool Invoke-only sub-action forwarded as `body.action`                                                                                                          |
+| dry_run              | -                         | Tool Invoke-only dry-run hint forwarded as `body.dryRun`                                                                                                        |
+| timeoutMs            | -                         | Client timeout in milliseconds for WS Agent waits and Tool Invoke HTTP requests                                                                                 |
 
 ## Examples
 
@@ -230,7 +247,7 @@ prompts:
   - 'What is the capital of {{country}}?'
 
 providers:
-  - openclaw:main
+  - openclaw
 
 tests:
   - vars:
@@ -269,7 +286,7 @@ prompts:
   - 'Summarize: {{text}}'
 
 providers:
-  - openclaw:responses:main
+  - openclaw:responses
 
 tests:
   - vars:
@@ -299,7 +316,7 @@ this eval without changing the agent's normal default model.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openclaw:main
+  - id: openclaw
     config:
       backend_model: openai/gpt-5.4
 ```
