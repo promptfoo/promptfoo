@@ -74,7 +74,7 @@ const config: Config = {
         },
         blog: {
           blogDescription:
-            'Explore practical guides on AI red teaming, LLM evaluations, model security, and building reliable AI applications from the Promptfoo team and contributors.',
+            'Explore AI security research, hands-on LLM red teaming and evaluation guides, real-world vulnerability analysis, and the latest Promptfoo product updates.',
           showReadingTime: false,
           blogSidebarCount: 0,
           postsPerPage: 20,
