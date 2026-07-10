@@ -23,7 +23,7 @@ providers:
   - id: meta:muse-spark-1.1
 ```
 
-Both `meta:<model>` and `meta:chat:<model>` resolve to the chat completions endpoint; `meta:responses:<model>` uses the [Responses API](#responses-api). If you omit the model, the provider defaults to `muse-spark-1.1`.
+Both `meta:<model>` and `meta:chat:<model>` resolve to the chat completions endpoint; `meta:responses:<model>` uses the [Responses API](#responses-api) and `meta:messages:<model>` the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.1`.
 
 ## Available Models
 
@@ -75,6 +75,43 @@ providers:
 
 With `web_search`, the model grounds answers in real-time web results with inline citations. Web search bills separately ($2.50 per 1,000 queries) and is not included in promptfoo's computed token cost.
 
+## Messages API
+
+`meta:messages:<model>` targets Meta's Anthropic-compatible Messages endpoint (`https://api.meta.ai/v1/messages`) — the surface Anthropic-format coding agents such as Claude Code use. Use it to evaluate Muse Spark over the same wire format those agents send:
+
+```yaml
+providers:
+  - id: meta:messages:muse-spark-1.1
+    config:
+      max_tokens: 8192
+```
+
+The provider extends the [Anthropic provider](/docs/providers/anthropic/), so its options (`max_tokens`, `tools`, image and document content blocks, etc.) apply. Authentication uses your Meta key as a bearer token (`Authorization: Bearer`), matching Meta's docs — Anthropic-scoped settings like `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and Claude Code OAuth credentials are deliberately ignored on this surface.
+
+## Using with coding-agent providers
+
+Meta positions Muse Spark as a backend for coding agents, and promptfoo's agentic providers can evaluate those setups end to end:
+
+- **Codex CLI** — the [`openai:codex-sdk` provider](/docs/providers/openai-codex-sdk) accepts a `base_url`; point it at `https://api.meta.ai/v1` with `model: muse-spark-1.1` and set `MODEL_API_KEY` as the key env, mirroring Meta's Codex guide (Codex drives Muse Spark over the Responses API).
+- **Claude Code** — the [`claude-agent-sdk` provider](/docs/providers/claude-agent-sdk/) forwards `config.env` to the agent subprocess. Set `apiKeyRequired: false` and pass the environment Meta's guide prescribes:
+
+```yaml
+providers:
+  - id: claude-agent-sdk
+    config:
+      apiKeyRequired: false
+      env:
+        ANTHROPIC_BASE_URL: https://api.meta.ai
+        ANTHROPIC_AUTH_TOKEN: '{{env.META_API_KEY}}'
+        ANTHROPIC_MODEL: muse-spark-1.1
+        ANTHROPIC_DEFAULT_OPUS_MODEL: muse-spark-1.1
+        ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.1
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-spark-1.1
+        CLAUDE_CODE_SUBAGENT_MODEL: muse-spark-1.1
+```
+
+Pin every model alias as shown — Meta serves only `muse-spark-1.1`, and Claude Code otherwise routes background tasks, Plan Mode, or subagents to Claude models the Meta API doesn't serve. See Meta's [coding agents guide](https://dev.meta.ai/docs/guides/coding-agents) for the full setup pattern.
+
 ## Example Usage
 
 ```yaml
@@ -98,8 +135,8 @@ npx promptfoo@latest init --example provider-meta
 
 ## API Details
 
-- Base URL: `https://api.meta.ai/v1` (override with `apiBaseUrl`).
-- OpenAI-compatible chat completions (`/chat/completions`) and Responses (`/responses`) endpoints. Meta also serves an Anthropic-compatible Messages endpoint, which promptfoo does not use.
+- Base URL: `https://api.meta.ai/v1` (override with `apiBaseUrl`; the Messages surface uses the bare host `https://api.meta.ai`).
+- OpenAI-compatible chat completions (`/chat/completions`) and Responses (`/responses`) endpoints, plus the Anthropic-compatible Messages (`/messages`) endpoint.
 - Rate limits apply per team, not per key: 60 RPM / 2M TPM on the free tier, 3,000 RPM / 4M TPM paid.
 - Full [API documentation](https://dev.meta.ai/docs/getting-started/overview).
 

@@ -1,5 +1,7 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
 
@@ -12,9 +14,13 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
+import type { AnthropicMessageOptions } from './anthropic/types';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const META_API_BASE_URL = 'https://api.meta.ai/v1';
+// The Anthropic-compatible Messages surface is served from the bare host; the
+// Anthropic SDK appends /v1/messages itself.
+const META_MESSAGES_API_BASE_URL = 'https://api.meta.ai';
 const META_API_KEY_ENVAR = 'META_API_KEY';
 // Meta's official SDKs and docs read MODEL_API_KEY; honor it as a fallback so a
 // key set up per the Meta Model API quickstart works without renaming.
@@ -24,14 +30,27 @@ const DEFAULT_META_MODEL = 'muse-spark-1.1';
 // Muse Spark rejects other values (including OpenAI's 'none') with an HTTP 400.
 const META_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
 
-type MetaConfig = OpenAiCompletionOptions & {
+// Minimal config shapes shared by the OpenAI- and Anthropic-based Meta providers.
+type MetaKeyConfig = { apiKey?: string; apiKeyEnvar?: string };
+type MetaCostConfig = {
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
   // Per-cached-token input rate. The Meta Model API bills cached prompt tokens
   // below the normal input rate; override the built-in rate if pricing changes.
   cacheReadCost?: number;
 };
 
+type MetaConfig = OpenAiCompletionOptions & MetaCostConfig;
+
 type MetaProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MetaConfig;
+};
+
+type MetaMessagesConfig = AnthropicMessageOptions & MetaKeyConfig & MetaCostConfig;
+
+type MetaMessagesProviderOptions = Omit<ProviderOptions, 'config'> & {
+  config?: MetaMessagesConfig;
 };
 
 // Published Meta Model API pricing in USD per token (the pricing page lists
@@ -63,7 +82,10 @@ function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): st
 // key to the Meta endpoint and 401. Provider-scoped `env:` overrides beat the
 // ambient process env; within each source META_API_KEY beats Meta's generic
 // MODEL_API_KEY so promptfoo users can isolate the key per provider.
-function resolveMetaApiKey(config: MetaConfig, env: EnvOverrides | undefined): string | undefined {
+function resolveMetaApiKey(
+  config: MetaKeyConfig,
+  env: EnvOverrides | undefined,
+): string | undefined {
   if (config.apiKey !== undefined) {
     return config.apiKey;
   }
@@ -90,7 +112,7 @@ function resolveMetaApiKey(config: MetaConfig, env: EnvOverrides | undefined): s
   return fromOfficialEnv;
 }
 
-function missingMetaApiKeyMessage(config: MetaConfig): string {
+function missingMetaApiKeyMessage(config: MetaKeyConfig): string {
   const envar =
     config.apiKeyEnvar && config.apiKeyEnvar !== META_API_KEY_ENVAR
       ? config.apiKeyEnvar
@@ -122,7 +144,7 @@ function assertSupportedReasoningEffort(effort: unknown): void {
  */
 export function calculateMetaCost(
   modelName: string,
-  config: MetaConfig,
+  config: MetaCostConfig,
   promptTokens?: number,
   completionTokens?: number,
   cachedTokens?: number,
@@ -163,10 +185,12 @@ function extractCachedTokens(raw: unknown): number {
     }
   }
   // Chat Completions reports prompt_tokens_details.cached_tokens; the
-  // Responses API reports input_tokens_details.cached_tokens.
+  // Responses API reports input_tokens_details.cached_tokens; the Messages
+  // surface uses Anthropic's cache_read_input_tokens.
   const cached =
     parsed?.usage?.prompt_tokens_details?.cached_tokens ??
-    parsed?.usage?.input_tokens_details?.cached_tokens;
+    parsed?.usage?.input_tokens_details?.cached_tokens ??
+    parsed?.usage?.cache_read_input_tokens;
   return typeof cached === 'number' ? cached : 0;
 }
 
@@ -471,12 +495,119 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   }
 }
 
+// Meta also serves an Anthropic-compatible Messages endpoint — the surface
+// Anthropic-format coding agents like Claude Code use. It authenticates with
+// `Authorization: Bearer`, not Anthropic's x-api-key header.
+// https://dev.meta.ai/docs/features/messages
+export class MetaMessagesProvider extends AnthropicMessagesProvider {
+  // Never authenticate with a local Claude Code OAuth credential — that token
+  // belongs to Anthropic and must not be sent to api.meta.ai.
+  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH: boolean = false;
+
+  // Muse model ids are not Anthropic models; skip the unknown-model warning.
+  static override readonly WARNS_ON_UNKNOWN_MODEL: boolean = false;
+
+  constructor(modelName: string, providerOptions: MetaMessagesProviderOptions) {
+    const metaConfig = providerOptions.config ?? {};
+    const resolvedConfig: MetaMessagesConfig = {
+      ...metaConfig,
+      apiBaseUrl: metaConfig.apiBaseUrl ?? META_MESSAGES_API_BASE_URL,
+    };
+
+    super(modelName, {
+      ...providerOptions,
+      config: resolvedConfig,
+    });
+
+    // The Anthropic SDK sends `apiKey` as an x-api-key header; Meta
+    // authenticates the Messages surface with a bearer token, so rebuild the
+    // client with authToken instead.
+    this.anthropic = new Anthropic({
+      apiKey: null,
+      authToken: this.apiKey ?? null,
+      baseURL: this.getApiBaseUrl(),
+    });
+  }
+
+  // Meta-specific key resolution — never ANTHROPIC_API_KEY, which would send
+  // an Anthropic key to the Meta endpoint.
+  override getApiKey(): string | undefined {
+    return resolveMetaApiKey(this.config as MetaMessagesConfig, this.env);
+  }
+
+  // Ignore ANTHROPIC_BASE_URL overrides — those are Anthropic-scoped.
+  override getApiBaseUrl(): string {
+    return (this.config as MetaMessagesConfig).apiBaseUrl ?? META_MESSAGES_API_BASE_URL;
+  }
+
+  id(): string {
+    return `meta:messages:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Meta Model API Messages Provider ${this.modelName}]`;
+  }
+
+  toJSON() {
+    return {
+      provider: 'meta:messages',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
+  }
+
+  override async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      throw new Error(missingMetaApiKeyMessage(this.config as MetaMessagesConfig));
+    }
+
+    const response = await super.callApi(prompt, context);
+
+    if (!response || response.error || response.cached || response.cost !== undefined) {
+      return response;
+    }
+
+    // Muse models are not in the Anthropic billing tables, so the base cost
+    // path returns undefined. Anthropic-format usage reports total input in
+    // tokenUsage.prompt with cache reads broken out separately, which is
+    // exactly what calculateMetaCost expects.
+    if (response.tokenUsage) {
+      const config: MetaMessagesConfig = {
+        ...(this.config as MetaMessagesConfig),
+        ...(context?.prompt?.config as Partial<MetaMessagesConfig> | undefined),
+      };
+      const cachedTokens =
+        response.tokenUsage.completionDetails?.cacheReadInputTokens ??
+        extractCachedTokens(response.raw);
+      const cost = calculateMetaCost(
+        this.modelName,
+        config,
+        response.tokenUsage.prompt,
+        response.tokenUsage.completion,
+        cachedTokens,
+      );
+      if (cost !== undefined) {
+        response.cost = cost;
+      }
+    }
+
+    return response;
+  }
+}
+
 export function createMetaProvider(
   providerPath: string,
   options: MetaProviderOptions = {},
 ): ApiProvider {
-  // Accept `meta:<model>`, `meta:chat:<model>` and `meta:responses:<model>`;
-  // everything after the optional sub-type segment is the model id.
+  // Accept `meta:<model>`, `meta:chat:<model>`, `meta:responses:<model>` and
+  // `meta:messages:<model>`; everything after the optional sub-type segment is
+  // the model id.
   const splits = providerPath.split(':');
   const rest = splits.slice(1);
 
@@ -485,13 +616,21 @@ export function createMetaProvider(
     return new MetaResponsesProvider(rest.join(':') || DEFAULT_META_MODEL, options);
   }
 
+  if (rest[0] === 'messages') {
+    rest.shift();
+    return new MetaMessagesProvider(
+      rest.join(':') || DEFAULT_META_MODEL,
+      options as MetaMessagesProviderOptions,
+    );
+  }
+
   // Fail fast instead of silently treating an unsupported sub-type as a model
   // name — the Meta Model API exposes no embeddings or legacy completions
   // endpoint.
   if (rest[0] === 'embedding' || rest[0] === 'embeddings' || rest[0] === 'completion') {
     throw new Error(
       `The Meta Model API does not expose an ${rest[0]} endpoint; "${providerPath}" cannot be resolved. ` +
-        'Use meta:<model>, meta:chat:<model>, or meta:responses:<model> instead.',
+        'Use meta:<model>, meta:chat:<model>, meta:responses:<model>, or meta:messages:<model> instead.',
     );
   }
 

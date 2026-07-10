@@ -284,11 +284,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
 
+  // Subclasses that serve non-Anthropic model catalogs over the Messages wire
+  // format (e.g. Meta's Anthropic-compatible endpoint) set this to false so
+  // their model ids don't trigger the unknown-Anthropic-model warning.
+  static readonly WARNS_ON_UNKNOWN_MODEL: boolean = true;
+
   constructor(
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
+    // `new.target` propagates through super() calls, so this sees the
+    // directly-constructed subclass's flag.
     if (
+      (new.target as typeof AnthropicMessagesProvider | undefined)?.WARNS_ON_UNKNOWN_MODEL !==
+        false &&
       !AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(
         normalizeAnthropicModelName(modelName),
       )

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import {
   calculateMetaCost,
   createMetaProvider,
+  MetaMessagesProvider,
   MetaResponsesProvider,
 } from '../../src/providers/meta';
 import { mockProcessEnv } from '../util/utils';
@@ -54,6 +56,13 @@ describe('createMetaProvider routing', () => {
     expect(provider).toBeInstanceOf(MetaResponsesProvider);
     expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
     expect(createMetaProvider('meta:responses').id()).toBe('meta:responses:muse-spark-1.1');
+  });
+
+  it('routes meta:messages:<model> to the Anthropic-compatible Messages provider', () => {
+    const provider = createMetaProvider('meta:messages:muse-spark-1.1');
+    expect(provider).toBeInstanceOf(MetaMessagesProvider);
+    expect(provider.id()).toBe('meta:messages:muse-spark-1.1');
+    expect(createMetaProvider('meta:messages').id()).toBe('meta:messages:muse-spark-1.1');
   });
 
   it('fails fast for unsupported sub-types instead of treating them as models', () => {
@@ -537,5 +546,125 @@ describe('MetaResponsesProvider request body shaping', () => {
     await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(
       /reasoning_effort 'none'/,
     );
+  });
+});
+
+describe('MetaMessagesProvider', () => {
+  it('points the Anthropic SDK client at the bare Meta host with bearer auth', () => {
+    const restore = mockProcessEnv({ META_API_KEY: 'LLM|1|messages-key' });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
+      expect((provider as any).getApiBaseUrl()).toBe('https://api.meta.ai');
+      // Meta authenticates with Authorization: Bearer, not x-api-key.
+      expect((provider as any).anthropic.authToken).toBe('LLM|1|messages-key');
+      expect((provider as any).anthropic.apiKey).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it('ignores Anthropic-scoped env configuration (base URL and API key)', () => {
+    const restore = mockProcessEnv({
+      ANTHROPIC_API_KEY: 'sk-ant-secret',
+      ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+      META_API_KEY: undefined,
+      MODEL_API_KEY: undefined,
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
+      expect((provider as any).getApiKey()).toBeUndefined();
+      expect((provider as any).getApiBaseUrl()).toBe('https://api.meta.ai');
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not log the unknown-Anthropic-model warning for Muse models', async () => {
+    const logger = (await import('../../src/logger')).default;
+    vi.mocked(logger.warn).mockClear();
+    createMetaProvider('meta:messages:muse-spark-1.1');
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('unknown Anthropic model'),
+    );
+    // The warning still fires for directly-constructed Anthropic providers.
+    new AnthropicMessagesProvider('not-a-real-model');
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown Anthropic model'));
+  });
+
+  it('never authenticates with a Claude Code OAuth credential', () => {
+    expect((MetaMessagesProvider as any).SUPPORTS_CLAUDE_CODE_OAUTH).toBe(false);
+    const restore = mockProcessEnv({ META_API_KEY: undefined, MODEL_API_KEY: undefined });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        config: { apiKeyRequired: false },
+      }) as MetaMessagesProvider;
+      expect((provider as any).usingClaudeCodeOAuth).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('throws the Meta-specific missing-key error from callApi', async () => {
+    const restore = mockProcessEnv({ META_API_KEY: undefined, MODEL_API_KEY: undefined });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1');
+      await expect(provider.callApi('Hello')).rejects.toThrow(/Meta Model API key is not set/);
+    } finally {
+      restore();
+    }
+  });
+
+  it('redacts an explicit apiKey from toJSON output', () => {
+    const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+      config: { apiKey: 'LLM|123|secret' },
+    }) as MetaMessagesProvider;
+    const json = provider.toJSON();
+    expect(json.provider).toBe('meta:messages');
+    expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
+  });
+
+  it('fills in cost from Anthropic-format usage (cache reads billed at the cached rate)', async () => {
+    const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
+      output: 'hi',
+      tokenUsage: {
+        // Anthropic-format: prompt is total input incl. cache reads.
+        total: 1500,
+        prompt: 1000,
+        completion: 500,
+        completionDetails: { cacheReadInputTokens: 400, cacheCreationInputTokens: 0 },
+      },
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        config: { apiKey: 'LLM|1|k' },
+      });
+      const result = await provider.callApi('Say hi');
+      expect(result.cost).toBeCloseTo((600 * 1.25 + 400 * 0.15 + 500 * 4.25) / 1e6, 12);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does not attach cost to error or cached responses', async () => {
+    const spy = vi
+      .spyOn(AnthropicMessagesProvider.prototype, 'callApi')
+      .mockResolvedValueOnce({ error: 'API error: 429' })
+      .mockResolvedValueOnce({
+        output: 'hi',
+        cached: true,
+        tokenUsage: { cached: 1500, total: 1500 },
+      });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        config: { apiKey: 'LLM|1|k' },
+      });
+      const errored = await provider.callApi('Say hi');
+      expect(errored.error).toBeTruthy();
+      expect(errored.cost).toBeUndefined();
+      const cachedResult = await provider.callApi('Say hi');
+      expect(cachedResult.cost).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
