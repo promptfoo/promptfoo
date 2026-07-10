@@ -348,6 +348,7 @@ export const ADDITIONAL_PLUGINS = [
   'cross-session-leak',
   'cyberseceval',
   'data-exfil',
+  'data-structure-injection',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
@@ -479,7 +480,11 @@ export const DATASET_EXEMPT_PLUGINS = [
 ] as const;
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)
-export const MULTI_INPUT_EXCLUDED_PLUGINS = ['cca', 'cross-session-leak'] as const;
+export const MULTI_INPUT_EXCLUDED_PLUGINS = [
+  'cca',
+  'cross-session-leak',
+  'data-structure-injection',
+] as const;
 export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
