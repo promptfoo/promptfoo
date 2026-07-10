@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { loadClaudeCodeCredential } from '../../src/providers/anthropic/claudeCodeAuth';
+import { getAnthropicEnvHeaderSuppressions } from '../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import {
   calculateMetaCost,
   createMetaProvider,
-  getAnthropicEnvHeaderSuppressions,
   MetaMessagesProvider,
   MetaResponsesProvider,
 } from '../../src/providers/meta';

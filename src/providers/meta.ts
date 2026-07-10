@@ -1,9 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -125,6 +126,28 @@ function missingMetaApiKeyMessage(config: MetaKeyConfig): string {
   );
 }
 
+// Shared defaults for the two OpenAI-based Meta providers. `||` (not `??`) for
+// apiBaseUrl so an empty string — e.g. a template that rendered empty — still
+// resolves to the Meta endpoint.
+function resolveMetaOpenAiConfig(config: MetaConfig = {}): MetaConfig {
+  return {
+    ...config,
+    apiKeyEnvar: config.apiKeyEnvar ?? META_API_KEY_ENVAR,
+    apiBaseUrl: config.apiBaseUrl || META_API_BASE_URL,
+  };
+}
+
+function metaToJSON(provider: string, modelName: string, config: MetaKeyConfig) {
+  return {
+    provider,
+    model: modelName,
+    config: {
+      ...config,
+      ...(config.apiKey && { apiKey: undefined }),
+    },
+  };
+}
+
 function assertSupportedReasoningEffort(effort: unknown): void {
   if (effort === undefined || effort === null) {
     return;
@@ -134,6 +157,50 @@ function assertSupportedReasoningEffort(effort: unknown): void {
       `Muse Spark models do not support reasoning_effort '${effort}'. Omit it to let ` +
         `the model pick its own reasoning depth, or use one of: ${META_REASONING_EFFORTS.join(', ')}.`,
     );
+  }
+}
+
+// Set the single output-cap field a Meta endpoint accepts, or — when no cap is
+// configured — strip a leaked OPENAI_MAX_COMPLETION_TOKENS / OPENAI_MAX_TOKENS
+// env default so reasoning keeps the full output budget. Explicit passthrough
+// values are left untouched.
+function applyMetaOutputCap(
+  body: Record<string, unknown>,
+  passthrough: Record<string, unknown>,
+  field: 'max_completion_tokens' | 'max_output_tokens',
+  value: number | undefined,
+): void {
+  if (field in passthrough) {
+    return;
+  }
+  if (value === undefined) {
+    delete body[field];
+  } else {
+    body[field] = value;
+  }
+}
+
+// The base providers seed temperature / top_p / penalties from OPENAI_* env
+// vars whenever those are set. They are OpenAI-scoped tuning knobs; don't let
+// them leak into Meta requests. Promptfoo's deterministic temperature default
+// is kept, sourced from config alone.
+function applyMetaSamplingHygiene(
+  body: Record<string, unknown>,
+  config: OpenAiCompletionOptions,
+  passthrough: Record<string, unknown>,
+  samplingKeys: Array<'top_p' | 'presence_penalty' | 'frequency_penalty'>,
+): void {
+  if (config.temperature === undefined && !('temperature' in passthrough)) {
+    if (config.omitDefaults) {
+      delete body.temperature;
+    } else {
+      body.temperature = 0;
+    }
+  }
+  for (const key of samplingKeys) {
+    if (config[key] === undefined && !(key in passthrough)) {
+      delete body[key];
+    }
   }
 }
 
@@ -176,45 +243,34 @@ export function calculateMetaCost(
   );
 }
 
-// Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
-// (newline-separated `Name: value` lines) and map each header name to null so
-// the SDK omits it. Exported for tests.
-export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
-  const suppressed: Record<string, null> = {};
-  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
-  if (!customHeadersEnv) {
-    return suppressed;
+// Fill in cost for responses the OpenAI/Anthropic billing tables can't price
+// (Muse models are in neither). Both base getTokenUsage helpers surface cache
+// reads as completionDetails.cacheReadInputTokens, so that is the only source
+// needed. Honors prompt-level cost overrides like the base billing paths do.
+function applyMetaCost(
+  response: ProviderResponse,
+  modelName: string,
+  providerConfig: MetaCostConfig,
+  context?: CallApiContextParams,
+): ProviderResponse {
+  if (!response || response.cached || response.cost !== undefined || !response.tokenUsage) {
+    return response;
   }
-  for (const line of customHeadersEnv.split('\n')) {
-    const colon = line.indexOf(':');
-    if (colon >= 0) {
-      const name = line.substring(0, colon).trim();
-      if (name) {
-        suppressed[name] = null;
-      }
-    }
+  const config: MetaCostConfig = {
+    ...providerConfig,
+    ...(context?.prompt?.config as Partial<MetaCostConfig> | undefined),
+  };
+  const cost = calculateMetaCost(
+    modelName,
+    config,
+    response.tokenUsage.prompt,
+    response.tokenUsage.completion,
+    response.tokenUsage.completionDetails?.cacheReadInputTokens ?? 0,
+  );
+  if (cost !== undefined) {
+    response.cost = cost;
   }
-  return suppressed;
-}
-
-function extractCachedTokens(raw: unknown): number {
-  let parsed: any = raw;
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      logger.debug(`[Meta] Failed to parse raw response for cache info: ${err}`);
-      return 0;
-    }
-  }
-  // Chat Completions reports prompt_tokens_details.cached_tokens; the
-  // Responses API reports input_tokens_details.cached_tokens; the Messages
-  // surface uses Anthropic's cache_read_input_tokens.
-  const cached =
-    parsed?.usage?.prompt_tokens_details?.cached_tokens ??
-    parsed?.usage?.input_tokens_details?.cached_tokens ??
-    parsed?.usage?.cache_read_input_tokens;
-  return typeof cached === 'number' ? cached : 0;
+  return response;
 }
 
 // The Meta Model API (dev.meta.ai) serves the Muse Spark models through an
@@ -225,14 +281,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   config: MetaConfig;
 
   constructor(modelName: string, providerOptions: MetaProviderOptions) {
-    const metaConfig = providerOptions.config ?? {};
-    const resolvedConfig: MetaConfig = {
-      ...metaConfig,
-      apiKeyEnvar: metaConfig.apiKeyEnvar ?? META_API_KEY_ENVAR,
-      // `||` (not `??`) so an empty string — e.g. a template that rendered
-      // empty — still resolves to the Meta endpoint.
-      apiBaseUrl: metaConfig.apiBaseUrl || META_API_BASE_URL,
-    };
+    const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
 
     super(modelName, {
       ...providerOptions,
@@ -283,14 +332,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'meta',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return metaToJSON('meta', this.modelName, this.config);
   }
 
   override async getOpenAiBody(
@@ -317,39 +359,18 @@ class MetaProvider extends OpenAiChatCompletionProvider {
 
     // The Meta API caps generation with max_completion_tokens (there is no
     // max_tokens parameter); honor an explicit max_tokens as
-    // max_completion_tokens rather than silently dropping it. When no cap is
-    // configured, strip a leaked OPENAI_MAX_COMPLETION_TOKENS default so
-    // reasoning keeps the full output budget.
-    if (!('max_completion_tokens' in passthrough)) {
-      const maxCompletionTokens = config.max_completion_tokens ?? config.max_tokens;
-      if (maxCompletionTokens === undefined) {
-        delete body.max_completion_tokens;
-      } else {
-        body.max_completion_tokens = maxCompletionTokens;
-      }
-    }
-    delete body.max_tokens;
-
-    // The base provider seeds temperature / top_p / penalties from OPENAI_*
-    // env vars whenever those are set. They are OpenAI-scoped tuning knobs;
-    // don't let them leak into Meta requests. Promptfoo's deterministic
-    // temperature default is kept, sourced from config alone.
-    if (config.temperature === undefined && !('temperature' in passthrough)) {
-      if (config.omitDefaults) {
-        delete body.temperature;
-      } else {
-        body.temperature = 0;
-      }
-    }
-    if (config.top_p === undefined && !('top_p' in passthrough)) {
-      delete body.top_p;
-    }
-    if (config.presence_penalty === undefined && !('presence_penalty' in passthrough)) {
-      delete body.presence_penalty;
-    }
-    if (config.frequency_penalty === undefined && !('frequency_penalty' in passthrough)) {
-      delete body.frequency_penalty;
-    }
+    // max_completion_tokens rather than silently dropping it.
+    applyMetaOutputCap(
+      body,
+      passthrough,
+      'max_completion_tokens',
+      config.max_completion_tokens ?? config.max_tokens,
+    );
+    applyMetaSamplingHygiene(body, config, passthrough, [
+      'top_p',
+      'presence_penalty',
+      'frequency_penalty',
+    ]);
 
     return result;
   }
@@ -360,35 +381,10 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error || response.cached || response.cost !== undefined) {
+    if (!response || response.error) {
       return response;
     }
-
-    // Muse models are not in the OpenAI billing tables, so the base cost path
-    // returns undefined. Fill it in from Meta's price table / user overrides,
-    // honoring prompt-level config overrides like the base billing path does.
-    if (response.tokenUsage) {
-      const config: MetaConfig = {
-        ...this.config,
-        ...(context?.prompt?.config as Partial<MetaConfig> | undefined),
-      };
-      const cachedTokens =
-        response.tokenUsage.completionDetails?.cacheReadInputTokens ??
-        extractCachedTokens(response.raw);
-      const cost = calculateMetaCost(
-        this.modelName,
-        config,
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
-      if (cost !== undefined) {
-        response.cost = cost;
-      }
-    }
-
-    return response;
+    return applyMetaCost(response, this.modelName, this.config, context);
   }
 }
 
@@ -400,12 +396,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   config: MetaConfig;
 
   constructor(modelName: string, providerOptions: MetaProviderOptions) {
-    const metaConfig = providerOptions.config ?? {};
-    const resolvedConfig: MetaConfig = {
-      ...metaConfig,
-      apiKeyEnvar: metaConfig.apiKeyEnvar ?? META_API_KEY_ENVAR,
-      apiBaseUrl: metaConfig.apiBaseUrl || META_API_BASE_URL,
-    };
+    const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
 
     super(modelName, {
       ...providerOptions,
@@ -448,14 +439,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'meta:responses',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return metaToJSON('meta:responses', this.modelName, this.config);
   }
 
   override async getOpenAiBody(
@@ -470,30 +454,14 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     assertSupportedReasoningEffort(body.reasoning?.effort);
 
     // The Responses API caps generation with max_output_tokens; map the
-    // chat-style caps across so a config shared with meta:<model> keeps its
-    // cap, and strip leaked OPENAI_MAX_COMPLETION_TOKENS / OPENAI_MAX_TOKENS
-    // env defaults when no cap is configured.
-    if (!('max_output_tokens' in passthrough)) {
-      const maxOutputTokens =
-        config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens;
-      if (maxOutputTokens === undefined) {
-        delete body.max_output_tokens;
-      } else {
-        body.max_output_tokens = maxOutputTokens;
-      }
-    }
-
-    // Same OPENAI_* env hygiene as the chat provider.
-    if (config.temperature === undefined && !('temperature' in passthrough)) {
-      if (config.omitDefaults) {
-        delete body.temperature;
-      } else {
-        body.temperature = 0;
-      }
-    }
-    if (config.top_p === undefined && !('top_p' in passthrough)) {
-      delete body.top_p;
-    }
+    // chat-style caps across so a config shared with meta:<model> keeps its cap.
+    applyMetaOutputCap(
+      body,
+      passthrough,
+      'max_output_tokens',
+      config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
+    );
+    applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);
 
     return result;
   }
@@ -547,23 +515,24 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
       ...providerOptions,
       config: resolvedConfig,
     });
+  }
 
-    // The Anthropic SDK sends `apiKey` as an x-api-key header; Meta
-    // authenticates the Messages surface with a bearer token, so rebuild the
-    // client with authToken instead. Also explicitly omit any headers the SDK
-    // would merge in from ANTHROPIC_CUSTOM_HEADERS — those are Anthropic-scoped
-    // (often gateway/proxy secrets) and must not be sent to Meta; a null value
-    // tells the SDK to drop the header, and constructor defaultHeaders win
-    // over the env-derived ones.
+  // The Anthropic SDK sends `apiKey` as an x-api-key header; Meta
+  // authenticates the Messages surface with a bearer token, so swap the key
+  // over to authToken. Also explicitly omit any headers the SDK would merge in
+  // from ANTHROPIC_CUSTOM_HEADERS — those are Anthropic-scoped (often
+  // gateway/proxy secrets) and must not be sent to Meta; a null value tells
+  // the SDK to drop the header.
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
     const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions();
-    this.anthropic = new Anthropic({
+    return {
+      ...options,
       apiKey: null,
       authToken: this.apiKey ?? null,
-      baseURL: this.getApiBaseUrl(),
       ...(Object.keys(suppressedEnvHeaders).length > 0
-        ? { defaultHeaders: suppressedEnvHeaders }
+        ? { defaultHeaders: { ...options.defaultHeaders, ...suppressedEnvHeaders } }
         : {}),
-    });
+    };
   }
 
   // Meta-specific key resolution — never ANTHROPIC_API_KEY, which would send
@@ -586,14 +555,7 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'meta:messages',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return metaToJSON('meta:messages', this.modelName, this.config as MetaMessagesConfig);
   }
 
   override async callApi(
@@ -609,35 +571,7 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     // Unlike the chat provider, do NOT skip error responses: the base class
     // deliberately bills errors that carry tokenUsage (e.g. an MCP loop that
     // exceeded max_tool_calls) so spent tokens don't vanish from cost totals.
-    if (!response || response.cached || response.cost !== undefined) {
-      return response;
-    }
-
-    // Muse models are not in the Anthropic billing tables, so the base cost
-    // path returns undefined. Anthropic-format usage reports total input in
-    // tokenUsage.prompt with cache reads broken out separately, which is
-    // exactly what calculateMetaCost expects.
-    if (response.tokenUsage) {
-      const config: MetaMessagesConfig = {
-        ...(this.config as MetaMessagesConfig),
-        ...(context?.prompt?.config as Partial<MetaMessagesConfig> | undefined),
-      };
-      const cachedTokens =
-        response.tokenUsage.completionDetails?.cacheReadInputTokens ??
-        extractCachedTokens(response.raw);
-      const cost = calculateMetaCost(
-        this.modelName,
-        config,
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
-      if (cost !== undefined) {
-        response.cost = cost;
-      }
-    }
-
-    return response;
+    return applyMetaCost(response, this.modelName, this.config as MetaMessagesConfig, context);
   }
 }
 
@@ -645,24 +579,9 @@ export function createMetaProvider(
   providerPath: string,
   options: MetaProviderOptions = {},
 ): ApiProvider {
-  // Accept `meta:<model>`, `meta:chat:<model>`, `meta:responses:<model>` and
-  // `meta:messages:<model>`; everything after the optional sub-type segment is
-  // the model id.
-  const splits = providerPath.split(':');
-  const rest = splits.slice(1);
-
-  if (rest[0] === 'responses') {
-    rest.shift();
-    return new MetaResponsesProvider(rest.join(':') || DEFAULT_META_MODEL, options);
-  }
-
-  if (rest[0] === 'messages') {
-    rest.shift();
-    return new MetaMessagesProvider(
-      rest.join(':') || DEFAULT_META_MODEL,
-      options as MetaMessagesProviderOptions,
-    );
-  }
+  // Accept `meta:<model>` plus the chat/responses/messages sub-types;
+  // everything after the optional sub-type segment is the model id.
+  const rest = providerPath.split(':').slice(1);
 
   // Fail fast instead of silently treating an unsupported sub-type as a model
   // name — the Meta Model API exposes no embeddings or legacy completions
@@ -674,8 +593,16 @@ export function createMetaProvider(
     );
   }
 
-  if (rest[0] === 'chat') {
-    rest.shift();
+  const subType =
+    rest[0] === 'chat' || rest[0] === 'responses' || rest[0] === 'messages' ? rest.shift() : 'chat';
+  const modelName = rest.join(':') || DEFAULT_META_MODEL;
+
+  switch (subType) {
+    case 'responses':
+      return new MetaResponsesProvider(modelName, options);
+    case 'messages':
+      return new MetaMessagesProvider(modelName, options as MetaMessagesProviderOptions);
+    default:
+      return new MetaProvider(modelName, options);
   }
-  return new MetaProvider(rest.join(':') || DEFAULT_META_MODEL, options);
 }

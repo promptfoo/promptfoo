@@ -293,18 +293,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
-    // `new.target` propagates through super() calls, so this sees the
-    // directly-constructed subclass's flag.
+    super(modelName, options);
     if (
-      (new.target as typeof AnthropicMessagesProvider | undefined)?.WARNS_ON_UNKNOWN_MODEL !==
-        false &&
+      (this.constructor as typeof AnthropicMessagesProvider).WARNS_ON_UNKNOWN_MODEL &&
       !AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(
         normalizeAnthropicModelName(modelName),
       )
     ) {
       logger.warn(`Using unknown Anthropic model: ${modelName}`);
     }
-    super(modelName, options);
     const { id } = options;
     this.id = id ? () => id : this.id;
 

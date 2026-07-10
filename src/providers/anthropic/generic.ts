@@ -10,10 +10,36 @@ import {
   isCredentialExpired,
   loadClaudeCodeCredential,
 } from './claudeCodeAuth';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
+
+/**
+ * Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
+ * (newline-separated `Name: value` lines) and map each header name to null so
+ * the SDK omits it. Providers that reuse the SDK against Anthropic-compatible
+ * third-party endpoints use this to keep Anthropic-scoped headers (often
+ * gateway/proxy secrets) off foreign hosts.
+ */
+export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
+  const suppressed: Record<string, null> = {};
+  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
+  if (!customHeadersEnv) {
+    return suppressed;
+  }
+  for (const line of customHeadersEnv.split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon >= 0) {
+      const name = line.substring(0, colon).trim();
+      if (name) {
+        suppressed[name] = null;
+      }
+    }
+  }
+  return suppressed;
+}
 
 /**
  * Base options shared by all Anthropic provider implementations.
@@ -182,13 +208,26 @@ export class AnthropicGenericProvider implements ApiProvider {
       }
     }
 
-    this.anthropic = new Anthropic({
-      apiKey: this.apiKey ?? null,
-      authToken: authToken ?? null,
-      baseURL: this.getApiBaseUrl(),
-      ...(Object.keys(defaultHeaders).length > 0 ? { defaultHeaders } : {}),
-    });
+    this.anthropic = new Anthropic(
+      this.buildAnthropicClientOptions({
+        apiKey: this.apiKey ?? null,
+        authToken: authToken ?? null,
+        baseURL: this.getApiBaseUrl(),
+        ...(Object.keys(defaultHeaders).length > 0 ? { defaultHeaders } : {}),
+      }),
+    );
     this.id = id ? () => id : this.id;
+  }
+
+  /**
+   * Options for the Anthropic SDK client built during construction.
+   * Subclasses that point the SDK at an Anthropic-compatible third-party
+   * endpoint can override this to adjust auth or headers (e.g. bearer-token
+   * services). Called from the constructor, so overrides may only rely on
+   * `config`, `env`, and `apiKey`, which are set before the client is built.
+   */
+  protected buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    return options;
   }
 
   id(): string {
