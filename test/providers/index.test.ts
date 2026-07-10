@@ -25,9 +25,11 @@ import {
 } from '../../src/providers/huggingface';
 import {
   getProviderIds,
+  isProviderInputMetadataUnresolved,
   loadApiProvider,
   loadApiProviders,
   resolveProviderConfigs,
+  resolveProviderInputsForValidation,
 } from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
@@ -54,6 +56,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { getProviderFromCloud } from '../../src/util/cloud';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
@@ -572,6 +575,23 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with openai:chat', async () => {
     const provider = await loadApiProvider('openai:chat');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+  });
+
+  it('exposes legacy config.inputs as provider metadata', async () => {
+    const inputs = { context: 'Reference context', question: 'User question' };
+    const provider = await loadApiProvider('echo', {
+      options: { config: { inputs } },
+    });
+
+    expect(provider.inputs).toEqual(inputs);
+  });
+
+  it('keeps sequence prompt arrays private to the sequence provider', async () => {
+    const provider = await loadApiProvider('sequence', {
+      options: { config: { inputs: ['First {{prompt}}', 'Second {{prompt}}'] } },
+    });
+
+    expect(provider.inputs).toBeUndefined();
   });
 
   it('loadApiProvider with openai:completion', async () => {
@@ -2303,6 +2323,19 @@ config:
     expect((result as any[])[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
   });
 
+  it('preserves ProviderOptionsMap entries loaded from provider files', () => {
+    mockFsReadFileSync.mockReturnValue(`
+echo:
+  label: mapped-echo
+`);
+
+    const result = resolveProviderConfigs(['file://./providers.yaml'], {
+      basePath: path.join(path.sep, 'test', 'path'),
+    });
+
+    expect(result).toEqual([{ echo: { label: 'mapped-echo' } }]);
+  });
+
   it('should handle mixed provider types preserving non-file providers', () => {
     const yamlContent = `
 id: ollama:phi3
@@ -2408,5 +2441,722 @@ prompts:
 
     expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
     expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
+  });
+
+  it('should render environment variables and return runtime provider inputs', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  context: Reference context
+  question: User question
+`);
+    const basePath = path.join(path.sep, 'test');
+
+    const result = await resolveProviderInputsForValidation(
+      ['file://{{env.PROVIDER_DIR}}/provider.yaml'],
+      {
+        basePath,
+        env: { PROVIDER_DIR: 'targets' },
+      },
+    );
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'targets', 'provider.yaml'),
+      'utf8',
+    );
+    expect(result).toEqual([
+      {
+        context: 'Reference context',
+        question: 'User question',
+      },
+    ]);
+  });
+
+  it('should apply two-pass environment rendering to provider file references', async () => {
+    mockProcessEnv({ POSTERIOR_PROVIDER_ROOT: path.join(path.sep, 'workspace') });
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  context: Reference context
+  question: User question
+`);
+
+    try {
+      const result = await resolveProviderInputsForValidation(
+        ['file://{{ env.PROVIDER_DIR }}/provider.yaml'],
+        {
+          env: { PROVIDER_DIR: '{{ env.POSTERIOR_PROVIDER_ROOT }}/targets' },
+        },
+      );
+
+      const [resolvedPath, encoding] = mockFsReadFileSync.mock.calls[0];
+      expect(path.normalize(resolvedPath)).toBe(
+        path.join(path.sep, 'workspace', 'targets', 'provider.yaml'),
+      );
+      expect(encoding).toBe('utf8');
+      expect(result).toEqual([{ context: 'Reference context', question: 'User question' }]);
+    } finally {
+      mockProcessEnv({ POSTERIOR_PROVIDER_ROOT: undefined });
+    }
+  });
+
+  it('should read cloud input metadata without instantiating the provider', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: 'echo',
+      inputs: { context: 'Reference context', question: 'User question' },
+    });
+
+    await expect(
+      resolveProviderInputsForValidation(
+        'promptfoo://provider/00000000-0000-0000-0000-000000000000',
+      ),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000000');
+  });
+
+  it('merges local cloud config before discovering dynamic provider inputs', async () => {
+    const cleanup = vi.fn();
+    class DynamicProvider {
+      inputs: Record<string, string> | undefined;
+      cleanup = cleanup;
+      constructor(options: { config?: { inputMode?: string } }) {
+        this.inputs =
+          options.config?.inputMode === 'multi'
+            ? { context: 'Reference context', question: 'User question' }
+            : undefined;
+      }
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: 'file:///workspace/dynamic-provider.mjs',
+      config: { inputMode: 'single' },
+    });
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: 'promptfoo://provider/00000000-0000-0000-0000-000000000000',
+            config: { inputMode: 'multi' },
+          },
+        ],
+        { loadDynamicProviders: true },
+      ),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    {
+      label: 'empty local metadata over cloud metadata',
+      localInputs: {} as Record<string, string>,
+      cloudInputs: { context: 'Cloud context', question: 'Cloud question' },
+    },
+    {
+      label: 'local metadata over empty cloud metadata',
+      localInputs: { context: 'Local context', question: 'Local question' },
+      cloudInputs: {} as Record<string, string>,
+    },
+  ])('matches runtime and preflight precedence for $label', async ({
+    localInputs,
+    cloudInputs,
+  }) => {
+    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+    vi.mocked(getProviderFromCloud)
+      .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs })
+      .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs });
+
+    const configuredProvider = { id: providerId, config: { inputs: localInputs } };
+    const provider = await loadApiProvider(providerId, {
+      options: configuredProvider,
+    });
+    const preflightInputs = await resolveProviderInputsForValidation([configuredProvider]);
+
+    expect(provider.inputs).toEqual(localInputs);
+    expect(preflightInputs).toEqual([localInputs]);
+  });
+
+  it('renders legacy local inputs before merging a cloud provider', async () => {
+    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({ id: 'echo' });
+
+    const provider = await loadApiProvider(providerId, {
+      options: {
+        config: { inputs: { question: '{{ env.INPUT_DESCRIPTION }}' } },
+        env: { INPUT_DESCRIPTION: 'Rendered question' },
+      },
+    });
+
+    expect(provider.inputs).toEqual({ question: 'Rendered question' });
+  });
+
+  it('renders cloud legacy inputs after merging the cloud environment', async () => {
+    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+    const cloudProvider = {
+      id: 'echo',
+      config: { inputs: { question: '{{ env.OPENAI_BASE_URL }}' } },
+      env: { OPENAI_BASE_URL: 'Rendered cloud question' },
+    };
+    vi.mocked(getProviderFromCloud)
+      .mockResolvedValueOnce(cloudProvider)
+      .mockResolvedValueOnce(cloudProvider);
+
+    const provider = await loadApiProvider(providerId);
+    const preflightInputs = await resolveProviderInputsForValidation(providerId);
+
+    expect(provider.inputs).toEqual({ question: 'Rendered cloud question' });
+    expect(preflightInputs).toEqual([{ question: 'Rendered cloud question' }]);
+  });
+
+  it('ignores sequence prompt arrays during provider preflight', async () => {
+    await expect(
+      resolveProviderInputsForValidation([
+        { id: 'sequence', config: { inputs: ['First {{prompt}}', 'Second {{prompt}}'] } },
+      ]),
+    ).resolves.toEqual([undefined]);
+  });
+
+  it('defers dynamic provider inputs unless runtime loading is explicitly requested', async () => {
+    const cleanup = vi.fn();
+    class DynamicProvider {
+      inputs = { context: 'Reference context', question: 'User question' };
+      cleanup = cleanup;
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const providerPath = 'file:///workspace/dynamic-provider.mjs';
+
+    const staticInputs = await resolveProviderInputsForValidation([providerPath]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+    expect(importModule).not.toHaveBeenCalled();
+
+    await expect(
+      resolveProviderInputsForValidation([providerPath], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(importModule).toHaveBeenCalledWith('/workspace/dynamic-provider.mjs');
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('loads dynamic provider inputs for uppercase JavaScript-family extensions', async () => {
+    class DynamicProvider {
+      inputs = { context: 'Reference context', question: 'User question' };
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+
+    await expect(
+      resolveProviderInputsForValidation(['file:///workspace/dynamic-provider.MJS'], {
+        loadDynamicProviders: true,
+      }),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(importModule).toHaveBeenCalledWith('/workspace/dynamic-provider.MJS');
+  });
+
+  it('preserves dynamic provider inputs when validation cleanup fails', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const cleanup = vi.fn().mockRejectedValue(cleanupError);
+    class DynamicProvider {
+      inputs = { prompt: 'User prompt' };
+      cleanup = cleanup;
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        resolveProviderInputsForValidation(['file:///workspace/dynamic-provider.mjs'], {
+          loadDynamicProviders: true,
+        }),
+      ).resolves.toEqual([{ prompt: 'User prompt' }]);
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(warnSpy).toHaveBeenCalledWith('[Provider Validation] Error cleaning up provider', {
+        error: cleanupError,
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('preserves untrusted conversation content while validating dynamic providers', async () => {
+    class DynamicProvider {
+      inputs: Record<string, string>;
+      constructor(options: { config: { _conversation: Array<{ content: string }> } }) {
+        this.inputs = { observed: options.config._conversation[0].content };
+      }
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: 'file:///workspace/dynamic-provider.mjs',
+            config: {
+              _conversation: [
+                { role: 'assistant', content: '{{ env.PROVIDER_VALIDATION_SECRET }}' },
+              ],
+            },
+          },
+        ],
+        {
+          env: { PROVIDER_VALIDATION_SECRET: 'must-not-render' },
+          loadDynamicProviders: true,
+        },
+      ),
+    ).resolves.toEqual([{ observed: '{{ env.PROVIDER_VALIDATION_SECRET }}' }]);
+  });
+
+  it('waits for every validation-owned provider cleanup before rejecting', async () => {
+    let releaseCleanup: (() => void) | undefined;
+    const cleanupStarted = vi.fn();
+    class DynamicProvider {
+      inputs = { prompt: 'User prompt' };
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+      async cleanup() {
+        cleanupStarted();
+        await new Promise<void>((resolve) => {
+          releaseCleanup = resolve;
+        });
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const invalidProvider = JSON.parse('{"__proto__":{"id":"echo"}}');
+    let settled = false;
+    const outcome = resolveProviderInputsForValidation(
+      ['file:///workspace/dynamic-provider.mjs', invalidProvider],
+      { loadDynamicProviders: true },
+    )
+      .then(
+        () => ({ status: 'fulfilled' as const }),
+        (reason: unknown) => ({ status: 'rejected' as const, reason }),
+      )
+      .finally(() => {
+        settled = true;
+      });
+
+    await vi.waitFor(() => expect(cleanupStarted).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    releaseCleanup!();
+
+    const result = await outcome;
+    expect(result.status).toBe('rejected');
+    expect(result).toHaveProperty('reason');
+    expect((result as { reason: Error }).reason.message).toContain('Invalid provider');
+  });
+
+  it.each([
+    {
+      label: 'ProviderOptions id',
+      providers: [
+        {
+          id: '{{ env.TARGET_PROVIDER }}',
+          env: {
+            TARGET_PROVIDER: 'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+          },
+        },
+      ],
+      env: undefined,
+    },
+    {
+      label: 'ProviderOptionsMap key',
+      providers: [{ '{{ env.TARGET_PROVIDER }}': {} }],
+      env: {
+        TARGET_PROVIDER: 'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+      },
+    },
+  ])('renders an env-backed cloud $label before reading inputs', async ({ providers, env }) => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: 'echo',
+      inputs: { context: 'Reference context', question: 'User question' },
+    });
+
+    await expect(resolveProviderInputsForValidation(providers as any, { env })).resolves.toEqual([
+      { context: 'Reference context', question: 'User question' },
+    ]);
+    expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000001');
+  });
+
+  it('filters resolved provider metadata before compatibility validation', async () => {
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          { id: 'echo', label: 'selected-single' },
+          {
+            id: 'echo',
+            label: 'excluded-multi',
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+        ],
+        { filter: 'selected-single' },
+      ),
+    ).resolves.toEqual([undefined]);
+  });
+
+  it('filters ProviderOptionsMap entries by their effective nested id', async () => {
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          { echo: { id: 'unselected-single' } },
+          {
+            echo: {
+              id: 'selected-multi',
+              inputs: { context: 'Reference context', question: 'User question' },
+            },
+          },
+        ],
+        { filter: 'selected-multi' },
+      ),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+  });
+
+  it('matches runtime filtering for provider-local env-backed ids', async () => {
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: '{{ env.TARGET_PROVIDER }}',
+            env: { TARGET_PROVIDER: 'echo' },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+        ],
+        { filter: '^echo$' },
+      ),
+    ).resolves.toEqual([]);
+  });
+
+  it('rejects unknown named providers without instantiating them', async () => {
+    await expect(
+      resolveProviderInputsForValidation(['definitely-not-a-promptfoo-provider']),
+    ).rejects.toThrow('Could not identify provider');
+  });
+
+  it('does not evaluate Nunjucks expressions during provider validation', async () => {
+    await expect(
+      resolveProviderInputsForValidation([
+        {
+          id: `{{ env.CANARY.constructor.constructor("return 'echo'")() }}`,
+          env: { CANARY: 'x' },
+        },
+      ]),
+    ).rejects.toThrow('Could not identify provider');
+  });
+
+  it('supports a literal default filter during provider validation', async () => {
+    await expect(
+      resolveProviderInputsForValidation([
+        {
+          id: "{{ env.MISSING_PROVIDER | default('echo') }}",
+          inputs: { question: 'User question' },
+        },
+      ]),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('uses configured inputs from provider files with deferred environment filters', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: '{{ env.TARGET_PROVIDER | lower }}'
+env:
+  TARGET_PROVIDER: ECHO
+inputs:
+  question: User question
+`);
+
+    const providerPath = 'file://targets/provider.yaml';
+    const options = { basePath: path.join(path.sep, 'workspace') };
+    const staticInputs = await resolveProviderInputsForValidation([providerPath], options);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+
+    await expect(
+      resolveProviderInputsForValidation([providerPath], {
+        ...options,
+        loadDynamicProviders: true,
+      }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('defers filtered environment provider file paths until dynamic loading is requested', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  question: User question
+`);
+    const provider = {
+      id: 'file://{{ env.PROVIDER_DIR | lower }}/provider.yaml',
+      env: { PROVIDER_DIR: path.join(path.sep, 'WORKSPACE', 'TARGETS') },
+      inputs: { context: 'Outer context', question: 'Outer question' },
+    };
+
+    const staticInputs = await resolveProviderInputsForValidation([provider]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+    expect(mockFsReadFileSync).not.toHaveBeenCalled();
+
+    await expect(
+      resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+    const [resolvedPath, encoding] = mockFsReadFileSync.mock.calls[0];
+    expect(path.normalize(resolvedPath)).toBe(
+      path.join(path.sep, 'workspace', 'targets', 'provider.yaml'),
+    );
+    expect(encoding).toBe('utf8');
+  });
+
+  it('defers filtered environment provider ids until dynamic loading is requested', async () => {
+    const cleanup = vi.fn();
+    class DynamicProvider {
+      inputs = { question: 'User question' };
+      cleanup = cleanup;
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const provider = {
+      id: '{{ env.TARGET_PROVIDER | lower }}',
+      env: { TARGET_PROVIDER: 'file:///workspace/dynamic-provider.mjs' },
+    };
+
+    const staticInputs = await resolveProviderInputsForValidation([provider]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+    expect(importModule).not.toHaveBeenCalled();
+
+    await expect(
+      resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+    expect(importModule).toHaveBeenCalledWith('/workspace/dynamic-provider.mjs');
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('defers compound filters with literal arguments until dynamic loading', async () => {
+    const provider = {
+      id: "{{ env.MISSING_PROVIDER | default(' echo ') | trim }}",
+      inputs: { question: 'User question' },
+    };
+
+    const staticInputs = await resolveProviderInputsForValidation([provider]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+
+    await expect(
+      resolveProviderInputsForValidation([provider], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('does not execute non-literal default expressions', async () => {
+    const providerId =
+      '{{ env.MISSING_PROVIDER | default(env.CANARY.constructor.constructor("return \'echo\'")()) }}';
+    await expect(resolveProviderInputsForValidation([providerId])).rejects.toThrow(
+      'Could not identify provider',
+    );
+  });
+
+  it('resolves a file-backed ProviderOptions id without constructing the provider', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  question: File question
+`);
+    const basePath = path.join(path.sep, 'workspace');
+
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: "{{ env.MISSING_PROVIDER | default('file://targets/provider.yaml') }}",
+            inputs: { question: 'Outer question' },
+          },
+        ],
+        { basePath },
+      ),
+    ).resolves.toEqual([{ question: 'File question' }]);
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'targets', 'provider.yaml'),
+      'utf8',
+    );
+  });
+
+  it('resolves a cloud provider id that renders to a provider config file', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: '{{ env.TARGET_PROVIDER_FILE }}',
+      env: { TARGET_PROVIDER_FILE: 'file://targets/provider.yaml' },
+      inputs: { question: 'Cloud question' },
+    });
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  question: File question
+`);
+
+    await expect(
+      resolveProviderInputsForValidation(
+        'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+        { basePath: path.join(path.sep, 'workspace') },
+      ),
+    ).resolves.toEqual([{ question: 'File question' }]);
+  });
+
+  it('rejects an array behind a file-backed ProviderOptions id like runtime loading', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+- id: echo
+- id: echo
+`);
+
+    await expect(
+      resolveProviderInputsForValidation([{ id: 'file://targets/providers.yaml' }], {
+        basePath: path.join(path.sep, 'workspace'),
+      }),
+    ).rejects.toThrow('Use loadApiProviders instead of loadApiProvider');
+  });
+
+  it('redacts rendered environment values from provider validation errors', async () => {
+    const secretProviderId = 'private-provider-name-from-env';
+
+    const error = await resolveProviderInputsForValidation(['{{ env.PRIVATE_PROVIDER_ID }}'], {
+      env: { PRIVATE_PROVIDER_ID: secretProviderId },
+    }).catch((error) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('[redacted]');
+    expect(error.message).not.toContain(secretProviderId);
+  });
+
+  it('uses config environment state during provider validation', async () => {
+    const previousConfig = cliState.config;
+    cliState.config = { env: { TARGET_PROVIDER: 'echo' } };
+
+    try {
+      await expect(
+        resolveProviderInputsForValidation([
+          {
+            id: '{{ env.TARGET_PROVIDER }}',
+            inputs: { question: 'User question' },
+          },
+        ]),
+      ).resolves.toEqual([{ question: 'User question' }]);
+    } finally {
+      cliState.config = previousConfig;
+    }
+  });
+
+  it('renders a cloud provider id with cloud environment metadata', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: '{{ env.TARGET_PROVIDER }}',
+      env: { TARGET_PROVIDER: 'echo' },
+      inputs: { question: 'User question' },
+    });
+
+    await expect(
+      resolveProviderInputsForValidation(
+        'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+      ),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('redacts unknown cloud provider ids from validation errors', async () => {
+    const secretProviderId = 'private-cloud-provider-id';
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: '{{ env.TARGET_PROVIDER }}',
+      env: { TARGET_PROVIDER: secretProviderId },
+    });
+
+    const error = await resolveProviderInputsForValidation(
+      'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+    ).catch((error) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('[redacted]');
+    expect(error.message).not.toContain(secretProviderId);
+  });
+
+  it('rejects an own __proto__ provider map before cloud lookup', async () => {
+    const provider = JSON.parse(
+      '{"__proto__":{"id":"promptfoo://provider/00000000-0000-0000-0000-000000000001","inputs":{"question":"prompt"}}}',
+    );
+
+    await expect(resolveProviderInputsForValidation([provider])).rejects.toThrow(
+      'Invalid provider at index 0',
+    );
+    expect(getProviderFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('rejects deeply nested provider metadata with a controlled error', async () => {
+    const config: Record<string, unknown> = {};
+    let current = config;
+    for (let i = 0; i < 1500; i++) {
+      const child: Record<string, unknown> = {};
+      current.child = child;
+      current = child;
+    }
+
+    await expect(resolveProviderInputsForValidation([{ id: 'echo', config }])).rejects.toThrow(
+      'Provider configuration is too complex to validate',
+    );
+  });
+
+  it('rejects malformed scalar provider config files', async () => {
+    mockFsReadFileSync.mockReturnValue('echo');
+
+    await expect(
+      resolveProviderInputsForValidation(['file://path/to/provider.yaml']),
+    ).rejects.toThrow('Provider config in path/to/provider.yaml must have an id');
+  });
+
+  it('should not take ownership of already-instantiated providers', async () => {
+    const cleanup = vi.fn();
+    class ExistingProvider {
+      config = { inputs: { prompt: 'User prompt' } };
+      cleanup = cleanup;
+      id() {
+        return 'existing-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    const provider = new ExistingProvider();
+
+    await expect(resolveProviderInputsForValidation(provider as any)).resolves.toEqual([
+      { prompt: 'User prompt' },
+    ]);
+    expect(cleanup).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@ import {
   readConfig,
   resolveCliProvidersWithConfig,
   resolveConfigs,
+  withResolveConfigsHooks,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
@@ -2122,6 +2123,98 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
+  });
+
+  it('runs provider preflight after filtering and before provider construction', async () => {
+    const beforeProviderLoad = vi.fn(async ({ providers }) => {
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(providers).toEqual([{ id: 'echo', label: 'selected' }]);
+    });
+
+    const resolved = await resolveConfigs(
+      { filterTargets: 'selected' },
+      withResolveConfigsHooks(
+        {
+          prompts: ['{{prompt}}'],
+          providers: [
+            { id: 'echo', label: 'selected' },
+            { id: 'echo', label: 'excluded' },
+          ],
+        },
+        { beforeProviderLoad },
+      ),
+    );
+
+    expect(beforeProviderLoad).toHaveBeenCalledOnce();
+    expect(loadApiProviders).toHaveBeenCalledOnce();
+    expect(resolved.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
+  });
+
+  it.each([
+    { label: 'configured filter', commandOptions: {}, expectedLabel: 'selected' },
+    {
+      label: 'explicit override',
+      commandOptions: { filterTargets: 'excluded' },
+      expectedLabel: 'excluded',
+    },
+  ])('applies $label before provider construction', async ({ commandOptions, expectedLabel }) => {
+    const beforeProviderLoad = vi.fn(async ({ providers }) => {
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(providers).toEqual([{ id: 'echo', label: expectedLabel }]);
+    });
+
+    await resolveConfigs(
+      commandOptions,
+      withResolveConfigsHooks(
+        {
+          prompts: ['{{prompt}}'],
+          providers: [
+            { id: 'echo', label: 'selected' },
+            { id: 'echo', label: 'excluded' },
+          ],
+          commandLineOptions: { filterProviders: 'selected' },
+        },
+        { beforeProviderLoad },
+      ),
+    );
+
+    expect(beforeProviderLoad).toHaveBeenCalledOnce();
+    expect(loadApiProviders).toHaveBeenCalledOnce();
+  });
+
+  it('does not construct providers when provider preflight rejects', async () => {
+    const originalBasePath = cliState.basePath;
+    const originalConfig = cliState.config;
+    const originalSelectedProviderConfigs = cliState.selectedProviderConfigs;
+    const previousConfig = { env: { PREVIOUS_CONFIG: 'preserved' } };
+    const previousSelectedProviderConfigs = ['previous-provider'];
+    cliState.basePath = '/previous/base';
+    cliState.config = previousConfig;
+    cliState.selectedProviderConfigs = previousSelectedProviderConfigs;
+    const beforeProviderLoad = vi.fn(async () => {
+      throw new Error('preflight rejected');
+    });
+
+    try {
+      await expect(
+        resolveConfigs(
+          {},
+          withResolveConfigsHooks(
+            { prompts: ['{{prompt}}'], providers: ['echo'] },
+            { beforeProviderLoad },
+          ),
+        ),
+      ).rejects.toThrow('preflight rejected');
+
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(cliState.basePath).toBe('/previous/base');
+      expect(cliState.config).toBe(previousConfig);
+      expect(cliState.selectedProviderConfigs).toBe(previousSelectedProviderConfigs);
+    } finally {
+      cliState.basePath = originalBasePath;
+      cliState.config = originalConfig;
+      cliState.selectedProviderConfigs = originalSelectedProviderConfigs;
+    }
   });
 });
 

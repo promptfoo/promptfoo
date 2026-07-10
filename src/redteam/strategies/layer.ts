@@ -1,11 +1,65 @@
 import logger from '../../logger';
-import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { assertPosteriorTargetSupported, hasPosteriorStrategy } from './posterior';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy } from './types';
+
+const MAX_EXPANDED_PER_TURN_LAYER_STEPS = 1000;
+export const LAYER_COMPLEXITY_ERROR = `Layer strategy per-turn configuration is too complex; reduce nested or repeated layer steps (maximum ${MAX_EXPANDED_PER_TURN_LAYER_STEPS} expanded steps)`;
+
+interface LayerTraversalBudget {
+  expandedNodes: number;
+}
+
+function getApplicablePerTurnLayer(
+  testCase: TestCaseWithPlugin,
+  layer: LayerConfig,
+  inheritedTargets?: string[],
+  ancestors: ReadonlySet<object> = new Set(),
+  budget: LayerTraversalBudget = { expandedNodes: 0 },
+): LayerConfig | undefined {
+  const layerObj = typeof layer === 'string' ? { id: layer } : layer;
+  if (typeof layer === 'object' && ancestors.has(layer)) {
+    return undefined;
+  }
+  budget.expandedNodes += 1;
+  if (budget.expandedNodes > MAX_EXPANDED_PER_TURN_LAYER_STEPS) {
+    throw new Error(LAYER_COMPLEXITY_ERROR);
+  }
+  const nextAncestors = new Set(ancestors);
+  if (typeof layer === 'object') {
+    nextAncestors.add(layer);
+  }
+  const targets = (layerObj.config?.plugins as string[] | undefined) ?? inheritedTargets;
+
+  if (!pluginMatchesStrategyTargets(testCase, layerObj.id, targets)) {
+    return undefined;
+  }
+
+  const runtimeConfig = { ...(layerObj.config ?? {}) };
+  delete runtimeConfig.plugins;
+
+  if (layerObj.id !== 'layer') {
+    return typeof layer === 'string' ? layer : { id: layerObj.id, config: runtimeConfig };
+  }
+
+  const steps = Array.isArray(layerObj.config?.steps)
+    ? (layerObj.config.steps as LayerConfig[])
+    : [];
+  const applicableSteps = steps
+    .map((step) => getApplicablePerTurnLayer(testCase, step, targets, nextAncestors, budget))
+    .filter((step): step is LayerConfig => step !== undefined);
+
+  return applicableSteps.length > 0
+    ? {
+        id: layerObj.id,
+        config: { ...runtimeConfig, steps: applicableSteps },
+      }
+    : undefined;
+}
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -74,26 +128,37 @@ export async function addLayerTestCases(
 
       // Collect remaining steps as per-turn layer configs
       const remainingSteps = steps.slice(i + 1);
-      const perTurnLayers: LayerConfig[] = remainingSteps.map((s) =>
-        typeof s === 'string' ? s : { id: s.id, config: s.config },
-      );
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
-      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
 
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,
-        perTurnLayers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+        perTurnLayers: remainingSteps.map((layer) =>
+          typeof layer === 'string' ? layer : layer.id,
+        ),
         testCaseCount: current.length,
       });
 
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
       return current.map((testCase) => {
+        const inheritedTargets = config?.plugins as string[] | undefined;
+        const budget: LayerTraversalBudget = { expandedNodes: 0 };
+        const perTurnLayers: LayerConfig[] = remainingSteps
+          .map((layer) =>
+            getApplicablePerTurnLayer(testCase, layer, inheritedTargets, new Set(), budget),
+          )
+          .filter((layer): layer is LayerConfig => layer !== undefined);
+
+        if (hasPosteriorStrategy(perTurnLayers)) {
+          assertPosteriorTargetSupported([testCase]);
+        }
+
+        const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
         const originalText = String(testCase.vars?.[injectVar] ?? '');
         return {
           ...testCase,
@@ -103,9 +168,6 @@ export async function addLayerTestCases(
               injectVar,
               scanId,
               ...stepObj.config,
-              ...remoteGenerationContextPayload(
-                typeof config?.targetId === 'string' ? config.targetId : undefined,
-              ),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
@@ -126,6 +188,12 @@ export async function addLayerTestCases(
     // ═══════════════════════════════════════════════════════════════════════
     // REGULAR STRATEGY: Apply transform to test cases (existing behavior)
     // ═══════════════════════════════════════════════════════════════════════
+    const stepTargets =
+      (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
+    const applicable = current.filter((testCase) =>
+      pluginMatchesStrategyTargets(testCase, stepObj.id, stepTargets as string[] | undefined),
+    );
+
     let stepAction: Strategy['action'] | undefined;
 
     try {
@@ -133,11 +201,10 @@ export async function addLayerTestCases(
         const loaded = await loadStrategy(stepObj.id);
         stepAction = loaded.action;
       } else {
-        // Try exact match first, then base id before ':'
+        // Try an exact match, then the supported custom:<variant> form.
         let builtin = strategies.find((s) => s.id === stepObj.id);
-        if (!builtin && stepObj.id.includes(':')) {
-          const baseId = stepObj.id.split(':')[0];
-          builtin = strategies.find((s) => s.id === baseId);
+        if (!builtin && stepObj.id.startsWith('custom:')) {
+          builtin = strategies.find((s) => s.id === 'custom');
         }
         stepAction = builtin?.action;
       }
@@ -148,16 +215,11 @@ export async function addLayerTestCases(
 
     if (!stepAction) {
       logger.warn(`layer strategy: step ${stepObj.id} not registered, skipping`);
+      current = applicable;
       continue;
     }
 
     // Determine applicable test cases for this step using the same targeting rules
-    const stepTargets =
-      (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
-    const applicable = current.filter((t) =>
-      pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
-    );
-
     const next = await stepAction(applicable, injectVar, {
       ...(stepObj.config || {}),
       ...(config || {}),

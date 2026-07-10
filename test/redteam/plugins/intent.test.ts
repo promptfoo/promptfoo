@@ -107,6 +107,27 @@ describe('IntentPlugin', () => {
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
   });
 
+  it('preserves strategy compatibility metadata without copying the intent payload', async () => {
+    const inputs = {
+      context: 'Reference context',
+      question: 'User question',
+    };
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+      intent: ['intent1', 'intent2'],
+      excludeStrategies: ['posterior'],
+      inputs,
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+
+    expect(tests).toHaveLength(2);
+    expect(tests[0].metadata?.pluginConfig).toEqual({
+      excludeStrategies: ['posterior'],
+      inputs,
+    });
+    expect(tests[0].metadata?.pluginConfig).not.toHaveProperty('intent');
+  });
+
   it('should initialize with a list of list of strings', async () => {
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
       intent: [

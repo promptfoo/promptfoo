@@ -1,11 +1,117 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import {
+  configuredPluginHasApplicablePosteriorForMultiInput,
+  getEffectiveStrategiesForCompatibility,
+  isSequenceOnlyIntentPlugin,
+  pluginConfigMatchesStrategy,
+  REDTEAM_DEFAULTS,
+} from '@promptfoo/redteam/sharedFrontend';
 import type { Strategy } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/redteam/types';
+import type {
+  RedteamPlugin,
+  RedteamStrategy,
+  RedteamStrategyObject,
+} from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
+}
+
+export function isPluginCompatibleWithStrategy(
+  plugin: string | { id: string; config?: unknown },
+  strategyId: string,
+  strategyConfig?: RedteamStrategyObject['config'],
+): boolean {
+  if (strategyId === 'basic' || strategyId === 'default') {
+    return true;
+  }
+  const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
+  const pluginConfig = typeof plugin === 'string' ? undefined : plugin.config;
+  if (isSequenceOnlyIntentPlugin(pluginId, pluginConfig)) {
+    return false;
+  }
+  return pluginConfigMatchesStrategy(pluginId, pluginConfig, {
+    id: strategyId as Strategy,
+    config: strategyConfig,
+  });
+}
+
+function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {
+  const pending = [strategy];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === 'posterior') {
+      return true;
+    }
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      continue;
+    }
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    const { config, id } = current as { config?: Record<string, unknown>; id?: unknown };
+    if (id === 'posterior') {
+      return true;
+    }
+    if (id === 'layer' && Array.isArray(config?.steps)) {
+      for (let i = config.steps.length - 1; i >= 0; i--) {
+        pending.push(config.steps[i]);
+      }
+    }
+  }
+  return false;
+}
+
+export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
+  const visited = new Set<object>();
+  return getEffectiveStrategiesForCompatibility(strategies).some((strategy) =>
+    containsPosteriorStrategy(strategy, visited),
+  );
+}
+
+function hasFileBackedCompatibilityConfig(pluginId: string, pluginConfig: unknown): boolean {
+  if (!pluginConfig || typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
+    return false;
+  }
+  const compatibilityKeys = [
+    'excludeStrategies',
+    'inputs',
+    ...(pluginId === 'intent' || pluginId === 'promptfoo:redteam:intent' ? ['intent'] : []),
+  ];
+  return compatibilityKeys.some((key) => {
+    const value = (pluginConfig as Record<string, unknown>)[key];
+    return typeof value === 'string' && value.startsWith('file://');
+  });
+}
+
+export function hasPosteriorStrategy(
+  strategies: readonly RedteamStrategy[],
+  plugins?: readonly RedteamPlugin[],
+  options: { includeDisabledStrategies?: boolean; pluginsUseTargetInputs?: boolean } = {},
+): boolean {
+  const visited = new Set<object>();
+  const effectiveStrategies = getEffectiveStrategiesForCompatibility(strategies).filter(
+    (strategy) => options.includeDisabledStrategies || strategy.config?.numTests !== 0,
+  );
+  if (!plugins || plugins.length === 0) {
+    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
+  }
+
+  const normalizedPlugins = plugins.map((plugin) =>
+    typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin,
+  );
+  return effectiveStrategies.some((strategy) =>
+    normalizedPlugins.some((plugin) =>
+      hasFileBackedCompatibilityConfig(plugin.id, plugin.config)
+        ? false
+        : configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy, {
+            pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+          }),
+    ),
+  );
 }
 
 // Strategies that require configuration before they can be used
@@ -93,6 +199,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'other-encodings': 1,
   emoji: 1,
   piglatin: 1,
+  posterior: 1,
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,

@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { resolvePluginForCompatibility } from '../pluginConfig';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -23,6 +24,11 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
+import {
+  addPosteriorAttack,
+  hasApplicablePosteriorStrategy,
+  POSTERIOR_MULTI_INPUT_ERROR,
+} from './posterior';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -31,11 +37,141 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { pluginConfigMatchesStrategy, pluginMatchesStrategyTargets } from './util';
 
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
+import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
+
+export const INTERNAL_PER_TURN_LAYERS_ERROR =
+  'Strategy config field "_perTurnLayers" is reserved for internal layer composition; configure per-turn transforms with a layer strategy';
+
+function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
+  const pending = [strategy];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      continue;
+    }
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    const { config, id } = current as { config?: Record<string, unknown>; id?: unknown };
+    if (config && Object.prototype.hasOwnProperty.call(config, '_perTurnLayers')) {
+      return true;
+    }
+    if (id === 'layer' && Array.isArray(config?.steps)) {
+      for (let i = config.steps.length - 1; i >= 0; i--) {
+        pending.push(config.steps[i]);
+      }
+    }
+  }
+  return false;
+}
+
+function isNonEmptyInputRecord(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0
+  );
+}
+
+function pluginHasConfiguredInputs(plugin: unknown): boolean {
+  return Boolean(
+    plugin &&
+      typeof plugin === 'object' &&
+      !Array.isArray(plugin) &&
+      isNonEmptyInputRecord((plugin as { config?: { inputs?: unknown } }).config?.inputs),
+  );
+}
+
+export function getStrategyCompatibilityError(
+  strategies: readonly unknown[],
+  inputs: unknown,
+  options: {
+    includeDisabledStrategies?: boolean;
+    plugins?: readonly unknown[];
+    pluginsUseTargetInputs?: boolean;
+  } = {},
+): string | undefined {
+  if (strategies.some((strategy) => hasUserConfiguredPerTurnLayers(strategy))) {
+    return INTERNAL_PER_TURN_LAYERS_ERROR;
+  }
+
+  const hasTargetInputs = isNonEmptyInputRecord(inputs);
+  if (
+    !hasApplicablePosteriorStrategy(strategies, undefined, {
+      includeDisabledStrategies: options.includeDisabledStrategies,
+    })
+  ) {
+    return undefined;
+  }
+
+  let resolvedPlugins: readonly unknown[] | undefined;
+  try {
+    resolvedPlugins = options.plugins?.map((plugin) =>
+      hasApplicablePosteriorStrategy(strategies, [plugin], {
+        includeDisabledStrategies: options.includeDisabledStrategies,
+        pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+      })
+        ? resolvePluginForCompatibility(plugin)
+        : plugin,
+    );
+  } catch (error) {
+    if (
+      isNonEmptyInputRecord(inputs) &&
+      (inputs as Record<string, unknown>).compatibilityProbe === true
+    ) {
+      return POSTERIOR_MULTI_INPUT_ERROR;
+    }
+    throw error;
+  }
+  const hasPluginInputs =
+    options.pluginsUseTargetInputs === true
+      ? false
+      : (resolvedPlugins?.some(pluginHasConfiguredInputs) ?? false);
+  if (!hasTargetInputs && !hasPluginInputs) {
+    return undefined;
+  }
+
+  const hasPosterior =
+    hasTargetInputs &&
+    hasApplicablePosteriorStrategy(strategies, resolvedPlugins, {
+      includeDisabledStrategies: options.includeDisabledStrategies,
+      pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+    });
+  const pluginsWithConfiguredInputs = hasPluginInputs
+    ? resolvedPlugins?.filter(pluginHasConfiguredInputs)
+    : undefined;
+  const pluginInputsHavePosterior =
+    !hasTargetInputs &&
+    pluginsWithConfiguredInputs &&
+    pluginsWithConfiguredInputs.length > 0 &&
+    hasApplicablePosteriorStrategy(strategies, pluginsWithConfiguredInputs, {
+      includeDisabledStrategies: options.includeDisabledStrategies,
+      pluginsUseTargetInputs: false,
+    });
+
+  return hasPosterior || pluginInputsHavePosterior ? POSTERIOR_MULTI_INPUT_ERROR : undefined;
+}
+
+export function isStrategyApplicable(
+  testCase: TestCaseWithPlugin,
+  strategy: RedteamStrategyObject,
+): boolean {
+  const pluginId = testCase.metadata?.pluginId;
+  return Boolean(
+    pluginId &&
+      pluginMatchesStrategyTargets(testCase, strategy.id, strategy.config?.plugins) &&
+      pluginConfigMatchesStrategy(pluginId, testCase.metadata?.pluginConfig, strategy),
+  );
+}
 
 export const Strategies: Strategy[] = [
   {
@@ -295,6 +431,17 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'posterior',
+    action: async (testCases, injectVar) => {
+      logger.debug('Adding Posterior Attack test cases', { testCaseCount: testCases.length });
+      const newTestCases = addPosteriorAttack(testCases, injectVar);
+      logger.debug('Added Posterior Attack test cases', {
+        testCaseCount: newTestCases.length,
+      });
+      return newTestCases;
+    },
+  },
+  {
     // Deprecated: Use 'jailbreak-templates' instead. This alias exists for backward compatibility.
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
@@ -370,6 +517,11 @@ export const Strategies: Strategy[] = [
 ];
 
 export async function validateStrategies(strategies: RedteamStrategyObject[]): Promise<void> {
+  const compatibilityError = getStrategyCompatibilityError(strategies, undefined);
+  if (compatibilityError) {
+    throw new Error(compatibilityError);
+  }
+
   const invalidStrategies = [];
 
   for (const strategy of strategies) {

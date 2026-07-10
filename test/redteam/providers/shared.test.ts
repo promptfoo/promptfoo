@@ -16,6 +16,8 @@ import {
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
+  resolveRedteamTargetProviderInputMetadata,
+  resolveRedteamTargetProviderInputs,
   setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
@@ -34,6 +36,8 @@ import type {
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
+const mockIsProviderInputMetadataUnresolved = vi.hoisted(() => vi.fn());
+const mockResolveProviderInputsForValidation = vi.hoisted(() => vi.fn());
 const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
 // Create a hoisted mock class that can be instantiated with `new`
 const mockOpenAiInstances: any[] = [];
@@ -87,7 +91,9 @@ vi.mock('../../../src/providers/openai/chat', () => ({
   OpenAiChatCompletionProvider: MockOpenAiChatCompletionProvider,
 }));
 vi.mock('../../../src/providers/index', () => ({
+  isProviderInputMetadataUnresolved: mockIsProviderInputMetadataUnresolved,
   loadApiProviders: mockLoadApiProviders,
+  resolveProviderInputsForValidation: mockResolveProviderInputsForValidation,
 }));
 vi.mock('../../../src/util/server', () => ({
   checkServerFeatureSupport: mockCheckServerFeatureSupport,
@@ -95,6 +101,7 @@ vi.mock('../../../src/util/server', () => ({
 
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
+const mockedResolveProviderInputsForValidation = mockResolveProviderInputsForValidation;
 const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
 
 function setCliStateConfig(config: typeof cliState.config) {
@@ -114,6 +121,8 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockReset();
     mockedLoadApiProviders.mockReset();
+    mockIsProviderInputMetadataUnresolved.mockReset().mockReturnValue(false);
+    mockedResolveProviderInputsForValidation.mockReset();
     mockedCheckServerFeatureSupport.mockReset();
 
     // Clear the instances array
@@ -129,6 +138,49 @@ describe('shared redteam provider utilities', () => {
         provider: undefined,
       },
     });
+  });
+
+  it('resolves target provider config references through the shared provider module', async () => {
+    const resolved = [{ query: 'User query' }];
+    mockedResolveProviderInputsForValidation.mockResolvedValue(resolved);
+
+    await expect(
+      resolveRedteamTargetProviderInputs(['file://providers.yaml'], '/config', {
+        PROVIDER_DIR: 'providers',
+      }),
+    ).resolves.toEqual(resolved);
+    expect(mockedResolveProviderInputsForValidation).toHaveBeenCalledWith(
+      ['file://providers.yaml'],
+      {
+        basePath: '/config',
+        env: { PROVIDER_DIR: 'providers' },
+        loadDynamicProviders: undefined,
+      },
+    );
+  });
+
+  it('reports unresolved dynamic metadata and forwards runtime-loading options', async () => {
+    const unresolved = Symbol('unresolved');
+    mockedResolveProviderInputsForValidation.mockResolvedValue([unresolved]);
+    mockIsProviderInputMetadataUnresolved.mockImplementation((value) => value === unresolved);
+
+    await expect(
+      resolveRedteamTargetProviderInputMetadata(
+        ['package:custom-provider'],
+        '/config',
+        undefined,
+        undefined,
+        { loadDynamicProviders: true },
+      ),
+    ).resolves.toEqual({ inputs: [unresolved], hasUnresolved: true });
+    expect(mockedResolveProviderInputsForValidation).toHaveBeenCalledWith(
+      ['package:custom-provider'],
+      {
+        basePath: '/config',
+        env: undefined,
+        loadDynamicProviders: true,
+      },
+    );
   });
 
   describe('RedteamProviderManager', () => {

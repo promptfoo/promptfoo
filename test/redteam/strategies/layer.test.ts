@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
+import { MULTI_INPUT_VAR } from '../../../src/redteam/constants/plugins';
+import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+import { Strategies } from '../../../src/redteam/strategies/index';
+import { addLayerTestCases, LAYER_COMPLEXITY_ERROR } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
 import type { TestCaseWithPlugin } from '../../../src/types/index';
@@ -253,6 +256,30 @@ describe('addLayerTestCases', () => {
     expect(mockStrategies[0].action).toHaveBeenCalledTimes(1);
   });
 
+  it('applies plugin targeting even when a layer step cannot be loaded', async () => {
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'test' },
+        metadata: {
+          pluginId: 'harmful:hate',
+          pluginConfig: { inputs: { context: 'Reference context', question: 'User question' } },
+        },
+      },
+    ];
+
+    const result = await addLayerTestCases(
+      testCases,
+      'input',
+      {
+        steps: [{ id: 'unknown-strategy', config: { plugins: ['policy'] } }, 'posterior'],
+      },
+      mockStrategies,
+      mockLoadStrategy,
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it('should respect plugin targeting in steps', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -311,7 +338,7 @@ describe('addLayerTestCases', () => {
 
   it('should handle colon-separated strategy IDs', async () => {
     const colonStrategy: Strategy = {
-      id: 'jailbreak',
+      id: 'jailbreak:composite',
       action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
         testCases.map((tc) => ({
           ...tc,
@@ -338,7 +365,7 @@ describe('addLayerTestCases', () => {
       mockLoadStrategy,
     );
 
-    // Should find and use the base 'jailbreak' strategy
+    // Should find and use the exact colon-separated strategy.
     expect(result).toHaveLength(1);
     expect(result[0].vars?.input).toBe('[Jailbreak] test');
     expect(colonStrategy.action).toHaveBeenCalledTimes(1);
@@ -614,14 +641,7 @@ describe('addLayerTestCases', () => {
         testCases,
         'input',
         {
-          targetId: 'cloud-target-123',
-          steps: [
-            {
-              id: 'jailbreak:hydra',
-              config: { maxTurns: 5, stateful: true, targetId: 'stale-target' },
-            },
-            'audio',
-          ],
+          steps: [{ id: 'jailbreak:hydra', config: { maxTurns: 5, stateful: true } }, 'audio'],
         },
         mockStrategies,
         mockLoadStrategy,
@@ -635,7 +655,6 @@ describe('addLayerTestCases', () => {
           expect.objectContaining({
             maxTurns: 5,
             stateful: true,
-            targetId: 'cloud-target-123',
             _perTurnLayers: ['audio'],
           }),
         );
@@ -667,6 +686,257 @@ describe('addLayerTestCases', () => {
           { id: 'base64', config: { someOption: true } },
         ]);
       }
+    });
+
+    it('should respect plugin exclusions for per-turn layers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { [MULTI_INPUT_VAR]: '{"task":"canary task"}' },
+          metadata: {
+            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        MULTI_INPUT_VAR,
+        { steps: ['jailbreak:hydra', 'posterior'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      const provider = result[0].provider;
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra');
+      expect(provider).toEqual(
+        expect.objectContaining({
+          config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+        }),
+      );
+    });
+
+    it('should recursively respect plugin exclusions for nested per-turn layers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { [MULTI_INPUT_VAR]: '{"task":"canary task"}' },
+          metadata: {
+            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        MULTI_INPUT_VAR,
+        {
+          steps: ['jailbreak:hydra', { id: 'layer', config: { steps: ['posterior'] } }],
+        },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra');
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+        }),
+      );
+    });
+
+    it('should ignore cyclic nested per-turn layer aliases', async () => {
+      const cyclicLayer: { id: string; config: { steps: unknown[] } } = {
+        id: 'layer',
+        config: { steps: [] },
+      };
+      cyclicLayer.config.steps.push(cyclicLayer);
+
+      const result = await addLayerTestCases(
+        [
+          {
+            vars: { input: 'canary task' },
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        'input',
+        { steps: ['jailbreak:hydra', cyclicLayer] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra');
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+        }),
+      );
+    });
+
+    it('should retain repeated per-turn layer aliases below the complexity limit', async () => {
+      const sharedLayer = { id: 'layer', config: { steps: ['audio'] } };
+
+      const [result] = await addLayerTestCases(
+        [{ vars: { input: 'canary task' }, metadata: { pluginId: 'harmful:hate' } }],
+        'input',
+        { steps: ['jailbreak:hydra', sharedLayer, sharedLayer] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result.provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            _perTurnLayers: [
+              { id: 'layer', config: { steps: ['audio'] } },
+              { id: 'layer', config: { steps: ['audio'] } },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should share the per-turn complexity budget across repeated roots', async () => {
+      let sharedLayer: unknown = 'audio';
+      for (let i = 0; i < 8; i++) {
+        sharedLayer = { id: 'layer', config: { steps: [sharedLayer, sharedLayer] } };
+      }
+
+      await expect(
+        addLayerTestCases(
+          [{ vars: { input: 'canary task' }, metadata: { pluginId: 'harmful:hate' } }],
+          'input',
+          { steps: ['jailbreak:hydra', sharedLayer, sharedLayer, sharedLayer] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow(LAYER_COMPLEXITY_ERROR);
+    });
+
+    it('should reject deeply nested per-turn layers with a controlled error', async () => {
+      let nestedLayer: unknown = 'audio';
+      for (let i = 0; i < 1100; i++) {
+        nestedLayer = { id: 'layer', config: { steps: [nestedLayer] } };
+      }
+
+      await expect(
+        addLayerTestCases(
+          [{ vars: { input: 'canary task' }, metadata: { pluginId: 'harmful:hate' } }],
+          'input',
+          { steps: ['jailbreak:hydra', nestedLayer] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow(LAYER_COMPLEXITY_ERROR);
+    });
+
+    it('should consume nested plugin targeting before applying per-turn layers at runtime', async () => {
+      const [testCase] = await addLayerTestCases(
+        [
+          {
+            vars: { input: 'harmful behavior' },
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        'input',
+        {
+          steps: [
+            'jailbreak:hydra',
+            {
+              id: 'layer',
+              config: {
+                plugins: ['harmful'],
+                steps: [{ id: 'posterior', config: { plugins: ['harmful'] } }],
+              },
+            },
+          ],
+        },
+        Strategies,
+        mockLoadStrategy,
+      );
+      const provider = testCase.provider;
+      expect(provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            _perTurnLayers: [
+              {
+                id: 'layer',
+                config: { steps: [{ id: 'posterior', config: {} }] },
+              },
+            ],
+          }),
+        }),
+      );
+
+      if (!provider || typeof provider === 'string' || typeof provider === 'function') {
+        throw new Error('Expected an attack provider configuration');
+      }
+      const layerConfigs = provider.config?._perTurnLayers;
+      if (!Array.isArray(layerConfigs)) {
+        throw new Error('Expected per-turn layer configuration');
+      }
+
+      const transformed = await applyRuntimeTransforms(
+        'runtime attack',
+        'input',
+        layerConfigs,
+        Strategies,
+      );
+
+      expect(transformed.error).toBeUndefined();
+      expect(transformed.prompt).toContain('You are a classifier for red teaming');
+      expect(transformed.prompt).toContain('runtime attack');
+    });
+
+    it.each([
+      ['directly', ['jailbreak:hydra', 'posterior']],
+      [
+        'inside a nested layer',
+        ['jailbreak:hydra', { id: 'layer', config: { steps: ['posterior'] } }],
+      ],
+    ])('should reject posterior per-turn layers %s for test cases with multi-input metadata', async (_label, steps) => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { [MULTI_INPUT_VAR]: '{}' },
+          metadata: {
+            pluginConfig: {
+              inputs: {
+                context: { description: 'Reference context', type: 'text' },
+                question: { description: 'User question', type: 'text' },
+              },
+            },
+            pluginId: 'policy',
+          },
+        },
+      ];
+
+      await expect(
+        addLayerTestCases(testCases, MULTI_INPUT_VAR, { steps }, mockStrategies, mockLoadStrategy),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+    });
+
+    it('should not resolve unsupported strategy aliases', async () => {
+      const posteriorAction = vi.fn(async (testCases: TestCaseWithPlugin[]) => testCases);
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'canary task' },
+          metadata: {
+            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['posterior:alias'] },
+        [...mockStrategies, { id: 'posterior', action: posteriorAction }],
+        mockLoadStrategy,
+      );
+
+      expect(posteriorAction).not.toHaveBeenCalled();
+      expect(result).toEqual(testCases);
     });
 
     it('should generate correct metric suffix for each attack provider', async () => {

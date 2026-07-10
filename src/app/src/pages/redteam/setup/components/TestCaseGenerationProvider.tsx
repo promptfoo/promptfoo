@@ -18,6 +18,7 @@ import {
   type Strategy,
 } from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
+import { isPluginCompatibleWithStrategy } from './strategies/utils';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
@@ -235,14 +236,17 @@ export const TestCaseGenerationProvider: React.FC<{
 
   // Compute available plugins from config
   const availablePlugins = useMemo(() => {
-    const plugins =
-      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
-    // If no plugins are configured, provide a default
-    if (plugins.length === 0) {
-      return [DEFAULT_PLUGIN];
-    }
-    return plugins;
-  }, [redTeamConfig.plugins]);
+    const configuredPlugins = redTeamConfig.plugins ?? [];
+    const previewPlugins = configuredPlugins.length > 0 ? configuredPlugins : [DEFAULT_PLUGIN];
+    const compatiblePlugins = strategy
+      ? previewPlugins.filter((plugin) =>
+          isPluginCompatibleWithStrategy(plugin, strategy.id, strategy.config),
+        )
+      : previewPlugins;
+    return compatiblePlugins
+      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+      .filter(Boolean);
+  }, [redTeamConfig.plugins, strategy]);
 
   // ===================================================================
   // Refs
@@ -587,10 +591,14 @@ export const TestCaseGenerationProvider: React.FC<{
         setTestCaseBatch([]);
         setBatchIndex(0);
 
-        // Look up the plugin config from redTeamConfig.plugins
-        const pluginFromConfig = redTeamConfig.plugins?.find((p) =>
-          typeof p === 'string' ? p === newPluginId : p.id === newPluginId,
-        );
+        // Look up the same compatible plugin entry that made this ID available.
+        const pluginFromConfig = redTeamConfig.plugins?.find((candidate) => {
+          const candidateId = typeof candidate === 'string' ? candidate : candidate.id;
+          return (
+            candidateId === newPluginId &&
+            isPluginCompatibleWithStrategy(candidate, strategy!.id, strategy!.config)
+          );
+        });
         const pluginConfig =
           typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
 

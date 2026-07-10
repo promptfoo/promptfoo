@@ -7,17 +7,25 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
-import { redteamProviderManager } from '../../redteam/providers/shared';
+import {
+  redteamProviderManager,
+  resolveRedteamTargetProviderInputMetadata,
+} from '../../redteam/providers/shared';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
-import { doRedteamRun } from '../../redteam/shared';
-import { Strategies } from '../../redteam/strategies/index';
+import { dereferenceLiveRedteamConfig, doRedteamRun } from '../../redteam/shared';
+import {
+  getStrategyCompatibilityError,
+  isStrategyApplicable,
+  Strategies,
+} from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
@@ -33,6 +41,112 @@ import {
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// Input metadata resolution emits a private Symbol while a dynamic provider is unresolved.
+function isUnresolvedProviderInput(value: unknown): boolean {
+  return typeof value === 'symbol';
+}
+
+function findTargetCompatibilityError(
+  strategies: readonly unknown[],
+  plugins: readonly unknown[],
+  inputs: readonly unknown[],
+): string | undefined {
+  const firstInput = inputs[0];
+  const pluginsUseTargetInputs =
+    isUnresolvedProviderInput(firstInput) ||
+    (isRecord(firstInput) && Object.keys(firstInput).length > 0);
+  return inputs
+    .filter((input) => !isUnresolvedProviderInput(input))
+    .map((input) =>
+      getStrategyCompatibilityError(strategies, input, { plugins, pluginsUseTargetInputs }),
+    )
+    .find((error) => error !== undefined);
+}
+
+async function getLiveConfigCompatibilityError(
+  config: Record<string, unknown>,
+  options: { loadDynamicProviders?: boolean } = {},
+): Promise<string | undefined> {
+  const resolvedConfig = await dereferenceLiveRedteamConfig(config);
+  const redteam = isRecord(resolvedConfig.redteam) ? resolvedConfig.redteam : undefined;
+  const commandLineOptions = isRecord(resolvedConfig.commandLineOptions)
+    ? resolvedConfig.commandLineOptions
+    : undefined;
+  const strategies = Array.isArray(commandLineOptions?.strategies)
+    ? commandLineOptions.strategies
+    : Array.isArray(resolvedConfig.strategies)
+      ? resolvedConfig.strategies
+      : Array.isArray(redteam?.strategies)
+        ? redteam.strategies
+        : [];
+  const configuredPlugins =
+    Array.isArray(commandLineOptions?.plugins) && commandLineOptions.plugins.length > 0
+      ? commandLineOptions.plugins
+      : Array.isArray(resolvedConfig.plugins)
+        ? resolvedConfig.plugins
+        : Array.isArray(redteam?.plugins)
+          ? redteam.plugins
+          : undefined;
+  const plugins =
+    configuredPlugins && configuredPlugins.length > 0
+      ? configuredPlugins
+      : Array.from(REDTEAM_DEFAULT_PLUGINS);
+  const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
+  if (strategyConfigError) {
+    return strategyConfigError;
+  }
+  const configuredTargets = resolvedConfig.targets ?? resolvedConfig.providers;
+  if (configuredTargets === undefined) {
+    return undefined;
+  }
+
+  const requiresResolvedInputs =
+    getStrategyCompatibilityError(
+      strategies,
+      { compatibilityProbe: true },
+      {
+        plugins,
+        pluginsUseTargetInputs: false,
+      },
+    ) !== undefined ||
+    getStrategyCompatibilityError(strategies, undefined, {
+      plugins,
+      pluginsUseTargetInputs: false,
+    }) !== undefined;
+  if (!requiresResolvedInputs) {
+    return undefined;
+  }
+
+  const env = isRecord(resolvedConfig.env)
+    ? (resolvedConfig.env as Record<string, string>)
+    : undefined;
+  const configuredFilter = commandLineOptions?.filterProviders ?? commandLineOptions?.filterTargets;
+  const filter = typeof configuredFilter === 'string' ? configuredFilter : undefined;
+  let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+    configuredTargets,
+    cliState.basePath,
+    env,
+    filter,
+    { loadDynamicProviders: false },
+  );
+  let compatibilityError = findTargetCompatibilityError(strategies, plugins, resolvedInputs.inputs);
+  if (!compatibilityError && options.loadDynamicProviders && resolvedInputs.hasUnresolved) {
+    resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+      configuredTargets,
+      cliState.basePath,
+      env,
+      filter,
+      { loadDynamicProviders: true },
+    );
+    compatibilityError = findTargetCompatibilityError(strategies, plugins, resolvedInputs.inputs);
+  }
+  return compatibilityError;
+}
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -66,6 +180,14 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // In multi-input mode, some plugins don't support dynamic generation
     const hasMultiInput =
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
+    const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs, {
+      includeDisabledStrategies: true,
+      plugins: [plugin],
+    });
+    if (compatibilityError) {
+      res.status(400).json({ error: compatibilityError });
+      return;
+    }
     if (hasMultiInput) {
       const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
       if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
@@ -73,6 +195,22 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
         return;
       }
+    }
+
+    if (
+      !['basic', 'default'].includes(strategy.id) &&
+      !isStrategyApplicable(
+        {
+          vars: {},
+          metadata: { pluginId: plugin.id, pluginConfig: plugin.config },
+        } as TestCaseWithPlugin,
+        strategy,
+      )
+    ) {
+      res.status(400).json({
+        error: `Strategy ${strategy.id} is not compatible with plugin ${plugin.id}`,
+      });
+      return;
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)
@@ -115,17 +253,31 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     if (!['basic', 'default'].includes(strategy.id)) {
       try {
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
+        const applicableTestCases = (testCases as TestCaseWithPlugin[]).filter((testCase) =>
+          isStrategyApplicable(testCase, strategy),
+        );
+
+        if (applicableTestCases.length === 0) {
+          res.status(400).json({
+            error: `Strategy ${strategy.id} is not compatible with plugin ${plugin.id}`,
+          });
+          return;
+        }
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as TestCaseWithPlugin[],
+          applicableTestCases,
           injectVar,
           strategy.config || {},
           strategy.id,
         );
 
-        if (strategyTestCases && strategyTestCases.length > 0) {
-          finalTestCases = strategyTestCases;
+        if (!strategyTestCases || strategyTestCases.length === 0) {
+          res.status(400).json({
+            error: `Strategy ${strategy.id} is not compatible with plugin ${plugin.id}`,
+          });
+          return;
         }
+        finalTestCases = strategyTestCases;
       } catch (error) {
         logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({
@@ -231,6 +383,43 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 // Track the current running job
 let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
+let currentRunPromise: Promise<void> | null = null;
+let currentPreflightPromise: Promise<void> | null = null;
+let latestRunRequest = 0;
+let pendingRunRequest: number | null = null;
+let latestRunId: string | null = null;
+const RUN_CLEANUP_TIMEOUT_MS = 10_000;
+
+async function waitForRunCleanup(
+  runPromise: Promise<void>,
+  timeoutMs = RUN_CLEANUP_TIMEOUT_MS,
+): Promise<boolean> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<boolean>((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), timeoutMs);
+    timeoutId.unref?.();
+  });
+
+  try {
+    return await Promise.race([
+      runPromise.then(
+        () => true,
+        () => true,
+      ),
+      timeout,
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function clearPendingRunRequest(runRequest: number): void {
+  if (pendingRunRequest === runRequest) {
+    pendingRunRequest = null;
+  }
+}
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
@@ -239,7 +428,81 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  // If there's a current job running, abort it
+  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const runRequest = ++latestRunRequest;
+  const id = crypto.randomUUID();
+  latestRunId = id;
+  pendingRunRequest = runRequest;
+  const rejectSupersededRequest = (): boolean => {
+    if (runRequest === latestRunRequest) {
+      return false;
+    }
+    clearPendingRunRequest(runRequest);
+    res.status(409).json({ error: 'Run request superseded by a newer request' });
+    return true;
+  };
+  const passesCompatibilityPreflight = async (loadDynamicProviders: boolean): Promise<boolean> => {
+    try {
+      const compatibilityError = await getLiveConfigCompatibilityError(config, {
+        loadDynamicProviders,
+      });
+      if (rejectSupersededRequest()) {
+        return false;
+      }
+      if (!compatibilityError) {
+        return true;
+      }
+      clearPendingRunRequest(runRequest);
+      res.status(400).json({ error: compatibilityError });
+    } catch {
+      if (rejectSupersededRequest()) {
+        return false;
+      }
+      clearPendingRunRequest(runRequest);
+      logger.warn('[Redteam] Failed to resolve target configuration before starting run');
+      res.status(400).json({ error: 'Invalid target provider configuration' });
+    }
+    return false;
+  };
+  const passesTrackedDynamicPreflight = async (): Promise<boolean> => {
+    const dynamicPreflightPromise = passesCompatibilityPreflight(true);
+    const trackedPreflightPromise = dynamicPreflightPromise.then(() => undefined);
+    currentPreflightPromise = trackedPreflightPromise;
+    const compatibilityPassed = await dynamicPreflightPromise;
+    if (currentPreflightPromise === trackedPreflightPromise) {
+      currentPreflightPromise = null;
+    }
+    return compatibilityPassed;
+  };
+
+  // Resolve only static metadata while the current provider may still own external resources.
+  if (!(await passesCompatibilityPreflight(false))) {
+    return;
+  }
+
+  const previousRunPromise = currentRunPromise;
+  const previousPreflightPromise = currentPreflightPromise;
+  if (previousPreflightPromise !== null) {
+    const preflightComplete = await waitForRunCleanup(previousPreflightPromise);
+    if (rejectSupersededRequest()) {
+      return;
+    }
+    if (!preflightComplete) {
+      clearPendingRunRequest(runRequest);
+      res.status(409).json({ error: 'Previous run is still validating target compatibility' });
+      return;
+    }
+  }
+  // Once execution cleanup is complete, dynamically validate replacements before discarding a
+  // predecessor whose result is still being summarized.
+  if (
+    previousRunPromise === null &&
+    (currentJobId || previousPreflightPromise !== null) &&
+    !(await passesTrackedDynamicPreflight())
+  ) {
+    return;
+  }
+  // If there's a current job running, abort it and wait for provider cleanup before replacement.
   if (currentJobId) {
     if (currentAbortController) {
       currentAbortController.abort();
@@ -248,10 +511,28 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       append: true,
       resetResult: false,
     });
+    cliState.webUI = false;
+    currentJobId = null;
+    currentAbortController = null;
+  }
+  if (previousRunPromise !== null) {
+    const cleanupComplete = await waitForRunCleanup(previousRunPromise);
+    if (rejectSupersededRequest()) {
+      return;
+    }
+    if (!cleanupComplete) {
+      clearPendingRunRequest(runRequest);
+      res.status(409).json({ error: 'Previous run is still shutting down' });
+      return;
+    }
+
+    // Dynamic providers may now be instantiated safely because the predecessor has released them.
+    if (!(await passesTrackedDynamicPreflight())) {
+      return;
+    }
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
-  const id = crypto.randomUUID();
+  clearPendingRunRequest(runRequest);
   currentJobId = id;
   currentAbortController = new AbortController();
 
@@ -261,7 +542,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   cliState.webUI = true;
 
   // Run redteam in background
-  doRedteamRun({
+  const executionPromise = doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
@@ -273,7 +554,19 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     },
     abortSignal: currentAbortController.signal,
-  })
+  });
+  const cleanupBarrier = executionPromise.then(
+    () => undefined,
+    () => undefined,
+  );
+  currentRunPromise = cleanupBarrier;
+  void cleanupBarrier.finally(() => {
+    if (currentRunPromise === cleanupBarrier) {
+      currentRunPromise = null;
+    }
+  });
+
+  void executionPromise
     .then(async (evalResult) => {
       const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
       if (currentJobId === id) {
@@ -305,13 +598,19 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
+  const hadPendingRun = pendingRunRequest !== null;
+  latestRunRequest += 1;
+  pendingRunRequest = null;
   if (!currentJobId) {
+    if (hadPendingRun) {
+      res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Pending run cancelled' }));
+      return;
+    }
     res.status(400).json({ error: 'No job currently running' });
     return;
   }
 
   const jobId = currentJobId;
-
   if (currentAbortController) {
     currentAbortController.abort();
   }
@@ -326,7 +625,7 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   currentJobId = null;
   currentAbortController = null;
 
-  // Wait a moment to ensure cleanup
+  // Preserve the bounded cancellation response; a replacement still awaits currentRunPromise.
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));
@@ -396,7 +695,9 @@ redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void>
   res.json(
     RedteamSchemas.Status.Response.parse({
       hasRunningJob: currentJobId !== null,
+      hasPendingRun: pendingRunRequest !== null,
       jobId: currentJobId,
+      latestRunId,
     }),
   );
 });

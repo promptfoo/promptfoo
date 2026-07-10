@@ -291,6 +291,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'posterior',
+    displayName: 'Posterior Attack',
+    description: 'Safety-classifier reframing',
+    longDescription:
+      'Reframes a harmful request as a safety-classification task, asking the target to author an example that a red-team classifier would label unsafe',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/posterior/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'jailbreak-templates',
     displayName: 'Jailbreak Templates',
     description: 'Static jailbreak templates',

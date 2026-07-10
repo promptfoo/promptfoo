@@ -99,7 +99,9 @@ export type RedteamTaskResponse = z.infer<typeof RedteamTaskResponseSchema>;
 
 export const RedteamStatusResponseSchema = z.object({
   hasRunningJob: z.boolean(),
+  hasPendingRun: z.boolean().optional().default(false),
   jobId: z.string().nullable(),
+  latestRunId: z.string().uuid().nullable().optional(),
 });
 
 export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
