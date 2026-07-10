@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { formatOpenAiError, getOpenAICacheWriteInputTokens } from '../openai/util';
+import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
@@ -39,31 +39,6 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
-function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] | undefined {
-  const outputTokenDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
-  const cachedInputTokens =
-    usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
-  const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
-
-  if (!outputTokenDetails && cachedInputTokens <= 0 && cacheWriteInputTokens === undefined) {
-    return undefined;
-  }
-
-  return {
-    ...(outputTokenDetails
-      ? {
-          reasoning: outputTokenDetails.reasoning_tokens,
-          acceptedPrediction: outputTokenDetails.accepted_prediction_tokens,
-          rejectedPrediction: outputTokenDetails.rejected_prediction_tokens,
-        }
-      : {}),
-    ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-    ...(cacheWriteInputTokens === undefined
-      ? {}
-      : { cacheCreationInputTokens: cacheWriteInputTokens }),
-  };
-}
-
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
@@ -74,7 +49,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
       const totalTokens = data.usage.total_tokens || promptTokens + completionTokens;
-      const completionDetails = getCompletionTokenDetails(data.usage);
+      const completionDetails = getOpenAICompletionTokenDetails(data.usage);
 
       return {
         total: totalTokens,

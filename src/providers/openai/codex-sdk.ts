@@ -641,7 +641,6 @@ async function loadCodexSDK(): Promise<any> {
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
     // GPT-5.6 models (requires Codex 0.144.0 or later)
-    'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',

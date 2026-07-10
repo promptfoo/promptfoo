@@ -2096,16 +2096,18 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o', {
         config: {
           prompt_cache_key: 'shared-prefix',
-          prompt_cache_options: { mode: 'explicit', ttl: '30m' },
           prompt_cache_retention: 'in_memory',
         },
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body: gpt56Body } = await new OpenAiChatCompletionProvider('gpt-5.6', {
+        config: { prompt_cache_options: { mode: 'explicit', ttl: '30m' } },
+      }).getOpenAiBody('Test prompt');
 
       expect(body.prompt_cache_key).toBe('shared-prefix');
-      expect(body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '30m' });
       expect(body.prompt_cache_retention).toBe('in_memory');
+      expect(gpt56Body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '30m' });
     });
 
     it('should not share config between provider instances', () => {

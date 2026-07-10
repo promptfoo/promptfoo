@@ -780,11 +780,13 @@ export function getOpenAICacheWriteInputTokens(usage: any): number | undefined {
   return undefined;
 }
 
-function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] | undefined {
+export function getOpenAICompletionTokenDetails(
+  usage: any,
+): TokenUsage['completionDetails'] | undefined {
   const cachedInputTokens =
     usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
   const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
-  const completionDetails = usage.completion_tokens_details;
+  const completionDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
 
   if (!completionDetails && cachedInputTokens <= 0 && cacheWriteInputTokens === undefined) {
     return undefined;
@@ -811,7 +813,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       // Cached responses don't count as a new request
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
-      const completionDetails = getCompletionTokenDetails(data.usage);
+      const completionDetails = getOpenAICompletionTokenDetails(data.usage);
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,

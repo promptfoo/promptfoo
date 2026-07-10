@@ -604,6 +604,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
+      const cost = calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+        apiUrl: this.getApiUrl(),
+        cachedResponse: cached,
+        serviceTier: data.service_tier ?? config.service_tier,
+      });
+
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
         ? [message.function_call]
@@ -704,11 +710,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
-            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-              apiUrl: this.getApiUrl(),
-              cachedResponse: cached,
-              serviceTier: data.service_tier ?? config.service_tier,
-            }),
+            cost,
             guardrails: { flagged: contentFiltered },
             metadata: {
               http: {
@@ -745,11 +747,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
-          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-            apiUrl: this.getApiUrl(),
-            cachedResponse: cached,
-            serviceTier: data.service_tier ?? config.service_tier,
-          }),
+          cost,
           guardrails: { flagged: contentFiltered },
           metadata: {
             http: {
@@ -768,11 +766,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
-        cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-          apiUrl: this.getApiUrl(),
-          cachedResponse: cached,
-          serviceTier: data.service_tier ?? config.service_tier,
-        }),
+        cost,
         guardrails: { flagged: contentFiltered },
         metadata: {
           http: {

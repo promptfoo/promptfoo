@@ -186,14 +186,12 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it('should warn about unknown model', () => {
+    it.each(['unknown-model', 'gpt-5.6'])('should warn about unknown model %s', (model) => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
+      new OpenAICodexSDKProvider({ config: { model } });
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK: unknown-model',
-      );
+      expect(warnSpy).toHaveBeenCalledWith(`Using unknown model for OpenAI Codex SDK: ${model}`);
 
       warnSpy.mockRestore();
     });
@@ -2831,7 +2829,6 @@ describe('OpenAICodexSDKProvider', () => {
 
     describe('GPT-5.2 through GPT-5.6 models', () => {
       it.each([
-        'gpt-5.6',
         'gpt-5.6-sol',
         'gpt-5.6-terra',
         'gpt-5.6-luna',
