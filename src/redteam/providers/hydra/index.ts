@@ -73,9 +73,12 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
-  hydraRoundsCompleted: number;
-  hydraBacktrackCount: number;
-  hydraResult: boolean;
+  hydraRoundsCompleted?: number;
+  hydraBacktrackCount?: number;
+  hydraResult?: boolean;
+  goblinRoundsCompleted?: number;
+  goblinBacktrackCount?: number;
+  goblinResult?: boolean;
   stopReason: TurnBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
@@ -104,7 +107,7 @@ interface HydraResponse extends ProviderResponse {
   metadata: HydraMetadata;
 }
 
-interface HydraConfig {
+export interface HydraConfig {
   injectVar: string;
   scanId?: string;
   targetId?: string;
@@ -125,6 +128,22 @@ interface HydraConfig {
    */
   inputs?: Inputs;
 }
+
+export interface HydraProviderOptions {
+  strategyName: string;
+  strategyId: string;
+  providerId: string;
+  taskId: 'hydra-decision' | 'goblin-decision';
+  metadataPrefix: 'hydra' | 'goblin';
+}
+
+const DEFAULT_HYDRA_PROVIDER_OPTIONS: HydraProviderOptions = {
+  strategyName: 'Hydra',
+  strategyId: 'hydra',
+  providerId: 'promptfoo:redteam:hydra',
+  taskId: 'hydra-decision',
+  metadataPrefix: 'hydra',
+};
 
 function scrubOutputForHistory(output: string): string {
   if (typeof output !== 'string') {
@@ -148,6 +167,7 @@ function scrubOutputForHistory(output: string): string {
 
 export class HydraProvider implements ApiProvider {
   readonly config: HydraConfig;
+  private readonly providerOptions: HydraProviderOptions;
   private scanId?: string;
   private readonly agentProvider: ApiProvider;
   private readonly injectVar: string;
@@ -159,8 +179,12 @@ export class HydraProvider implements ApiProvider {
   private conversationHistory: Message[] = [];
   private sessionId?: string;
 
-  constructor(config: HydraConfig) {
+  constructor(config: HydraConfig, options: Partial<HydraProviderOptions> = {}) {
     this.config = config;
+    this.providerOptions = {
+      ...DEFAULT_HYDRA_PROVIDER_OPTIONS,
+      ...options,
+    };
     this.scanId = config.scanId; // Use scanId from config if provided
     this.injectVar = config.injectVar;
     const configuredMaxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
@@ -173,20 +197,24 @@ export class HydraProvider implements ApiProvider {
     this.perTurnLayers = config._perTurnLayers ?? [];
 
     if (this.stateful && this.maxBacktracks > 0) {
-      logger.debug('[Hydra] Backtracking disabled in stateful mode');
+      logger.debug(`${this.logPrefix} Backtracking disabled in stateful mode`);
     }
 
-    // Hydra strategy requires remote generation
+    // Adaptive multi-turn strategies require remote generation.
     if (!shouldGenerateRemote()) {
       throw new Error(
         neverGenerateRemote()
-          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:hydra strategy')
-          : getRemoteGenerationDisabledError('jailbreak:hydra strategy'),
+          ? getRemoteGenerationExplicitlyDisabledError(
+              `jailbreak:${this.providerOptions.metadataPrefix} strategy`,
+            )
+          : getRemoteGenerationDisabledError(
+              `jailbreak:${this.providerOptions.metadataPrefix} strategy`,
+            ),
       );
     }
 
     this.agentProvider = new PromptfooChatCompletionProvider({
-      task: 'hydra-decision',
+      task: this.providerOptions.taskId,
       jsonOnly: true,
       preferSmallModel: false,
       ...remoteGenerationContextPayload(this.config.targetId),
@@ -194,7 +222,7 @@ export class HydraProvider implements ApiProvider {
       inputs: this.config.inputs,
     });
 
-    logger.debug('[Hydra] Provider initialized', {
+    logger.debug(`${this.logPrefix} Provider initialized`, {
       maxTurns: this.maxTurns,
       maxBacktracks: this.maxBacktracks,
       stateful: this.stateful,
@@ -206,7 +234,11 @@ export class HydraProvider implements ApiProvider {
   }
 
   id() {
-    return 'promptfoo:redteam:hydra';
+    return this.providerOptions.providerId;
+  }
+
+  private get logPrefix(): string {
+    return `[${this.providerOptions.strategyName}]`;
   }
 
   async callApi(
@@ -214,7 +246,7 @@ export class HydraProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<HydraResponse> {
-    logger.debug('[Hydra] callApi invoked');
+    logger.debug(`${this.logPrefix} callApi invoked`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -259,7 +291,7 @@ export class HydraProvider implements ApiProvider {
 
     // Resolve tracing options
     const tracingOptions = resolveTracingOptions({
-      strategyId: 'hydra',
+      strategyId: this.providerOptions.strategyId,
       test,
       config: this.config as unknown as Record<string, unknown>,
     });
@@ -267,7 +299,7 @@ export class HydraProvider implements ApiProvider {
       tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
-    logger.debug('[Hydra] Starting attack', {
+    logger.debug(`${this.logPrefix} Starting attack`, {
       goal,
       scanId,
       maxTurns: this.maxTurns,
@@ -329,7 +361,7 @@ export class HydraProvider implements ApiProvider {
     let previousTraceSummary: string | undefined;
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
-      logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
+      logger.debug(`${this.logPrefix} Turn ${turn}/${this.maxTurns}`);
 
       // Build request for cloud agent
       // Conditionally exclude target outputs from conversation history for privacy
@@ -342,7 +374,7 @@ export class HydraProvider implements ApiProvider {
         : this.conversationHistory;
 
       const cloudRequest = {
-        task: 'hydra-decision',
+        task: this.providerOptions.taskId,
         testRunId,
         scanId,
         turn,
@@ -374,7 +406,7 @@ export class HydraProvider implements ApiProvider {
         {
           prompt: {
             raw: JSON.stringify(cloudRequest),
-            label: 'hydra-agent',
+            label: `${this.providerOptions.metadataPrefix}-agent`,
           },
           vars: {},
         },
@@ -389,7 +421,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (agentResp.error) {
-        logger.debug('[Hydra] Agent provider error', {
+        logger.debug(`${this.logPrefix} Agent provider error`, {
           turn,
           testRunId,
           error: agentResp.error,
@@ -410,8 +442,8 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (!nextMessage) {
-        logger.info('[Hydra] Missing message from agent', { turn });
-        agentFailureError = 'Hydra agent did not return an attack message';
+        logger.info(`${this.logPrefix} Missing message from agent`, { turn });
+        agentFailureError = `${this.providerOptions.strategyName} agent did not return an attack message`;
         continue;
       }
 
@@ -425,7 +457,10 @@ export class HydraProvider implements ApiProvider {
 
       // Extract input vars from the processed message for multi-input mode
       if (this.config.inputs && shouldGenerateRemote()) {
-        assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
+        assertRemoteMaterializationHandled(
+          agentResp,
+          `${this.providerOptions.strategyName} multi-input generation`,
+        );
       }
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
       let materializedInputVars:
@@ -437,11 +472,14 @@ export class HydraProvider implements ApiProvider {
         !currentInputVars &&
         !agentResp.materializedVars
       ) {
-        logger.warn('[Hydra] Remote multi-input generation returned an invalid prompt format', {
-          turn,
-          messagePreview: processedMessage.slice(0, 200),
-        });
-        agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
+        logger.warn(
+          `${this.logPrefix} Remote multi-input generation returned an invalid prompt format`,
+          {
+            turn,
+            messagePreview: processedMessage.slice(0, 200),
+          },
+        );
+        agentFailureError = `${this.providerOptions.strategyName} remote multi-input generation returned an invalid prompt format`;
         continue;
       }
       if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
@@ -457,7 +495,7 @@ export class HydraProvider implements ApiProvider {
             this.config.inputs,
             {
               materializationIndex: turn,
-              pluginId: 'hydra',
+              pluginId: this.providerOptions.metadataPrefix,
               provider: this.agentProvider,
               purpose: test?.metadata?.purpose as string | undefined,
             },
@@ -528,7 +566,7 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
-      logger.debug('[Hydra] Sending to target', {
+      logger.debug(`${this.logPrefix} Sending to target`, {
         turn,
         stateful: this.stateful,
         messageLength: nextMessage.length,
@@ -541,7 +579,7 @@ export class HydraProvider implements ApiProvider {
       let finalTargetPrompt = targetPrompt;
       lastTransformResult = undefined;
       if (this.perTurnLayers.length > 0) {
-        logger.debug('[Hydra] Applying per-turn transforms', {
+        logger.debug(`${this.logPrefix} Applying per-turn transforms`, {
           turn,
           layers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
         });
@@ -563,7 +601,7 @@ export class HydraProvider implements ApiProvider {
 
         // Skip turn if transform failed
         if (lastTransformResult.error) {
-          logger.warn('[Hydra] Transform failed, skipping turn', {
+          logger.warn(`${this.logPrefix} Transform failed, skipping turn`, {
             turn,
             error: lastTransformResult.error,
           });
@@ -594,18 +632,21 @@ export class HydraProvider implements ApiProvider {
             },
           };
           finalTargetPrompt = JSON.stringify(hybridPayload);
-          logger.debug('[Hydra] Using hybrid format (history + audio/image current turn)', {
-            turn,
-            historyLength: historyWithoutCurrentTurn.length,
-            hasAudio: !!lastTransformResult.audio,
-            hasImage: !!lastTransformResult.image,
-          });
+          logger.debug(
+            `${this.logPrefix} Using hybrid format (history + audio/image current turn)`,
+            {
+              turn,
+              historyLength: historyWithoutCurrentTurn.length,
+              hasAudio: !!lastTransformResult.audio,
+              hasImage: !!lastTransformResult.image,
+            },
+          );
         } else {
           // No audio/image, just use the transformed text
           finalTargetPrompt = lastTransformResult.prompt;
         }
 
-        logger.debug('[Hydra] Per-turn transforms applied', {
+        logger.debug(`${this.logPrefix} Per-turn transforms applied`, {
           turn,
           originalLength: nextMessage.length,
           transformedLength: finalTargetPrompt.length,
@@ -672,14 +713,14 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
-      logger.debug('[Hydra] Received target response', {
+      logger.debug(`${this.logPrefix} Received target response`, {
         turn,
         responseLength: targetResponse.output?.length,
         hasTrace: !!traceContext,
       });
 
       if (isConversationEndedResponse(targetResponse)) {
-        logger.info('[Hydra] Target ended conversation', {
+        logger.info(`${this.logPrefix} Target ended conversation`, {
           turn,
           reason: targetResponse.conversationEndReason,
         });
@@ -688,12 +729,12 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (targetResponse.error) {
-        logger.info('[Hydra] Target error', { turn, error: targetResponse.error });
+        logger.info(`${this.logPrefix} Target error`, { turn, error: targetResponse.error });
         continue;
       }
 
       if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
-        logger.info('[Hydra] Malformed target response - missing output', {
+        logger.info(`${this.logPrefix} Malformed target response - missing output`, {
           turn,
           responseKeys: Object.keys(targetResponse),
         });
@@ -701,7 +742,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (!targetResponse.output || !targetResponse.output.trim()) {
-        logger.info('[Hydra] Empty target response', {
+        logger.info(`${this.logPrefix} Empty target response`, {
           turn,
           outputIsNull: targetResponse.output === null,
           outputIsUndefined: targetResponse.output === undefined,
@@ -736,7 +777,7 @@ export class HydraProvider implements ApiProvider {
           promptIdx: context?.promptIdx,
         });
         if (targetResponse.output !== beforeOutput) {
-          logger.debug('[Hydra] Externalized binary output', {
+          logger.debug(`${this.logPrefix} Externalized binary output`, {
             turn,
             beforeLength: beforeOutput?.length,
             afterLength: targetResponse.output?.length,
@@ -746,7 +787,7 @@ export class HydraProvider implements ApiProvider {
                 : undefined,
           });
         } else if (typeof targetResponse.output === 'string') {
-          logger.debug('[Hydra] Binary output not externalized (using in-band)', {
+          logger.debug(`${this.logPrefix} Binary output not externalized (using in-band)`, {
             turn,
             responseLength: targetResponse.output.length,
           });
@@ -768,7 +809,7 @@ export class HydraProvider implements ApiProvider {
       const isRefusal = isBasicRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
-        logger.debug('[Hydra] Response rejected (basic refusal), backtracking...', {
+        logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
           turn,
           backtrackCount: backtrackCount + 1,
           maxBacktracks: this.maxBacktracks,
@@ -782,7 +823,7 @@ export class HydraProvider implements ApiProvider {
           this.conversationHistory.pop(); // Remove user
         }
 
-        logger.debug('[Hydra] After backtracking state', {
+        logger.debug(`${this.logPrefix} After backtracking state`, {
           turn,
           backtrackCount,
           conversationLength: this.conversationHistory.length,
@@ -790,10 +831,13 @@ export class HydraProvider implements ApiProvider {
         });
 
         if (backtrackCount >= this.maxBacktracks) {
-          logger.debug(`[Hydra] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`, {
-            backtrackCount,
-            maxBacktracks: this.maxBacktracks,
-          });
+          logger.debug(
+            `${this.logPrefix} Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`,
+            {
+              backtrackCount,
+              maxBacktracks: this.maxBacktracks,
+            },
+          );
           stopReason = 'Max backtracks reached';
           break;
         }
@@ -839,7 +883,7 @@ export class HydraProvider implements ApiProvider {
               context?.evaluationId ??
               (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
 
-            logger.debug('[Hydra] Fetching exfil tracking from server API', {
+            logger.debug(`${this.logPrefix} Fetching exfil tracking from server API`, {
               webPageUuid,
               evalId,
               source: 'lastTransformResult.metadata',
@@ -855,7 +899,7 @@ export class HydraProvider implements ApiProvider {
                 });
               }
             } catch (error) {
-              logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
+              logger.warn(`${this.logPrefix} Failed to fetch exfil tracking from server`, {
                 error,
                 webPageUuid,
               });
@@ -867,7 +911,9 @@ export class HydraProvider implements ApiProvider {
             gradingContext.wasExfiltrated === undefined &&
             targetResponse.metadata?.wasExfiltrated !== undefined
           ) {
-            logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
+            logger.debug(
+              `${this.logPrefix} Using exfil data from provider response metadata (fallback)`,
+            );
             Object.assign(gradingContext, {
               wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
               exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
@@ -891,7 +937,7 @@ export class HydraProvider implements ApiProvider {
             assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
           };
 
-          logger.debug('[Hydra] Grader result', {
+          logger.debug(`${this.logPrefix} Grader result`, {
             turn,
             passed: grade.pass,
           });
@@ -926,7 +972,7 @@ export class HydraProvider implements ApiProvider {
         });
         stopReason = 'Grader failed';
 
-        logger.debug('[Hydra] Vulnerability achieved!', { turn });
+        logger.debug(`${this.logPrefix} Vulnerability achieved!`, { turn });
         break;
       }
     }
@@ -936,7 +982,7 @@ export class HydraProvider implements ApiProvider {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {
-          task: 'hydra-decision',
+          task: this.providerOptions.taskId,
           testRunId,
           scanId,
           testComplete: true,
@@ -951,7 +997,7 @@ export class HydraProvider implements ApiProvider {
           {
             prompt: {
               raw: JSON.stringify(learningRequest),
-              label: 'hydra-learning-update',
+              label: `${this.providerOptions.metadataPrefix}-learning-update`,
             },
             vars: {},
           },
@@ -962,9 +1008,9 @@ export class HydraProvider implements ApiProvider {
           countAsRequest: false,
         });
 
-        logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
+        logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {
-        logger.warn('[Hydra] Failed to update scan learnings', { error });
+        logger.warn(`${this.logPrefix} Failed to update scan learnings`, { error });
         // Don't fail test if learning update fails
       }
     }
@@ -974,11 +1020,25 @@ export class HydraProvider implements ApiProvider {
       content: msg.content,
     })) as Record<string, any>[];
     const targetProbeCount = totalTokenUsage.numRequests ?? 0;
-    const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+    const roundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
     const failClosedError =
       targetProbeCount === 0
-        ? agentFailureError || 'Hydra did not execute any target probes'
+        ? agentFailureError ||
+          `${this.providerOptions.strategyName} did not execute any target probes`
         : undefined;
+
+    const strategyMetadata =
+      this.providerOptions.metadataPrefix === 'goblin'
+        ? {
+            goblinRoundsCompleted: roundsCompleted,
+            goblinBacktrackCount: backtrackCount,
+            goblinResult: vulnerabilityAchieved,
+          }
+        : {
+            hydraRoundsCompleted: roundsCompleted,
+            hydraBacktrackCount: backtrackCount,
+            hydraResult: vulnerabilityAchieved,
+          };
 
     return {
       output: lastTargetResponse?.output || '',
@@ -990,9 +1050,7 @@ export class HydraProvider implements ApiProvider {
       metadata: {
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
-        hydraRoundsCompleted,
-        hydraBacktrackCount: backtrackCount,
-        hydraResult: vulnerabilityAchieved,
+        ...strategyMetadata,
         stopReason,
         successfulAttacks,
         totalSuccessfulAttacks: successfulAttacks.length,

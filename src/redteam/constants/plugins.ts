@@ -451,7 +451,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
-// Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goat, crescendo).
+// Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goblin, goat, crescendo).
 export const CANARY_BREAKING_STRATEGY_IDS = [
   'base64',
   'hex',
