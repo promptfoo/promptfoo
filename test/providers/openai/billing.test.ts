@@ -152,6 +152,58 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
   });
 
+  it.each([
+    [{ apiHost: 'eu.api.openai.com' }, {}],
+    [{ apiBaseUrl: 'https://us.api.openai.com/v1' }, {}],
+    [{}, { apiUrl: 'https://eu.api.openai.com/v1' }],
+  ])('applies the GPT-5.6 regional processing uplift', (config, options) => {
+    const usage = {
+      input_tokens: 2_000,
+      output_tokens: 1_000,
+      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+    };
+
+    expect(calculateOpenAIUsageCost('gpt-5.6', config, usage, options)).toBeCloseTo(
+      ((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6) * 1.1,
+      10,
+    );
+  });
+
+  it('preserves GPT-5.6 custom costs while uplifting remaining regional rates', () => {
+    const usage = {
+      input_tokens: 2_000,
+      output_tokens: 1_000,
+      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+    };
+
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5.6',
+        {
+          apiHost: 'eu.api.openai.com',
+          inputCost: 2 / 1e6,
+        },
+        usage,
+      ),
+    ).toBeCloseTo((2_000 * 2 + 1_000 * 30 * 1.1) / 1e6, 10);
+  });
+
+  it.each([
+    'proxy.api.openai.com',
+    'au.api.openai.com',
+  ])('does not apply the GPT-5.6 regional uplift to %s', (apiHost) => {
+    const usage = {
+      input_tokens: 2_000,
+      output_tokens: 1_000,
+      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+    };
+
+    expect(calculateOpenAIUsageCost('gpt-5.6', { apiHost }, usage)).toBeCloseTo(
+      (1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6,
+      10,
+    );
+  });
+
   it('omits GPT-5.6 cost when summarized usage lacks cache-write tokens', () => {
     expect(
       calculateOpenAIUsageCostFromTokenUsage('gpt-5.6-sol', {
@@ -173,19 +225,43 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
   });
 
-  it('uses GPT-5.6 Flex and Priority rates, including long-context multipliers', () => {
+  it('uses GPT-5.6 Flex long-context rates and rejects unsupported Priority long context', () => {
     const usage = {
       input_tokens: 300_000,
       output_tokens: 1_000,
       input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
     };
 
+    expect(calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage)).toBeCloseTo(
+      (150_000 * 5 + 100_000 * 0.5 + 50_000 * 6.25 + 1_000 * 22.5) / 1e6,
+      10,
+    );
     expect(
       calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'flex' }),
     ).toBeCloseTo((150_000 * 2.5 + 100_000 * 0.25 + 50_000 * 3.125 + 1_000 * 11.25) / 1e6, 10);
     expect(
       calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'priority' }),
-    ).toBeCloseTo((150_000 * 10 + 100_000 * 1 + 50_000 * 12.5 + 1_000 * 45) / 1e6, 10);
+    ).toBeUndefined();
+  });
+
+  it('uses GPT-5.6 Priority rates through the 272K input limit', () => {
+    const usage = {
+      input_tokens: 272_000,
+      output_tokens: 1_000,
+      input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'priority' }),
+    ).toBeCloseTo((122_000 * 5 + 100_000 * 0.5 + 50_000 * 6.25 + 1_000 * 30) / 1e6, 10);
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5.6-terra',
+        {},
+        { ...usage, input_tokens: 272_001 },
+        { serviceTier: 'priority' },
+      ),
+    ).toBeUndefined();
   });
 
   it('prices chat-latest cached input at the published discount', () => {

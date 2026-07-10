@@ -402,6 +402,42 @@ const ALL_TEXT_MODELS = OPENAI_BILLING_MODELS;
 const TEXT_MODELS_BY_ID = new Map(ALL_TEXT_MODELS.map((model) => [model.id, model]));
 
 const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
+const OPENAI_GPT_5_6_REGIONAL_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
+
+type OpenAIBillingConfig = ProviderConfig & {
+  apiHost?: string;
+  apiBaseUrl?: string;
+};
+
+function usesOpenAIRegionalProcessing(
+  config: OpenAIBillingConfig,
+  resolvedApiUrl: string | undefined,
+): boolean {
+  const endpoint = resolvedApiUrl || config.apiHost || config.apiBaseUrl;
+  if (!endpoint) {
+    return false;
+  }
+
+  const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return OPENAI_GPT_5_6_REGIONAL_HOSTNAMES.has(hostname);
+  } catch {
+    return false;
+  }
+}
+
+function applyRateMultiplier(rates: OpenAITextRates, multiplier: number): OpenAITextRates {
+  return {
+    input: rates.input * multiplier,
+    ...(rates.cachedInput === undefined ? {} : { cachedInput: rates.cachedInput * multiplier }),
+    ...(rates.cacheWriteInput === undefined
+      ? {}
+      : { cacheWriteInput: rates.cacheWriteInput * multiplier }),
+    ...(rates.output === undefined ? {} : { output: rates.output * multiplier }),
+  };
+}
 
 type OpenAIUsageParts = {
   usage: any;
@@ -503,32 +539,6 @@ function getBaseTextRates(
   };
 }
 
-function applyLongContextRates(
-  modelName: string,
-  rates: OpenAITextRates,
-  totalInputTokens: number,
-): OpenAITextRates {
-  const model = TEXT_MODELS_BY_ID.get(modelName);
-  const cost = model?.cost;
-  const longContext = cost?.longContext;
-  if (!cost || !longContext || totalInputTokens <= longContext.threshold) {
-    return rates;
-  }
-
-  const inputMultiplier = longContext.input / cost.input;
-  const outputMultiplier = longContext.output / cost.output;
-  return {
-    input: rates.input * inputMultiplier,
-    ...(rates.cachedInput === undefined
-      ? {}
-      : { cachedInput: rates.cachedInput * inputMultiplier }),
-    ...(rates.cacheWriteInput === undefined
-      ? {}
-      : { cacheWriteInput: rates.cacheWriteInput * inputMultiplier }),
-    ...(rates.output === undefined ? {} : { output: rates.output * outputMultiplier }),
-  };
-}
-
 function getModelRates(
   modelName: string,
   tier: OpenAIProcessingTier,
@@ -566,10 +576,13 @@ function getModelRates(
     };
   }
 
+  const model = TEXT_MODELS_BY_ID.get(modelName);
   if (tier === 'priority' && PRIORITY_TEXT_RATES[modelName]) {
-    return {
-      text: applyLongContextRates(modelName, PRIORITY_TEXT_RATES[modelName], totalInputTokens),
-    };
+    const longContext = model?.cost?.longContext;
+    if (longContext && totalInputTokens > longContext.threshold) {
+      return undefined;
+    }
+    return { text: PRIORITY_TEXT_RATES[modelName] };
   }
 
   const text = getBaseTextRates(modelName, totalInputTokens);
@@ -577,7 +590,6 @@ function getModelRates(
     return undefined;
   }
 
-  const model = TEXT_MODELS_BY_ID.get(modelName);
   const discountedText =
     tier === 'batch' || (tier === 'flex' && FLEX_SUPPORTED_TEXT_MODELS.has(modelName))
       ? {
@@ -714,7 +726,7 @@ function calculateTextCost(
   rates: OpenAITextRates,
   usage: OpenAIBillingUsage,
   cachedTextInputTokens: number,
-  config: ProviderConfig,
+  config: OpenAIBillingConfig,
 ): number {
   const textInputCost = config.inputCost ?? config.cost ?? rates.input;
   const cachedInputCost = config.inputCost ?? config.cost ?? rates.cachedInput ?? textInputCost;
@@ -767,11 +779,12 @@ function calculateModalCost(
 
 export function calculateOpenAIUsageCost(
   modelName: string,
-  config: ProviderConfig,
+  config: OpenAIBillingConfig,
   rawUsage: any,
   options: {
     serviceTier?: string | null;
     cachedResponse?: boolean;
+    apiUrl?: string;
   } = {},
 ): number | undefined {
   if (!rawUsage) {
@@ -780,10 +793,18 @@ export function calculateOpenAIUsageCost(
 
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const rates = getModelRates(modelName, tier, usage.totalInputTokens);
-  if (!rates) {
+  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
+  if (!modelRates) {
     return undefined;
   }
+
+  const rates =
+    GPT_5_6_MODELS.has(modelName) && usesOpenAIRegionalProcessing(config, options.apiUrl)
+      ? {
+          ...modelRates,
+          text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
+        }
+      : modelRates;
 
   if (options.cachedResponse) {
     return 0;

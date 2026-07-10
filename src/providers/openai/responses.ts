@@ -176,6 +176,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config,
       this.getBillingUsage(data, config),
       {
+        apiUrl: this.getApiUrl(),
         cachedResponse: cached,
         serviceTier,
       },

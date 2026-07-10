@@ -548,7 +548,7 @@ OpenAI [launched GPT-5.6 for general availability](https://openai.com/index/gpt-
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
-Prompt-cache reads receive a 90% discount, and explicit cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`. Requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
+Prompt-cache reads receive a 90% discount, and explicit cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -2461,17 +2461,22 @@ when you want extended prompt caching. GPT-5.5, GPT-5.5 Pro, and future Response
 models require extended retention, so `prompt_cache_retention: in_memory` will fail for
 those models.
 
-GPT-5.6 also supports explicit caching with `prompt_cache_options`. When the API reports
-`cache_write_tokens`, Promptfoo prices those writes at 1.25 times the active input rate.
+GPT-5.6 also supports `prompt_cache_options`. The `implicit` mode below keeps automatic
+breakpoint placement for ordinary prompts. When the API reports `cache_write_tokens`, Promptfoo
+prices those writes at 1.25 times the active input rate.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:responses:gpt-5.6
     config:
+      prompt_cache_key: shared-prefix
       prompt_cache_options:
-        mode: explicit
+        mode: implicit
         ttl: 30m
 ```
+
+If you select `explicit` mode, add `prompt_cache_breakpoint: { mode: explicit }` to a supported
+structured content block. Explicit mode without a breakpoint disables prompt caching.
 
 The `include` option requests extra structured payloads in the raw Responses object.
 For example, `web_search_call.results` returns search results when you need to inspect

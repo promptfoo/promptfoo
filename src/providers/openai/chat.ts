@@ -705,6 +705,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             logProbs,
             ...(finishReason && { finishReason }),
             cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+              apiUrl: this.getApiUrl(),
               cachedResponse: cached,
               serviceTier: data.service_tier ?? config.service_tier,
             }),
@@ -745,6 +746,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           logProbs,
           ...(finishReason && { finishReason }),
           cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+            apiUrl: this.getApiUrl(),
             cachedResponse: cached,
             serviceTier: data.service_tier ?? config.service_tier,
           }),
@@ -767,6 +769,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         logProbs,
         ...(finishReason && { finishReason }),
         cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+          apiUrl: this.getApiUrl(),
           cachedResponse: cached,
           serviceTier: data.service_tier ?? config.service_tier,
         }),
