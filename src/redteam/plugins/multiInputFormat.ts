@@ -352,3 +352,46 @@ export function getPromptOutputFormatter(
   }
   return PROMPT_OUTPUT_FORMATTERS['single-input'];
 }
+
+export type JsonArrayOutputFormatterConfig = {
+  inputs?: InputsSchema;
+};
+
+export type JsonArrayOutputFormatter = {
+  instruction: (n: number, config?: JsonArrayOutputFormatterConfig) => string;
+  parse: (output: unknown[]) => string[];
+};
+
+const JSON_ARRAY_OUTPUT_FORMATTERS: Record<string, JsonArrayOutputFormatter> = {
+  'single-input': {
+    instruction: (n) =>
+      `**Always generate ${n} outputs**, returned as a **JSON array of strings**, with no extra commentary.`,
+    parse: (output) => output.map((item) => (typeof item === 'string' ? item : String(item))),
+  },
+  'multi-input': {
+    instruction: (n, config) => {
+      const inputs = config?.inputs ?? {};
+      const inputKeys = getInputKeys(inputs);
+      const schema = buildSchemaString(inputs);
+      return `**Always generate ${n} outputs**, returned as a **JSON array of objects**.
+Each object must have these keys: ${inputKeys.map((k) => `"${k}"`).join(', ')}
+Format: [{"${inputKeys[0]}": "adversarial content for ${inputKeys[0]}", ${inputKeys
+        .slice(1)
+        .map((k) => `"${k}": "value for ${k}"`)
+        .join(', ')}}, ...]
+Schema: {${schema}}
+No extra commentary.`;
+    },
+    parse: (output) =>
+      output.map((item) => (typeof item === 'object' ? JSON.stringify(item) : String(item))),
+  },
+};
+
+export function getJsonArrayOutputFormatter(
+  config?: JsonArrayOutputFormatterConfig,
+): JsonArrayOutputFormatter {
+  if (hasMultiInput(config?.inputs)) {
+    return JSON_ARRAY_OUTPUT_FORMATTERS['multi-input'];
+  }
+  return JSON_ARRAY_OUTPUT_FORMATTERS['single-input'];
+}

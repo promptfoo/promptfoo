@@ -89,9 +89,11 @@
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
     "src/contracts/api/user.ts": ["duplicates"],
+    "src/redteam/plugins/multiInputFormat.ts": ["exports"],
     "src/redteam/providers/custom/index.ts": ["duplicates"],
     "src/redteam/providers/hydra/index.ts": ["duplicates"],
     "src/types/api/**": ["duplicates", "types"],
+    "src/types/codeScan.ts": ["exports", "types"],
     "src/types/modelAudit.ts": ["types"],
     "src/types/targetLink.ts": ["types"],
     "src/util/sanitizer.ts": ["duplicates"]
