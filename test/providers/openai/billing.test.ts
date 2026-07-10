@@ -216,6 +216,48 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
+  it.each([
+    'gpt-5.4',
+    'gpt-5.4-2026-03-05',
+    'gpt-5.4-mini',
+    'gpt-5.4-mini-2026-03-17',
+    'gpt-5.4-nano',
+    'gpt-5.4-nano-2026-03-17',
+    'gpt-5.4-pro',
+    'gpt-5.4-pro-2026-03-05',
+    'gpt-5.5',
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ])('applies the regional processing uplift to eligible model %s', (model) => {
+    const usage = {
+      input_tokens: 2_000,
+      output_tokens: 1_000,
+      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 0 },
+    };
+    const standardCost = calculateOpenAIUsageCost(model, {}, usage);
+
+    expect(standardCost).toBeDefined();
+    expect(calculateOpenAIUsageCost(model, { apiHost: 'eu.api.openai.com' }, usage)).toBeCloseTo(
+      standardCost! * 1.1,
+      10,
+    );
+  });
+
+  it('does not apply the regional processing uplift to models released before the cutoff', () => {
+    const usage = { input_tokens: 2_000, output_tokens: 1_000 };
+    const standardCost = calculateOpenAIUsageCost('gpt-5.2', {}, usage);
+
+    expect(standardCost).toBeDefined();
+    expect(
+      calculateOpenAIUsageCost('gpt-5.2', { apiHost: 'eu.api.openai.com' }, usage),
+    ).toBeCloseTo(standardCost!, 10);
+  });
+
   it('preserves GPT-5.6 custom costs while uplifting remaining regional rates', () => {
     const usage = {
       input_tokens: 2_000,

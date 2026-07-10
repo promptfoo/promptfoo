@@ -397,13 +397,12 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
   },
 ]);
 
-const ALL_TEXT_MODELS = OPENAI_BILLING_MODELS;
-
-const TEXT_MODELS_BY_ID = new Map(ALL_TEXT_MODELS.map((model) => [model.id, model]));
+const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id, model]));
 
 const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+const OPENAI_REGIONAL_PROCESSING_MODEL = /^gpt-5\.[456](?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
-const OPENAI_GPT_5_6_REGIONAL_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
+const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
 
 type OpenAIBillingConfig = ProviderConfig & {
   apiHost?: string;
@@ -422,7 +421,7 @@ function usesOpenAIRegionalProcessing(
   const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`;
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return OPENAI_GPT_5_6_REGIONAL_HOSTNAMES.has(hostname);
+    return OPENAI_REGIONAL_PROCESSING_HOSTNAMES.has(hostname);
   } catch {
     return false;
   }
@@ -624,8 +623,7 @@ function getNumericValue(value: unknown): number {
 }
 
 export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
-  const usageParts = getOpenAIUsageParts(rawUsage);
-  const { usage, inputDetails, outputDetails } = usageParts;
+  const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
 
   const totalOutputTokens = getNumericValue(usage.completion_tokens ?? usage.output_tokens);
   const reportedInputTokens = getNumericValue(usage.prompt_tokens ?? usage.input_tokens);
@@ -799,7 +797,8 @@ export function calculateOpenAIUsageCost(
   }
 
   const rates =
-    GPT_5_6_MODELS.has(modelName) && usesOpenAIRegionalProcessing(config, options.apiUrl)
+    OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) &&
+    usesOpenAIRegionalProcessing(config, options.apiUrl)
       ? {
           ...modelRates,
           text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
