@@ -127,6 +127,10 @@ function isGuardrailError(payload: JsonRecord, error: JsonRecord, message: strin
     return true;
   }
 
+  if (errorCode === 'content_filter_error' || innerErrorCode === 'content_filter_error') {
+    return false;
+  }
+
   return DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS.some((pattern) => pattern.test(message));
 }
 
