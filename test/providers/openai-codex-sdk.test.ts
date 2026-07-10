@@ -2517,6 +2517,35 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should ignore attached live provider objects before rendering prompt config vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const attachedProvider: Record<string, unknown> = {
+          id: () => 'attached-provider',
+        };
+        attachedProvider.self = attachedProvider;
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              config: {
+                model: '{{ model }}',
+                provider: attachedProvider,
+              } as any,
+            },
+            vars: { model: 'gpt-5.2' },
+          } as any),
+        ).resolves.toMatchObject({
+          output: 'Response',
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
       it('should use CODEX_API_KEY from env if available', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
