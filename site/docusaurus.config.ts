@@ -73,6 +73,8 @@ const config: Config = {
           ],
         },
         blog: {
+          blogDescription:
+            'Explore practical guides on AI red teaming, LLM evaluations, model security, and building reliable AI applications from the Promptfoo team and contributors.',
           showReadingTime: false,
           blogSidebarCount: 0,
           postsPerPage: 20,
