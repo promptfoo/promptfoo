@@ -275,8 +275,8 @@ describe('AZURE_MODELS cost coverage', () => {
     expect(calculateAzureCost(id, {}, 1000, 1000)).toBeGreaterThan(0);
   });
 
-  // Exact standard-tier per-1M input/output rates for entries added/corrected from the Azure
-  // Retail Prices API. Probing input and output separately catches a swapped input/output or a
+  // Exact standard-tier per-1M input/output rates for entries added/corrected from official
+  // pricing sources. Probing input and output separately catches a swapped input/output or a
   // transcription typo. Input is probed at 100k tokens — below every long-context threshold —
   // so tiered models (gpt-5.4-pro, gpt-5.5) assert their standard input rate here, while the
   // long-context tiers are pinned by the dedicated boundary tests above.
@@ -297,6 +297,8 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.4-pro', 30, 180],
     ['gpt-5.4-mini', 0.75, 4.5],
     ['gpt-5.4-nano', 0.2, 1.25],
+    ['claude-haiku-4-5', 1, 5],
+    ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],
     ['gpt-realtime', 4, 16],
     ['gpt-audio-mini', 0.6, 2.4],
