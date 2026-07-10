@@ -1,4 +1,5 @@
-import { callApi, fetchUserId } from '@app/utils/api';
+import { callApiJson, callApiResult, fetchUserId } from '@app/utils/api';
+import { ApiRoutes, UserSchemas } from '@promptfoo/contracts';
 import { create } from 'zustand';
 
 interface UserState {
@@ -25,13 +26,10 @@ export const useUserStore = create<UserState>((set, getState) => ({
       return;
     }
     try {
-      const response = await callApi('/user/email', { cache: 'no-store' });
-      if (response.ok) {
-        const data = await response.json();
-        set({ email: data.email, isLoading: false });
-      } else {
-        throw new Error('Failed to fetch user email');
-      }
+      const data = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response, {
+        cache: 'no-store',
+      });
+      set({ email: data.email, isLoading: false });
     } catch (error) {
       console.error('Error fetching user email:', error);
       set({ email: null, isLoading: false });
@@ -51,20 +49,16 @@ export const useUserStore = create<UserState>((set, getState) => ({
   },
   logout: async () => {
     try {
-      const response = await callApi('/user/logout', {
-        method: 'POST',
+      const response = await callApiResult(ApiRoutes.User.Logout, UserSchemas.Logout.Response, {
         headers: {
           'Content-Type': 'application/json',
         },
       });
 
-      if (response.ok) {
-        set({ email: null, userId: null, isLoading: false });
-      } else {
+      if (!response.ok) {
         console.error('Logout failed');
-        // Clear local state even if logout API call fails
-        set({ email: null, userId: null, isLoading: false });
       }
+      set({ email: null, userId: null, isLoading: false });
     } catch (error) {
       console.error('Error during logout:', error);
       // Clear local state even if API call fails

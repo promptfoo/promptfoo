@@ -13,8 +13,9 @@ import { Textarea } from '@app/components/ui/textarea';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
+import { ApiRoutes, ProviderResponseSchemas } from '@promptfoo/contracts';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -170,19 +171,21 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
         setShowSlowDiscoveryMessage(true);
       }, 5000);
 
-      const response = await callApi('/providers/discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config.target),
-      });
+      const response = await callApiResult(
+        ApiRoutes.Providers.Discover,
+        ProviderResponseSchemas.Discover.Response,
+        {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config.target),
+        },
+      );
 
       if (!response.ok) {
-        const { error } = (await response.json()) as { error: string };
-        setDiscoveryError(error);
+        setDiscoveryError(response.error.message);
         return;
       }
 
-      const data = (await response.json()) as TargetPurposeDiscoveryResult;
+      const data = response.data as TargetPurposeDiscoveryResult;
       setDiscoveryResult(data);
 
       // Clear the timeout since discovery completed

@@ -2,13 +2,15 @@ import express from 'express';
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
+import { ApiRoutes } from '../../contracts/api/routes';
+import { VersionSchemas } from '../../contracts/api/version';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { isUpdateBlockedByRuntime } from '../../runtimeCompatibility';
-import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
+import { replyError } from '../utils/errors';
 import {
   getRuntimeNoticeForVersionResponse,
   getRuntimePolicyForVersionResponse,
@@ -93,7 +95,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 // During outages: ~60 requests/hour vs ~12 with 5-minute delay.
 const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
     const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
@@ -145,9 +147,8 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     res.json(VersionSchemas.Response.parse(response));
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
-    res.status(500).json({
+    replyError(res, 500, 'Failed to check version', {
       ...buildBaseVersionFields(),
-      error: 'Failed to check version',
       latestVersion: VERSION,
       updateAvailable: false,
       blockedUpdateNotice: null,

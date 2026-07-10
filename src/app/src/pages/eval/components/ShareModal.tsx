@@ -11,7 +11,8 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
-import { callApi } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
 import { Check, Copy } from 'lucide-react';
 import logger from '../../../../../logger';
 
@@ -46,14 +47,14 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       }
 
       try {
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-        const data = (await response.json()) as {
-          domain: string;
-          isCloudEnabled: boolean;
-          error?: string;
-        };
+        const response = await callApiResult(
+          ApiRoutes.Results.ShareCheckDomain,
+          ServerResponseSchemas.ShareCheckDomain.Response,
+          { query: new URLSearchParams({ id: evalId }) },
+        );
 
         if (response.ok) {
+          const data = response.data;
           const isPublicDomain = data.domain.includes('promptfoo.app');
           if (isPublicDomain && !data.isCloudEnabled) {
             setShowNeedsSignup(true);
@@ -72,7 +73,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
             setIsLoading(false);
           }
         } else {
-          setError(data.error || 'Failed to check share domain');
+          setError(response.error.message || 'Failed to check share domain');
         }
       } catch (error) {
         console.error('Failed to check share domain:', error);

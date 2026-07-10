@@ -1,28 +1,32 @@
-import {
-  createMockResponse,
-  getCallApiMock,
-  mockCallApiResponse,
-  mockCallApiResponseOnce,
-  rejectCallApi,
-  rejectCallApiOnce,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
 import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, VersionSchemas } from '@promptfoo/contracts';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
+  callApiJson: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useVersionCheck', () => {
+  const mockCallApiJson = vi.mocked(callApiJson);
+  const mockCallApiResponse = (response: unknown) => {
+    mockCallApiJson.mockResolvedValue(response as never);
+  };
+  const mockCallApiResponseOnce = (response: unknown) => {
+    mockCallApiJson.mockResolvedValueOnce(response as never);
+  };
+  const rejectCallApiOnce = (error: Error) => {
+    mockCallApiJson.mockRejectedValueOnce(error);
+  };
+
   beforeEach(() => {
-    resetCallApiMock();
+    mockCallApiJson.mockReset();
     localStorage.clear();
     // Only use fake timers in specific tests that need timer control.
   });
@@ -54,7 +58,7 @@ describe('useVersionCheck', () => {
       },
     };
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -64,8 +68,8 @@ describe('useVersionCheck', () => {
 
     expect(result.current.versionInfo).toEqual(mockVersionInfo);
     expect(result.current.error).toBeNull();
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledWith(ApiRoutes.Version, VersionSchemas.Response);
   });
 
   it('should refresh runtime policy time when the initial response crosses the cutoff', async () => {
@@ -82,12 +86,11 @@ describe('useVersionCheck', () => {
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
     };
-    let resolveVersion!: (response: Response) => void;
-    getCallApiMock().mockImplementationOnce(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveVersion = resolve;
-        }),
+    let resolveVersion!: (response: unknown) => void;
+    mockCallApiJson.mockReturnValueOnce(
+      new Promise<unknown>((resolve) => {
+        resolveVersion = resolve;
+      }) as never,
     );
 
     const { result } = renderHook(() => useVersionCheck());
@@ -95,15 +98,13 @@ describe('useVersionCheck', () => {
 
     timers.setSystemTime(new Date('2026-07-30T00:00:00.100Z'));
     await act(async () => {
-      resolveVersion(
-        createMockResponse({
-          currentVersion: '1.0.0',
-          latestVersion: '1.1.0',
-          updateAvailable: true,
-          updateBlockedByRuntime: false,
-          runtimeNotice,
-        }),
-      );
+      resolveVersion({
+        currentVersion: '1.0.0',
+        latestVersion: '1.1.0',
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        runtimeNotice,
+      });
     });
 
     expect(result.current.loading).toBe(false);
@@ -126,7 +127,7 @@ describe('useVersionCheck', () => {
 
     localStorage.setItem(STORAGE_KEY, mockVersionInfo.latestVersion);
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -150,7 +151,7 @@ describe('useVersionCheck', () => {
       },
     };
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -302,7 +303,7 @@ describe('useVersionCheck', () => {
     await act(async () => {
       await timers.advanceByAsync(12 * 60 * 60 * 1000);
     });
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.runtimeNoticeDismissed).toBe(true);
 
     await act(async () => {
@@ -354,7 +355,7 @@ describe('useVersionCheck', () => {
     await act(async () => {
       await timers.advanceByAsync(7 * 24 * 60 * 60 * 1000);
     });
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.runtimeNoticeDismissed).toBe(true);
   });
 
@@ -421,7 +422,7 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(12 * 60 * 60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.runtimeNoticeDismissed).toBe(false);
     expect(result.current.error).toBeNull();
   });
@@ -519,7 +520,7 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
@@ -564,7 +565,7 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(60 * 60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
@@ -594,7 +595,7 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.updateDismissed).toBe(true);
   });
 
@@ -638,14 +639,14 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(maxTimerDelay);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
 
     await act(async () => {
       await timers.advanceByAsync(cutoffTime - startTime - maxTimerDelay);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(3);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(3);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
@@ -671,7 +672,7 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
     expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-30T00:00:00.000Z'));
     expect(result.current.runtimePolicyUpdatedAt).not.toBe(initialPolicyTime);
@@ -715,7 +716,7 @@ describe('useVersionCheck', () => {
       await timers.advanceByAsync(60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
     expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-30T00:00:00.000Z'));
     expect(result.current.runtimePolicyUpdatedAt).not.toBe(initialPolicyTime);
@@ -724,7 +725,7 @@ describe('useVersionCheck', () => {
     await act(async () => {
       await timers.advanceByAsync(5 * 60 * 1000);
     });
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
   });
 
   it('should retry a failed cutoff refresh', async () => {
@@ -755,13 +756,13 @@ describe('useVersionCheck', () => {
     await act(async () => {
       await timers.advanceByAsync(60 * 1000);
     });
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       await timers.advanceByAsync(5 * 60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(3);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(3);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
@@ -778,7 +779,7 @@ describe('useVersionCheck', () => {
       },
     };
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result, rerender } = renderHook(() => useVersionCheck());
 
@@ -786,18 +787,18 @@ describe('useVersionCheck', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
 
     rerender();
 
     // Wait a short time to ensure no additional calls are made
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
   });
 
   it('should handle network errors by setting loading=false and populating the error state', async () => {
-    rejectCallApi(new Error('Network error'));
+    mockCallApiJson.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -808,8 +809,8 @@ describe('useVersionCheck', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error?.message).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledWith(ApiRoutes.Version, VersionSchemas.Response);
   });
 
   it('should retry an initial version-check failure and recover the runtime policy', async () => {
@@ -837,13 +838,13 @@ describe('useVersionCheck', () => {
     const { result } = renderHook(() => useVersionCheck());
     await act(async () => {});
     expect(result.current.error?.message).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await timers.advanceByAsync(5 * 60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo).toEqual(versionInfo);
     expect(result.current.error).toBeNull();
   });

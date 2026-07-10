@@ -1,11 +1,11 @@
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SCAN_OPTIONS, useModelAuditConfigStore } from './useModelAuditConfigStore';
 
 vi.mock('@app/utils/api');
 
-const mockCallApi = vi.mocked(callApi);
+const mockCallApiJson = vi.mocked(callApiJson);
 
 describe('useModelAuditConfigStore', () => {
   beforeEach(() => {
@@ -264,10 +264,7 @@ describe('useModelAuditConfigStore', () => {
 
   describe('installation check', () => {
     it('should check installation status', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ installed: true, cwd: '/test/dir' }),
-      } as Response);
+      mockCallApiJson.mockResolvedValueOnce({ installed: true, cwd: '/test/dir' } as any);
 
       const { result } = renderHook(() => useModelAuditConfigStore());
 
@@ -283,7 +280,7 @@ describe('useModelAuditConfigStore', () => {
     });
 
     it('should handle installation check failure', async () => {
-      mockCallApi.mockRejectedValueOnce(new Error('Network error'));
+      mockCallApiJson.mockRejectedValueOnce(new Error('Network error'));
 
       const { result } = renderHook(() => useModelAuditConfigStore());
 
@@ -299,10 +296,7 @@ describe('useModelAuditConfigStore', () => {
     });
 
     it('should deduplicate concurrent installation checks', async () => {
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ installed: true, cwd: '/test/dir' }),
-      } as Response);
+      mockCallApiJson.mockResolvedValue({ installed: true, cwd: '/test/dir' } as any);
 
       const { result } = renderHook(() => useModelAuditConfigStore());
 
@@ -316,7 +310,7 @@ describe('useModelAuditConfigStore', () => {
       });
 
       // Should only have called the API once due to deduplication
-      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      expect(mockCallApiJson).toHaveBeenCalledTimes(1);
     });
   });
 

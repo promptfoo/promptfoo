@@ -14,7 +14,8 @@ import { MediaGrid } from './MediaGrid';
 import type { MediaItem } from '../types';
 
 // Mock the API utilities
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   getApiBaseUrl: () => 'http://localhost:3000',
 }));
 

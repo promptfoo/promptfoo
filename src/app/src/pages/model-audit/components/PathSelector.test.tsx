@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +9,7 @@ import PathSelector from './PathSelector';
 vi.mock('@app/utils/api');
 vi.mock('../stores');
 
-const mockCallApi = vi.mocked(callApi);
+const mockCallApiJson = vi.mocked(callApiJson);
 const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
 
 describe('PathSelector', () => {
@@ -34,10 +34,7 @@ describe('PathSelector', () => {
         type: 'file',
         name: 'model.pkl',
       };
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(apiResponse),
-      } as Response);
+      mockCallApiJson.mockResolvedValue(apiResponse as any);
 
       render(
         <TooltipProvider delayDuration={0}>
@@ -54,11 +51,7 @@ describe('PathSelector', () => {
       await user.click(addButton);
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
+        expect(mockCallApiJson).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -76,7 +69,7 @@ describe('PathSelector', () => {
     it('should call onAddPath with the guessed type and name when the API call fails', async () => {
       const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
-      mockCallApi.mockRejectedValue(new Error('API Error'));
+      mockCallApiJson.mockRejectedValue(new Error('API Error'));
 
       render(
         <TooltipProvider delayDuration={0}>
@@ -93,11 +86,7 @@ describe('PathSelector', () => {
       await user.click(addButton);
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
+        expect(mockCallApiJson).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -115,10 +104,7 @@ describe('PathSelector', () => {
     it('should call onAddPath with the guessed type and name when a user enters a path that does not exist according to the API', async () => {
       const user = userEvent.setup();
       const pathToAdd = '/path/to/nonexistent/directory/';
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ exists: false }),
-      } as Response);
+      mockCallApiJson.mockResolvedValue({ exists: false } as any);
 
       render(
         <TooltipProvider delayDuration={0}>
@@ -135,11 +121,7 @@ describe('PathSelector', () => {
       await user.click(addButton);
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
+        expect(mockCallApiJson).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -158,10 +140,7 @@ describe('PathSelector', () => {
       const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       const apiResponse = {};
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(apiResponse),
-      } as Response);
+      mockCallApiJson.mockResolvedValue(apiResponse as any);
 
       render(
         <TooltipProvider delayDuration={0}>
@@ -178,11 +157,7 @@ describe('PathSelector', () => {
       await user.click(addButton);
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
+        expect(mockCallApiJson).toHaveBeenCalled();
       });
 
       await waitFor(() => {

@@ -7,12 +7,13 @@
  * Prerequisites: Run `npm run build` before running these tests.
  *
  * NOTE: These tests are gated on a built `dist/` and become `describe.skip` when it is absent.
- * The `integration-tests` CI job does not build, so they are skipped there and run only locally
- * after `npm run build`. The published artifacts themselves are independently verified in CI by
- * the build-and-pack `test:package-artifact` job (see scripts/testPackageArtifact.ts).
+ * In CI, the non-building `integration-tests` job skips them, while the `build` job runs them after
+ * `npm run build`. The separate `test:package-artifact` step verifies the packed npm artifact (see
+ * scripts/testPackageArtifact.ts).
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -20,8 +21,63 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const distDir = path.resolve(__dirname, '../../dist/src');
 const buildExists = fs.existsSync(distDir);
 
-// Skip all tests if build doesn't exist (e.g., in CI Jest run before build)
+// Skip all tests if the build does not exist (for example, in a non-building Vitest test job).
 const describeIfBuildExists = buildExists ? describe : describe.skip;
+
+const contractsRuntimeBudgetBytes = {
+  'contracts.js': 60_000,
+  'contracts.cjs': 70_000,
+} as const;
+const contractsDeclarationClosureBudgetBytes = 95_000;
+
+function resolveLocalModule(importerPath: string, specifier: string): string {
+  const resolvedPath = path.resolve(path.dirname(importerPath), specifier);
+  const candidates: string[] = [];
+  const declarationExtension = importerPath.endsWith('.d.cts')
+    ? '.d.cts'
+    : importerPath.endsWith('.d.mts')
+      ? '.d.mts'
+      : importerPath.endsWith('.d.ts')
+        ? '.d.ts'
+        : undefined;
+
+  if (declarationExtension) {
+    const emittedMapping = (
+      [
+        ['.cjs', '.d.cts'],
+        ['.mjs', '.d.mts'],
+        ['.js', '.d.ts'],
+      ] as const
+    ).find(([emittedExtension]) => resolvedPath.endsWith(emittedExtension));
+    if (emittedMapping) {
+      const [emittedExtension, emittedDeclarationExtension] = emittedMapping;
+      candidates.push(
+        `${resolvedPath.slice(0, -emittedExtension.length)}${emittedDeclarationExtension}`,
+      );
+    } else if (path.extname(specifier) === '') {
+      candidates.push(`${resolvedPath}${declarationExtension}`);
+      candidates.push(path.join(resolvedPath, `index${declarationExtension}`));
+    }
+  }
+
+  // Declaration files resolve their declaration siblings first; keep the emitted runtime path as
+  // a fallback for packages that intentionally ship JavaScript without a declaration sibling.
+  candidates.push(resolvedPath);
+
+  const existingPath = candidates.find((candidate) => {
+    try {
+      return fs.statSync(candidate).isFile();
+    } catch {
+      return false;
+    }
+  });
+  if (!existingPath) {
+    throw new Error(
+      `Unable to resolve local import ${specifier} from ${importerPath}; tried ${candidates.join(', ')}`,
+    );
+  }
+  return existingPath;
+}
 
 /**
  * Follows the relative chunk imports out of a built entry file and returns the byte size of the
@@ -47,7 +103,7 @@ function readModuleClosure(entryPath: string): { totalBytes: number; bareSpecifi
     for (const match of source.matchAll(/(?:from|require|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
       const specifier = match[1];
       if (specifier.startsWith('.')) {
-        stack.push(path.resolve(path.dirname(filePath), specifier));
+        stack.push(resolveLocalModule(filePath, specifier));
       } else {
         bareSpecifiers.add(specifier.replace(/^node:/, '').split('/')[0]);
       }
@@ -56,6 +112,49 @@ function readModuleClosure(entryPath: string): { totalBytes: number; bareSpecifi
 
   return { totalBytes, bareSpecifiers };
 }
+
+describe('declaration module resolution', () => {
+  it.each([
+    ['entry.d.ts', 'dep.js', 'dep.d.ts'],
+    ['entry.d.cts', 'dep.cjs', 'dep.d.cts'],
+    ['entry.d.mts', 'dep.mjs', 'dep.d.mts'],
+  ])('prefers declaration siblings for %s imports', (importerName, emittedName, declarationName) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));
+    try {
+      const importerPath = path.join(tempDir, importerName);
+      fs.writeFileSync(importerPath, `export * from './${emittedName}';`);
+      fs.writeFileSync(path.join(tempDir, emittedName), 'export const runtime = true;');
+      fs.writeFileSync(
+        path.join(tempDir, declarationName),
+        "import 'declaration-only-dependency';",
+      );
+
+      const { bareSpecifiers } = readModuleClosure(importerPath);
+      expect([...bareSpecifiers]).toEqual(['declaration-only-dependency']);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves extensionless declaration directory indexes as files', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));
+    try {
+      const importerPath = path.join(tempDir, 'entry.d.ts');
+      const dependencyDir = path.join(tempDir, 'dependency');
+      fs.mkdirSync(dependencyDir);
+      fs.writeFileSync(importerPath, "export * from './dependency';");
+      fs.writeFileSync(
+        path.join(dependencyDir, 'index.d.ts'),
+        "import 'declaration-index-dependency';",
+      );
+
+      const { bareSpecifiers } = readModuleClosure(importerPath);
+      expect([...bareSpecifiers]).toEqual(['declaration-index-dependency']);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
 
 describeIfBuildExists('Library Exports', () => {
   describe('Build artifacts', () => {
@@ -79,10 +178,11 @@ describeIfBuildExists('Library Exports', () => {
       // The contracts entry files are thin re-export shims; the real footprint lives in the shared
       // chunks they import. Measure the whole transitive closure (entry + every reachable local
       // chunk), not just the shim, so a regression that inlines a heavy dep into a chunk is caught.
-      for (const entry of ['contracts.js', 'contracts.cjs']) {
+      for (const [entry, budgetBytes] of Object.entries(contractsRuntimeBudgetBytes)) {
         const { totalBytes, bareSpecifiers } = readModuleClosure(path.join(distDir, entry));
-        // ~14KB (ESM) / ~19KB (CJS) today; a heavy dep or inlined zod would blow well past this.
-        expect(totalBytes).toBeLessThan(50000);
+        // Shared local API routes and response schemas bring the closures to ~47KB ESM / ~57KB
+        // CJS. Keep format-specific headroom while still catching a leaked or inlined dependency.
+        expect(totalBytes).toBeLessThan(budgetBytes);
         // Leaf-safe contract: zod is the ONLY external the subpath may pull. This catches both a
         // newly-leaked dependency (extra entry) AND zod accidentally being inlined (zod disappears).
         expect([...bareSpecifiers].sort()).toEqual(['zod']);
@@ -91,7 +191,10 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(50000);
+        const { totalBytes, bareSpecifiers } = readModuleClosure(declarationPath);
+        // The entry and its generated transform declaration chunk total ~80KB in either format.
+        expect(totalBytes).toBeLessThan(contractsDeclarationClosureBudgetBytes);
+        expect([...bareSpecifiers].sort()).toEqual(['zod']);
       }
     });
 
@@ -150,6 +253,18 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.NODE_20_RUNTIME_NOTICE_ID).toBe('node20-removal-2026-07-30');
+      expect(contractsModule.RuntimeCompatibilityNoticeSchema).toBeDefined();
+      expect(contractsModule.ApiRoutes.Health.expressPath).toBe('/health');
+      expect(
+        contractsModule.ServerResponseSchemas.Health.Response.safeParse({
+          status: 'OK',
+          version: 'test',
+        }).success,
+      ).toBe(true);
+      expect(
+        contractsModule.ModelAuditSchemas.ListScans.Query.safeParse({ limit: 1 }).success,
+      ).toBe(true);
     });
   });
 
@@ -196,6 +311,18 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.NODE_20_RUNTIME_NOTICE_ID).toBe('node20-removal-2026-07-30');
+      expect(contractsModule.RuntimeCompatibilityNoticeSchema).toBeDefined();
+      expect(contractsModule.ApiRoutes.Health.expressPath).toBe('/health');
+      expect(
+        contractsModule.ServerResponseSchemas.Health.Response.safeParse({
+          status: 'OK',
+          version: 'test',
+        }).success,
+      ).toBe(true);
+      expect(
+        contractsModule.ModelAuditSchemas.ListScans.Query.safeParse({ limit: 1 }).success,
+      ).toBe(true);
     });
   });
 });

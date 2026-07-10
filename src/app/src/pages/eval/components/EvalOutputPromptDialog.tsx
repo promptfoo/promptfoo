@@ -36,7 +36,7 @@ interface RedteamHistoryEntry {
 }
 
 interface CodeDisplayProps {
-  content: string;
+  content: unknown;
   title: string;
   maxHeight?: string | number;
   onCopy: () => void;
@@ -44,6 +44,13 @@ interface CodeDisplayProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   showCopyButton?: boolean;
+}
+
+function formatDisplayContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  return JSON.stringify(content, null, 2) ?? String(content);
 }
 
 function CodeDisplay({
@@ -56,8 +63,7 @@ function CodeDisplay({
   onMouseLeave,
   showCopyButton = false,
 }: CodeDisplayProps) {
-  // Ensure content is a string - handles cases where providers return objects
-  const safeContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  const safeContent = formatDisplayContent(content);
 
   // Improved code detection logic
   const isCode =
@@ -124,7 +130,7 @@ export interface ReplayEvaluationParams {
  * Result from replaying an evaluation.
  */
 export interface ReplayEvaluationResult {
-  output?: string;
+  output?: unknown;
   error?: string;
 }
 
@@ -277,8 +283,8 @@ export default function EvalOutputPromptDialog({
 
       if (result.error) {
         setReplayError(result.error);
-      } else if (result.output) {
-        setReplayOutput(result.output);
+      } else if (result.output !== undefined && result.output !== null && result.output !== '') {
+        setReplayOutput(formatDisplayContent(result.output));
       } else {
         setReplayOutput('(No output returned)');
       }

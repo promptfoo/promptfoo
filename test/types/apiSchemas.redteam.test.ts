@@ -62,6 +62,13 @@ describe('API schema red-team coverage', () => {
       );
     });
 
+    it('defaults historical domain-only share responses to local cloud-disabled behavior', () => {
+      expect(ServerSchemas.ShareCheckDomain.Response.parse({ domain: 'promptfoo.app' })).toEqual({
+        domain: 'promptfoo.app',
+        isCloudEnabled: false,
+      });
+    });
+
     it('keeps prompt hashes and generated dataset bodies bounded to expected shapes', () => {
       expect(ServerSchemas.Prompt.Params.safeParse({ sha256hash: 'a'.repeat(64) }).success).toBe(
         true,
@@ -239,6 +246,34 @@ describe('API schema red-team coverage', () => {
         reason: 'remote disabled',
         details: { request1: { prompt: 'one' } },
       });
+      expect(
+        ProviderSchemas.TestSession.Response.parse({
+          success: false,
+          error: 'Session parser failed',
+        }),
+      ).toEqual({ success: false, error: 'Session parser failed' });
+      expect(ProviderSchemas.TestSession.Response.parse({ success: true })).toEqual({
+        success: true,
+      });
+      expect(
+        ProviderSchemas.TestSession.Response.parse({
+          success: false,
+          details: {
+            sessionId: null,
+            request1: null,
+            request2: { sessionId: null },
+            legacyDiagnostic: { attempts: 2 },
+          },
+        }).details,
+      ).toEqual({
+        sessionId: null,
+        request1: null,
+        request2: { sessionId: null },
+        legacyDiagnostic: { attempts: 2 },
+      });
+      expect(
+        ProviderSchemas.TestSession.Response.safeParse({ message: 'missing success' }).success,
+      ).toBe(false);
     });
 
     it('keeps generator and discovery schemas from accepting empty or non-object envelopes', () => {
@@ -400,6 +435,32 @@ describe('API schema red-team coverage', () => {
   });
 
   describe('model-audit schemas', () => {
+    it('accepts historical installation and scan-list responses', () => {
+      expect(
+        ModelAuditSchemas.CheckInstalled.Response.parse({
+          installed: true,
+          cwd: '/workspace',
+        }),
+      ).toEqual({ installed: true, version: null, cwd: '/workspace' });
+
+      const historicalScanList = {
+        scans: [
+          {
+            id: 'scan-1',
+            createdAt: 1,
+            updatedAt: 2,
+            modelPath: '/workspace/model.pkl',
+            results: { issues: [] },
+            hasErrors: false,
+          },
+        ],
+        total: 1,
+      };
+      expect(ModelAuditSchemas.ListScans.Response.parse(historicalScanList)).toEqual(
+        historicalScanList,
+      );
+    });
+
     it('trims path checks and rejects empty path probes before filesystem access', () => {
       expect(ModelAuditSchemas.CheckPath.Request.parse({ path: '  ~/model.pkl  ' })).toEqual({
         path: '~/model.pkl',
@@ -628,12 +689,50 @@ describe('API schema red-team coverage', () => {
       expect(EvalSchemas.GetJob.Params.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
-          { promptIdx: 0, testIdx: 0, success: true, score: 1, provider: { id: 'echo' } },
+          { promptIdx: 0, testIdx: 0, success: true, score: 1 },
+        ]).success,
+      ).toBe(true);
+      expect(EvalSchemas.AddResults.Request.safeParse([]).success).toBe(true);
+      expect(
+        EvalSchemas.AddResults.Request.safeParse([
+          {
+            id: 'result-1',
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: { id: 'echo' },
+          },
         ]).success,
       ).toBe(true);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
-          { promptIdx: -1, testIdx: 0, success: true, score: 1 },
+          {
+            id: 'legacy-result-1',
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: 'echo',
+          },
+        ]).success,
+      ).toBe(true);
+      expect(
+        EvalSchemas.AddResults.Request.safeParse([
+          {
+            id: 'result-1',
+            promptIdx: -1,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: { id: 'echo' },
+          },
         ]).success,
       ).toBe(false);
       expect(

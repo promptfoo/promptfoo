@@ -6,8 +6,30 @@ import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
 // Mock the callApi utility
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
+  callApiResult: vi.fn(
+    async (
+      route: { clientPath: string },
+      schema: { parse: (value: unknown) => unknown },
+      options?: RequestInit,
+    ) => {
+      const response = await vi.mocked(callApi)(route.clientPath, options);
+      const body = await response.json();
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: {
+            message: body.message ?? body.error ?? 'Request failed',
+            body,
+          },
+          response,
+        };
+      }
+      return { ok: true, data: schema.parse(body), response };
+    },
+  ),
 }));
 
 // Mock the VariableSelectionDialog component
@@ -533,7 +555,6 @@ describe('SessionsTab', () => {
         expect(callApi).toHaveBeenCalledWith(
           '/providers/test-session',
           expect.objectContaining({
-            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: expect.stringContaining(baseProvider.config.url as string),
           }),
@@ -602,6 +623,32 @@ describe('SessionsTab', () => {
         expect(screen.getByText('Session parser failed')).toBeInTheDocument();
       });
 
+      expect(mockOnTestComplete).toHaveBeenCalledWith(false);
+    });
+
+    it('should render an error-only HTTP 200 response without a validation error', async () => {
+      const user = userEvent.setup();
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'Backend session validation failed',
+        }),
+      });
+
+      render(
+        <SessionsTab
+          selectedTarget={baseProvider}
+          updateCustomTarget={mockUpdateCustomTarget}
+          onTestComplete={mockOnTestComplete}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: /test session/i }));
+
+      expect(await screen.findByText('Backend session validation failed')).toBeInTheDocument();
+      expect(screen.getByText('Session Test Failed')).toBeInTheDocument();
+      expect(screen.queryByText(/invalid input|expected string|zod/i)).not.toBeInTheDocument();
       expect(mockOnTestComplete).toHaveBeenCalledWith(false);
     });
 

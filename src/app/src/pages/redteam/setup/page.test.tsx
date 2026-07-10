@@ -1,7 +1,8 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { formatDataGridDate } from '@app/utils/date';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -33,8 +34,27 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
+  callApiJson: vi.fn(
+    async (
+      route: { clientPath: string },
+      _schema: unknown,
+      options: {
+        params?: Record<string, string | number>;
+        query?: URLSearchParams;
+      } & RequestInit = {},
+    ) => {
+      let path = route.clientPath;
+      for (const [name, value] of Object.entries(options.params ?? {})) {
+        path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+      }
+      const search = options.query?.toString();
+      const response = await vi.mocked(callApi)(search ? `${path}?${search}` : path, options);
+      return response.json();
+    },
+  ),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
@@ -187,6 +207,121 @@ describe('RedTeamSetupPage', () => {
 
     const setupModal = screen.getByTestId('setup-modal');
     expect(setupModal).toBeInTheDocument();
+  });
+
+  describe('numeric config timestamps', () => {
+    it('sorts numeric list timestamps newest-first and preserves the loaded timestamp', async () => {
+      const user = userEvent.setup();
+      const olderTimestamp = Date.UTC(2024, 0, 2, 3, 4);
+      const newerTimestamp = Date.UTC(2024, 6, 8, 9, 10);
+      const loadedTimestamp = Date.UTC(2024, 11, 20, 21, 22);
+
+      mockedCallApi.mockImplementation(async (url) => {
+        if (url === '/configs?type=redteam') {
+          return {
+            ok: true,
+            json: async () => ({
+              configs: [
+                {
+                  id: 'older-config',
+                  name: 'Older Config',
+                  type: 'redteam',
+                  createdAt: olderTimestamp,
+                  updatedAt: olderTimestamp,
+                },
+                {
+                  id: 'newer-config',
+                  name: 'Newer Config',
+                  type: 'redteam',
+                  createdAt: newerTimestamp,
+                  updatedAt: newerTimestamp,
+                },
+              ],
+            }),
+          } as Response;
+        }
+        if (url === '/configs/redteam/newer-config') {
+          return {
+            ok: true,
+            json: async () => ({
+              id: 'newer-config',
+              name: 'Newer Config',
+              type: 'redteam',
+              config: initialRedTeamState.config,
+              createdAt: newerTimestamp,
+              updatedAt: loadedTimestamp,
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Load or Import Configuration',
+      });
+      const olderDate = formatDataGridDate(olderTimestamp);
+      const newerDate = formatDataGridDate(newerTimestamp);
+      expect(olderDate).not.toBe('');
+      expect(newerDate).not.toBe('');
+
+      const olderConfig = within(dialog).getByRole('button', { name: /Older Config/i });
+      const newerConfig = within(dialog).getByRole('button', { name: /Newer Config/i });
+      expect(within(olderConfig).getByText(olderDate)).toBeInTheDocument();
+      expect(within(newerConfig).getByText(newerDate)).toBeInTheDocument();
+
+      const configChoices = within(dialog)
+        .getAllByRole('button')
+        .filter((button) => /(?:Older|Newer) Config/.test(button.textContent ?? ''));
+      expect(configChoices).toEqual([newerConfig, olderConfig]);
+
+      await user.click(newerConfig);
+
+      const loadedDate = formatDataGridDate(loadedTimestamp);
+      expect(loadedDate).not.toBe('');
+      await waitFor(() => {
+        expect(screen.getAllByText(loadedDate).length).toBeGreaterThan(0);
+      });
+    });
+
+    it('preserves a numeric createdAt timestamp after saving', async () => {
+      const user = userEvent.setup();
+      const createdTimestamp = Date.UTC(2025, 1, 3, 4, 5);
+
+      mockedCallApi.mockImplementation(async (url) => {
+        if (url === '/configs') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'saved-config', createdAt: createdTimestamp }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Save Config' }));
+      const dialog = screen.getByRole('dialog', { name: 'Save Configuration' });
+      await user.type(within(dialog).getByLabelText('Configuration Name'), 'Numeric Config');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      const createdDate = formatDataGridDate(createdTimestamp);
+      expect(createdDate).not.toBe('');
+      await waitFor(() => {
+        expect(screen.getAllByText(createdDate).length).toBeGreaterThan(0);
+      });
+    });
   });
 
   describe('YAML file import', () => {

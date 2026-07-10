@@ -212,6 +212,9 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Test Built Library Exports
+        run: npx vitest run --config vitest.integration.config.ts test/integration/library-exports.integration.test.ts --sequence.shuffle=false
+
       - name: Test Package Artifact
         if: matrix.node == '20.20' || matrix.node == '26.x'
         env:

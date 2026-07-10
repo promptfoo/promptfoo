@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import {
   FINAL_RUNTIME_NOTICE_PHASE_MS,
   getRuntimeNoticeReminderIntervalDays,
   parseUtcMidnight,
 } from '@app/utils/runtimeCompatibility';
+import { ApiRoutes, VersionSchemas } from '@promptfoo/contracts';
 
 export interface RuntimeCompatibilityNotice {
   id: string;
@@ -36,6 +37,7 @@ export interface VersionInfo {
   updateCommands?: {
     primary: string;
     alternative: string | null;
+    commandType?: 'docker' | 'npx' | 'npm';
     isCustomContainer?: boolean;
   };
   commandType?: 'docker' | 'npx' | 'npm';
@@ -161,11 +163,7 @@ export function useVersionCheck(): UseVersionCheckResult {
   const checkVersion = useCallback(
     async (background: boolean = false): Promise<boolean> => {
       try {
-        const response = await callApi('/version');
-        if (!response.ok) {
-          throw new Error('Failed to fetch version information');
-        }
-        const data: VersionInfo = await response.json();
+        const data = await callApiJson(ApiRoutes.Version, VersionSchemas.Response);
 
         clearRuntimePolicyRetry();
         if (isMountedRef.current) {

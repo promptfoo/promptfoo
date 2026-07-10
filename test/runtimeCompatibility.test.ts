@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NODE_20_SUPPORT_END_DATE,
+  RuntimeCompatibilityNoticeSchema,
+  VersionSchemas,
+} from '../src/contracts';
+import {
   getRuntimeCompatibilityNotice,
   getRuntimeNoticeReminderIntervalMs,
   isLatestUpdateBlockedByRuntime,
@@ -11,6 +16,35 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('runtime compatibility policy', () => {
+  it('keeps the runtime producer aligned with the public version policy schemas', () => {
+    const notice = getRuntimeCompatibilityNotice('v20.20.2');
+    expect(notice).not.toBeNull();
+    expect(RuntimeCompatibilityNoticeSchema.parse(notice)).toEqual(notice);
+
+    const versionResponse = VersionSchemas.Response.parse({
+      currentVersion: '0.121.18',
+      latestVersion: '0.121.18',
+      updateAvailable: false,
+      updateBlockedByRuntime: false,
+      runtimeNotice: notice,
+      blockedUpdateNotice: null,
+      runtimePolicy: { supportEndDate: NODE_20_SUPPORT_END_DATE },
+      selfHosted: true,
+      isNpx: false,
+      updateCommands: {
+        primary: 'npm install -g promptfoo',
+        alternative: null,
+        commandType: 'npm',
+      },
+      commandType: 'npm',
+    });
+
+    expect(versionResponse.runtimeNotice).toEqual(notice);
+    expect(versionResponse.runtimePolicy).toEqual({
+      supportEndDate: NODE_20_SUPPORT_END_DATE,
+    });
+  });
+
   it('detects Node.js 20 and returns the dated compatibility notice', () => {
     expect(
       getRuntimeCompatibilityNotice('v20.20.2', {
