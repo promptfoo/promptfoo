@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { loadClaudeCodeCredential } from '../../src/providers/anthropic/claudeCodeAuth';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import {
   calculateMetaCost,
   createMetaProvider,
+  getAnthropicEnvHeaderSuppressions,
   MetaMessagesProvider,
   MetaResponsesProvider,
 } from '../../src/providers/meta';
@@ -17,6 +19,16 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 }));
 vi.mock('../../src/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+// A valid, unexpired Claude Code OAuth credential is always "available" so the
+// OAuth-suppression test below proves MetaMessagesProvider refuses it even
+// when one exists (rather than passing trivially on machines without one).
+vi.mock('../../src/providers/anthropic/claudeCodeAuth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/anthropic/claudeCodeAuth')>()),
+  loadClaudeCodeCredential: vi.fn(() => ({
+    accessToken: 'claude-code-oauth-secret',
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  })),
 }));
 
 // The provider extends OpenAiChatCompletionProvider; the Meta-specific wiring
@@ -87,6 +99,15 @@ describe('MetaProvider configuration', () => {
       }),
     );
     expect(provider.getApiUrl()).toBe('https://proxy.example.com/v1');
+  });
+
+  it('resolves an empty-string apiBaseUrl (e.g. an unset template) to the Meta host', () => {
+    const provider = asChat(
+      createMetaProvider('meta:muse-spark-1.1', {
+        config: { apiBaseUrl: '' },
+      }),
+    );
+    expect(provider.getApiUrl()).toBe('https://api.meta.ai/v1');
   });
 
   it('passes through standard OpenAI options without dropping them', () => {
@@ -600,14 +621,50 @@ describe('MetaMessagesProvider', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown Anthropic model'));
   });
 
-  it('never authenticates with a Claude Code OAuth credential', () => {
+  it('never authenticates with a Claude Code OAuth credential, even when one exists', () => {
     expect((MetaMessagesProvider as any).SUPPORTS_CLAUDE_CODE_OAUTH).toBe(false);
     const restore = mockProcessEnv({ META_API_KEY: undefined, MODEL_API_KEY: undefined });
     try {
+      // Sanity-check the mock: the plain Anthropic provider WOULD pick up the
+      // mocked OAuth credential under this config.
+      const restoreAnthropic = mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      const anthropicProvider = new AnthropicMessagesProvider('claude-sonnet-4-5', {
+        config: { apiKeyRequired: false },
+      });
+      restoreAnthropic();
+      expect((anthropicProvider as any).usingClaudeCodeOAuth).toBe(true);
+
       const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
         config: { apiKeyRequired: false },
       }) as MetaMessagesProvider;
+      expect(vi.mocked(loadClaudeCodeCredential)).toHaveBeenCalled();
       expect((provider as any).usingClaudeCodeOAuth).toBe(false);
+      expect((provider as any).anthropic.authToken).not.toBe('claude-code-oauth-secret');
+    } finally {
+      restore();
+    }
+  });
+
+  it('resolves empty-string apiBaseUrl to the Meta host, never the SDK Anthropic default', () => {
+    const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+      config: { apiBaseUrl: '' },
+    }) as MetaMessagesProvider;
+    expect((provider as any).getApiBaseUrl()).toBe('https://api.meta.ai');
+    expect((provider as any).anthropic.baseURL).toBe('https://api.meta.ai');
+  });
+
+  it('omits ANTHROPIC_CUSTOM_HEADERS-derived headers from Meta traffic', () => {
+    const restore = mockProcessEnv({
+      ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: hunter2\nX-Gateway: internal',
+    });
+    try {
+      expect(getAnthropicEnvHeaderSuppressions()).toEqual({
+        'X-Proxy-Secret': null,
+        'X-Gateway': null,
+      });
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
+      const defaultHeaders = (provider as any).anthropic._options?.defaultHeaders;
+      expect(defaultHeaders).toMatchObject({ 'X-Proxy-Secret': null, 'X-Gateway': null });
     } finally {
       restore();
     }
@@ -654,7 +711,7 @@ describe('MetaMessagesProvider', () => {
     }
   });
 
-  it('does not attach cost to error or cached responses', async () => {
+  it('does not attach cost to usage-less error responses or cached responses', async () => {
     const spy = vi
       .spyOn(AnthropicMessagesProvider.prototype, 'callApi')
       .mockResolvedValueOnce({ error: 'API error: 429' })
@@ -672,6 +729,23 @@ describe('MetaMessagesProvider', () => {
       expect(errored.cost).toBeUndefined();
       const cachedResult = await provider.callApi('Say hi');
       expect(cachedResult.cost).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('bills errors that carry tokenUsage (base class intent for MCP-loop failures)', async () => {
+    const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
+      error: 'Exceeded max_tool_calls (8)',
+      tokenUsage: { total: 1500, prompt: 1000, completion: 500 },
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        config: { apiKey: 'LLM|1|k' },
+      });
+      const result = await provider.callApi('Say hi');
+      expect(result.error).toBeTruthy();
+      expect(result.cost).toBeCloseTo((1000 * 1.25 + 500 * 4.25) / 1e6, 12);
     } finally {
       spy.mockRestore();
     }

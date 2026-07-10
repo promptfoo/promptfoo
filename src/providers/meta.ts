@@ -176,6 +176,27 @@ export function calculateMetaCost(
   );
 }
 
+// Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
+// (newline-separated `Name: value` lines) and map each header name to null so
+// the SDK omits it. Exported for tests.
+export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
+  const suppressed: Record<string, null> = {};
+  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
+  if (!customHeadersEnv) {
+    return suppressed;
+  }
+  for (const line of customHeadersEnv.split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon >= 0) {
+      const name = line.substring(0, colon).trim();
+      if (name) {
+        suppressed[name] = null;
+      }
+    }
+  }
+  return suppressed;
+}
+
 function extractCachedTokens(raw: unknown): number {
   let parsed: any = raw;
   if (typeof raw === 'string') {
@@ -208,7 +229,9 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     const resolvedConfig: MetaConfig = {
       ...metaConfig,
       apiKeyEnvar: metaConfig.apiKeyEnvar ?? META_API_KEY_ENVAR,
-      apiBaseUrl: metaConfig.apiBaseUrl ?? META_API_BASE_URL,
+      // `||` (not `??`) so an empty string — e.g. a template that rendered
+      // empty — still resolves to the Meta endpoint.
+      apiBaseUrl: metaConfig.apiBaseUrl || META_API_BASE_URL,
     };
 
     super(modelName, {
@@ -224,7 +247,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 
   override getApiUrl(): string {
-    return this.config.apiBaseUrl ?? META_API_BASE_URL;
+    return this.config.apiBaseUrl || META_API_BASE_URL;
   }
 
   // Meta has no concept of an OpenAI organization; suppress the header so a
@@ -381,7 +404,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     const resolvedConfig: MetaConfig = {
       ...metaConfig,
       apiKeyEnvar: metaConfig.apiKeyEnvar ?? META_API_KEY_ENVAR,
-      apiBaseUrl: metaConfig.apiBaseUrl ?? META_API_BASE_URL,
+      apiBaseUrl: metaConfig.apiBaseUrl || META_API_BASE_URL,
     };
 
     super(modelName, {
@@ -397,7 +420,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   }
 
   override getApiUrl(): string {
-    return this.config.apiBaseUrl ?? META_API_BASE_URL;
+    return this.config.apiBaseUrl || META_API_BASE_URL;
   }
 
   override getOrganization(): undefined {
@@ -513,7 +536,7 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     const metaConfig = providerOptions.config ?? {};
     const resolvedConfig: MetaMessagesConfig = {
       ...metaConfig,
-      apiBaseUrl: metaConfig.apiBaseUrl ?? META_MESSAGES_API_BASE_URL,
+      apiBaseUrl: metaConfig.apiBaseUrl || META_MESSAGES_API_BASE_URL,
       // Muse reasoning arrives as encrypted redacted_thinking blocks on this
       // surface; surfacing that ciphertext would pollute graded output, so
       // hide thinking by default (overridable with showThinking: true).
@@ -527,11 +550,19 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
     // The Anthropic SDK sends `apiKey` as an x-api-key header; Meta
     // authenticates the Messages surface with a bearer token, so rebuild the
-    // client with authToken instead.
+    // client with authToken instead. Also explicitly omit any headers the SDK
+    // would merge in from ANTHROPIC_CUSTOM_HEADERS — those are Anthropic-scoped
+    // (often gateway/proxy secrets) and must not be sent to Meta; a null value
+    // tells the SDK to drop the header, and constructor defaultHeaders win
+    // over the env-derived ones.
+    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions();
     this.anthropic = new Anthropic({
       apiKey: null,
       authToken: this.apiKey ?? null,
       baseURL: this.getApiBaseUrl(),
+      ...(Object.keys(suppressedEnvHeaders).length > 0
+        ? { defaultHeaders: suppressedEnvHeaders }
+        : {}),
     });
   }
 
@@ -543,7 +574,7 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
   // Ignore ANTHROPIC_BASE_URL overrides — those are Anthropic-scoped.
   override getApiBaseUrl(): string {
-    return (this.config as MetaMessagesConfig).apiBaseUrl ?? META_MESSAGES_API_BASE_URL;
+    return (this.config as MetaMessagesConfig).apiBaseUrl || META_MESSAGES_API_BASE_URL;
   }
 
   id(): string {
@@ -575,7 +606,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
     const response = await super.callApi(prompt, context);
 
-    if (!response || response.error || response.cached || response.cost !== undefined) {
+    // Unlike the chat provider, do NOT skip error responses: the base class
+    // deliberately bills errors that carry tokenUsage (e.g. an MCP loop that
+    // exceeded max_tool_calls) so spent tokens don't vanish from cost totals.
+    if (!response || response.cached || response.cost !== undefined) {
       return response;
     }
 

@@ -92,16 +92,32 @@ Muse Spark's reasoning arrives on this surface as encrypted `redacted_thinking` 
 
 ## Using with coding-agent providers
 
-Meta positions Muse Spark as a backend for coding agents, and promptfoo's agentic providers can evaluate those setups end to end:
+Meta positions Muse Spark as a backend for coding agents, and promptfoo's agentic providers can evaluate those setups end to end. In both recipes, set `apiKey` explicitly: the agent subprocesses inherit your shell environment, and an explicit key guarantees your Meta key is used instead of an ambient `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` that belongs to another service.
 
-- **Codex CLI** — the [`openai:codex-sdk` provider](/docs/providers/openai-codex-sdk) accepts a `base_url`; point it at `https://api.meta.ai/v1` with `model: muse-spark-1.1` and set `MODEL_API_KEY` as the key env, mirroring Meta's Codex guide (Codex drives Muse Spark over the Responses API).
-- **Claude Code** — the [`claude-agent-sdk` provider](/docs/providers/claude-agent-sdk/) forwards `config.env` to the agent subprocess. Set `apiKeyRequired: false` and pass the environment Meta's guide prescribes:
+### Codex CLI
+
+The [`openai:codex-sdk` provider](/docs/providers/openai-codex-sdk) drives Muse Spark over the Responses API:
 
 ```yaml
 providers:
-  - id: claude-agent-sdk
+  - id: openai:codex-sdk
     config:
-      apiKeyRequired: false
+      base_url: https://api.meta.ai/v1
+      model: muse-spark-1.1
+      apiKey: '{{env.MODEL_API_KEY}}'
+```
+
+The explicit `apiKey` is required — the provider does not read `MODEL_API_KEY` on its own, and without it an ambient `OPENAI_API_KEY` would be sent to the Meta endpoint instead.
+
+### Claude Code
+
+The [`anthropic:claude-agent-sdk` provider](/docs/providers/claude-agent-sdk/) forwards `config.env` to the agent subprocess. Pass the environment Meta's guide prescribes, with `apiKey` set to your Meta key:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      apiKey: '{{env.MODEL_API_KEY}}'
       env:
         ANTHROPIC_BASE_URL: https://api.meta.ai
         ANTHROPIC_AUTH_TOKEN: '{{env.MODEL_API_KEY}}'
@@ -111,6 +127,12 @@ providers:
         ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-spark-1.1
         CLAUDE_CODE_SUBAGENT_MODEL: muse-spark-1.1
 ```
+
+:::warning
+
+Do not omit `apiKey`. The provider forwards its resolved API key into the agent subprocess as `ANTHROPIC_API_KEY` after `env:` is applied — if `apiKey` is unset and a real `ANTHROPIC_API_KEY` is exported in your shell, that Anthropic credential would be transmitted to Meta's endpoint.
+
+:::
 
 Pin every model alias as shown — Meta serves only `muse-spark-1.1`, and Claude Code otherwise routes background tasks, Plan Mode, or subagents to Claude models the Meta API doesn't serve. See Meta's [coding agents guide](https://dev.meta.ai/docs/guides/coding-agents) for the full setup pattern.
 

@@ -245,6 +245,9 @@ type EnvVars = {
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
