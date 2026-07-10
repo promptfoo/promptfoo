@@ -209,33 +209,34 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 The provider validates top-level provider config strictly. If you mistype a provider field such as `sandboxMode` instead of `sandbox_mode`, provider loading can fail before any rows run. Prompt-level config is parsed more leniently because promptfoo merges generic test options into `prompt.config`; unrelated keys are ignored there, while invalid values for known Codex fields still return a row-level provider error. Put extra Codex CLI settings that are not listed below under `cli_config`.
 
-| Parameter                | Type     | Description                                                                                          | Default              |
-| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
-| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
-| `base_url`               | string   | Custom API base URL                                                                                  | None                 |
-| `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
-| `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
-| `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
-| `model`                  | string   | Model to use                                                                                         | SDK default          |
-| `model_provider`         | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
-| `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
-| `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
-| `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |
-| `web_search_enabled`     | boolean  | Allow web search                                                                                     | false                |
-| `web_search_mode`        | string   | Web search mode: `disabled`, `cached`, or `live`                                                     | SDK default          |
-| `collaboration_mode`     | string   | Multi-agent preset mapped to `cli_config.collaboration_mode`                                         | None                 |
-| `approval_policy`        | string   | When to require approval (see below)                                                                 | SDK default          |
-| `cli_config`             | object   | Additional Codex CLI config overrides                                                                | None                 |
-| `skip_git_repo_check`    | boolean  | Skip Git repository validation                                                                       | false                |
-| `codex_path_override`    | string   | Custom path to codex binary                                                                          | None                 |
-| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
-| `persist_threads`        | boolean  | Keep threads alive between calls                                                                     | false                |
-| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
-| `output_schema`          | object   | JSON schema for structured responses                                                                 | None                 |
-| `cli_env`                | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
-| `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
-| `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
-| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
+| Parameter                  | Type     | Description                                                                                          | Default              |
+| -------------------------- | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| `apiKey`                   | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
+| `base_url`                 | string   | Custom API base URL                                                                                  | None                 |
+| `maxRetries`               | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
+| `working_dir`              | string   | Directory for Codex to operate in                                                                    | Current directory    |
+| `additional_directories`   | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
+| `model`                    | string   | Model to use                                                                                         | SDK default          |
+| `model_provider`           | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
+| `sandbox_mode`             | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
+| `model_reasoning_effort`   | string   | Reasoning intensity (see below)                                                                      | SDK default          |
+| `network_access_enabled`   | boolean  | Allow network requests                                                                               | false                |
+| `web_search_enabled`       | boolean  | Allow web search                                                                                     | false                |
+| `web_search_mode`          | string   | Web search mode: `disabled`, `cached`, or `live`                                                     | SDK default          |
+| `collaboration_mode`       | string   | Multi-agent preset mapped to `cli_config.collaboration_mode`                                         | None                 |
+| `approval_policy`          | string   | When to require approval (see below)                                                                 | SDK default          |
+| `cli_config`               | object   | Additional Codex CLI config overrides                                                                | None                 |
+| `skip_git_repo_check`      | boolean  | Skip Git repository validation                                                                       | false                |
+| `codex_path_override`      | string   | Custom path to codex binary                                                                          | None                 |
+| `skip_codex_version_check` | boolean  | Allow an intentionally divergent custom Codex binary without checking its SDK/event-schema version.  | `false`              |
+| `thread_id`                | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
+| `persist_threads`          | boolean  | Keep threads alive between calls                                                                     | false                |
+| `thread_pool_size`         | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
+| `output_schema`            | object   | JSON schema for structured responses                                                                 | None                 |
+| `cli_env`                  | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
+| `inherit_process_env`      | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
+| `enable_streaming`         | boolean  | Enable streaming events                                                                              | false                |
+| `deep_tracing`             | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
 
 During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
 
@@ -799,6 +800,26 @@ providers:
     config:
       codex_path_override: /custom/path/to/codex
 ```
+
+Before each turn, promptfoo runs the custom binary as `exec --experimental-json --version` with a 10-second hard timeout. The probe receives the same prepared `cli_env` and inherited process environment as the real SDK spawn, except API credentials and per-turn tracing identifiers are removed. Its reported version must exactly match the CLI version pinned by `node_modules/@openai/codex-sdk/package.json` in `dependencies["@openai/codex"]`.
+
+If you intentionally use a schema-compatible fork or a different CLI version, you can accept that compatibility risk explicitly:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      codex_path_override: /custom/path/to/codex
+      skip_codex_version_check: true
+```
+
+Compatibility failures report one of these conditions before a Codex turn starts:
+
+- the SDK manifest is missing or does not pin an exact `@openai/codex` version;
+- the custom binary cannot run JSON event mode within the timeout; or
+- the custom binary reports a different or invalid version.
+
+Successful checks are not cached across turns. This avoids retaining identifiers derived from inherited environment secrets and ensures PATH-resolved wrappers or replaced binaries are rechecked.
 
 ## Caching Behavior
 
