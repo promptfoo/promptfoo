@@ -166,6 +166,86 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should count missing final-answer verdicts as unsupported', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
+      pass: false,
+      reason: 'Faithfulness 0.33 is < 0.5',
+      score: expect.closeTo(0.33, 0.01),
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should count missing line-by-line verdicts as unsupported', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nverdict: yes',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
+      pass: false,
+      reason: 'Faithfulness 0.33 is < 0.5',
+      score: expect.closeTo(0.33, 0.01),
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+    });
+  });
+
   it('should clamp score when verdict count exceeds statement count', async () => {
     const query = 'Query text';
     const output = 'Output text';
