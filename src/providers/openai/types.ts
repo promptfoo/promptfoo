@@ -53,10 +53,9 @@ export interface OpenAiSharedOptions {
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
- * **o-series models only**
+ * Configuration options for OpenAI reasoning models, including o-series and GPT-5 models.
  *
- * Configuration options for
- * [reasoning models](https://platform.openai.com/docs/guides/reasoning).
+ * See the [reasoning models guide](https://platform.openai.com/docs/guides/reasoning).
  */
 export interface Reasoning {
   /** Controls which reasoning items are rendered back to the model on later turns. */
