@@ -397,10 +397,26 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
   },
 ]);
 
-const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id, model]));
+const ALL_TEXT_MODELS = OPENAI_BILLING_MODELS;
+
+const TEXT_MODELS_BY_ID = new Map(ALL_TEXT_MODELS.map((model) => [model.id, model]));
 
 const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
-const OPENAI_REGIONAL_PROCESSING_MODEL = /^gpt-5\.[456](?:-|$)/;
+const OPENAI_REGIONAL_PROCESSING_MODELS = new Set([
+  'gpt-5.4',
+  'gpt-5.4-2026-03-05',
+  'gpt-5.4-mini',
+  'gpt-5.4-mini-2026-03-17',
+  'gpt-5.4-nano',
+  'gpt-5.4-nano-2026-03-17',
+  'gpt-5.4-pro',
+  'gpt-5.4-pro-2026-03-05',
+  'gpt-5.5',
+  'gpt-5.5-2026-04-23',
+  'gpt-5.5-pro',
+  'gpt-5.5-pro-2026-04-23',
+  ...GPT_5_6_MODELS,
+]);
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
 
@@ -623,7 +639,8 @@ function getNumericValue(value: unknown): number {
 }
 
 export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
-  const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
+  const usageParts = getOpenAIUsageParts(rawUsage);
+  const { usage, inputDetails, outputDetails } = usageParts;
 
   const totalOutputTokens = getNumericValue(usage.completion_tokens ?? usage.output_tokens);
   const reportedInputTokens = getNumericValue(usage.prompt_tokens ?? usage.input_tokens);
@@ -797,7 +814,7 @@ export function calculateOpenAIUsageCost(
   }
 
   const rates =
-    OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) &&
+    OPENAI_REGIONAL_PROCESSING_MODELS.has(modelName) &&
     usesOpenAIRegionalProcessing(config, options.apiUrl)
       ? {
           ...modelRates,
