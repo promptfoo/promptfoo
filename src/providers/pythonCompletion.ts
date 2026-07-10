@@ -9,9 +9,13 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import { stableJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
-import { sanitizeScriptContext } from './scriptContext';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
@@ -113,8 +117,8 @@ function hasPythonResultError(result: any): boolean {
 function validateCallApiResult(functionName: string, result: any): void {
   // Log result structure for debugging
   const resultType = result === null ? 'null' : typeof result;
-  const resultKeys = result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
-  logger.debug(`Python provider result structure: ${resultType}, keys: ${resultKeys}`);
+  const resultKeys = result && typeof result === 'object' ? Object.keys(result) : [];
+  logger.debug('Python provider result structure', { resultType, resultKeys });
   if (hasPythonResultProperty(result, 'output')) {
     logger.debug(
       `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
@@ -327,19 +331,51 @@ export class PythonProvider implements ApiProvider {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
+    const functionName = this.functionName || apiType;
+    const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
-    logger.debug(`PythonProvider cache key: ${cacheKey}`);
+    // Create a new options object with processed file references included in the config
+    // This ensures any file:// references are replaced with their actual content
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: {
+        ...this.options?.config,
+        ...this.config, // Merge in the processed config containing resolved file references
+      },
+    };
+
+    const args = buildPythonScriptArgs(
+      apiType,
+      prompt,
+      optionsWithProcessedConfig,
+      sanitizedContext,
+    );
+
+    // Build a separate arg set for cache-key hashing that excludes per-run
+    // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
+    // full `args` (with tracing metadata) are still forwarded to the worker.
+    // Stable (sorted) JSON ensures callers that clone/reshape options or
+    // context with a different key order still hit the same cache entry.
+    const cacheKeyArgs = buildPythonScriptArgs(
+      apiType,
+      prompt,
+      optionsWithProcessedConfig,
+      buildCacheableScriptContext(context),
+    );
 
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
+    const containsSensitiveInput = containsSensitiveScriptInput(cacheKeyArgs);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `python:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
+          stableJsonStringify(cacheKeyArgs) ?? 'undefined',
+        )}`
+      : undefined;
+    logger.debug(`PythonProvider cache key: ${cacheKey ?? '[disabled for sensitive input]'}`);
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
-    if (cacheEnabled) {
+    if (cacheEnabled && cacheKey) {
       cachedResult = await cache.get(cacheKey);
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -348,37 +384,22 @@ export class PythonProvider implements ApiProvider {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
 
-      logger.debug(
-        `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
-      );
+      logger.debug('PythonProvider parsed cached result', {
+        resultType: typeof parsedResult,
+        resultKeys:
+          parsedResult && typeof parsedResult === 'object' ? Object.keys(parsedResult) : [],
+      });
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
       return applyCachedCallApiMetadata(apiType, parsedResult);
     } else {
-      const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
-
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
-      const args = buildPythonScriptArgs(
+      logger.debug('Executing python script via worker pool', {
+        scriptPath: absPath,
         apiType,
-        prompt,
-        optionsWithProcessedConfig,
-        sanitizedContext,
-      );
+        argCount: args.length,
+        hasContext: Boolean(sanitizedContext),
+      });
 
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
-
-      const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 
@@ -387,12 +408,12 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasPythonResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheEnabled && cacheKey && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `PythonProvider not caching result: ${hasError ? 'has error' : 'cache disabled'}`,
         );
       }
 

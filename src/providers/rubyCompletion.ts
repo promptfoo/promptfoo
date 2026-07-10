@@ -7,8 +7,12 @@ import { runRuby } from '../ruby/rubyUtils';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
-import { sanitizeScriptContext } from './scriptContext';
+import { stableJsonStringify } from '../util/json';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
@@ -103,8 +107,8 @@ function hasRubyResultError(result: any): boolean {
 function validateRubyCallApiResult(functionName: string, result: any): void {
   // Log result structure for debugging
   const resultType = result === null ? 'null' : typeof result;
-  const resultKeys = result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
-  logger.debug(`Ruby provider result structure: ${resultType}, keys: ${resultKeys}`);
+  const resultKeys = result && typeof result === 'object' ? Object.keys(result) : [];
+  logger.debug('Ruby provider result structure', { resultType, resultKeys });
   if (hasRubyResultProperty(result, 'output')) {
     logger.debug(
       `Ruby provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
@@ -246,19 +250,46 @@ export class RubyProvider implements ApiProvider {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
+    const functionName = this.functionName || apiType;
+    const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
-      this.options,
-    )}:${safeJsonStringify(context?.vars)}`;
-    logger.debug(`RubyProvider cache key: ${cacheKey}`);
+    // Create a new options object with processed file references included in the config
+    // This ensures any file:// references are replaced with their actual content
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: {
+        ...this.options?.config,
+        ...this.config, // Merge in the processed config containing resolved file references
+      },
+    };
+
+    const args = buildRubyScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
+
+    // Build a separate arg set for cache-key hashing that excludes per-run
+    // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
+    // full `args` (with tracing metadata) are still forwarded to the worker.
+    // Stable (sorted) JSON ensures callers that clone/reshape options or
+    // context with a different key order still hit the same cache entry.
+    const cacheKeyArgs = buildRubyScriptArgs(
+      apiType,
+      prompt,
+      optionsWithProcessedConfig,
+      buildCacheableScriptContext(context),
+    );
 
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
+    const containsSensitiveInput = containsSensitiveScriptInput(cacheKeyArgs);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `ruby:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
+          stableJsonStringify(cacheKeyArgs) ?? 'undefined',
+        )}`
+      : undefined;
+    logger.debug(`RubyProvider cache key: ${cacheKey ?? '[disabled for sensitive input]'}`);
     logger.debug(`RubyProvider cache enabled: ${cacheEnabled}`);
 
-    if (cacheEnabled) {
+    if (cacheEnabled && cacheKey) {
       cachedResult = await cache.get(cacheKey);
       logger.debug(`RubyProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -267,37 +298,23 @@ export class RubyProvider implements ApiProvider {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
 
-      logger.debug(
-        `RubyProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
-      );
+      logger.debug('RubyProvider parsed cached result', {
+        resultType: typeof parsedResult,
+        resultKeys:
+          parsedResult && typeof parsedResult === 'object' ? Object.keys(parsedResult) : [],
+      });
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
       return applyCachedRubyCallApiMetadata(apiType, parsedResult);
     } else {
-      const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
-
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
-      const args = buildRubyScriptArgs(
+      logger.debug('Running ruby script', {
+        scriptPath: absPath,
+        providerPath: this.scriptPath,
         apiType,
-        prompt,
-        optionsWithProcessedConfig,
-        sanitizedContext,
-      );
+        argCount: args.length,
+        hasContext: Boolean(sanitizedContext),
+      });
 
-      logger.debug(
-        `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-
-      const functionName = this.functionName || apiType;
       const result = await runRuby(absPath, functionName, args, {
         rubyExecutable: this.config.rubyExecutable,
       });
@@ -307,12 +324,12 @@ export class RubyProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasRubyResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheEnabled && cacheKey && !hasError) {
         logger.debug(`RubyProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `RubyProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `RubyProvider not caching result: ${hasError ? 'has error' : 'cache disabled'}`,
         );
       }
 

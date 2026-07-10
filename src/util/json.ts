@@ -129,6 +129,58 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   }
 }
 
+/**
+ * Stably stringify a value to JSON with deterministic object-key order.
+ * Intended for cache-key hashing: two semantically identical payloads
+ * whose keys happen to be inserted in different orders produce the same
+ * output string and therefore hash to the same cache key.
+ *
+ * Delegates all JSON semantics to `safeJsonStringify` and then
+ * canonicalizes object-key order on the parsed result. That means it
+ * inherits `JSON.stringify`'s correct handling of:
+ *
+ * - `toJSON(key)` — called once per position with the current property
+ *   key, so `Date` serializes to its ISO string, key-aware `toJSON`
+ *   implementations see the real key, and self-returning `toJSON`
+ *   implementations don't infinite-recurse.
+ * - Circular references — stripped via `safeJsonStringify`'s
+ *   ancestor-path tracking rather than a blanket "already visited" set,
+ *   so sibling-shared references like `{ a: shared, b: shared }` are
+ *   serialized in full on every occurrence.
+ * - `undefined`, functions, and other non-JSON values — omitted.
+ *
+ * Arrays are NOT sorted — only object-key order is normalized — because
+ * array order is semantically meaningful.
+ *
+ * @param value - The value to stringify
+ * @returns JSON string representation, or `undefined` if serialization fails
+ */
+export function stableJsonStringify<T>(value: T): string | undefined {
+  const raw = safeJsonStringify(value);
+  if (raw === undefined) {
+    return undefined;
+  }
+  try {
+    return canonicalizeJsonKeys(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+}
+
+function canonicalizeJsonKeys(val: unknown): string {
+  if (val === null || typeof val !== 'object') {
+    return JSON.stringify(val);
+  }
+  if (Array.isArray(val)) {
+    return `[${val.map(canonicalizeJsonKeys).join(',')}]`;
+  }
+  const obj = val as Record<string, unknown>;
+  const entries = Object.keys(obj)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalizeJsonKeys(obj[key])}`);
+  return `{${entries.join(',')}}`;
+}
+
 export function convertSlashCommentsToHash(str: string): string {
   // Split into lines, process each line, then join back
   return str

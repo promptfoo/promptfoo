@@ -4,8 +4,14 @@ import fs from 'fs';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
+import { sha256 } from '../util/createHash';
 import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
+import { safeJsonStringify, stableJsonStringify } from '../util/json';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
@@ -67,23 +73,47 @@ export class ScriptCompletionProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
     const fileHashes = getFileHashes(scriptParts);
+    const serializedOptions = safeJsonStringify(this.options ?? {}) ?? '{}';
+    const sanitizedContext = sanitizeScriptContext('ScriptCompletionProvider', context) ?? {};
+    const serializedContext = safeJsonStringify(sanitizedContext) ?? '{}';
+    // The cache-key hash must exclude per-run non-deterministic fields like
+    // `evaluationId` / `traceparent` so that two otherwise-identical eval
+    // runs hit the same cache entry. Stable (sorted) JSON ensures upstream
+    // callers that clone/reshape options or context with a different key
+    // order still hit the same cache entry.
+    const stableOptions = stableJsonStringify(this.options ?? {}) ?? '{}';
+    const stableCacheableContext =
+      stableJsonStringify(buildCacheableScriptContext(context)) ?? '{}';
 
     if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const containsSensitiveInput = containsSensitiveScriptInput([
+      prompt,
+      this.options ?? {},
+      buildCacheableScriptContext(context),
+    ]);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `exec:${this.scriptPath}:${fileHashes.join(':')}:${sha256(prompt)}:${sha256(
+          stableOptions,
+        )}:${sha256(stableCacheableContext)}`
+      : undefined;
+    if (containsSensitiveInput) {
+      logger.debug('ScriptCompletionProvider cache disabled for sensitive invocation input');
+    }
 
     let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
+    if (fileHashes.length > 0 && cacheEnabled && cacheKey) {
       const cache = await getCache();
       cachedResult = await cache.get(cacheKey);
 
       if (cachedResult) {
-        logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
+        logger.debug('Returning cached result for script', { scriptPath: this.scriptPath });
         return { ...JSON.parse(cachedResult as string), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
+    } else if (fileHashes.length === 0 && cacheEnabled) {
       logger.warn(
         `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
       );
@@ -92,37 +122,36 @@ export class ScriptCompletionProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve, reject) => {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
-      // Remove properties not useful in shell scripts and non-serializable objects
-      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-      delete context?.getCache;
-      delete context?.logger;
-      delete context?.filters; // NunjucksFilterMap contains functions
-      delete context?.originalProvider; // ApiProvider object with methods
-      const scriptArgs = scriptParts.concat([
-        prompt,
-        safeJsonStringify(this.options || {}) as string,
-        safeJsonStringify(context || {}) as string,
-      ]);
+      const scriptArgs = scriptParts.concat([prompt, serializedOptions, serializedContext]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 
       const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
         if (error) {
-          logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
+          logger.debug('Error running script', {
+            scriptPath: this.scriptPath,
+            errorMessage: error.message,
+          });
           reject(error);
           return;
         }
         const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
         const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
         if (errorOutput) {
-          logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
+          logger.debug('Script produced stderr output', {
+            scriptPath: this.scriptPath,
+            stderr: errorOutput,
+          });
           if (!standardOutput) {
             reject(new Error(errorOutput));
             return;
           }
         }
-        logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
+        logger.debug('Script produced stdout output', {
+          scriptPath: this.scriptPath,
+          stdout: standardOutput,
+        });
         const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
+        if (fileHashes.length > 0 && cacheEnabled && cacheKey) {
           const cache = await getCache();
           await cache.set(cacheKey, JSON.stringify(result));
         }

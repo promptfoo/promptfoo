@@ -87,7 +87,9 @@ providers:
 Both `main.go` and `evaluation/main.go` implement the same interface:
 
 ```go
-func CallApi(prompt string, options map[string]interface{}) (string, error)
+func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error)
 ```
 
-They share the same OpenAI client code but can be configured differently through the config file.
+They return a map containing the `output` key. The `ctx` argument contains test variables and
+metadata for the current eval. Both implementations share the same OpenAI client code but can be
+configured differently through the config file.
