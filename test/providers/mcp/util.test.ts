@@ -6,8 +6,11 @@ import {
   getAuthQueryParams,
   getMcpErrorMessage,
   getOAuthTokenWithExpiry,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  joinMcpErrors,
+  normalizeMcpContent,
 } from '../../../src/providers/mcp/util';
 
 import type {
@@ -65,6 +68,86 @@ describe('getMcpErrorMessage', () => {
     expect(getMcpErrorMessage({ content: '', isError: true })).toBe(
       'Tool returned an error result',
     );
+  });
+});
+
+describe('joinMcpErrors', () => {
+  it('returns undefined when there are no errors', () => {
+    expect(joinMcpErrors([])).toBeUndefined();
+  });
+
+  it('returns a single error unchanged', () => {
+    expect(joinMcpErrors(['only failure'])).toBe('only failure');
+  });
+
+  it('joins multiple error messages with a separator', () => {
+    expect(joinMcpErrors(['first failed', 'second failed'])).toBe('first failed; second failed');
+  });
+});
+
+describe('getThrownMcpErrorMessage', () => {
+  it('uses a plain thrown object message when present', () => {
+    expect(getThrownMcpErrorMessage({ message: 'connection lost' })).toBe('connection lost');
+  });
+
+  it('serializes thrown objects without message text', () => {
+    expect(getThrownMcpErrorMessage({ code: 'ECONNRESET' })).toBe('{"code":"ECONNRESET"}');
+  });
+});
+
+describe('normalizeMcpContent', () => {
+  it('returns an empty string for nullish content', () => {
+    expect(normalizeMcpContent(null)).toBe('');
+    expect(normalizeMcpContent(undefined)).toBe('');
+  });
+
+  it('passes strings through unchanged', () => {
+    expect(normalizeMcpContent('plain text')).toBe('plain text');
+  });
+
+  it('decodes Buffer content', () => {
+    expect(normalizeMcpContent(Buffer.from('buffered'))).toBe('buffered');
+  });
+
+  it('joins text content blocks', () => {
+    expect(
+      normalizeMcpContent([
+        { type: 'text', text: 'line one' },
+        { type: 'text', text: 'line two' },
+      ]),
+    ).toBe('line one\nline two');
+  });
+
+  it('serializes json and data blocks', () => {
+    expect(normalizeMcpContent([{ type: 'json', json: { a: 1 } }])).toBe('{"a":1}');
+    expect(normalizeMcpContent([{ type: 'image', data: 'abc' }])).toBe('"abc"');
+  });
+
+  it('serializes unknown block shapes as JSON', () => {
+    expect(normalizeMcpContent([{ type: 'mystery', foo: 'bar' }])).toBe(
+      '{"type":"mystery","foo":"bar"}',
+    );
+  });
+
+  it('serializes non-array objects as JSON', () => {
+    expect(normalizeMcpContent({ answer: 42 })).toBe('{"answer":42}');
+  });
+
+  it('serializes BigInt values without throwing', () => {
+    expect(normalizeMcpContent({ count: 42n })).toBe('{"count":"42"}');
+  });
+
+  it('stringifies primitive and nullish array elements', () => {
+    expect(normalizeMcpContent(['raw', 42, null, undefined])).toBe('raw\n42\nnull\nundefined');
+  });
+
+  it('degrades gracefully on circular content instead of throwing', () => {
+    const circular: any = { a: 1 };
+    circular.self = circular;
+    expect(() => normalizeMcpContent([{ type: 'json', json: circular }])).not.toThrow();
+    const result = normalizeMcpContent(circular);
+    expect(typeof result).toBe('string');
+    expect(result).not.toContain('[object Object]');
   });
 });
 

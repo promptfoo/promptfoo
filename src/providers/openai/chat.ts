@@ -21,7 +21,14 @@ import {
 } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getMcpErrorMessage,
+  getThrownMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+} from '../mcp/util';
 import {
   getRequestTimeoutMs,
   parseChatPrompt,
@@ -644,7 +651,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : message.tool_calls;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
+        const mcpErrors: string[] = [];
         let hasSuccessfulCallback = false;
+        let regularCallbackFailed = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
 
@@ -659,51 +668,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
                 if (isMcpErrorResult(mcpResult)) {
-                  results.push(
-                    `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`,
-                  );
+                  const message = formatMcpToolError(functionName, getMcpErrorMessage(mcpResult));
+                  results.push(message);
+                  mcpErrors.push(message);
                 } else {
-                  // Normalize MCP content to a readable string
-                  const normalizeContent = (content: any): string => {
-                    if (content == null) {
-                      return '';
-                    }
-                    if (typeof content === 'string') {
-                      return content;
-                    }
-                    if (Array.isArray(content)) {
-                      return content
-                        .map((part) => {
-                          if (typeof part === 'string') {
-                            return part;
-                          }
-                          if (part && typeof part === 'object') {
-                            if ('text' in part && (part as any).text != null) {
-                              return String((part as any).text);
-                            }
-                            if ('json' in part) {
-                              return JSON.stringify((part as any).json);
-                            }
-                            if ('data' in part) {
-                              return JSON.stringify((part as any).data);
-                            }
-                            return JSON.stringify(part);
-                          }
-                          return String(part);
-                        })
-                        .join('\n');
-                    }
-                    return JSON.stringify(content);
-                  };
-
-                  const content = normalizeContent(mcpResult?.content);
-                  results.push(`MCP Tool Result (${functionName}): ${content}`);
+                  results.push(formatMcpToolResult(functionName, mcpResult.content));
                 }
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
-                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                results.push(`MCP Tool Error (${functionName}): ${error}`);
+                const errorMessage = getThrownMcpErrorMessage(error);
+                logger.debug(`MCP tool execution failed for ${functionName}: ${errorMessage}`);
+                const message = formatMcpToolError(functionName, errorMessage);
+                results.push(message);
+                mcpErrors.push(message);
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               }
@@ -726,13 +704,22 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
               );
               hasSuccessfulCallback = false;
+              regularCallbackFailed = true;
               break;
             }
           }
         }
-        if (hasSuccessfulCallback && results.length > 0) {
+        // Surface results when a callback succeeded, or when an MCP tool
+        // errored — even if a later regular callback then threw and broke
+        // the loop, the MCP failure must still reach ProviderResponse.error.
+        if ((hasSuccessfulCallback || mcpErrors.length > 0) && results.length > 0) {
+          const mcpError = joinMcpErrors(mcpErrors);
           return {
-            output: results.join('\n'),
+            // Preserve the established raw-tool-call fallback when an
+            // ordinary callback fails, while still surfacing an earlier MCP
+            // error through ProviderResponse.error.
+            output: regularCallbackFailed ? output : results.join('\n'),
+            ...(mcpError ? { error: mcpError } : {}),
             tokenUsage: getTokenUsage(data, cached),
             cached,
             latencyMs,

@@ -93,7 +93,10 @@ describe('ResponsesProcessor', () => {
     });
 
     it('should process function calls', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function executed successfully');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Function executed successfully',
+        mcpErrors: [],
+      });
 
       const mockData = {
         output: [
@@ -114,6 +117,51 @@ describe('ResponsesProcessor', () => {
         mockData.output[0],
         undefined,
       );
+    });
+
+    it('surfaces MCP errors from a function_call item on ProviderResponse.error', async () => {
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'MCP Tool Error (read_file): denied',
+        mcpErrors: ['MCP Tool Error (read_file): denied'],
+      });
+
+      const mockData = {
+        output: [
+          {
+            type: 'function_call',
+            name: 'read_file',
+            arguments: '{"path": "x"}',
+            status: 'completed',
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 8 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.error).toBe('MCP Tool Error (read_file): denied');
+    });
+
+    it('surfaces MCP errors from a function_call inside a message on ProviderResponse.error', async () => {
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'MCP Tool Error (read_file): denied',
+        mcpErrors: ['MCP Tool Error (read_file): denied'],
+      });
+
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'function_call', name: 'read_file', arguments: '{}' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 8 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.error).toBe('MCP Tool Error (read_file): denied');
     });
 
     it('should handle empty function arguments correctly', async () => {
@@ -245,6 +293,47 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toContain('MCP Tools from test_server');
       expect(result.output).toContain('MCP Tool Result (test_tool): Tool result');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('surfaces a hosted MCP tool call error on ProviderResponse.error', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'mcp_call',
+            name: 'read_file',
+            server_label: 'test_server',
+            error: 'Path traversal not allowed',
+            status: 'failed',
+          },
+        ],
+        usage: { input_tokens: 8, output_tokens: 6 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.output).toContain('MCP Tool Error (read_file): Path traversal not allowed');
+      expect(result.error).toBe('MCP Tool Error (read_file): Path traversal not allowed');
+    });
+
+    it('surfaces a failed-status hosted MCP call even when error is null', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'mcp_call',
+            name: 'read_file',
+            server_label: 'test_server',
+            error: null,
+            output: null,
+            status: 'failed',
+          },
+        ],
+        usage: { input_tokens: 8, output_tokens: 6 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.error).toBe('MCP Tool Error (read_file): tool call failed');
     });
 
     it('should handle refusals correctly', async () => {
@@ -277,7 +366,10 @@ describe('ResponsesProcessor', () => {
     });
 
     it('should handle mixed response types', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function result');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Function result',
+        mcpErrors: [],
+      });
 
       const mockData = {
         output: [

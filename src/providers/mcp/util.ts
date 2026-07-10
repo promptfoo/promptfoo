@@ -38,7 +38,118 @@ export function isMcpErrorResult(result: MCPToolResult): boolean {
  * to a generic message for tools that signal `isError` without any detail.
  */
 export function getMcpErrorMessage(result: MCPToolResult): string {
-  return result.error || result.content || 'Tool returned an error result';
+  const message = (result.error || result.content || '').trim();
+  return message || 'Tool returned an error result';
+}
+
+/**
+ * Resolve a readable message from a value thrown while executing an MCP tool.
+ * MCP clients can throw plain objects, so `String(error)` is not enough here.
+ */
+export function getThrownMcpErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  return normalizeMcpContent(error) || String(error);
+}
+
+/**
+ * Join MCP tool error messages into a single `ProviderResponse.error` string,
+ * or `undefined` when there were no errors.
+ */
+export function joinMcpErrors(errors: string[]): string | undefined {
+  return errors.length > 0 ? errors.join('; ') : undefined;
+}
+
+/** Format an MCP tool failure into the shared `MCP Tool Error (...)` string. */
+export function formatMcpToolError(name: string, message: string): string {
+  return `MCP Tool Error (${name}): ${message}`;
+}
+
+/**
+ * Format a successful MCP tool result into the shared `MCP Tool Result (...)`
+ * string, normalizing `content` so non-string payloads never render as
+ * `[object Object]`.
+ */
+export function formatMcpToolResult(name: string, content: unknown): string {
+  return `MCP Tool Result (${name}): ${normalizeMcpContent(content)}`;
+}
+
+function stringifyMcpContent(value: unknown): string {
+  const ancestors: unknown[] = [];
+
+  try {
+    return (
+      JSON.stringify(value, function (_key, nestedValue) {
+        if (typeof nestedValue === 'bigint') {
+          return nestedValue.toString();
+        }
+        if (typeof nestedValue === 'object' && nestedValue !== null) {
+          while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+            ancestors.pop();
+          }
+          if (ancestors.includes(nestedValue)) {
+            return '[Circular]';
+          }
+          ancestors.push(nestedValue);
+        }
+        return nestedValue;
+      }) ?? String(value)
+    );
+  } catch {
+    return typeof value === 'object'
+      ? '{"error":"Unable to serialize MCP content"}'
+      : String(value);
+  }
+}
+
+/**
+ * Normalize MCP tool content into a readable string. MCP servers return content
+ * as an array of typed blocks (`{ type: 'text', text }`, etc.); this joins the
+ * human-readable parts so consumers, assertions, and transforms see plain text
+ * rather than a JSON-encoded block array.
+ */
+export function normalizeMcpContent(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Buffer.isBuffer(content)) {
+    return content.toString();
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return stringifyMcpContent((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return stringifyMcpContent((part as { data: unknown }).data);
+          }
+          return stringifyMcpContent(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return stringifyMcpContent(content);
 }
 
 /**
