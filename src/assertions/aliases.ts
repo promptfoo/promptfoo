@@ -1,11 +1,11 @@
-import { AssertionAliasesSchema, isReservedAssertionAliasLabel } from '../types/index';
-
-import type {
-  Assertion,
-  AssertionAlias,
-  AssertionOrSet,
-  AssertionSet,
-  TestCase,
+import {
+  type Assertion,
+  type AssertionAlias,
+  AssertionAliasesSchema,
+  type AssertionOrSet,
+  type AssertionSet,
+  isReservedAssertionAliasLabel,
+  type TestCase,
 } from '../types/index';
 
 type ResolvedAssertionAlias = {

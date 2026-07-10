@@ -228,9 +228,12 @@ async function createRuntimeTestSuite(
     testSuiteConfig.defaultTest.startsWith('file://')
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
-  const scenarios = testSuiteConfig.scenarios
-    ? ((await maybeLoadFromExternalFile(testSuiteConfig.scenarios)) as Scenario[]).flat()
+  const rawScenarios = testSuiteConfig.scenarios
+    ? await maybeLoadFromExternalFile(testSuiteConfig.scenarios)
     : undefined;
+  const scenarios = Array.isArray(rawScenarios)
+    ? (rawScenarios as Scenario[]).flat()
+    : (rawScenarios as Scenario[] | undefined);
 
   return {
     ...testSuiteConfig,
