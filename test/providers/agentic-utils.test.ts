@@ -43,6 +43,7 @@ describe('agentic-utils', () => {
       'openai:codex-sdk',
       'openai:codex-sdk:gpt-5.5',
       'openai:codex-app-server:gpt-5.5',
+      'openai:codex-plugin',
       'openai:codex-desktop',
       'anthropic:claude-agent-sdk',
       'anthropic:claude-code:sonnet',

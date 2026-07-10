@@ -7,6 +7,7 @@ import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { HttpProvider } from '../src/providers/http';
 import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
+import { OpenAICodexPluginProvider } from '../src/providers/openai/codex-plugin';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { OpenAiRealtimeProvider } from '../src/providers/openai/realtime';
@@ -545,6 +546,20 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
     expect(provider.id()).toBe('openai:codex-sdk:gpt-5.5-pro');
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.5-pro');
+  });
+
+  it('should load OpenAI Codex plugin provider with model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex-plugin:gpt-5.5', {
+      options: {
+        config: {
+          plugin: { path: '/tmp/plugin' },
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAICodexPluginProvider);
+    expect(provider.id()).toBe('openai:codex-plugin:gpt-5.5');
+    expect((provider as OpenAICodexPluginProvider).config.model).toBe('gpt-5.5');
   });
 
   it('should load OpenAI Codex provider with model from config when ID has no model', async () => {
