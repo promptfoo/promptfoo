@@ -2150,7 +2150,7 @@ providers:
           server_url: https://mcp.deepwiki.com/mcp
           require_approval:
             never:
-              tool_names: ["ask_question", "read_wiki_structure"]
+              tool_names: ['ask_question', 'read_wiki_structure']
 ```
 
 #### Complete MCP Example

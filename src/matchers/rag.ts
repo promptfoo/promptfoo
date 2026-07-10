@@ -411,14 +411,18 @@ export async function matchesContextFaithfulness(
       verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
       const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
       if (parsedVerdicts.length > 0) {
-        score =
-          1 - parsedVerdicts.filter((answer) => !answer.includes('yes')).length / statements.length;
+        const unsupportedVerdicts = parsedVerdicts.filter(
+          (answer) => !answer.includes('yes'),
+        ).length;
+        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
       }
     } else {
       const noVerdictCount = verdicts.split('verdict: no').length - 1;
       const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
       if (noVerdictCount + yesVerdictCount > 0) {
-        score = 1 - noVerdictCount / statements.length;
+        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
       }
     }
   }

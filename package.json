@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.17",
+  "version": "0.121.18",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -209,7 +209,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.108.0",
+    "webpack": "5.108.1",
     "dompurify": "3.4.11",
     "monaco-editor": {
       ".": "0.55.1",
@@ -217,7 +217,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.193",
+    "@anthropic-ai/claude-agent-sdk": "0.3.195",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -276,7 +276,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.193",
+    "@anthropic-ai/claude-agent-sdk": "0.3.195",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -370,7 +370,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "^5.0.0",
+    "js-yaml": "5.2.0",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
