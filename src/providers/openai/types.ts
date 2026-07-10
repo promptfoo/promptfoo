@@ -120,12 +120,6 @@ export interface OpenAiCodeInterpreterTool {
   };
 }
 
-export type OpenAiResponsesTool =
-  | OpenAiTool
-  | OpenAiMCPTool
-  | OpenAiWebSearchTool
-  | OpenAiCodeInterpreterTool;
-
 export type OpenAiPromptCacheRetention = 'in_memory' | '24h' | null;
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
@@ -285,22 +279,4 @@ export interface OpenAiVideoJob {
     message: string;
     code?: string;
   };
-}
-
-/**
- * Request body for creating a new video
- */
-export interface OpenAiVideoCreateRequest {
-  model: string;
-  prompt: string;
-  size?: string;
-  seconds?: OpenAiVideoDuration;
-  input_reference?: string;
-}
-
-/**
- * Request body for remixing an existing video
- */
-export interface OpenAiVideoRemixRequest {
-  prompt: string;
 }

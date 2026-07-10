@@ -312,12 +312,3 @@ export interface AzureVideoJob {
   inpaint_items: AzureVideoInpaintItem[] | null;
   failure_reason: string | null;
 }
-
-/**
- * Azure video provider options
- */
-export interface AzureVideoProviderOptions {
-  config?: AzureVideoOptions;
-  id?: string;
-  env?: EnvOverrides;
-}

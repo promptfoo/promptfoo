@@ -8,6 +8,7 @@
         "src/redteam/plugins/policy/evals/**/*.{js,cjs,mjs,ts}",
         "src/logger.browser.ts",
         "src/util/createHash.browser.ts",
+        "src/util/agent/targetLinkFs.ts",
         "test/__fixtures__/**/*.{js,cjs,mjs,ts}",
         "test/fixtures/**/*.{js,cjs,mjs,ts}",
         "test/smoke/fixtures/**/*.{js,cjs,mjs,ts}",
@@ -23,19 +24,25 @@
       "ignoreFiles": [
         "src/providers/audio/**/*.{js,ts,tsx}",
         "src/redteam/audio/**/*.{js,ts,tsx}",
-        "src/redteam/strategies/multilingual.ts",
-        "src/util/agent/targetLinkFs.ts"
+        "src/redteam/strategies/multilingual.ts"
       ],
-      "ignoreDependencies": ["@actions/*", "@octokit/rest", "@opencode-ai/sdk", "@types/pdf-parse"],
+      "ignoreDependencies": [
+        "@actions/*",
+        "@octokit/rest",
+        "@types/pdf-parse",
+        "block-no-verify",
+        "gcp-metadata",
+        "langium"
+      ],
       "paths": {
         "@promptfoo/*": ["./src/*"]
       }
     },
     "src/app": {
-      "entry": ["index.html", "src/tests/browser-mode/browserApis.browser.ts"],
+      "entry": ["index.html"],
       "project": ["src/**/*.{js,ts,tsx}"],
       "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
-      "ignoreDependencies": ["@promptfoo/*", "@kurkle/color", "tailwindcss"],
+      "ignoreDependencies": ["@kurkle/color", "lightningcss", "tailwindcss"],
       "paths": {
         "@app/*": ["./src/*"],
         "@promptfoo/*": ["../../*"]
@@ -59,24 +66,34 @@
         "@docusaurus/plugin-content-blog",
         "@swc/core",
         "@swc/jest",
-        "canvas-confetti",
-        "framer-motion",
-        "lucide-react"
+        "dompurify",
+        "langium",
+        "webpack"
       ]
     },
     "code-scan-action": {
-      "entry": ["src/main.ts"],
       "project": ["src/**/*.{js,ts,tsx}"]
     }
   },
   "ignoreBinaries": [
     "act",
-    "check-dependency-version-consistency",
     "dist/src/entrypoint.js",
     "ffmpeg",
     "gh",
-    "lockfile-lint",
-    "madge"
+    "go",
+    "modelaudit",
+    "python3",
+    "ruby",
+    "security"
   ],
-  "ignoreExportsUsedInFile": true
+  "ignoreExportsUsedInFile": true,
+  "ignoreIssues": {
+    "src/contracts/api/user.ts": ["duplicates"],
+    "src/redteam/providers/custom/index.ts": ["duplicates"],
+    "src/redteam/providers/hydra/index.ts": ["duplicates"],
+    "src/types/api/**": ["duplicates", "types"],
+    "src/types/modelAudit.ts": ["types"],
+    "src/types/targetLink.ts": ["types"],
+    "src/util/sanitizer.ts": ["duplicates"]
+  }
 }

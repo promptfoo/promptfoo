@@ -33,15 +33,6 @@ export type CodeScanOutputFormat = (typeof CodeScanOutputFormat)[keyof typeof Co
 
 export const CodeScanOutputFormatSchema = z.enum(['text', 'json', 'sarif']);
 
-// ============================================================================
-// Severity Utility Types
-// ============================================================================
-
-export interface SeverityDisplay {
-  emoji: string;
-  rank: number;
-}
-
 export interface SeverityCounts {
   total: number;
   critical: number;
@@ -92,18 +83,6 @@ export function getSeverityRank(severity: CodeScanSeverity): number {
     case CodeScanSeverity.NONE:
       return -1;
   }
-}
-
-/**
- * Get display information for a severity level (emoji + rank)
- * @param severity - The severity level
- * @returns Object with emoji and rank properties
- */
-export function getSeverityDisplay(severity: CodeScanSeverity): SeverityDisplay {
-  return {
-    emoji: getSeverityEmoji(severity),
-    rank: getSeverityRank(severity),
-  };
 }
 
 /**
@@ -251,15 +230,6 @@ export const CommentSchema = z.object({
   aiAgentPrompt: z.string().nullable().optional(),
 });
 
-export const PhaseResultsSchema = z.object({
-  inventory: z.string(),
-  tracing: z.string(),
-  analysis: z.string(),
-  filtering: z.string(),
-  fixes: z.string(),
-  comments: z.string(),
-});
-
 export const ScanResponseSchema = z.object({
   success: z.boolean(),
   review: z.string().optional(),
@@ -270,12 +240,6 @@ export const ScanResponseSchema = z.object({
   skipReason: z.string().optional(), // Set when the scan was intentionally skipped (e.g. fork PR awaiting maintainer approval)
 });
 
-// ============================================================================
-// TypeScript Types (inferred from schemas)
-// ============================================================================
-
-export type LineRange = z.infer<typeof LineRangeSchema>;
-
 // Scan Request/Response
 export type FileRecord = z.infer<typeof FileRecordSchema>;
 export type GitMetadata = z.infer<typeof GitMetadataSchema>;
@@ -283,7 +247,6 @@ export type ScanConfig = z.infer<typeof ScanConfigSchema>;
 export type PullRequestContext = z.infer<typeof PullRequestContextSchema>;
 export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 export type Comment = z.infer<typeof CommentSchema>;
-export type PhaseResults = z.infer<typeof PhaseResultsSchema>;
 export type ScanResponse = z.infer<typeof ScanResponseSchema>;
 
 /**
