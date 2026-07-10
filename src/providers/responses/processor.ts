@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { formatOpenAiError } from '../openai/util';
+import { formatOpenAiError, getOpenAICacheWriteInputTokens } from '../openai/util';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
@@ -43,12 +43,9 @@ function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] 
   const outputTokenDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
   const cachedInputTokens =
     usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
-  const cacheWriteInputTokens =
-    usage.prompt_tokens_details?.cache_write_tokens ??
-    usage.input_tokens_details?.cache_write_tokens ??
-    0;
+  const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
 
-  if (!outputTokenDetails && cachedInputTokens <= 0 && cacheWriteInputTokens <= 0) {
+  if (!outputTokenDetails && cachedInputTokens <= 0 && cacheWriteInputTokens === undefined) {
     return undefined;
   }
 
@@ -61,7 +58,9 @@ function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] 
         }
       : {}),
     ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-    ...(cacheWriteInputTokens > 0 ? { cacheCreationInputTokens: cacheWriteInputTokens } : {}),
+    ...(cacheWriteInputTokens === undefined
+      ? {}
+      : { cacheCreationInputTokens: cacheWriteInputTokens }),
   };
 }
 

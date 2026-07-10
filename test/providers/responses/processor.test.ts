@@ -65,9 +65,9 @@ describe('ResponsesProcessor', () => {
           input_tokens: 11,
           output_tokens: 7,
           total_tokens: 21,
+          cache_write_input_tokens: 2,
           input_tokens_details: {
             cached_tokens: 3,
-            cache_write_tokens: 2,
           },
           output_tokens_details: {
             reasoning_tokens: 4,

@@ -540,6 +540,10 @@ providers:
 
 OpenAI [launched GPT-5.6 for general availability](https://openai.com/index/gpt-5-6/) with three tiers. The `gpt-5.6` alias routes to `gpt-5.6-sol`; use `gpt-5.6-terra` for balanced cost and performance or `gpt-5.6-luna` for efficient, high-volume workloads. All three tiers support Chat Completions, Responses, and Batch.
 
+For compatibility with preview-era configs, bare `openai:gpt-5.6-sol`, `-terra`, and `-luna`
+IDs continue to use Responses. The new bare `openai:gpt-5.6` alias uses Chat Completions. Prefer
+the explicit `openai:chat:` or `openai:responses:` prefix when endpoint selection matters.
+
 | Model           | Tier                    | Input      | Cached input | Output      |
 | --------------- | ----------------------- | ---------- | ------------ | ----------- |
 | `gpt-5.6-sol`   | Flagship                | $5.00 / 1M | $0.50 / 1M   | $30.00 / 1M |

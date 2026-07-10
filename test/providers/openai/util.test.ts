@@ -140,6 +140,27 @@ describe('getTokenUsage', () => {
       },
     });
   });
+
+  it.each([
+    ['top-level positive', { cache_write_input_tokens: 4 }, 4],
+    ['nested explicit zero', { prompt_tokens_details: { cache_write_tokens: 0 } }, 0],
+  ])('should preserve %s cache-write usage', (_name, usageDetails, expected) => {
+    const result = getTokenUsage(
+      {
+        usage: {
+          total_tokens: 100,
+          prompt_tokens: 40,
+          completion_tokens: 60,
+          ...usageDetails,
+        },
+      },
+      false,
+    );
+
+    expect(result.completionDetails).toEqual({
+      cacheCreationInputTokens: expected,
+    });
+  });
 });
 
 describe('calculateOpenAICost', () => {

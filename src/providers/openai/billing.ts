@@ -1,4 +1,4 @@
-import { OPENAI_BILLING_MODELS } from './util';
+import { getOpenAICacheWriteInputTokens, OPENAI_BILLING_MODELS } from './util';
 
 import type { ProviderConfig } from '../shared';
 
@@ -466,18 +466,6 @@ function getOpenAIUsageParts(rawUsage: any): OpenAIUsageParts {
   };
 }
 
-function getReportedCacheWriteInputTokens({
-  usage,
-  inputDetails,
-}: OpenAIUsageParts): number | undefined {
-  for (const value of [inputDetails.cache_write_tokens, usage.cache_write_input_tokens]) {
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
 export type OpenAITokenUsageSummary = {
   prompt?: number;
   completion?: number;
@@ -665,7 +653,7 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
   return {
     totalInputTokens,
     cachedInputTokens: getNumericValue(inputDetails.cached_tokens ?? usage.cached_input_tokens),
-    cacheWriteInputTokens: getReportedCacheWriteInputTokens(usageParts) ?? 0,
+    cacheWriteInputTokens: getOpenAICacheWriteInputTokens(usage) ?? 0,
     cachedTextInputTokens: getNumericValue(cachedInputDetails.text_tokens),
     cachedAudioInputTokens: getNumericValue(cachedInputDetails.audio_tokens),
     cachedImageInputTokens: getNumericValue(cachedInputDetails.image_tokens),
@@ -827,7 +815,7 @@ export function calculateOpenAIUsageCost(
     config.inputCost ?? config.cost ?? rates.text.cacheWriteInput ?? textInputCost;
   if (
     cacheWriteInputCost !== textInputCost &&
-    getReportedCacheWriteInputTokens(usageParts) === undefined
+    getOpenAICacheWriteInputTokens(usageParts.usage) === undefined
   ) {
     return undefined;
   }

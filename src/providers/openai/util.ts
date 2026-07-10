@@ -766,16 +766,27 @@ export function failApiCall(err: any) {
   };
 }
 
+export function getOpenAICacheWriteInputTokens(usage: any): number | undefined {
+  for (const value of [
+    usage?.prompt_tokens_details?.cache_write_tokens,
+    usage?.input_tokens_details?.cache_write_tokens,
+    usage?.input_token_details?.cache_write_tokens,
+    usage?.cache_write_input_tokens,
+  ]) {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] | undefined {
   const cachedInputTokens =
     usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
-  const cacheWriteInputTokens =
-    usage.prompt_tokens_details?.cache_write_tokens ??
-    usage.input_tokens_details?.cache_write_tokens ??
-    0;
+  const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
   const completionDetails = usage.completion_tokens_details;
 
-  if (!completionDetails && cachedInputTokens <= 0 && cacheWriteInputTokens <= 0) {
+  if (!completionDetails && cachedInputTokens <= 0 && cacheWriteInputTokens === undefined) {
     return undefined;
   }
 
@@ -788,7 +799,9 @@ function getCompletionTokenDetails(usage: any): TokenUsage['completionDetails'] 
         }
       : {}),
     ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-    ...(cacheWriteInputTokens > 0 ? { cacheCreationInputTokens: cacheWriteInputTokens } : {}),
+    ...(cacheWriteInputTokens === undefined
+      ? {}
+      : { cacheCreationInputTokens: cacheWriteInputTokens }),
   };
 }
 
