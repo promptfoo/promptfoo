@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -15,9 +17,44 @@ import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
+import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
+
 vi.mock('../../src/envars');
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
+
+const execFileAsync = promisify(execFile);
+const WAL_PROBE_RESULT_PREFIX = 'PROMPTFOO_WAL_PROBE_RESULT=';
+
+async function runWalCheckpointProbe(
+  tempConfigDir: string,
+  contention: 'none' | 'reader' | 'writer',
+): Promise<WalCheckpointProbeResult> {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', 'tsx', 'test/database/fixtures/walCheckpointProbe.ts'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        IS_TESTING: 'false',
+        LOG_LEVEL: 'error',
+        PROMPTFOO_CONFIG_DIR: tempConfigDir,
+        PROMPTFOO_DISABLE_WAL_MODE: 'false',
+        PROMPTFOO_WAL_HOLD_READER: String(contention === 'reader'),
+        PROMPTFOO_WAL_HOLD_WRITER: String(contention === 'writer'),
+      },
+    },
+  );
+  const resultLine = stdout.split(/\r?\n/).find((line) => line.startsWith(WAL_PROBE_RESULT_PREFIX));
+
+  if (!resultLine) {
+    throw new Error(`WAL checkpoint probe did not return a result: ${stdout}`);
+  }
+
+  return JSON.parse(resultLine.slice(WAL_PROBE_RESULT_PREFIX.length));
+}
 
 describe('database', () => {
   let tempConfigDir: string;
@@ -227,6 +264,64 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
+    it('logs a successful file-backed WAL checkpoint', async () => {
+      const result = await runWalCheckpointProbe(tempConfigDir, 'none');
+
+      expect(result.logs).toContainEqual(
+        expect.objectContaining({
+          context: expect.objectContaining({ busy: 0 }),
+          level: 'debug',
+          message: 'Successfully checkpointed WAL file before closing',
+        }),
+      );
+      expect(
+        result.logs.some(
+          (entry) => entry.message === 'WAL checkpoint incomplete before closing database',
+        ),
+      ).toBe(false);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.rowCount).toBe(1);
+    });
+
+    it('warns when a file-backed WAL checkpoint is incomplete', async () => {
+      const result = await runWalCheckpointProbe(tempConfigDir, 'reader');
+
+      expect(result.logs).toContainEqual(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            busy: 1,
+            log: expect.any(Number),
+            checkpointed: expect.any(Number),
+          }),
+          level: 'warn',
+          message: 'WAL checkpoint incomplete before closing database',
+        }),
+      );
+      expect(
+        result.logs.some(
+          (entry) => entry.message === 'Successfully checkpointed WAL file before closing',
+        ),
+      ).toBe(false);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.rowCount).toBe(2);
+      // The checkpoint uses a bounded 1500ms busy timeout, not the default 5000ms.
+      // Assert only a regression to that stall (generous headroom for slow/loaded
+      // CI, where close overhead on top of the 1500ms wait varies widely).
+      expect(result.elapsedMs).toBeLessThan(4_500);
+    });
+
+    it('preserves acknowledged writes when a competing writer briefly holds the lock', async () => {
+      const result = await runWalCheckpointProbe(tempConfigDir, 'writer');
+
+      // A checkpoint racing a short-lived writer must not discard the insert that
+      // already reported success before close (regression for the zeroed busy
+      // timeout, which made the checkpoint fail instantly and lose the row).
+      expect(result.insertAcknowledged).toBe(true);
+      expect(result.rowCount).toBe(2);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.elapsedMs).toBeLessThan(4_500);
+    });
+
     it('should close database connection and reset instances', async () => {
       const _db = await getDb();
       expect(isDbOpen()).toBe(true);

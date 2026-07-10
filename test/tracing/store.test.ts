@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { mockGlobal } from '../util/utils';
 
 const mockRandomUUID = vi.fn(() => 'test-uuid');
@@ -50,7 +51,7 @@ describe('TraceStore', () => {
     };
     mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
-      run: vi.fn().mockResolvedValue(undefined),
+      run: vi.fn().mockResolvedValue({ rowsAffected: 0 }),
     };
 
     mockDb = {
@@ -692,6 +693,9 @@ describe('TraceStore', () => {
   describe('deleteOldTraces', () => {
     it('should delete dependent spans before traces older than retention period', async () => {
       const retentionDays = 30;
+      mockDeleteChain.run
+        .mockResolvedValueOnce({ rowsAffected: 3 })
+        .mockResolvedValueOnce({ rowsAffected: 2 });
 
       await traceStore.deleteOldTraces(retentionDays);
 
@@ -699,6 +703,14 @@ describe('TraceStore', () => {
       expect(mockDb.delete).toHaveBeenCalledTimes(2);
       expect(mockDeleteChain.where).toHaveBeenCalledTimes(2);
       expect(mockDeleteChain.run).toHaveBeenCalledTimes(2);
+      expect(logger.debug).toHaveBeenCalledWith(
+        '[TraceStore] Pruned traces older than retention period',
+        {
+          retentionDays: 30,
+          tracesDeleted: 2,
+          spansDeleted: 3,
+        },
+      );
     });
 
     it('should handle errors when deleting old traces', async () => {

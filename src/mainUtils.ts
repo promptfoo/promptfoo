@@ -248,15 +248,9 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  logger.debug('Closing logger file transports');
+  const dbClosePromise = closeDbIfOpen();
+  await withTimeout(dbClosePromise, 'closeDbIfOpen()');
 
-  try {
-    await withTimeout(closeLogger(), 'closeLogger()');
-  } catch {
-    // Can't log since logger might be closed.
-  }
-
-  await closeDbIfOpen();
   clearAgentCache();
 
   try {
@@ -264,6 +258,17 @@ export const shutdownGracefully = async (): Promise<void> => {
     await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
   } catch {
     // Silently handle dispatcher destroy errors.
+  }
+
+  // Preserve the original shutdown safety window for in-flight database work. If the close is
+  // still pending, the force-exit watchdog remains the hard upper bound.
+  await dbClosePromise;
+
+  logger.debug('Closing logger file transports');
+  try {
+    await withTimeout(closeLogger(), 'closeLogger()');
+  } catch {
+    // Can't log since logger might be closed.
   }
 
   clearTimeout(forceExitTimeout);
