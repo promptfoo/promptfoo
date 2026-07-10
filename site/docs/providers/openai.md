@@ -121,8 +121,8 @@ Supported parameters include:
 | `passthrough`            | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings.                                                           |
 | `presence_penalty`       | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                                                                               |
 | `prompt_cache_key`       | Stable key for repeated prompts with shared prefixes. Use it consistently to improve prompt-cache hit rates. Supported by Chat Completions and Responses.                                                                                                                                                                                                   |
-| `prompt_cache_options`   | GPT-5.6 prompt-cache controls. Set `mode` to `implicit` or `explicit`; explicit mode can use a `30m` TTL and explicit cache breakpoints in supported request content.                                                                                                                                                                                       |
-| `prompt_cache_retention` | Prompt-cache retention policy. Use `24h` for extended retention or `in_memory` for default in-memory retention where supported. GPT-5.5, GPT-5.5 Pro, and future Responses models require extended retention, so `in_memory` will be rejected there.                                                                                                        |
+| `prompt_cache_options`   | GPT-5.6 prompt-cache controls. Set `mode` to `implicit` or `explicit`; the only supported TTL is `30m`, and explicit mode supports cache breakpoints in supported request content.                                                                                                                                                                          |
+| `prompt_cache_retention` | Prompt-cache retention policy. Use `24h` for extended retention or `in_memory` for default in-memory retention where supported. GPT-5.5 and GPT-5.5 Pro Responses require extended retention. GPT-5.6 and later deprecate this field in favor of `prompt_cache_options.ttl`.                                                                                |
 | `reasoning`              | Reasoning configuration object for reasoning-capable models. In practice, use this with the Responses API (`openai:responses:*`) for o-series and GPT-5 family models. `effort` supports `none`, `low`, `medium`, `high`, and model-specific values such as `minimal`, `xhigh`, or `max`, with optional `summary`, persisted `context`, and GPT-5.6 `mode`. |
 | `response_format`        | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                                                                                       |
 | `seed`                   | Seed used for deterministic output.                                                                                                                                                                                                                                                                                                                         |
@@ -552,7 +552,7 @@ the explicit `openai:chat:` or `openai:responses:` prefix when endpoint selectio
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
-Prompt-cache reads receive a 90% discount, and explicit cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
+Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -2461,9 +2461,9 @@ to `low`.
 ### Prompt Caching and Included Tool Results
 
 Use `prompt_cache_key` for stable repeated prefixes and `prompt_cache_retention: 24h`
-when you want extended prompt caching. GPT-5.5, GPT-5.5 Pro, and future Responses
-models require extended retention, so `prompt_cache_retention: in_memory` will fail for
-those models.
+when you want extended prompt caching on older models. GPT-5.5 and GPT-5.5 Pro Responses
+require extended retention, so `prompt_cache_retention: in_memory` will fail there.
+GPT-5.6 and later deprecate `prompt_cache_retention`; use `prompt_cache_options.ttl` instead.
 
 GPT-5.6 also supports `prompt_cache_options`. The `implicit` mode below keeps automatic
 breakpoint placement for ordinary prompts. When the API reports `cache_write_tokens`, Promptfoo

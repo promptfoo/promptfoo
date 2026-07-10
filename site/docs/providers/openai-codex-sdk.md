@@ -260,7 +260,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-GPT-5.6 is the current model family. Use `gpt-5.6` as the Sol alias, choose `gpt-5.6-sol` explicitly for frontier capability, `gpt-5.6-terra` for balanced cost and performance, or `gpt-5.6-luna` for efficient high-volume work:
+GPT-5.6 is the current model family. The Codex 0.144.0 catalog exposes the concrete tiers, not the direct OpenAI API's `gpt-5.6` Sol alias. Use `gpt-5.6-sol` for frontier capability, `gpt-5.6-terra` for balanced cost and performance, or `gpt-5.6-luna` for efficient high-volume work:
 
 ```yaml
 providers:
@@ -272,7 +272,7 @@ providers:
 
 Supported models include:
 
-- **GPT-5.6** - Current family (`gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`)
+- **GPT-5.6** - Current family (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`)
 - **GPT-5.5** - Previous frontier model for professional work (`gpt-5.5`)
 - **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
 - **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
