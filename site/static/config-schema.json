@@ -43,29 +43,32 @@
         "derivedMetrics": {
           "$ref": "#/definitions/__schema35"
         },
-        "extensions": {
+        "assertionAliases": {
           "$ref": "#/definitions/__schema36"
         },
-        "metadata": {
-          "$ref": "#/definitions/__schema37"
-        },
-        "redteam": {
+        "extensions": {
           "$ref": "#/definitions/__schema38"
         },
-        "writeLatestResults": {
+        "metadata": {
           "$ref": "#/definitions/__schema39"
         },
-        "tracing": {
+        "redteam": {
           "$ref": "#/definitions/__schema40"
         },
-        "evaluateOptions": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema41"
         },
-        "commandLineOptions": {
+        "tracing": {
+          "$ref": "#/definitions/__schema42"
+        },
+        "evaluateOptions": {
           "$ref": "#/definitions/__schema43"
         },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema45"
+        },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema46"
         }
       },
       "required": ["prompts"],
@@ -1507,6 +1510,30 @@
       }
     },
     "__schema36": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/__schema37"
+      }
+    },
+    "__schema37": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": ["javascript", "python", "ruby"]
+        },
+        "script": {
+          "type": "string"
+        }
+      },
+      "required": ["label", "type", "script"],
+      "additionalProperties": false
+    },
+    "__schema38": {
       "anyOf": [
         {
           "type": "array",
@@ -1519,14 +1546,14 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema39": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema38": {
+    "__schema40": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -3076,10 +3103,10 @@
         }
       }
     },
-    "__schema39": {
+    "__schema41": {
       "type": "boolean"
     },
-    "__schema40": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3182,7 +3209,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema41": {
+    "__schema43": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3225,15 +3252,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema44"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema44": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema45": {
       "type": "object",
       "properties": {
         "description": {
@@ -3361,7 +3388,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema44"
             }
           ]
         },
@@ -3435,7 +3462,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema46": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

@@ -89,6 +89,9 @@ class AssertionValueFunctionContext(TypedDict):
     # Configuration passed to the assertion
     config: Optional[Dict[str, Any]]
 
+    # Value passed at the call site of a named script alias
+    value: Optional[Union[str, float, Dict[str, Any]]]
+
     # The provider that generated the response
     provider: Optional[Any]  # ApiProvider type
 

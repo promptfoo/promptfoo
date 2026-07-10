@@ -87,6 +87,9 @@ A `context` object is available in the Ruby method. Here is its type definition:
   # Configuration passed to the assertion
   'config' => Hash | nil,
 
+  # Value passed at the call site of a named script alias
+  'value' => String | Numeric | Hash | nil,
+
   # The provider that generated the response
   'provider' => Object | nil,  # ApiProvider type
 

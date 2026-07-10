@@ -56,6 +56,26 @@ tests:
 | metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
 | contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
 
+## Named script aliases
+
+Use `assertionAliases` to give a reusable JavaScript, Python, or Ruby assertion file a label. Alias labels must be unique and cannot reuse a built-in assertion type. The `script` path is relative to the config file.
+
+```yaml
+assertionAliases:
+  - label: minimum-length
+    type: javascript
+    script: file://assertions/minimum-length.mjs:checkLength
+
+tests:
+  - assert:
+      - type: minimum-length
+        value: 20
+        config:
+          inclusive: true
+```
+
+The alias runs through the existing `javascript`, `python`, or `ruby` handler. At each call site, `value` is available to the script as `context.value`, and `config` remains available as `context.config`.
+
 ## Grouping assertions via Assertion Sets
 
 Assertions can be grouped together using an `assert-set`.

@@ -41,6 +41,7 @@ import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
+import { getResolvedAssertionAlias } from './aliases';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
@@ -152,7 +153,9 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionUsesTrace);
   }
 
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  return TRACE_AWARE_ASSERTION_TYPES.has(
+    getResolvedAssertionAlias(assertion)?.type ?? getAssertionBaseType(assertion),
+  );
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
@@ -430,6 +433,7 @@ export async function runAssertion({
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
+  const assertionAlias = getResolvedAssertionAlias(assertion);
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -452,6 +456,10 @@ export async function runAssertion({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
+  if (assertionAlias?.value !== undefined) {
+    context.value = assertionAlias.value;
+  }
+
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion)) {
     try {
@@ -472,7 +480,7 @@ export async function runAssertion({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
+  let renderedValue = assertionAlias?.script ?? assertion.value;
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
@@ -561,7 +569,7 @@ export async function runAssertion({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
+  const baseType = assertionAlias?.type ?? getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
@@ -621,11 +629,11 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
-    inverse: isAssertionInverse(assertion),
+    inverse: assertionAlias ? false : isAssertionInverse(assertion),
     latencyMs,
     logProbs,
     output,
