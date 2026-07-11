@@ -341,7 +341,7 @@ jobs:
         run: |
           npx promptfoo@latest redteam generate \
             --plugins harmful,pii,contracts \
-            --strategies jailbreak,prompt-injection
+            --strategies jailbreak,jailbreak-templates
           npx promptfoo@latest redteam run
 ```
 
@@ -460,6 +460,7 @@ gh pr comment --body "
 
 ## Caching Strategies
 
+<!-- prettier-ignore -->
 Optimize CI/CD performance with proper caching [[memory:3455374]]:
 
 ```yaml

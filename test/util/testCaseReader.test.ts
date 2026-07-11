@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
@@ -337,6 +337,55 @@ describe('readStandaloneTestsFile', () => {
     expect(result[2].description).toBe('Row #3');
   });
 
+  it('should throw a descriptive error for malformed JSONL pointing at the real file line', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"x":"a"}}
+{"vars":{"x":"b"} BROKEN}
+{"vars":{"x":"c"}}`,
+    );
+
+    // The raw JSON.parse SyntaxError says "line 1" (its view of the single line);
+    // the wrapper must report the offending file and its real line number (2).
+    await expect(readStandaloneTestsFile('bad.jsonl')).rejects.toThrow(
+      /Failed to parse JSONL test file .*bad\.jsonl on line 2:/,
+    );
+  });
+
+  it('should count blank lines when reporting the malformed JSONL line number', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"x":"a"}}
+
+{"vars":{"x":"b"} BROKEN}`,
+    );
+
+    // Line 2 is blank, so the broken row is file line 3 — must not be reported
+    // as 2 (its index among non-blank rows).
+    await expect(readStandaloneTestsFile('bad.jsonl')).rejects.toThrow(
+      /Failed to parse JSONL test file .*bad\.jsonl on line 3:/,
+    );
+  });
+
+  it('should throw a descriptive error for malformed JSONL loaded via glob', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"x":"a"}}
+not valid json`,
+    );
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat() as string[]);
+
+    await expect(readTests(['bad.jsonl'])).rejects.toThrow(
+      /Failed to parse JSONL test file .*bad\.jsonl on line 2:/,
+    );
+  });
+
+  it('should throw a descriptive error for a malformed JSON test file loaded via glob', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('{ "not": valid json }');
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat() as string[]);
+
+    await expect(readTests(['bad.json'])).rejects.toThrow(
+      /Failed to parse JSON test file .*bad\.json:/,
+    );
+  });
+
   it('should read YAML file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
       - var1: value1
@@ -413,6 +462,30 @@ describe('readStandaloneTestsFile', () => {
         vars: { review_id: 'review-002' },
       },
     ]);
+  });
+
+  it('should redact SAS tokens in malformed Azure Blob JSONL parse errors', async () => {
+    const blobUri = 'az://account/container/tests.jsonl?sp=r&sig=SECRETSIG';
+    vi.mocked(readAzureBlobText).mockResolvedValue('{"vars":{"x":"a"}}\n{"vars": BROKEN}');
+
+    const error = await readStandaloneTestsFile(blobUri).then(
+      () => {
+        throw new Error('expected readStandaloneTestsFile to reject');
+      },
+      (err) => err as Error,
+    );
+    expect(error.message).toContain(
+      'Failed to parse JSONL test file az://account/container/tests.jsonl?<redacted> on line 2:',
+    );
+    expect(error.message).not.toContain('SECRETSIG');
+  });
+
+  it('should throw a descriptive error for a malformed standalone JSON test file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('{"vars": {');
+
+    await expect(readStandaloneTestsFile('bad.json')).rejects.toThrow(
+      /Failed to parse JSON test file .*bad\.json:/,
+    );
   });
 
   it('should read CSV test sets from Azure Blob Storage URIs', async () => {

@@ -1,10 +1,7 @@
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';
-
-export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
 const CLOUD_HOSTNAMES = new Set([
   new URL(CLOUD_API_HOST).hostname,
@@ -22,6 +19,20 @@ function isPromptfooCloudHost(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+let hasWarnedAboutLegacyApiHost = false;
+
+function warnOnceAboutLegacyApiHost(): void {
+  if (hasWarnedAboutLegacyApiHost) {
+    return;
+  }
+  hasWarnedAboutLegacyApiHost = true;
+  logger.warn(
+    'Ignoring the API_HOST environment variable for Promptfoo Cloud routing. ' +
+      'To point at a self-hosted deployment, use PROMPTFOO_CLOUD_API_URL or ' +
+      '`promptfoo auth login --host <url>`.',
+  );
 }
 
 interface CloudUser {
@@ -125,10 +136,27 @@ export class CloudConfig {
    *
    * Trailing slashes are stripped so callers that append a path (e.g.
    * `${getApiHost()}/api/v1/...`) never produce a double slash. On-prem hosts
-   * entered via `promptfoo auth login --api-host https://host/` commonly include one.
+   * entered via `promptfoo auth login --host https://host/` commonly include one.
    */
   private resolveApiHost(): string {
-    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+    // The generic API_HOST env var is intentionally NOT consulted: the cloud
+    // origin decides where monkeyPatchFetch sends the saved bearer token, and
+    // env files routinely define API_HOST for the app under test. Self-hosted
+    // deployments must use `promptfoo auth login --api-host <url>` or
+    // PROMPTFOO_CLOUD_API_URL. process.env is read directly (not
+    // getEnvString) so an eval config's `env` block can never influence it.
+    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || CLOUD_API_HOST;
+    // monkeyPatchFetch resolves the host on every request, including evals that
+    // never touch Cloud, so only warn when a Cloud credential is actually in
+    // play — that's the only case where the legacy variable ever had an effect.
+    if (
+      !this.config.apiHost &&
+      !process.env.PROMPTFOO_CLOUD_API_URL &&
+      process.env.API_HOST &&
+      this.resolveApiKey()
+    ) {
+      warnOnceAboutLegacyApiHost();
+    }
     return host.replace(/\/+$/, '');
   }
 

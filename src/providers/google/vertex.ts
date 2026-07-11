@@ -13,6 +13,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
@@ -68,6 +69,47 @@ import type {
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
+
+// Vertex retains the Sonnet 4.5 1M preview and its >200K pricing tier. Native Anthropic and
+// Bedrock Sonnet 4.5 requests are capped at 200K, so only this provider opts into these rates.
+const VERTEX_CLAUDE_SONNET_4_5_MODELS = new Set([
+  'claude-sonnet-4-5',
+  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-5-latest',
+]);
+const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
+  threshold: 200_000,
+  input: 6 / 1e6,
+  output: 22.5 / 1e6,
+};
+
+function applyVertexClaudeLongContextPricing(
+  modelName: string,
+  config: GoogleProviderConfig,
+  inputTokens?: number,
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
+): GoogleProviderConfig {
+  const effectiveInputTokens =
+    (inputTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
+  if (
+    !VERTEX_CLAUDE_SONNET_4_5_MODELS.has(modelName) ||
+    effectiveInputTokens <= VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.threshold
+  ) {
+    return config;
+  }
+
+  // `cost` already supplies both rates and intentionally overrides tier-specific pricing.
+  if (config.cost != null) {
+    return config;
+  }
+
+  return {
+    ...config,
+    inputCost: config.inputCost ?? VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.input,
+    outputCost: config.outputCost ?? VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.output,
+  };
+}
 
 type VertexEmbeddingPredictResponse = {
   predictions?: Array<{
@@ -266,8 +308,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
       try {
-        const yaml = await import('js-yaml');
-        const parsed = yaml.default.load(prompt);
+        const parsed = loadYaml(prompt);
         normalizedPrompt = JSON.stringify(parsed);
       } catch (err) {
         return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
@@ -426,15 +467,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
         this.getRegion() === 'global'
           ? this.config
           : applyClaudeRegionalPremium(normalizedModelName, this.config);
+      const effectivePricingConfig = applyVertexClaudeLongContextPricing(
+        normalizedModelName,
+        pricingConfig,
+        data.usage?.input_tokens,
+        data.usage?.cache_read_input_tokens,
+        data.usage?.cache_creation_input_tokens,
+      );
       const response = {
         cached: false,
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
           normalizedModelName,
-          pricingConfig,
+          effectivePricingConfig,
           data.usage?.input_tokens,
           data.usage?.output_tokens,
+          data.usage?.cache_read_input_tokens,
+          data.usage?.cache_creation_input_tokens,
         ),
       };
 
