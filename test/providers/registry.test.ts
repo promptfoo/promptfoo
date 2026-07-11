@@ -322,7 +322,7 @@ describe('Provider Registry', () => {
         mockContext,
       );
 
-      expect(chatProvider.id()).toBe('meta:muse-spark-1.1');
+      expect(chatProvider.id()).toBe('meta:chat:muse-spark-1.1');
       expect(defaultProvider.id()).toBe('meta:responses:muse-spark-1.1');
       expect(responsesProvider.id()).toBe('meta:responses:muse-spark-1.1');
       expect(messagesProvider.id()).toBe('meta:messages:muse-spark-1.1');

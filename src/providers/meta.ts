@@ -26,6 +26,19 @@ const META_MESSAGES_API_BASE_URL = 'https://api.meta.ai';
 // source the key from somewhere else.
 const META_API_KEY_ENVAR = 'MODEL_API_KEY';
 const DEFAULT_META_MODEL = 'muse-spark-1.1';
+const DEFAULT_META_MAX_OUTPUT_TOKENS = 131_072;
+const UNSUPPORTED_META_SUBTYPES = new Set([
+  'assistant',
+  'audio',
+  'completion',
+  'embedding',
+  'embeddings',
+  'image',
+  'moderation',
+  'realtime',
+  'transcription',
+  'video',
+]);
 
 // Muse Spark rejects other values (including OpenAI's 'none') with an HTTP 400.
 const META_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
@@ -85,16 +98,13 @@ function resolveMetaApiKey(
   config: MetaKeyConfig,
   env: EnvOverrides | undefined,
 ): string | undefined {
-  if (config.apiKey !== undefined) {
-    return config.apiKey;
-  }
-  const apiKeyEnvar = (config.apiKeyEnvar ?? META_API_KEY_ENVAR) as EnvVarKey;
-  return getProviderEnvString(env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar);
+  const apiKeyEnvar = (config.apiKeyEnvar || META_API_KEY_ENVAR) as EnvVarKey;
+  return config.apiKey || getProviderEnvString(env, apiKeyEnvar) || getEnvString(apiKeyEnvar);
 }
 
 function missingMetaApiKeyMessage(config: MetaKeyConfig): string {
   return (
-    `Meta Model API key is not set. Set the ${config.apiKeyEnvar ?? META_API_KEY_ENVAR} ` +
+    `Meta Model API key is not set. Set the ${config.apiKeyEnvar || META_API_KEY_ENVAR} ` +
     'environment variable or add `apiKey` to the provider config.'
   );
 }
@@ -108,6 +118,13 @@ function resolveMetaOpenAiConfig(config: MetaConfig = {}): MetaConfig {
     apiKeyEnvar: config.apiKeyEnvar ?? META_API_KEY_ENVAR,
     apiBaseUrl: config.apiBaseUrl || META_API_BASE_URL,
   };
+}
+
+function resolveMetaOpenAiUrl(config: MetaConfig): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost.replace(/\/+$/, '')}/v1`;
+  }
+  return (config.apiBaseUrl || META_API_BASE_URL).replace(/\/+$/, '');
 }
 
 function metaToJSON(provider: string, modelName: string, config: MetaKeyConfig) {
@@ -135,8 +152,8 @@ function assertSupportedReasoningEffort(effort: unknown): void {
 
 // Set the single output-cap field a Meta endpoint accepts, or — when no cap is
 // configured — strip a leaked OPENAI_MAX_COMPLETION_TOKENS / OPENAI_MAX_TOKENS
-// env default so reasoning keeps the full output budget. Explicit passthrough
-// values are left untouched.
+// env default so reasoning keeps the full output budget. A passthrough
+// max_tokens alias is mapped to the canonical field.
 function applyMetaOutputCap(
   body: Record<string, unknown>,
   passthrough: Record<string, unknown>,
@@ -146,10 +163,35 @@ function applyMetaOutputCap(
   if (field in passthrough) {
     return;
   }
-  if (value === undefined) {
+  const outputCap = passthrough.max_tokens ?? value;
+  if (outputCap === undefined) {
     delete body[field];
   } else {
-    body[field] = value;
+    body[field] = outputCap;
+  }
+}
+
+function assertSupportedMetaRequest(
+  body: Record<string, unknown>,
+  config: OpenAiCompletionOptions,
+): void {
+  if (config.stop !== undefined || 'stop' in body) {
+    throw new Error(
+      'Muse Spark models do not support `stop` sequences; remove `stop` from the provider config.',
+    );
+  }
+  if ('logprobs' in body) {
+    throw new Error('Muse Spark models do not support logprobs.');
+  }
+  if (typeof body.n === 'number' && body.n > 1) {
+    throw new Error(
+      'Muse Spark models do not support `n > 1`; remove `n` from the provider config.',
+    );
+  }
+  if (body.stream) {
+    throw new Error(
+      'Meta chat and Responses streaming is not supported by promptfoo; remove `stream` from the provider config.',
+    );
   }
 }
 
@@ -269,7 +311,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 
   override getApiUrl(): string {
-    return this.config.apiBaseUrl || META_API_BASE_URL;
+    return resolveMetaOpenAiUrl(this.config);
   }
 
   // Meta has no concept of an OpenAI organization; suppress the header so a
@@ -298,7 +340,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 
   id(): string {
-    return `meta:${this.modelName}`;
+    return `meta:chat:${this.modelName}`;
   }
 
   toString(): string {
@@ -306,7 +348,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return metaToJSON('meta', this.modelName, this.config);
+    return metaToJSON('meta:chat', this.modelName, this.config);
   }
 
   override async getOpenAiBody(
@@ -319,17 +361,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     const passthrough = (config.passthrough ?? {}) as Record<string, unknown>;
 
     assertSupportedReasoningEffort(body.reasoning_effort);
-
-    // Meta documents `stop` and logprobs as unsupported; surface one
-    // actionable error instead of an opaque HTTP 400 per request.
-    if ('stop' in body) {
-      throw new Error(
-        'Muse Spark models do not support `stop` sequences; remove `stop` from the provider config.',
-      );
-    }
-    if ('logprobs' in body) {
-      throw new Error('Muse Spark models do not support logprobs.');
-    }
+    assertSupportedMetaRequest(body, config);
 
     // The Meta API caps generation with max_completion_tokens (max_tokens is
     // only a deprecated alias); honor an explicit max_tokens as the canonical
@@ -385,7 +417,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   }
 
   override getApiUrl(): string {
-    return this.config.apiBaseUrl || META_API_BASE_URL;
+    return resolveMetaOpenAiUrl(this.config);
   }
 
   override getOrganization(): undefined {
@@ -426,6 +458,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     const passthrough = (config.passthrough ?? {}) as Record<string, unknown>;
 
     assertSupportedReasoningEffort(body.reasoning?.effort);
+    assertSupportedMetaRequest(body, config);
 
     // The Responses API caps generation with max_output_tokens; map the
     // chat-style caps across so a config shared with meta:<model> keeps its cap.
@@ -479,6 +512,12 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     const resolvedConfig: MetaMessagesConfig = {
       ...metaConfig,
       apiBaseUrl: metaConfig.apiBaseUrl || META_MESSAGES_API_BASE_URL,
+      max_tokens: metaConfig.max_tokens ?? DEFAULT_META_MAX_OUTPUT_TOKENS,
+      temperature: metaConfig.temperature ?? 0,
+      // The Anthropic SDK rejects large non-streaming requests before they
+      // reach Meta. Streaming is aggregated by the base provider and lets
+      // Muse use its full output budget by default.
+      stream: metaConfig.stream ?? true,
       // Muse reasoning arrives as encrypted redacted_thinking blocks on this
       // surface; surfacing that ciphertext would pollute graded output, so
       // hide thinking by default (overridable with showThinking: true).
@@ -503,9 +542,11 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
       ...options,
       apiKey: null,
       authToken: this.apiKey ?? null,
-      ...(Object.keys(suppressedEnvHeaders).length > 0
-        ? { defaultHeaders: { ...options.defaultHeaders, ...suppressedEnvHeaders } }
-        : {}),
+      defaultHeaders: {
+        ...options.defaultHeaders,
+        ...suppressedEnvHeaders,
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+      },
     };
   }
 
@@ -561,9 +602,8 @@ export function createMetaProvider(
   const rest = providerPath.split(':').slice(1);
 
   // Fail fast instead of silently treating an unsupported sub-type as a model
-  // name — the Meta Model API exposes no embeddings or legacy completions
-  // endpoint.
-  if (rest[0] === 'embedding' || rest[0] === 'embeddings' || rest[0] === 'completion') {
+  // name — the Meta Model API only exposes chat, Responses, and Messages.
+  if (UNSUPPORTED_META_SUBTYPES.has(rest[0])) {
     throw new Error(
       `The Meta Model API does not expose an ${rest[0]} endpoint; "${providerPath}" cannot be resolved. ` +
         'Use meta:<model>, meta:chat:<model>, meta:responses:<model>, or meta:messages:<model> instead.',

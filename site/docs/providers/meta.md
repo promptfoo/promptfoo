@@ -5,7 +5,7 @@ description: Configure Meta's Model API to evaluate Muse Spark reasoning models 
 
 # Meta Model API
 
-The [Meta Model API](https://dev.meta.ai/) (public preview) serves Meta Superintelligence Labs' Muse Spark models through an OpenAI-compatible API. The Meta provider extends the [OpenAI provider](/docs/providers/openai/), so all of its options are supported.
+The [Meta Model API](https://dev.meta.ai/) (public preview) serves Meta Superintelligence Labs' Muse Spark models through an OpenAI-compatible API. The Meta provider extends the [OpenAI provider](/docs/providers/openai/) and supports its compatible options.
 
 :::note
 
@@ -44,7 +44,7 @@ providers:
 
 ### Configuration Options
 
-The provider accepts every option the [OpenAI provider](/docs/providers/openai/) supports. Notable behavior:
+The provider accepts compatible [OpenAI provider](/docs/providers/openai/) options. Notable behavior:
 
 - `reasoning_effort` — `minimal`, `low`, `medium`, `high`, or `xhigh`. When omitted, the model picks its own reasoning depth. Muse Spark does not support `none`; the provider rejects it with a clear error. Reasoning tokens bill at the output rate and count toward the output cap.
 - `max_completion_tokens` — caps generation on the chat endpoint (Meta accepts `max_tokens` only as a deprecated alias; if you set it, the provider forwards it as the canonical `max_completion_tokens`). On the [Responses API](#responses-api) the cap is `max_output_tokens`, and the provider maps `max_completion_tokens`/`max_tokens` onto it. When unset, no cap is sent so reasoning can use the full output budget.
@@ -54,7 +54,7 @@ The provider accepts every option the [OpenAI provider](/docs/providers/openai/)
 - `prompt_cache_retention` — `in_memory` or `24h` for prompt caching; cached prompt tokens bill at the cached-input rate.
 - `seed` — best-effort determinism.
 
-Muse Spark does not support `logprobs`, `n > 1`, `stop`, or audio input/output — the provider fails fast with a clear error for `stop` and `logprobs` instead of surfacing an HTTP 400 per request. OpenAI-scoped environment defaults (`OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_MAX_COMPLETION_TOKENS`, penalty variables) are not applied to Meta requests.
+Muse Spark does not support `logprobs`, `n > 1`, `stop`, or audio input/output. The provider fails fast for unsupported options instead of surfacing an HTTP 400 per request. OpenAI-compatible `stream` is also rejected because promptfoo expects a complete JSON response on the chat and Responses surfaces. OpenAI-scoped environment defaults (`OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_MAX_COMPLETION_TOKENS`, penalty variables) are not applied to Meta requests.
 
 ### Cost Tracking
 
@@ -86,7 +86,7 @@ providers:
       max_tokens: 8192
 ```
 
-The provider extends the [Anthropic provider](/docs/providers/anthropic/), so its options (`max_tokens`, `tools`, image and document content blocks, etc.) apply. Authentication uses your Meta key as a bearer token (`Authorization: Bearer`), matching Meta's docs — Anthropic-scoped settings like `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and Claude Code OAuth credentials are deliberately ignored on this surface.
+The provider extends the [Anthropic provider](/docs/providers/anthropic/), so its options (`max_tokens`, `tools`, image and document content blocks, etc.) apply. It defaults `max_tokens` to Muse Spark's 131,072-token output budget and enables streaming so the Anthropic SDK can safely handle long generations; streamed output is aggregated before grading. Authentication uses your Meta key as a bearer token (`Authorization: Bearer`), matching Meta's docs — Anthropic-scoped settings like `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MAX_TOKENS`, `ANTHROPIC_TEMPERATURE`, custom headers, and Claude Code OAuth credentials are deliberately ignored on this surface.
 
 Muse Spark's reasoning arrives on this surface as encrypted `redacted_thinking` blocks, so the provider defaults `showThinking` to `false` to keep the ciphertext out of graded output.
 
@@ -121,6 +121,7 @@ providers:
       env:
         ANTHROPIC_BASE_URL: https://api.meta.ai
         ANTHROPIC_AUTH_TOKEN: '{{env.MODEL_API_KEY}}'
+        ANTHROPIC_CUSTOM_HEADERS: ''
         ANTHROPIC_MODEL: muse-spark-1.1
         ANTHROPIC_DEFAULT_OPUS_MODEL: muse-spark-1.1
         ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.1
@@ -131,7 +132,7 @@ providers:
 
 :::warning
 
-Do not omit `apiKey`. The provider forwards its resolved API key into the agent subprocess as `ANTHROPIC_API_KEY` after `env:` is applied — if `apiKey` is unset and a real `ANTHROPIC_API_KEY` is exported in your shell, that Anthropic credential would be transmitted to Meta's endpoint.
+Do not omit `apiKey` or the empty `ANTHROPIC_CUSTOM_HEADERS` override. The provider forwards its resolved API key into the agent subprocess as `ANTHROPIC_API_KEY` after `env:` is applied — if `apiKey` is unset and a real `ANTHROPIC_API_KEY` is exported in your shell, that Anthropic credential would be transmitted to Meta's endpoint. Clearing `ANTHROPIC_CUSTOM_HEADERS` also prevents an inherited gateway or proxy secret from being sent to Meta.
 
 :::
 

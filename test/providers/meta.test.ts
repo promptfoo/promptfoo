@@ -9,6 +9,7 @@ import {
   MetaMessagesProvider,
   MetaResponsesProvider,
 } from '../../src/providers/meta';
+import { filterProviders } from '../../src/util/eval/filterProviders';
 import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -39,7 +40,7 @@ function asChat(provider: ReturnType<typeof createMetaProvider>) {
   return provider as unknown as OpenAiChatCompletionProvider & {
     getApiUrl: () => string;
     getOrganization: () => unknown;
-    getOpenAiBody: (prompt: string) => Promise<{ body: any; config: any }>;
+    getOpenAiBody: (prompt: string, context?: any) => Promise<{ body: any; config: any }>;
     toJSON: () => any;
   };
 }
@@ -55,8 +56,10 @@ describe('createMetaProvider routing', () => {
   it('routes meta:chat:<model> to the chat completions provider', () => {
     const provider = createMetaProvider('meta:chat:muse-spark-1.1');
     expect(provider).not.toBeInstanceOf(MetaResponsesProvider);
-    expect(provider.id()).toBe('meta:muse-spark-1.1');
+    expect(provider.id()).toBe('meta:chat:muse-spark-1.1');
     expect(asChat(provider).modelName).toBe('muse-spark-1.1');
+    expect(filterProviders([provider], '^meta:chat:')).toEqual([provider]);
+    expect(createMetaProvider(provider.id())).not.toBeInstanceOf(MetaResponsesProvider);
   });
 
   it('falls back to the default model for a bare prefix', () => {
@@ -80,10 +83,19 @@ describe('createMetaProvider routing', () => {
     expect(createMetaProvider('meta:messages').id()).toBe('meta:messages:muse-spark-1.1');
   });
 
-  it('fails fast for unsupported sub-types instead of treating them as models', () => {
-    expect(() => createMetaProvider('meta:embedding:foo')).toThrow(/does not expose/);
-    expect(() => createMetaProvider('meta:embeddings:foo')).toThrow(/does not expose/);
-    expect(() => createMetaProvider('meta:completion:foo')).toThrow(/does not expose/);
+  it.each([
+    'assistant',
+    'audio',
+    'completion',
+    'embedding',
+    'embeddings',
+    'image',
+    'moderation',
+    'realtime',
+    'transcription',
+    'video',
+  ])('fails fast for the unsupported %s sub-type instead of treating it as a model', (subType) => {
+    expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(/does not expose/);
   });
 });
 
@@ -102,6 +114,20 @@ describe('MetaProvider configuration', () => {
       }),
     );
     expect(provider.getApiUrl()).toBe('https://proxy.example.com/v1');
+  });
+
+  it.each([
+    'meta:chat:muse-spark-1.1',
+    'meta:responses:muse-spark-1.1',
+  ])('honours apiHost and normalizes trailing slashes for %s', (id) => {
+    const withHost = createMetaProvider(id, {
+      config: { apiHost: 'proxy.example.com/' },
+    }) as MetaResponsesProvider;
+    const withBaseUrl = createMetaProvider(id, {
+      config: { apiBaseUrl: 'https://proxy.example.com/v1/' },
+    }) as MetaResponsesProvider;
+    expect((withHost as any).getApiUrl()).toBe('https://proxy.example.com/v1');
+    expect((withBaseUrl as any).getApiUrl()).toBe('https://proxy.example.com/v1');
   });
 
   it('resolves an empty-string apiBaseUrl (e.g. an unset template) to the Meta host', () => {
@@ -127,7 +153,7 @@ describe('MetaProvider configuration', () => {
     const provider = createMetaProvider('meta:chat:muse-spark-1.1');
     expect(provider.toString()).toBe('[Meta Model API Provider muse-spark-1.1]');
     expect(asChat(provider).toJSON()).toMatchObject({
-      provider: 'meta',
+      provider: 'meta:chat',
       model: 'muse-spark-1.1',
     });
   });
@@ -157,6 +183,18 @@ describe('MetaProvider key resolution', () => {
     const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|official' });
     try {
       const provider = createMetaProvider('meta:chat:muse-spark-1.1');
+      expect((provider as any).getApiKey()).toBe('LLM|1|official');
+    } finally {
+      restore();
+    }
+  });
+
+  it('falls back to MODEL_API_KEY when an apiKey template resolves to an empty string', () => {
+    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|official' });
+    try {
+      const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
+        config: { apiKey: '' },
+      });
       expect((provider as any).getApiKey()).toBe('LLM|1|official');
     } finally {
       restore();
@@ -230,6 +268,16 @@ describe('MetaProvider request body shaping', () => {
     expect(body.reasoning_effort).toBe('xhigh');
   });
 
+  it('renders templated reasoning_effort before validating it', async () => {
+    const provider = asChat(
+      createMetaProvider('meta:chat:muse-spark-1.1', {
+        config: { reasoning_effort: '{{effort}}' as any },
+      }),
+    );
+    const { body } = await provider.getOpenAiBody('Hello', { vars: { effort: 'high' } });
+    expect(body.reasoning_effort).toBe('high');
+  });
+
   it('forwards max_completion_tokens', async () => {
     const provider = asChat(
       createMetaProvider('meta:chat:muse-spark-1.1', {
@@ -245,6 +293,17 @@ describe('MetaProvider request body shaping', () => {
     const provider = asChat(
       createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { max_tokens: 2048 },
+      }),
+    );
+    const { body } = await provider.getOpenAiBody('Hello');
+    expect(body.max_completion_tokens).toBe(2048);
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it('maps passthrough max_tokens onto max_completion_tokens instead of dropping it', async () => {
+    const provider = asChat(
+      createMetaProvider('meta:chat:muse-spark-1.1', {
+        config: { max_completion_tokens: 4096, passthrough: { max_tokens: 2048 } },
       }),
     );
     const { body } = await provider.getOpenAiBody('Hello');
@@ -289,6 +348,19 @@ describe('MetaProvider request body shaping', () => {
       }),
     );
     await expect(provider.getOpenAiBody('Hello')).rejects.toThrow(/stop/);
+  });
+
+  it.each([
+    [{ logprobs: true }, /logprobs/],
+    [{ n: 2 }, /n > 1/],
+    [{ stream: true }, /streaming is not supported/],
+  ])('rejects unsupported chat passthrough options: %j', async (passthrough, error) => {
+    const provider = asChat(
+      createMetaProvider('meta:chat:muse-spark-1.1', {
+        config: { passthrough },
+      }),
+    );
+    await expect(provider.getOpenAiBody('Hello')).rejects.toThrow(error);
   });
 
   it('leaves explicit passthrough values untouched', async () => {
@@ -513,6 +585,15 @@ describe('MetaResponsesProvider request body shaping', () => {
     expect(body.max_tokens).toBeUndefined();
   });
 
+  it('maps passthrough max_tokens onto max_output_tokens instead of dropping it', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { max_output_tokens: 4096, passthrough: { max_tokens: 2048 } },
+    });
+    const { body } = await (provider as any).getOpenAiBody('Hello');
+    expect(body.max_output_tokens).toBe(2048);
+    expect(body.max_tokens).toBeUndefined();
+  });
+
   it('does not leak OPENAI_* env defaults into Responses requests', async () => {
     const restore = mockProcessEnv({
       OPENAI_MAX_COMPLETION_TOKENS: '256',
@@ -544,6 +625,34 @@ describe('MetaResponsesProvider request body shaping', () => {
     });
     await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(
       /reasoning_effort 'none'/,
+    );
+  });
+
+  it('rejects configured stop sequences instead of silently dropping them', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { stop: ['\n'] },
+    });
+    await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(/stop/);
+  });
+
+  it.each([
+    [{ stop: ['\n'] }, /stop/],
+    [{ logprobs: true }, /logprobs/],
+    [{ n: 2 }, /n > 1/],
+    [{ stream: true }, /streaming is not supported/],
+  ])('rejects unsupported Responses passthrough options: %j', async (passthrough, error) => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { passthrough },
+    });
+    await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(error);
+  });
+
+  it('rejects configured Responses streaming before attempting to parse SSE as JSON', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { stream: true },
+    });
+    await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(
+      /streaming is not supported/,
     );
   });
 });
@@ -584,6 +693,30 @@ describe('MetaMessagesProvider', () => {
       config: { showThinking: true },
     }) as MetaMessagesProvider;
     expect((explicit as any).config.showThinking).toBe(true);
+  });
+
+  it('uses the full Muse output budget and ignores Anthropic-scoped sampling defaults', () => {
+    const restore = mockProcessEnv({
+      ANTHROPIC_MAX_TOKENS: '1024',
+      ANTHROPIC_TEMPERATURE: '0.9',
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        env: { ANTHROPIC_TEMPERATURE: '0.7' },
+      }) as MetaMessagesProvider;
+      expect((provider as any).config.max_tokens).toBe(131_072);
+      expect((provider as any).config.temperature).toBe(0);
+      expect((provider as any).config.stream).toBe(true);
+
+      const explicit = createMetaProvider('meta:messages:muse-spark-1.1', {
+        config: { max_tokens: 8192, temperature: 0.3, stream: false },
+      }) as MetaMessagesProvider;
+      expect((explicit as any).config.max_tokens).toBe(8192);
+      expect((explicit as any).config.temperature).toBe(0.3);
+      expect((explicit as any).config.stream).toBe(false);
+    } finally {
+      restore();
+    }
   });
 
   it('does not log the unknown-Anthropic-model warning for Muse models', async () => {
@@ -642,6 +775,32 @@ describe('MetaMessagesProvider', () => {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
       const defaultHeaders = (provider as any).anthropic._options?.defaultHeaders;
       expect(defaultHeaders).toMatchObject({ 'X-Proxy-Secret': null, 'X-Gateway': null });
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves Meta bearer auth when ANTHROPIC_CUSTOM_HEADERS contains Authorization', async () => {
+    const restore = mockProcessEnv({
+      ANTHROPIC_CUSTOM_HEADERS:
+        'Authorization: Bearer anthropic-proxy-secret\nX-Proxy-Secret: hunter2',
+      MODEL_API_KEY: 'LLM|1|messages-key',
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
+      const { req } = await (provider as any).anthropic.buildRequest({
+        method: 'post',
+        path: '/v1/messages',
+        body: {
+          model: 'muse-spark-1.1',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'Hello' }],
+        },
+      });
+      const headers = new Headers(req.headers);
+      expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
+      expect(headers.has('x-proxy-secret')).toBe(false);
+      expect(headers.has('x-api-key')).toBe(false);
     } finally {
       restore();
     }
