@@ -120,11 +120,12 @@ describe('MetaProvider configuration', () => {
     'meta:chat:muse-spark-1.1',
     'meta:responses:muse-spark-1.1',
   ])('honours apiHost and normalizes trailing slashes for %s', (id) => {
+    const trailingSlashes = '/'.repeat(100_000);
     const withHost = createMetaProvider(id, {
-      config: { apiHost: 'proxy.example.com/' },
+      config: { apiHost: `proxy.example.com${trailingSlashes}` },
     }) as MetaResponsesProvider;
     const withBaseUrl = createMetaProvider(id, {
-      config: { apiBaseUrl: 'https://proxy.example.com/v1/' },
+      config: { apiBaseUrl: `https://proxy.example.com/v1${trailingSlashes}` },
     }) as MetaResponsesProvider;
     expect((withHost as any).getApiUrl()).toBe('https://proxy.example.com/v1');
     expect((withBaseUrl as any).getApiUrl()).toBe('https://proxy.example.com/v1');

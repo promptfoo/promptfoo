@@ -121,10 +121,18 @@ function resolveMetaOpenAiConfig(config: MetaConfig = {}): MetaConfig {
 }
 
 function resolveMetaOpenAiUrl(config: MetaConfig): string {
+  const trimTrailingSlashes = (value: string): string => {
+    let end = value.length;
+    while (end > 0 && value[end - 1] === '/') {
+      end -= 1;
+    }
+    return value.slice(0, end);
+  };
+
   if (config.apiHost) {
-    return `https://${config.apiHost.replace(/\/+$/, '')}/v1`;
+    return `https://${trimTrailingSlashes(config.apiHost)}/v1`;
   }
-  return (config.apiBaseUrl || META_API_BASE_URL).replace(/\/+$/, '');
+  return trimTrailingSlashes(config.apiBaseUrl || META_API_BASE_URL);
 }
 
 function metaToJSON(provider: string, modelName: string, config: MetaKeyConfig) {
