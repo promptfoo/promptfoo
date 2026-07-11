@@ -27,8 +27,8 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
-import yaml from 'js-yaml';
 import {
   Brain,
   ClipboardCheck,
@@ -324,7 +324,7 @@ export default function RedTeamSetupPage() {
     try {
       const content = await readFileAsText(file);
       // biome-ignore lint/suspicious/noExplicitAny: FIXME
-      const yamlConfig = yaml.load(content) as any;
+      const yamlConfig = loadYaml(content) as any;
 
       const strategies = yamlConfig?.redteam?.strategies || [];
       let target = yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET;

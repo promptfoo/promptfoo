@@ -18,6 +18,7 @@ To create a service account:
 
 1. Navigate to your Organization Settings page
 2. Click on the "Users" tab and then select "Create Service Account"
+
 <div style={{ textAlign: 'center' }}>
     <img src="/img/enterprise-docs/create-service-account.png" alt="Create Service Account screen" style={{ width: '80%' }} />
 </div>

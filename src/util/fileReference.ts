@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile, isPythonFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
+import { loadYaml } from './yamlLoad';
 
 /**
  * Loads the content from a file reference
@@ -34,7 +34,7 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
     } else if (extension === '.yaml' || extension === '.yml') {
       logger.debug(`Loading YAML file: ${resolvedPath}`);
       const content = await fs.promises.readFile(resolvedPath, 'utf8');
-      return yaml.load(content);
+      return loadYaml(content);
     } else if (isJavascriptFile(resolvedPath)) {
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
       const mod = await importModule(resolvedPath, functionName);

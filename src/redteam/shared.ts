@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import chalk from 'chalk';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
