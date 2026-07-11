@@ -49,6 +49,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])                                                                                   | None                        |
 | `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])                                                                              | None                        |
 | `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                             | `false`                     |
+| `promptfoo-version` | Exact `promptfoo` CLI version to install for scanning (e.g. `0.121.0`). Ranges and dist-tags are rejected.                               | Version pinned at release   |
 | `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning                                                                             | None                        |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
@@ -67,7 +68,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 ```yaml
 - name: Run Promptfoo Code Scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     enable-fork-prs: true
 ```
@@ -78,7 +79,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 ```yaml
 - name: Run Promptfoo Code Scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     min-severity: medium # Report medium, high and critical issues (also the default when omitted)
 ```
@@ -87,7 +88,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 ```yaml
 - name: Run Promptfoo Code Scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     guidance: |
       Focus on the document ingestion flow.
@@ -98,7 +99,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 ```yaml
 - name: Run Promptfoo Code Scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     guidance-file: ./promptfoo-scan-guidance.md
 ```
@@ -107,7 +108,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 ```yaml
 - name: Run Promptfoo Code Scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     config-path: .promptfoo-code-scan.yaml
 ```
@@ -119,13 +120,13 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
   if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
-  uses: github/codeql-action/upload-sarif@v4
+  uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
     category: promptfoo-code-scan
@@ -178,13 +179,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
 
       - name: Run Promptfoo Code Scan
         id: promptfoo-code-scan
-        uses: promptfoo/code-scan-action@v1
+        uses: promptfoo/code-scan-action@v0
         env:
           PROMPTFOO_API_KEY: ${{ secrets.PROMPTFOO_API_KEY }}
         with:
@@ -195,11 +196,21 @@ jobs:
 
       - name: Upload SARIF to GitHub Code Scanning
         if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
           sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
           category: promptfoo-code-scan
 ```
+
+The example pins the third-party actions to full commit SHAs with version comments. Tags such as `v0` are convenient but mutable; a commit SHA is the only immutable reference. For maximum assurance, pin `promptfoo/code-scan-action` the same way — resolve a release tag to its commit with `gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha` and use `uses: promptfoo/code-scan-action@<full-commit-sha> # <tag>`.
+
+## Supply Chain Security
+
+The hardening below applies to code-scan-action releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
+
+- The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input to override the pin with another exact version.
+- The `dist/` bundle and `action.yml` committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) are built and exported by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo` (and likewise for `action.yml`).
+- The scanner install strips npm config and `NODE_OPTIONS` from its environment and isolates its npm config files, but a step that runs pull-request-controlled code earlier in the same job (such as `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and it already runs with the job's token. Keep the scan in a job that only checks out and scans the PR; run untrusted build steps in a separate job.
 
 ## See Also
 

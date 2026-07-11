@@ -5,11 +5,17 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
+// esbuild inlines (and tree-shakes) this named JSON import at build time, so each
+// action release ships with the promptfoo CLI version that was current in the
+// monorepo when the release was built — the runtime install below is pinned to it
+// instead of resolving a mutable dist-tag like `latest`.
+import { version as defaultPromptfooVersion } from '../../package.json';
 import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
 import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
@@ -34,6 +40,7 @@ interface ActionInputs {
   githubToken: string;
   enableForkPrs: boolean;
   sarifOutputPath: string | undefined;
+  promptfooVersion: string;
 }
 
 interface PullRequestForkPayload {
@@ -86,6 +93,36 @@ function resolveMinimumSeverityInput(): string {
   return primary || alias || DEFAULT_MINIMUM_SEVERITY;
 }
 
+// Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
+// a dist-tag, a git/URL spec, or an extra npm flag — must be rejected because the value
+// is passed straight into `npm install` and controls which code scans the repository.
+// Numeric components are capped at 15 digits so they always stay below
+// Number.MAX_SAFE_INTEGER, node-semver's actual component limit: an oversized
+// component makes the spec invalid semver, which npm reclassifies as a mutable
+// dist-tag lookup, defeating the exact-version contract. Leading zeros are rejected
+// as invalid strict semver (npm loose-parses them rather than resolving exactly).
+const SEMVER_NUMERIC = String.raw`(?:0|[1-9]\d{0,14})`;
+const SEMVER_PRERELEASE_ID = String.raw`(?:0|[1-9]\d{0,14}|\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const EXACT_SEMVER_PATTERN = new RegExp(
+  `^${SEMVER_NUMERIC}\\.${SEMVER_NUMERIC}\\.${SEMVER_NUMERIC}` +
+    `(?:-${SEMVER_PRERELEASE_ID}(?:\\.${SEMVER_PRERELEASE_ID})*)?$`,
+);
+// semver's own MAX_LENGTH; also bounds regex work on hostile input.
+const MAX_VERSION_LENGTH = 256;
+
+function resolvePromptfooVersionInput(): string {
+  const override = core.getInput('promptfoo-version').trim();
+  if (!override) {
+    return defaultPromptfooVersion;
+  }
+  if (override.length > MAX_VERSION_LENGTH || !EXACT_SEMVER_PATTERN.test(override)) {
+    throw new Error(
+      `Invalid promptfoo-version "${override}": expected an exact version like 0.121.0`,
+    );
+  }
+  return override;
+}
+
 function getActionInputs(): ActionInputs {
   return {
     apiHost: core.getInput('api-host'),
@@ -98,6 +135,7 @@ function getActionInputs(): ActionInputs {
     // core.getInput returns '' when unset; normalize so a falsy check at the call site
     // doesn't have to special-case the empty-string sentinel.
     sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
+    promptfooVersion: resolvePromptfooVersionInput(),
   };
 }
 
@@ -120,6 +158,13 @@ function createSubprocessEnv(): Record<string, string> {
 
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
+
+  // A PR-controlled step running earlier in the workflow can persist
+  // NODE_OPTIONS=--require=/path/to/payload.cjs via $GITHUB_ENV; Node preloads that
+  // module into every child node process — npm during the install and promptfoo during
+  // the scan (when the OIDC token / API key are in scope). Strip it from all
+  // subprocesses; the action does not rely on caller-provided NODE_OPTIONS.
+  delete env.NODE_OPTIONS;
 
   for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
     delete env[key];
@@ -314,15 +359,67 @@ function parseScanOutput(scanOutput: string): ScanResponse {
   }
 }
 
+// Owns every hardening decision for the scanner install as one unit so a future npm
+// invocation cannot accidentally drop one of them:
+// - exact release-pinned version, never a mutable spec like `latest`
+// - --ignore-scripts: the scanner tree must not execute arbitrary code before the
+//   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
+// - sanitized env (createSubprocessEnv) with tokens stripped, plus every env-level
+//   npm config override removed (see below)
+// - cwd outside the checked-out workspace: npm's global mode documents (and testing
+//   confirms) that it ignores the per-project .npmrc, but the workspace holds the
+//   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
+//   strict-ssl, ignore-scripts…) may ever be in scope
+async function installPromptfooCli(promptfooVersion: string): Promise<void> {
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+
+  // npm reads its registry (and other config) from both env vars and user/global
+  // .npmrc files. A PR-controlled step running before this action can poison either:
+  // set npm_config_registry via $GITHUB_ENV, or write `registry=https://attacker/` to
+  // $HOME/.npmrc — redirecting this exact install to an attacker registry whose
+  // promptfoo tarball then runs as the scanner. Close both channels for the install:
+  //  - strip every npm_config_*/NPM_CONFIG_* env var, and
+  //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
+  //    consulted (two distinct paths: npm rejects loading one file as both).
+  // The pinned version therefore resolves from the runner's default (public) registry.
+  // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
+  // for this one install (the SaaS scan already requires public egress); the scan
+  // subprocess keeps workflow-provided npm config because its nested npx (MCP)
+  // invocations rely on it.
+  const env = createSubprocessEnv();
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase().startsWith('npm_config_')) {
+      delete env[key];
+    }
+  }
+  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
+  const emptyUserConfig = path.join(npmrcDir, 'user');
+  const emptyGlobalConfig = path.join(npmrcDir, 'global');
+
+  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
+  await exec.exec(
+    'npm',
+    [
+      'install',
+      '-g',
+      `promptfoo@${promptfooVersion}`,
+      '--ignore-scripts',
+      '--userconfig',
+      emptyUserConfig,
+      '--globalconfig',
+      emptyGlobalConfig,
+    ],
+    { env, cwd: installCwd },
+  );
+  core.info('✅ Promptfoo installed successfully');
+}
+
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
+  promptfooVersion: string,
 ): Promise<ScanResponse> {
-  const installEnv = createSubprocessEnv();
-
-  core.info('📦 Installing promptfoo...');
-  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: installEnv });
-  core.info('✅ Promptfoo installed successfully');
+  await installPromptfooCli(promptfooVersion);
 
   core.info('🚀 Running promptfoo code-scans run...');
 
@@ -363,11 +460,15 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
+function getScanResponse(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+  promptfooVersion: string,
+): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
-  return runPromptfooScan(cliArgs, oidcToken);
+  return runPromptfooScan(cliArgs, oidcToken, promptfooVersion);
 }
 
 function buildCommentBody(comment: Comment): string {
@@ -748,7 +849,7 @@ async function runCodeScan(): Promise<void> {
     await fetchBaseBranch(baseBranch);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs, oidcToken);
+    const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
