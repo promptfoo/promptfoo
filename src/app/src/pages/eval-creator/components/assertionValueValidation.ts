@@ -70,7 +70,12 @@ const BASE_ASSERTION_TYPES = [
 ] as const satisfies AssertionType[];
 
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BASE_ASSERTION_TYPES);
-const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
+const SPECIAL_ASSERTION_TYPES = new Set<string>([
+  'max-score',
+  'select-best',
+  'select-lowest-cost',
+  'select-lowest-latency',
+]);
 
 function isSupportedAssertionType(type: string): boolean {
   return (

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { Checkbox } from '@app/components/ui/checkbox';
 import { DeleteIcon } from '@app/components/ui/icons';
 import { Label } from '@app/components/ui/label';
 import {
@@ -73,6 +74,8 @@ const assertTypes: AssertionType[] = [
   'cost',
   'finish-reason',
   'latency',
+  'select-lowest-cost',
+  'select-lowest-latency',
   'perplexity',
   'perplexity-score',
   'rouge-n',
@@ -99,6 +102,11 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'contains-all',
   'not-contains-any',
   'not-contains-all',
+]);
+
+const METRIC_SELECTOR_TYPES = new Set<AssertionType>([
+  'select-lowest-cost',
+  'select-lowest-latency',
 ]);
 
 // Assertion types that require an LLM
@@ -169,9 +177,34 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                 <Select
                   value={assert.type}
                   onValueChange={(newValue) => {
-                    const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
-                    );
+                    const newType = newValue as AssertionType;
+                    const newAsserts = asserts.map((a, i) => {
+                      if (i !== index) {
+                        return a;
+                      }
+                      if (METRIC_SELECTOR_TYPES.has(newType)) {
+                        const { value: _value, ...assertionWithoutValue } = a;
+                        const existingOnlyPassing =
+                          typeof a.value === 'object' &&
+                          a.value !== null &&
+                          !Array.isArray(a.value) &&
+                          typeof (a.value as { onlyPassing?: unknown }).onlyPassing === 'boolean'
+                            ? (a.value as { onlyPassing: boolean }).onlyPassing
+                            : undefined;
+                        return {
+                          ...assertionWithoutValue,
+                          type: newType,
+                          value: {
+                            onlyPassing: existingOnlyPassing ?? newType === 'select-lowest-latency',
+                          },
+                        };
+                      }
+                      if (METRIC_SELECTOR_TYPES.has(a.type)) {
+                        const { value: _value, ...assertionWithoutValue } = a;
+                        return { ...assertionWithoutValue, type: newType };
+                      }
+                      return { ...a, type: newType };
+                    });
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
                   }}
@@ -189,44 +222,70 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   </SelectContent>
                 </Select>
 
+                {METRIC_SELECTOR_TYPES.has(assert.type) && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`assert-only-passing-${index}`}
+                      checked={
+                        typeof assert.value === 'object' &&
+                        assert.value !== null &&
+                        !Array.isArray(assert.value) &&
+                        typeof (assert.value as { onlyPassing?: unknown }).onlyPassing === 'boolean'
+                          ? (assert.value as { onlyPassing: boolean }).onlyPassing
+                          : assert.type === 'select-lowest-latency'
+                      }
+                      onCheckedChange={(checked) => {
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: { onlyPassing: checked === true } } : a,
+                        );
+                        setAsserts(newAsserts);
+                        onAdd(newAsserts);
+                      }}
+                    />
+                    <Label htmlFor={`assert-only-passing-${index}`}>Only passing outputs</Label>
+                  </div>
+                )}
+
                 {/* Value textarea */}
-                <div className="space-y-2">
-                  <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-                    Value
-                  </Label>
-                  <Textarea
-                    id={`assert-value-${index}`}
-                    placeholder="Enter expected value or criteria..."
-                    value={
-                      typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : ''
-                    }
-                    onChange={(e) => {
-                      const newValue = e.target.value;
-                      const newAsserts = asserts.map((a, i) =>
-                        i === index ? { ...a, value: newValue } : a,
-                      );
-                      setAsserts(newAsserts);
-                      onAdd(newAsserts);
-                    }}
-                    className="min-h-20 resize-y"
-                  />
-                  {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
-                    <p className="text-xs text-muted-foreground">
-                      Separate values with commas, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
-                    </p>
-                  )}
-                  {(assert.type === 'regex' || assert.type === 'not-regex') && (
-                    <p className="text-xs text-muted-foreground">
-                      Enter a regular expression pattern, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
-                    </p>
-                  )}
-                </div>
+                {!METRIC_SELECTOR_TYPES.has(assert.type) && (
+                  <div className="space-y-2">
+                    <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+                      Value
+                    </Label>
+                    <Textarea
+                      id={`assert-value-${index}`}
+                      placeholder="Enter expected value or criteria..."
+                      value={
+                        typeof assert.value === 'string'
+                          ? assert.value
+                          : typeof assert.value === 'number'
+                            ? String(assert.value)
+                            : ''
+                      }
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: newValue } : a,
+                        );
+                        setAsserts(newAsserts);
+                        onAdd(newAsserts);
+                      }}
+                      className="min-h-20 resize-y"
+                    />
+                    {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
+                      <p className="text-xs text-muted-foreground">
+                        Separate values with commas, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
+                      </p>
+                    )}
+                    {(assert.type === 'regex' || assert.type === 'not-regex') && (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a regular expression pattern, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           ))}

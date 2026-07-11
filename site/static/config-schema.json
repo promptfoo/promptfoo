@@ -1043,7 +1043,13 @@
             },
             {
               "type": "string",
-              "enum": ["select-best", "human", "max-score"]
+              "enum": [
+                "select-best",
+                "select-lowest-cost",
+                "select-lowest-latency",
+                "human",
+                "max-score"
+              ]
             },
             {}
           ]

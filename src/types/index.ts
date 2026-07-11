@@ -666,13 +666,24 @@ export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 type NotPrefixed<T extends string> = `not-${T}`;
 
 // The 'human' assertion type is added via the web UI to allow manual grading.
-// The 'select-best' assertion type compares all variations for a given test case
-// and selects the highest scoring one after all other assertions have completed.
+// The 'select-*' assertion types compare all variations for a given test case
+// after the regular assertions have completed.
 // The 'max-score' assertion type selects the output with the highest aggregate score
 // from other assertions.
-export type SpecialAssertionTypes = 'select-best' | 'human' | 'max-score';
+export type SpecialAssertionTypes =
+  | 'select-best'
+  | 'select-lowest-cost'
+  | 'select-lowest-latency'
+  | 'human'
+  | 'max-score';
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human', 'max-score']);
+export const SpecialAssertionTypesSchema = z.enum([
+  'select-best',
+  'select-lowest-cost',
+  'select-lowest-latency',
+  'human',
+  'max-score',
+]);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
@@ -745,7 +756,42 @@ export type Assertion = z.infer<typeof AssertionSchema>;
  * Schema for validating individual assertions (regular or assert-set).
  * Used for runtime validation of user-provided config.
  */
-export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
+export const AssertionOrSetSchema = z
+  .union([AssertionSetSchema, AssertionSchema])
+  .superRefine((assertion, ctx) => {
+    if (assertion.type === 'assert-set') {
+      if (!Array.isArray(assertion.assert)) {
+        return;
+      }
+      assertion.assert.forEach((nested, index) => {
+        if (nested.type === 'select-lowest-cost' || nested.type === 'select-lowest-latency') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${nested.type} must be a top-level assertion`,
+            path: ['assert', index, 'type'],
+          });
+        }
+      });
+      return;
+    }
+    if (assertion.type !== 'select-lowest-cost' && assertion.type !== 'select-lowest-latency') {
+      return;
+    }
+    if (assertion.value === undefined) {
+      return;
+    }
+    const result = z
+      .object({ onlyPassing: z.boolean().optional() })
+      .strict()
+      .safeParse(assertion.value);
+    if (!result.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${assertion.type} value must be an object containing only an optional boolean onlyPassing field`,
+        path: ['value'],
+      });
+    }
+  });
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
