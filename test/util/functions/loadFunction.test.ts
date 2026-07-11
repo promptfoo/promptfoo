@@ -360,6 +360,29 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should parse Ruby file URLs with function names', () => {
+    const result = parseFileUrl('file://./path/to/check.rb:checkValue');
+    expect(result).toEqual({
+      filePath: './path/to/check.rb',
+      functionName: 'checkValue',
+    });
+  });
+
+  it('should parse Ruby Windows drive-letter file URLs at the last colon', () => {
+    const result = parseFileUrl('file://C:\\path\\to\\check.rb:checkValue');
+    expect(result).toEqual({
+      filePath: 'C:\\path\\to\\check.rb',
+      functionName: 'checkValue',
+    });
+  });
+
+  it('should preserve colon suffixes for non-executable file URLs', () => {
+    const result = parseFileUrl('file://./path/to/check.txt:checkValue');
+    expect(result).toEqual({
+      filePath: './path/to/check.txt:checkValue',
+    });
+  });
+
   it('should preserve colons in default-export file paths', () => {
     const result = parseFileUrl('file://./path/to/file:default.js');
     expect(result).toEqual({

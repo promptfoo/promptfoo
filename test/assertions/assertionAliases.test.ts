@@ -4,7 +4,11 @@ import * as path from 'path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion } from '../../src/assertions';
-import { resolveAssertionAliases } from '../../src/assertions/aliases';
+import {
+  copyResolvedAssertionAlias,
+  getResolvedAssertionAlias,
+  resolveAssertionAliases,
+} from '../../src/assertions/aliases';
 import { evaluate } from '../../src/node/evaluate';
 import { runPython } from '../../src/python/pythonUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
@@ -307,5 +311,69 @@ describe('named script assertion aliases', () => {
     }
 
     expect(assertionUsesTrace(assertion)).toBe(true);
+  });
+
+  it('passes through built-in assertions when aliases are defined', () => {
+    const assertion = { type: 'equals' as const, value: 'hi' };
+    const [test] = resolveAssertionAliases(
+      [{ assert: [assertion] } as TestCase],
+      [
+        {
+          label: 'checks-passthrough',
+          type: 'javascript',
+          script: 'file://check-value.mjs:checkValue',
+        },
+      ],
+    );
+    const resolved = test.assert?.[0];
+
+    expect(resolved).toBe(assertion);
+    if (!resolved || resolved.type === 'assert-set') {
+      throw new Error('Expected the built-in assertion to pass through');
+    }
+    expect(getResolvedAssertionAlias(resolved)).toBeUndefined();
+  });
+
+  it('resolves alias references nested inside assert sets', () => {
+    const [test] = resolveAssertionAliases(
+      [
+        {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'checks-nested', value: 'nested' }],
+            },
+          ],
+        } as unknown as TestCase,
+      ],
+      [
+        {
+          label: 'checks-nested',
+          type: 'javascript',
+          script: 'file://check-nested.mjs:checkNested',
+        },
+      ],
+    );
+    const assertionSet = test.assert?.[0];
+
+    expect(assertionSet?.type).toBe('assert-set');
+    if (!assertionSet || assertionSet.type !== 'assert-set') {
+      throw new Error('Expected an assertion set');
+    }
+    const child = assertionSet.assert[0];
+    expect(child).toMatchObject({ type: 'checks-nested', value: 'nested' });
+    expect(getResolvedAssertionAlias(child)).toEqual({
+      type: 'javascript',
+      script: 'file://check-nested.mjs:checkNested',
+      value: 'nested',
+    });
+  });
+
+  it('returns assert-set targets unchanged when copying alias metadata', () => {
+    const source = { type: 'assert-set' as const, assert: [] };
+    const target = { type: 'assert-set' as const, assert: [] };
+
+    expect(copyResolvedAssertionAlias(source, target)).toBe(target);
+    expect(target).toEqual({ type: 'assert-set', assert: [] });
   });
 });
