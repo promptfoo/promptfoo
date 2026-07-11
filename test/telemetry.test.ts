@@ -324,14 +324,17 @@ describe('Telemetry', () => {
     // Create spy on the dynamically imported class (not the statically imported one)
     const localSendEventSpy = vi.spyOn(TelemetryClass.prototype as any, 'sendEvent');
 
+    const { fetchWithProxy: mockedFetchWithProxy } = await import('../src/util/fetch/index');
+
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
     // When telemetry is disabled, sendEvent is called with the "telemetry disabled" event
-    // but NOT with the user's event ('eval_ran')
+    // but NOT with the user's event ('eval_ran'), and no network request is made either way.
     expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', {
       feature: 'telemetry disabled',
     });
     expect(localSendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    expect(mockedFetchWithProxy).not.toHaveBeenCalled();
     localSendEventSpy.mockRestore();
   });
 
@@ -731,6 +734,15 @@ describe('Telemetry', () => {
       sendEventSpy.mockClear();
       telemetry.record('command_used', { name: 'test' });
       expect(sendEventSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not make any network request, even to report that telemetry is disabled', () => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      const telemetry = new Telemetry();
+
+      telemetry.record('eval_ran', { foo: 'bar' });
+
+      expect(fetchWithProxySpy).not.toHaveBeenCalled();
     });
   });
 
