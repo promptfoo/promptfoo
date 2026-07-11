@@ -90,7 +90,7 @@ redteam:
   numTests: 10
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
   plugins:
     - harmful:hate
     - harmful:violence

@@ -1805,12 +1805,12 @@ providers:
     config:
       url: 'https://example.com/api'
       # Function-based validation
-      validateStatus: (status) => status < 500  # Accept any status below 500
+      validateStatus: (status) => status < 500 # Accept any status below 500
       # Or string-based expression
-      validateStatus: 'status >= 200 && status <= 299'  # Accept only 2xx responses
+      validateStatus: 'status >= 200 && status <= 299' # Accept only 2xx responses
       # Or load from file
-      validateStatus: 'file://validators/status.js'  # Load default export
-      validateStatus: 'file://validators/status.js:validateStatus'  # Load specific function
+      validateStatus: 'file://validators/status.js' # Load default export
+      validateStatus: 'file://validators/status.js:validateStatus' # Load specific function
 ```
 
 Example validator file (`validators/status.js`):
