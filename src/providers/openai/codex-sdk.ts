@@ -114,6 +114,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
@@ -128,11 +130,13 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default)
+ * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'max': Deepest single-agent reasoning for GPT-5.6
+ * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Web search modes controlling how the agent accesses the web.
@@ -408,7 +412,9 @@ const OpenAICodexSDKConfigShape = {
   model: z.string().min(1).optional(),
   model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+  model_reasoning_effort: z
+    .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    .optional(),
   network_access_enabled: z.boolean().optional(),
   web_search_enabled: z.boolean().optional(),
   web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
@@ -634,6 +640,10 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.6 models (requires Codex 0.144.0 or later)
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-pro',
@@ -1993,6 +2003,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =

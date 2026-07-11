@@ -151,7 +151,7 @@ export class AnthropicGenericProvider implements ApiProvider {
       this.config.apiKeyRequired === false &&
       subclass.SUPPORTS_CLAUDE_CODE_OAUTH
     ) {
-      const credential = loadClaudeCodeCredential();
+      const credential = loadClaudeCodeCredential(this.env);
       if (credential) {
         if (isCredentialExpired(credential)) {
           logger.warn(

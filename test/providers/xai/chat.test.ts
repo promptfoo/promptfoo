@@ -269,7 +269,8 @@ describe('xAI Chat Provider', () => {
       expect(GROK_3_MINI_MODELS).not.toContain('grok-2-1212');
     });
 
-    it('identifies Grok Code Fast as reasoning models', () => {
+    it('identifies Grok Build and its Grok Code Fast aliases as reasoning models', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-build-0.1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1-0825');
@@ -680,10 +681,6 @@ describe('xAI Chat Provider', () => {
         'grok-4-1-fast-reasoning',
         'grok-4-fast-non-reasoning',
         'grok-4',
-        'grok-code-fast',
-        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
-        // it shares the post-retirement billing target with the undated slug.
-        'grok-code-fast-1-0825',
         'grok-3',
         // The grok-3 family collapses every -beta and -fast variant into the
         // same id on xAI's catalog, so all of them must redirect together.
@@ -694,6 +691,47 @@ describe('xAI Chat Provider', () => {
       ]) {
         expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
       }
+    });
+
+    it('bills grok-build-0.1 and its grok-code-fast aliases at its own pricing', () => {
+      // xAI's docs list grok-code-fast-1 / grok-code-fast / grok-code-fast-1-0825 as
+      // aliases of grok-build-0.1 ($1.00 input / $2.00 output per 1M tokens), so they
+      // must NOT redirect to grok-4.3 pricing.
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 100_000, 1_000_000)).toBeCloseTo(2.1, 10);
+      }
+    });
+
+    it('switches grok-build-0.1 and its aliases to higher-context pricing above 200k tokens', () => {
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        // Exactly at the threshold stays on the standard tier (exclusive >).
+        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
+          (200_000 * 1 + 1_000 * 2) / 1e6,
+          10,
+        );
+        // One token over switches the whole request to the higher tier.
+        expect(calculateXAICost(modelName, {}, 200_001, 1_000)).toBeCloseTo(
+          (200_001 * 2 + 1_000 * 4) / 1e6,
+          10,
+        );
+      }
+    });
+
+    it('uses higher-context cache-read pricing for grok-build-0.1 cached prompt tokens', () => {
+      expect(calculateXAICost('grok-build-0.1', {}, 200_001, 1_000, 0, 100_000)).toBeCloseTo(
+        (100_001 * 2 + 100_000 * 0.4 + 1_000 * 4) / 1e6,
+        10,
+      );
     });
 
     it('returns undefined for invalid inputs', () => {
