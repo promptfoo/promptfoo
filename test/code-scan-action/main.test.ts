@@ -4,10 +4,14 @@
  * Tests for the GitHub Action main entry point, specifically the CLI args construction.
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The action embeds the monorepo's promptfoo version at build time and pins the
+// runtime install to it; read the same source here so assertions track releases.
+import { version as pinnedPromptfooVersion } from '../../package.json';
 import { FileChangeStatus } from '../../src/types/codeScan';
 import { mockProcessEnv } from '../util/utils';
 
@@ -102,6 +106,7 @@ const mocks = vi.hoisted(() => {
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
+    mkdtempSync: vi.fn(),
     realpathSync: vi.fn(),
     lstatSync: vi.fn(),
   };
@@ -137,6 +142,7 @@ vi.mock('fs', async () => {
     unlinkSync: mocks.fs.unlinkSync,
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
+    mkdtempSync: mocks.fs.mkdtempSync,
     realpathSync: mocks.fs.realpathSync,
     lstatSync: mocks.fs.lstatSync,
     // Strip O_NOFOLLOW so writeSarifFile takes the writeFileSync fallback path that the
@@ -149,13 +155,31 @@ vi.mock('fs', async () => {
 
 const originalEnv = { ...process.env };
 
+// Matches the deterministic fs.mkdtempSync mock; the install passes empty user/global
+// npm config files under this dir to isolate the registry from a poisoned .npmrc.
+const MOCK_NPMRC_DIR = path.join(os.tmpdir(), 'promptfoo-npmrc-test');
+
+function expectedInstallArgs(version: string): string[] {
+  return [
+    'install',
+    '-g',
+    `promptfoo@${version}`,
+    '--ignore-scripts',
+    '--userconfig',
+    path.join(MOCK_NPMRC_DIR, 'user'),
+    '--globalconfig',
+    path.join(MOCK_NPMRC_DIR, 'global'),
+  ];
+}
+
 interface PromptfooExecCall {
   args: string[];
   options?: { env?: Record<string, string> };
 }
 
 interface NpmExecCall {
-  options?: { env?: Record<string, string> };
+  args: string[];
+  options?: { env?: Record<string, string>; cwd?: string };
 }
 
 interface PromptfooAndNpmExecCalls {
@@ -201,6 +225,9 @@ function setupMocks() {
   mocks.core.getBooleanInput.mockReturnValue(false);
   mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
 
+  // Deterministic temp dir for the install's isolated --userconfig/--globalconfig
+  // files, so tests can assert the exact npm args without touching disk.
+  mocks.fs.mkdtempSync.mockReturnValue(MOCK_NPMRC_DIR);
   mocks.fs.realpathSync.mockImplementation((p: string) => p);
   // Default: target file does not exist yet, so writeSarifFile won't trip the symlink check.
   mocks.fs.lstatSync.mockImplementation(() => {
@@ -275,18 +302,23 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   };
 }
 
+function isNpmInstallCall(call: unknown[]): boolean {
+  const [command, args] = call;
+  return (
+    command === 'npm' &&
+    Array.isArray(args) &&
+    args[0] === 'install' &&
+    args[1] === '-g' &&
+    typeof args[2] === 'string' &&
+    args[2].startsWith('promptfoo@')
+  );
+}
+
 async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   await import('../../code-scan-action/src/main');
 
   const call = await vi.waitFor(() => {
-    const npmCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) =>
-        command === 'npm' &&
-        Array.isArray(args) &&
-        args[0] === 'install' &&
-        args[1] === '-g' &&
-        args[2] === 'promptfoo',
-    );
+    const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
     if (!npmCall) {
       throw new Error('npm install exec call not found');
@@ -296,6 +328,7 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   });
 
   return {
+    args: call[1] as string[],
     options: call[2] as NpmExecCall['options'],
   };
 }
@@ -307,14 +340,7 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
     const promptfooCall = mocks.exec.exec.mock.calls.find(
       ([command, args]) => command === 'promptfoo' && Array.isArray(args),
     );
-    const npmCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) =>
-        command === 'npm' &&
-        Array.isArray(args) &&
-        args[0] === 'install' &&
-        args[1] === '-g' &&
-        args[2] === 'promptfoo',
-    );
+    const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
     if (!promptfooCall || !Array.isArray(promptfooCall[1]) || !npmCall) {
       throw new Error('expected promptfoo and npm install exec calls not found');
@@ -325,6 +351,7 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
 
   return {
     npmInstall: {
+      args: calls.npmCall[1] as string[],
       options: calls.npmCall[2] as NpmExecCall['options'],
     },
     promptfoo: {
@@ -469,6 +496,135 @@ describe('code-scan-action main', () => {
       expect(mocks.core.info).toHaveBeenCalledWith(
         'OIDC token not available: Failed to get GitHub OIDC token: OIDC not configured',
       );
+    });
+  });
+
+  describe('scanner install pinning', () => {
+    function mockPromptfooVersionInput(value: string): void {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity' || name === 'minimum-severity') {
+          return 'medium';
+        }
+        if (name === 'promptfoo-version') {
+          return value;
+        }
+        return '';
+      });
+    }
+
+    it('installs the release-pinned promptfoo version with lifecycle scripts disabled and isolated npm config', async () => {
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
+    });
+
+    it('installs an exact promptfoo-version input override', async () => {
+      mockPromptfooVersionInput('0.100.5');
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(expectedInstallArgs('0.100.5'));
+    });
+
+    it('accepts an exact prerelease promptfoo-version override', async () => {
+      mockPromptfooVersionInput('1.2.3-rc.1');
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(expectedInstallArgs('1.2.3-rc.1'));
+    });
+
+    it('accepts 15-digit numeric components (the cap boundary)', async () => {
+      const version = `${'9'.repeat(15)}.0.0`;
+      mockPromptfooVersionInput(version);
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(expectedInstallArgs(version));
+    });
+
+    it('falls back to the release-pinned version when promptfoo-version is whitespace', async () => {
+      mockPromptfooVersionInput('   ');
+
+      const { args } = await importActionAndGetNpmInstallCall();
+
+      expect(args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
+    });
+
+    it('strips NODE_OPTIONS from both the install and scan subprocesses', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({ NODE_OPTIONS: '--require=/tmp/payload.cjs' });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.NODE_OPTIONS).toBeUndefined();
+      expect(promptfoo.options?.env?.NODE_OPTIONS).toBeUndefined();
+    });
+
+    it('strips env-level npm config overrides from the install but not the scan', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({
+        npm_config_registry: 'https://attacker.example/registry',
+        NPM_CONFIG_USERCONFIG: '/tmp/attacker-npmrc',
+      });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.npm_config_registry).toBeUndefined();
+      expect(npmInstall.options?.env?.NPM_CONFIG_USERCONFIG).toBeUndefined();
+      // The scan env is intentionally not stripped of npm config: nested npx
+      // invocations (MCP) rely on workflow-provided npm settings. Only the
+      // documented keys (tokens, --before) are removed there.
+      expect(promptfoo.options?.env?.npm_config_registry).toBe('https://attacker.example/registry');
+      expect(promptfoo.options?.env?.NPM_CONFIG_USERCONFIG).toBe('/tmp/attacker-npmrc');
+    });
+
+    it('runs the install from RUNNER_TEMP so workspace npm config is out of scope', async () => {
+      const runnerTemp = path.resolve('/runner/temp');
+      mockProcessEnv({ RUNNER_TEMP: runnerTemp });
+
+      const { options } = await importActionAndGetNpmInstallCall();
+
+      expect(options?.cwd).toBe(runnerTemp);
+    });
+
+    it('falls back to os.tmpdir() for the install cwd when RUNNER_TEMP is unset', async () => {
+      mockProcessEnv({ RUNNER_TEMP: undefined });
+
+      const { options } = await importActionAndGetNpmInstallCall();
+
+      expect(options?.cwd).toBe(os.tmpdir());
+    });
+
+    it.each([
+      ['a dist-tag', 'latest'],
+      ['a semver range', '^0.100.0'],
+      ['an npm flag smuggled after the version', '0.100.5 --before=2020-01-01'],
+      ['an alias to another package', 'npm:malicious-package@1.0.0'],
+      ['a git URL', 'github:attacker/promptfoo'],
+      // Above-MAX_SAFE_INTEGER components are invalid semver that npm reclassifies as
+      // a mutable dist-tag lookup; leading zeros are invalid strict semver that npm
+      // would loose-parse instead of resolving exactly.
+      ['a numeric component above MAX_SAFE_INTEGER', '9999999999999999999.1.1'],
+      ['a 16-digit numeric component (above the cap)', `${'9'.repeat(16)}.0.0`],
+      ['a leading-zero component', '01.2.3'],
+      ['a leading-zero numeric prerelease id', '1.2.3-01'],
+      ['an overlong version string', `1.2.3-${'a'.repeat(300)}`],
+    ])('rejects %s as promptfoo-version without running any install', async (_label, value) => {
+      mockPromptfooVersionInput(value);
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining(`Invalid promptfoo-version "${value}"`),
+        );
+      });
+
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
     });
   });
 

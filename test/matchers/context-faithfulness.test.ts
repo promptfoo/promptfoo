@@ -125,6 +125,68 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should keep reserved faithfulness vars ahead of user vars', async () => {
+    const mockCallApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        output: 'Statement from answer.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Final verdict for each statement in order: Yes.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await matchesContextFaithfulness(
+      'question from assertion',
+      'answer from provider',
+      'context from contextTransform',
+      0,
+      {
+        rubricPrompt: [
+          'question={{ question }}\nanswer={{ answer }}\nextra={{ extra }}',
+          'context={{ context }}\nstatements={{ statements }}\nextra={{ extra }}',
+        ],
+      },
+      {
+        question: 'vars question sentinel',
+        answer: 'vars answer sentinel',
+        context: 'vars context sentinel',
+        statements: 'vars statements sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [longformPrompt, longformCallApiContext] = mockCallApi.mock.calls[0];
+    const [nliPrompt, nliCallApiContext] = mockCallApi.mock.calls[1];
+
+    expect(longformPrompt).toContain('question=question from assertion');
+    expect(longformPrompt).toContain('answer=answer from provider');
+    expect(longformPrompt).toContain('extra=kept user var');
+    expect(longformPrompt).not.toContain('vars question sentinel');
+    expect(longformPrompt).not.toContain('vars answer sentinel');
+    expect(longformCallApiContext.vars).toMatchObject({
+      question: 'question from assertion',
+      answer: 'answer from provider',
+      extra: 'kept user var',
+    });
+
+    expect(nliPrompt).toContain('context=context from contextTransform');
+    expect(nliPrompt).toContain('statements=Statement from answer.');
+    expect(nliPrompt).toContain('extra=kept user var');
+    expect(nliPrompt).not.toContain('vars context sentinel');
+    expect(nliPrompt).not.toContain('vars statements sentinel');
+    expect(nliCallApiContext.vars).toMatchObject({
+      context: 'context from contextTransform',
+      statements: ['Statement from answer.'],
+      extra: 'kept user var',
+    });
+  });
+
   it('should fail when no verdict markers are returned', async () => {
     const query = 'Query text';
     const output = 'Output text';
