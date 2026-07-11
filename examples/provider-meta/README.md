@@ -9,7 +9,7 @@ cd provider-meta
 
 ## Usage
 
-Set your `MODEL_API_KEY` environment variable — Meta's default, the same variable its official SDKs use. You can create a key from the API keys tab on the [Meta Model API dashboard](https://dev.meta.ai/). The provider also reads `META_API_KEY` as a promptfoo-specific override.
+Set your `MODEL_API_KEY` environment variable — Meta's official variable, the same one its SDKs use. You can create a key from the API keys tab on the [Meta Model API dashboard](https://dev.meta.ai/).
 
 Then run:
 
@@ -25,4 +25,4 @@ View the results with `promptfoo view`.
 - Cost is computed automatically from Meta's published pricing, including the cheaper cached-input rate for prompt-cache hits.
 - Plain `icontains` / `icontains-any` assertions, so the example runs with nothing but a `MODEL_API_KEY`.
 
-To try search grounding with inline citations, switch a provider to the Responses API endpoint: `meta:responses:muse-spark-1.1` with `tools: [{ type: web_search }]` — see the [provider docs](https://www.promptfoo.dev/docs/providers/meta/).
+`meta:<model>` targets Meta's Responses API by default, so search grounding with inline citations is one config line away: add `tools: [{ type: web_search }]` to a provider. See the [provider docs](https://www.promptfoo.dev/docs/providers/meta/) for the chat completions (`meta:chat:`) and Anthropic-compatible (`meta:messages:`) surfaces.

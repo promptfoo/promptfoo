@@ -4,8 +4,8 @@ description: Meta Model API (Muse Spark) provider demo
 prompts:
   - 'In one sentence, summarise: {{passage}}'
 
-# Both providers run on a single `MODEL_API_KEY` (Meta's default env var; the
-# promptfoo-specific `META_API_KEY` also works and takes precedence). Muse
+# Both providers run on a single `MODEL_API_KEY` (Meta's official env var).
+# `meta:<model>` targets the Responses API, Meta's recommended surface. Muse
 # Spark 1.1 is a reasoning model: reasoning_effort controls how much it thinks
 # before answering, and reasoning tokens bill at the output rate. Comparing
 # minimal vs high shows the latency/quality trade-off on the same model.

@@ -1,5 +1,4 @@
 import { getEnvString } from '../envars';
-import logger from '../logger';
 import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -22,12 +21,10 @@ const META_API_BASE_URL = 'https://api.meta.ai/v1';
 // The Anthropic-compatible Messages surface is served from the bare host; the
 // Anthropic SDK appends /v1/messages itself.
 const META_MESSAGES_API_BASE_URL = 'https://api.meta.ai';
-const META_API_KEY_ENVAR = 'META_API_KEY';
-// MODEL_API_KEY is Meta's default: it's what the official SDKs, docs, and
-// quickstart use, so it's the variable we document and recommend. META_API_KEY
-// is a promptfoo-specific override that wins when both are set, for users who
-// need to isolate the key per provider.
-const META_OFFICIAL_KEY_ENVAR = 'MODEL_API_KEY';
+// MODEL_API_KEY is Meta's official env var: it's what the SDKs, docs, and
+// quickstart use. Use `apiKeyEnvar` (or `apiKey`) in the provider config to
+// source the key from somewhere else.
+const META_API_KEY_ENVAR = 'MODEL_API_KEY';
 const DEFAULT_META_MODEL = 'muse-spark-1.1';
 
 // Muse Spark rejects other values (including OpenAI's 'none') with an HTTP 400.
@@ -83,8 +80,7 @@ function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): st
 // Resolve the key from Meta-specific sources only — unlike the OpenAI base
 // provider we do NOT fall back to OPENAI_API_KEY, which would send an OpenAI
 // key to the Meta endpoint and 401. Provider-scoped `env:` overrides beat the
-// ambient process env; within each source META_API_KEY beats Meta's generic
-// MODEL_API_KEY so promptfoo users can isolate the key per provider.
+// ambient process env.
 function resolveMetaApiKey(
   config: MetaKeyConfig,
   env: EnvOverrides | undefined,
@@ -92,37 +88,14 @@ function resolveMetaApiKey(
   if (config.apiKey !== undefined) {
     return config.apiKey;
   }
-  const apiKeyEnvar = config.apiKeyEnvar as EnvVarKey | undefined;
-  if (apiKeyEnvar && apiKeyEnvar !== META_API_KEY_ENVAR) {
-    return getProviderEnvString(env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar);
-  }
-  const fromOverrides =
-    getProviderEnvString(env, META_API_KEY_ENVAR) ??
-    getProviderEnvString(env, META_OFFICIAL_KEY_ENVAR);
-  if (fromOverrides !== undefined) {
-    return fromOverrides;
-  }
-  const fromMetaEnv = getEnvString(META_API_KEY_ENVAR);
-  if (fromMetaEnv !== undefined) {
-    return fromMetaEnv;
-  }
-  const fromOfficialEnv = getEnvString(META_OFFICIAL_KEY_ENVAR);
-  if (fromOfficialEnv !== undefined) {
-    // MODEL_API_KEY is a generic name other tooling could also set; leave a
-    // trace so an unexpected credential source is observable.
-    logger.debug('[Meta] Using API key from the MODEL_API_KEY environment variable');
-  }
-  return fromOfficialEnv;
+  const apiKeyEnvar = (config.apiKeyEnvar ?? META_API_KEY_ENVAR) as EnvVarKey;
+  return getProviderEnvString(env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar);
 }
 
 function missingMetaApiKeyMessage(config: MetaKeyConfig): string {
-  const envar =
-    config.apiKeyEnvar && config.apiKeyEnvar !== META_API_KEY_ENVAR
-      ? config.apiKeyEnvar
-      : `${META_OFFICIAL_KEY_ENVAR} (or ${META_API_KEY_ENVAR})`;
   return (
-    `Meta Model API key is not set. Set the ${envar} environment variable ` +
-    'or add `apiKey` to the provider config.'
+    `Meta Model API key is not set. Set the ${config.apiKeyEnvar ?? META_API_KEY_ENVAR} ` +
+    'environment variable or add `apiKey` to the provider config.'
   );
 }
 
@@ -581,7 +554,10 @@ export function createMetaProvider(
   options: MetaProviderOptions = {},
 ): ApiProvider {
   // Accept `meta:<model>` plus the chat/responses/messages sub-types;
-  // everything after the optional sub-type segment is the model id.
+  // everything after the optional sub-type segment is the model id. Bare
+  // `meta:<model>` defaults to the Responses API — Meta's full-feature
+  // surface (search grounding, cross-turn reasoning) and the one its docs
+  // recommend for agentic use.
   const rest = providerPath.split(':').slice(1);
 
   // Fail fast instead of silently treating an unsupported sub-type as a model
@@ -595,15 +571,17 @@ export function createMetaProvider(
   }
 
   const subType =
-    rest[0] === 'chat' || rest[0] === 'responses' || rest[0] === 'messages' ? rest.shift() : 'chat';
+    rest[0] === 'chat' || rest[0] === 'responses' || rest[0] === 'messages'
+      ? rest.shift()
+      : 'responses';
   const modelName = rest.join(':') || DEFAULT_META_MODEL;
 
   switch (subType) {
-    case 'responses':
-      return new MetaResponsesProvider(modelName, options);
+    case 'chat':
+      return new MetaProvider(modelName, options);
     case 'messages':
       return new MetaMessagesProvider(modelName, options as MetaMessagesProviderOptions);
     default:
-      return new MetaProvider(modelName, options);
+      return new MetaResponsesProvider(modelName, options);
   }
 }

@@ -211,8 +211,7 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   xai: 'XAI_API_KEY',
   groq: 'GROQ_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
-  // Meta's Model API documents MODEL_API_KEY as its default env var;
-  // META_API_KEY also works as a promptfoo-specific override.
+  // Meta's Model API documents MODEL_API_KEY as its official env var.
   meta: 'MODEL_API_KEY',
   moonshot: 'MOONSHOT_API_KEY',
   perplexity: 'PERPLEXITY_API_KEY',

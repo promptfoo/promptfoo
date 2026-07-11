@@ -286,14 +286,15 @@ describe('Provider Registry', () => {
         id: undefined,
         config: { temperature: 0.42, apiKey: 'meta-test-key' },
       };
+      // Bare meta:<model> defaults to the Responses API surface.
       const provider = await factory!.create('meta:muse-spark-1.1', metaOptions, mockContext);
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('meta:muse-spark-1.1');
+      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
       const config = (provider as any).config;
       expect(config.temperature).toBe(0.42);
       expect(config.apiKey).toBe('meta-test-key');
       expect(config.apiBaseUrl).toBe('https://api.meta.ai/v1');
-      expect(config.apiKeyEnvar).toBe('META_API_KEY');
+      expect(config.apiKeyEnvar).toBe('MODEL_API_KEY');
     });
 
     it('should route meta sub-types correctly', async () => {
@@ -322,7 +323,7 @@ describe('Provider Registry', () => {
       );
 
       expect(chatProvider.id()).toBe('meta:muse-spark-1.1');
-      expect(defaultProvider.id()).toBe('meta:muse-spark-1.1');
+      expect(defaultProvider.id()).toBe('meta:responses:muse-spark-1.1');
       expect(responsesProvider.id()).toBe('meta:responses:muse-spark-1.1');
       expect(messagesProvider.id()).toBe('meta:messages:muse-spark-1.1');
 

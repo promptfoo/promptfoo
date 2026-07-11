@@ -45,20 +45,23 @@ function asChat(provider: ReturnType<typeof createMetaProvider>) {
 }
 
 describe('createMetaProvider routing', () => {
-  it('parses meta:<model>', () => {
+  it('defaults meta:<model> to the Responses API provider', () => {
     const provider = createMetaProvider('meta:muse-spark-1.1');
-    expect(provider.id()).toBe('meta:muse-spark-1.1');
+    expect(provider).toBeInstanceOf(MetaResponsesProvider);
+    expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
     expect(asChat(provider).modelName).toBe('muse-spark-1.1');
   });
 
-  it('parses meta:chat:<model> to the same model', () => {
+  it('routes meta:chat:<model> to the chat completions provider', () => {
     const provider = createMetaProvider('meta:chat:muse-spark-1.1');
+    expect(provider).not.toBeInstanceOf(MetaResponsesProvider);
     expect(provider.id()).toBe('meta:muse-spark-1.1');
     expect(asChat(provider).modelName).toBe('muse-spark-1.1');
   });
 
   it('falls back to the default model for a bare prefix', () => {
     expect(asChat(createMetaProvider('meta:')).modelName).toBe('muse-spark-1.1');
+    expect(createMetaProvider('meta:').id()).toBe('meta:responses:muse-spark-1.1');
     expect(asChat(createMetaProvider('meta:chat')).modelName).toBe('muse-spark-1.1');
     expect(asChat(createMetaProvider('meta:chat:')).modelName).toBe('muse-spark-1.1');
   });
@@ -86,15 +89,15 @@ describe('createMetaProvider routing', () => {
 
 describe('MetaProvider configuration', () => {
   it('points at the Meta base URL and key envar by default', () => {
-    const provider = asChat(createMetaProvider('meta:muse-spark-1.1'));
+    const provider = asChat(createMetaProvider('meta:chat:muse-spark-1.1'));
     expect(provider.config.apiBaseUrl).toBe('https://api.meta.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('META_API_KEY');
+    expect(provider.config.apiKeyEnvar).toBe('MODEL_API_KEY');
     expect(provider.getApiUrl()).toBe('https://api.meta.ai/v1');
   });
 
   it('lets the user override the base URL', () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { apiBaseUrl: 'https://proxy.example.com/v1' },
       }),
     );
@@ -103,7 +106,7 @@ describe('MetaProvider configuration', () => {
 
   it('resolves an empty-string apiBaseUrl (e.g. an unset template) to the Meta host', () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { apiBaseUrl: '' },
       }),
     );
@@ -112,7 +115,7 @@ describe('MetaProvider configuration', () => {
 
   it('passes through standard OpenAI options without dropping them', () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { temperature: 0.2, max_completion_tokens: 256 },
       }),
     );
@@ -121,7 +124,7 @@ describe('MetaProvider configuration', () => {
   });
 
   it('reports itself as a Meta provider', () => {
-    const provider = createMetaProvider('meta:muse-spark-1.1');
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1');
     expect(provider.toString()).toBe('[Meta Model API Provider muse-spark-1.1]');
     expect(asChat(provider).toJSON()).toMatchObject({
       provider: 'meta',
@@ -131,7 +134,7 @@ describe('MetaProvider configuration', () => {
 
   it('redacts an explicit apiKey from toJSON output', () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { apiKey: 'LLM|123|secret', temperature: 0.2 },
       }),
     );
@@ -144,40 +147,17 @@ describe('MetaProvider configuration', () => {
 
 describe('MetaProvider key resolution', () => {
   it('resolves apiKey from config', () => {
-    const provider = createMetaProvider('meta:muse-spark-1.1', {
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
       config: { apiKey: 'LLM|1|from-config' },
     });
     expect((provider as any).getApiKey()).toBe('LLM|1|from-config');
   });
 
-  it('resolves apiKey from the META_API_KEY env var', () => {
-    const restore = mockProcessEnv({ META_API_KEY: 'LLM|1|from-env' });
+  it("resolves apiKey from Meta's official MODEL_API_KEY env var", () => {
+    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|official' });
     try {
-      const provider = createMetaProvider('meta:muse-spark-1.1');
-      expect((provider as any).getApiKey()).toBe('LLM|1|from-env');
-    } finally {
-      restore();
-    }
-  });
-
-  it("falls back to Meta's official MODEL_API_KEY env var", () => {
-    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|official', META_API_KEY: undefined });
-    try {
-      const provider = createMetaProvider('meta:muse-spark-1.1');
+      const provider = createMetaProvider('meta:chat:muse-spark-1.1');
       expect((provider as any).getApiKey()).toBe('LLM|1|official');
-    } finally {
-      restore();
-    }
-  });
-
-  it('prefers META_API_KEY over MODEL_API_KEY', () => {
-    const restore = mockProcessEnv({
-      META_API_KEY: 'LLM|1|specific',
-      MODEL_API_KEY: 'LLM|1|generic',
-    });
-    try {
-      const provider = createMetaProvider('meta:muse-spark-1.1');
-      expect((provider as any).getApiKey()).toBe('LLM|1|specific');
     } finally {
       restore();
     }
@@ -187,11 +167,10 @@ describe('MetaProvider key resolution', () => {
     const restore = mockProcessEnv({
       OPENAI_API_KEY: 'sk-openai-secret',
       OPENAI_ORGANIZATION: 'org-openai-secret',
-      META_API_KEY: undefined,
       MODEL_API_KEY: undefined,
     });
     try {
-      const provider = asChat(createMetaProvider('meta:muse-spark-1.1'));
+      const provider = asChat(createMetaProvider('meta:chat:muse-spark-1.1'));
       expect((provider as any).getApiKey()).toBeUndefined();
       expect(provider.getOrganization()).toBeUndefined();
     } finally {
@@ -200,9 +179,9 @@ describe('MetaProvider key resolution', () => {
   });
 
   it('prefers a provider-scoped env override over the ambient process env', () => {
-    const restore = mockProcessEnv({ META_API_KEY: 'LLM|1|ambient' });
+    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|ambient' });
     try {
-      const provider = createMetaProvider('meta:muse-spark-1.1', {
+      const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
         env: { MODEL_API_KEY: 'LLM|1|pinned' },
       });
       expect((provider as any).getApiKey()).toBe('LLM|1|pinned');
@@ -217,7 +196,7 @@ describe('MetaProvider key resolution', () => {
       MODEL_API_KEY: 'LLM|1|generic',
     });
     try {
-      const provider = createMetaProvider('meta:muse-spark-1.1', {
+      const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { apiKeyEnvar: 'CUSTOM_META_KEY' },
       });
       expect((provider as any).getApiKey()).toBe('LLM|1|custom');
@@ -229,21 +208,21 @@ describe('MetaProvider key resolution', () => {
 
 describe('MetaProvider request body shaping', () => {
   it('treats Muse models as reasoning models: no injected max_tokens default', async () => {
-    const provider = asChat(createMetaProvider('meta:muse-spark-1.1'));
+    const provider = asChat(createMetaProvider('meta:chat:muse-spark-1.1'));
     const { body } = await provider.getOpenAiBody('Hello');
     expect(body.max_tokens).toBeUndefined();
     expect(body.max_completion_tokens).toBeUndefined();
   });
 
   it('keeps the deterministic temperature default (Muse accepts temperature)', async () => {
-    const provider = asChat(createMetaProvider('meta:muse-spark-1.1'));
+    const provider = asChat(createMetaProvider('meta:chat:muse-spark-1.1'));
     const { body } = await provider.getOpenAiBody('Hello');
     expect(body.temperature).toBe(0);
   });
 
   it('forwards reasoning_effort, including the Meta-specific xhigh level', async () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { reasoning_effort: 'xhigh' },
       }),
     );
@@ -253,7 +232,7 @@ describe('MetaProvider request body shaping', () => {
 
   it('forwards max_completion_tokens', async () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { max_completion_tokens: 4096 },
       }),
     );
@@ -264,7 +243,7 @@ describe('MetaProvider request body shaping', () => {
 
   it('maps an explicit max_tokens onto max_completion_tokens instead of dropping it', async () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { max_tokens: 2048 },
       }),
     );
@@ -282,7 +261,7 @@ describe('MetaProvider request body shaping', () => {
       OPENAI_MAX_COMPLETION_TOKENS: '256',
     });
     try {
-      const provider = asChat(createMetaProvider('meta:muse-spark-1.1'));
+      const provider = asChat(createMetaProvider('meta:chat:muse-spark-1.1'));
       const { body } = await provider.getOpenAiBody('Hello');
       expect(body.temperature).toBe(0); // promptfoo's config default, not the env value
       expect(body.top_p).toBeUndefined();
@@ -296,7 +275,7 @@ describe('MetaProvider request body shaping', () => {
 
   it("rejects reasoning_effort 'none' with a clear error instead of an HTTP 400", async () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { reasoning_effort: 'none' },
       }),
     );
@@ -305,7 +284,7 @@ describe('MetaProvider request body shaping', () => {
 
   it('rejects `stop` with a clear error instead of an HTTP 400 per request', async () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { stop: ['\n'] },
       }),
     );
@@ -314,7 +293,7 @@ describe('MetaProvider request body shaping', () => {
 
   it('leaves explicit passthrough values untouched', async () => {
     const provider = asChat(
-      createMetaProvider('meta:muse-spark-1.1', {
+      createMetaProvider('meta:chat:muse-spark-1.1', {
         config: { passthrough: { max_completion_tokens: 5000, top_p: 0.9, temperature: 1.5 } },
       }),
     );
@@ -403,7 +382,7 @@ describe('MetaProvider callApi cost', () => {
 
   it('fills in cost from the built-in price table (incl. cached tokens)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider('meta:muse-spark-1.1', {
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
       config: { apiKey: 'LLM|1|k' },
     });
     const result = await provider.callApi('Say hi');
@@ -412,7 +391,7 @@ describe('MetaProvider callApi cost', () => {
 
   it('leaves cost undefined for unknown models without user pricing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider('meta:muse-future', {
+    const provider = createMetaProvider('meta:chat:muse-future', {
       config: { apiKey: 'LLM|1|k' },
     });
     const result = await provider.callApi('Say hi');
@@ -421,7 +400,7 @@ describe('MetaProvider callApi cost', () => {
 
   it('honours prompt-level cost overrides like the base billing path', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider('meta:muse-spark-1.1', {
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
       config: { apiKey: 'LLM|1|k' },
     });
     const result = await provider.callApi('Say hi', {
@@ -438,7 +417,7 @@ describe('MetaProvider callApi cost', () => {
       status: 429,
       statusText: 'Too Many Requests',
     } as any);
-    const provider = createMetaProvider('meta:muse-spark-1.1', {
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
       config: { apiKey: 'LLM|1|k' },
     });
     const result = await provider.callApi('Say hi');
@@ -448,7 +427,7 @@ describe('MetaProvider callApi cost', () => {
 
   it('does not fill cost for cached responses', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({ ...okResponse, cached: true } as any);
-    const provider = createMetaProvider('meta:muse-spark-1.1', {
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
       config: { apiKey: 'LLM|1|k' },
     });
     const result = await provider.callApi('Say hi');
@@ -461,14 +440,13 @@ describe('MetaResponsesProvider', () => {
   it('points at the Meta base URL and key envar by default', () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
     expect(provider.config.apiBaseUrl).toBe('https://api.meta.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('META_API_KEY');
+    expect(provider.config.apiKeyEnvar).toBe('MODEL_API_KEY');
     expect((provider as any).getApiUrl()).toBe('https://api.meta.ai/v1');
   });
 
   it('resolves keys like the chat provider (no OPENAI_API_KEY fallback)', () => {
     const restore = mockProcessEnv({
       OPENAI_API_KEY: 'sk-openai-secret',
-      META_API_KEY: undefined,
       MODEL_API_KEY: undefined,
     });
     try {
@@ -572,7 +550,7 @@ describe('MetaResponsesProvider request body shaping', () => {
 
 describe('MetaMessagesProvider', () => {
   it('points the Anthropic SDK client at the bare Meta host with bearer auth', () => {
-    const restore = mockProcessEnv({ META_API_KEY: 'LLM|1|messages-key' });
+    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|messages-key' });
     try {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
       expect((provider as any).getApiBaseUrl()).toBe('https://api.meta.ai');
@@ -588,7 +566,6 @@ describe('MetaMessagesProvider', () => {
     const restore = mockProcessEnv({
       ANTHROPIC_API_KEY: 'sk-ant-secret',
       ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
-      META_API_KEY: undefined,
       MODEL_API_KEY: undefined,
     });
     try {
@@ -623,7 +600,7 @@ describe('MetaMessagesProvider', () => {
 
   it('never authenticates with a Claude Code OAuth credential, even when one exists', () => {
     expect((MetaMessagesProvider as any).SUPPORTS_CLAUDE_CODE_OAUTH).toBe(false);
-    const restore = mockProcessEnv({ META_API_KEY: undefined, MODEL_API_KEY: undefined });
+    const restore = mockProcessEnv({ MODEL_API_KEY: undefined });
     try {
       // Sanity-check the mock: the plain Anthropic provider WOULD pick up the
       // mocked OAuth credential under this config.
@@ -671,7 +648,7 @@ describe('MetaMessagesProvider', () => {
   });
 
   it('throws the Meta-specific missing-key error from callApi', async () => {
-    const restore = mockProcessEnv({ META_API_KEY: undefined, MODEL_API_KEY: undefined });
+    const restore = mockProcessEnv({ MODEL_API_KEY: undefined });
     try {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1');
       await expect(provider.callApi('Hello')).rejects.toThrow(/Meta Model API key is not set/);

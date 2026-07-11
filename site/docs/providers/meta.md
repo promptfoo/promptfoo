@@ -9,21 +9,21 @@ The [Meta Model API](https://dev.meta.ai/) (public preview) serves Meta Superint
 
 :::note
 
-This provider is for the Meta **Model** API at `api.meta.ai` (Muse models). For Meta's hosted Llama models on the Llama API (`api.llama.com`), use the [Llama API provider](/docs/providers/llamaApi.md) instead.
+This provider is for the Meta **Model** API at `api.meta.ai` (Muse models), which supersedes Meta's [Llama API](/docs/providers/llamaApi.md) (`api.llama.com`) as Meta's hosted inference service — the Llama API Public Preview was retired on July 6, 2026.
 
 :::
 
 ## Setup
 
 1. Create an API key from the API keys tab on the [Meta Model API dashboard](https://dev.meta.ai/).
-2. Set the `MODEL_API_KEY` environment variable — Meta's default, the same variable its official SDKs and quickstart use — or specify `apiKey` in your config. The provider also reads `META_API_KEY` as a promptfoo-specific override that takes precedence when both are set (useful for isolating the key per provider).
+2. Set the `MODEL_API_KEY` environment variable — Meta's official variable, the same one its SDKs and quickstart use — or specify `apiKey` (or a custom `apiKeyEnvar`) in your config.
 
 ```yaml
 providers:
   - id: meta:muse-spark-1.1
 ```
 
-Both `meta:<model>` and `meta:chat:<model>` resolve to the chat completions endpoint; `meta:responses:<model>` uses the [Responses API](#responses-api) and `meta:messages:<model>` the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.1`.
+`meta:<model>` defaults to the [Responses API](#responses-api) — Meta's full-feature surface and the one its docs recommend. Use `meta:chat:<model>` for the OpenAI-compatible chat completions endpoint, or `meta:messages:<model>` for the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.1`.
 
 ## Available Models
 
@@ -62,7 +62,7 @@ Promptfoo computes cost from the [published pricing](https://dev.meta.ai/docs/ge
 
 ## Responses API
 
-`meta:responses:<model>` targets Meta's `/v1/responses` endpoint — the only Meta endpoint that carries reasoning across turns, with built-in web-search grounding:
+`meta:<model>` (the default) and `meta:responses:<model>` target Meta's `/v1/responses` endpoint — the only Meta endpoint that carries reasoning across turns, with built-in web-search grounding:
 
 ```yaml
 providers:
