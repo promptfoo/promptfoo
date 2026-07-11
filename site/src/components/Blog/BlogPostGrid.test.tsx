@@ -16,8 +16,14 @@ describe('BlogPostGrid', () => {
   });
 
   it('separates the older posts heading from the page number', () => {
-    render(<BlogPostGrid posts={[]} title="Older Posts • Page 2" />);
+    render(<BlogPostGrid posts={[]} title="Older Posts • Page 2" isPaginated />);
 
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Older Posts 2');
+  });
+
+  it('renders the older posts heading without a page number when the separator is missing', () => {
+    render(<BlogPostGrid posts={[]} title="Older Posts" isPaginated />);
+
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Older Posts');
   });
 });
