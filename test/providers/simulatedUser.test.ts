@@ -236,6 +236,33 @@ describe('SimulatedUser', () => {
       expect(customUserContext?.prompt.raw).not.toContain('target prompt');
     });
 
+    it('should apply delay configured on custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+        delay: 250,
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(timeUtils.sleep).toHaveBeenCalledWith(250);
+    });
+
     it('should support custom user providers configured by id', async () => {
       const customUserProvider = createMockProvider({
         id: 'custom-user-provider',

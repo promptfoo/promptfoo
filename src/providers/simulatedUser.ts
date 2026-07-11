@@ -241,6 +241,11 @@ export class SimulatedUser implements ApiProvider {
 
     const response = await userProvider.callApi(userPromptString, userContext);
 
+    if (userProvider.delay) {
+      logger.debug(`[SimulatedUser] Sleeping for ${userProvider.delay}ms`);
+      await sleep(userProvider.delay);
+    }
+
     // Propagate error from remote generation disable check
     if (response.error) {
       return {
