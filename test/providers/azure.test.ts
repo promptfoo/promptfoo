@@ -721,8 +721,12 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(true);
       });
 
-      it('should auto-detect gpt-5 models by deployment name', () => {
-        const provider = new AzureChatCompletionProvider('gpt-5.4', {
+      it.each([
+        'gpt-5.6-sol',
+        'gpt-5.6-terra',
+        'gpt-5.6-luna',
+      ])('should auto-detect %s by deployment name', (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);

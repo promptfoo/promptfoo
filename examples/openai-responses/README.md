@@ -71,6 +71,10 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 
 Example comparing GPT-5.5 standard and pro models with different Responses API reasoning settings.
 
+### GPT-5.6 (`promptfooconfig.gpt-5.6.yaml`)
+
+Example comparing the Sol, Terra, and Luna tiers. The `gpt-5.6` alias routes to Sol. All tiers support `max` reasoning; Codex `ultra` is available for Sol and Terra rather than as a Responses API reasoning value.
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -130,6 +134,9 @@ npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
 
 # GPT-5.5 example
 npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
+
+# GPT-5.6 example
+npx promptfoo eval -c promptfooconfig.gpt-5.6.yaml
 
 # Prompt caching example
 npx promptfoo eval -c promptfooconfig.prompt-cache.yaml

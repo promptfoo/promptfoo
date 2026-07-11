@@ -127,6 +127,47 @@ describe('WebSocketProvider', () => {
     expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
   });
 
+  it('should pass configured protocols to WebSocket connection', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        protocols: ['json'],
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', ['json'], {});
+  });
+
+  it('should preserve Sec-WebSocket-Protocol headers unless protocols are configured', async () => {
+    const headers = {
+      Authorization: 'Bearer test-token',
+      'Sec-WebSocket-Protocol': 'Bearer token-with-space',
+    };
+
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        headers,
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
+  });
+
   it('should work without headers provided', async () => {
     provider = new WebSocketProvider('ws://test.com', {
       config: {
@@ -172,7 +213,9 @@ describe('WebSocketProvider', () => {
   it('should handle WebSocket errors', async () => {
     emitWebSocketEvents({ type: 'error', error: new Error('connection failed') });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket error');
+    await expect(provider.callApi('test prompt')).rejects.toThrow(
+      'WebSocket error: connection failed',
+    );
     expect(mockWs.close).toHaveBeenCalled();
   });
 

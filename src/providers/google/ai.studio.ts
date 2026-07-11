@@ -598,6 +598,10 @@ export class AIStudioEmbeddingProvider
         ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
         : { total: promptTokens ?? 0, numRequests: 1 },
       cached,
+      cost:
+        cached || promptTokens === undefined
+          ? undefined
+          : calculateGoogleCost(this.modelName, this.config, promptTokens, 0),
     };
   }
 }

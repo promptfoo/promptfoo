@@ -182,7 +182,8 @@ function ProviderConfigEditor({
     } else if (
       field in updatedTarget.config ||
       field === 'streamResponse' ||
-      field === 'transformResponse'
+      field === 'transformResponse' ||
+      field === 'protocols'
     ) {
       (updatedTarget.config as Record<string, unknown>)[field] = value;
     } else if (field === 'label') {
