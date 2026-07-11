@@ -7,6 +7,12 @@ description: Use Meta's hosted Llama API service for text generation and multimo
 
 The Llama API provider enables you to use Meta's hosted Llama models through their official API service. This includes access to the latest Llama 4 multimodal models and Llama 3.3 text models, as well as accelerated variants from partners like Cerebras and Groq.
 
+:::note
+
+This provider is for Meta's Llama API at `api.llama.com`. For Meta's newer Model API serving the Muse Spark models at `api.meta.ai`, use the [Meta Model API provider](/docs/providers/meta.md) instead.
+
+:::
+
 ## Setup
 
 First, you'll need to get an API key from Meta:

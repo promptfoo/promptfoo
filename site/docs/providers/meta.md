@@ -29,7 +29,7 @@ Both `meta:<model>` and `meta:chat:<model>` resolve to the chat completions endp
 
 Check the [models page](https://dev.meta.ai/docs/getting-started/models) for the live list. As of writing:
 
-- `muse-spark-1.1` — multimodal reasoning model: 1,048,576-token context window, 131,072 max output tokens, text/image/video/PDF input, tool calling, structured output, and search grounding (Responses API only).
+- `muse-spark-1.1` — multimodal reasoning model: 1,048,576-token context window, 131,072 max output tokens, text/image/video/PDF input, tool calling, structured output, and search grounding (Responses and Messages APIs).
 
 ## Configuration
 
@@ -47,7 +47,7 @@ providers:
 The provider accepts every option the [OpenAI provider](/docs/providers/openai/) supports. Notable behavior:
 
 - `reasoning_effort` — `minimal`, `low`, `medium`, `high`, or `xhigh`. When omitted, the model picks its own reasoning depth. Muse Spark does not support `none`; the provider rejects it with a clear error. Reasoning tokens bill at the output rate and count toward the output cap.
-- `max_completion_tokens` — caps generation on the chat endpoint. The API has no `max_tokens` parameter; if you set `max_tokens` the provider forwards it as `max_completion_tokens`. On the [Responses API](#responses-api) the cap is `max_output_tokens`, and the provider maps `max_completion_tokens`/`max_tokens` onto it. When unset, no cap is sent so reasoning can use the full output budget.
+- `max_completion_tokens` — caps generation on the chat endpoint (Meta accepts `max_tokens` only as a deprecated alias; if you set it, the provider forwards it as the canonical `max_completion_tokens`). On the [Responses API](#responses-api) the cap is `max_output_tokens`, and the provider maps `max_completion_tokens`/`max_tokens` onto it. When unset, no cap is sent so reasoning can use the full output budget.
 - `temperature` — supported (0–2, API default 1.0). Promptfoo sends its deterministic default of `0` unless you override it.
 - `response_format` — structured output with guaranteed JSON schema matching.
 - `tools` / `tool_choice` — parallel tool calling with streamed arguments.
@@ -62,7 +62,7 @@ Promptfoo computes cost from the [published pricing](https://dev.meta.ai/docs/ge
 
 ## Responses API
 
-`meta:responses:<model>` targets Meta's `/v1/responses` endpoint — the only Meta endpoint with search grounding and reasoning that carries across turns:
+`meta:responses:<model>` targets Meta's `/v1/responses` endpoint — the only Meta endpoint that carries reasoning across turns, with built-in web-search grounding:
 
 ```yaml
 providers:
@@ -126,6 +126,7 @@ providers:
         ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.1
         ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-spark-1.1
         CLAUDE_CODE_SUBAGENT_MODEL: muse-spark-1.1
+        ENABLE_TOOL_SEARCH: 'true' # Claude Code disables MCP tool search for non-first-party hosts
 ```
 
 :::warning

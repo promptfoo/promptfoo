@@ -310,9 +310,10 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 
   // The Muse Spark models are reasoning models: they take reasoning_effort and
-  // max_completion_tokens, and the API has no max_tokens parameter. Marking
-  // them as reasoning models makes the base class forward those fields and
-  // skip the injected max_tokens default (1024), which would starve reasoning.
+  // max_completion_tokens (max_tokens is only a deprecated alias upstream).
+  // Marking them as reasoning models makes the base class forward those fields
+  // and skip the injected max_tokens default (1024), which would starve
+  // reasoning.
   protected override isReasoningModel(): boolean {
     return true;
   }
@@ -357,9 +358,9 @@ class MetaProvider extends OpenAiChatCompletionProvider {
       throw new Error('Muse Spark models do not support logprobs.');
     }
 
-    // The Meta API caps generation with max_completion_tokens (there is no
-    // max_tokens parameter); honor an explicit max_tokens as
-    // max_completion_tokens rather than silently dropping it.
+    // The Meta API caps generation with max_completion_tokens (max_tokens is
+    // only a deprecated alias); honor an explicit max_tokens as the canonical
+    // field rather than silently dropping it.
     applyMetaOutputCap(
       body,
       passthrough,
@@ -388,9 +389,9 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 }
 
-// Meta's /v1/responses endpoint follows the OpenAI Responses API shape and is
-// the only Meta endpoint with search grounding (tools: [{type: 'web_search'}])
-// and reasoning that persists across turns.
+// Meta's /v1/responses endpoint follows the OpenAI Responses API shape,
+// supports search grounding (tools: [{type: 'web_search'}]), and is the only
+// Meta endpoint whose reasoning persists across turns.
 // https://dev.meta.ai/docs/features/responses
 export class MetaResponsesProvider extends OpenAiResponsesProvider {
   config: MetaConfig;
