@@ -21,6 +21,8 @@ vi.mock('../../src/util/fetch/index.ts');
 
 // Mock PromptfooSimulatedUserProvider
 const mockUserProviderCallApi = vi.fn().mockResolvedValue({ output: 'user response' });
+const mockLoadApiProvider = vi.hoisted(() => vi.fn());
+const mockCustomUserProviderCallApi = vi.hoisted(() => vi.fn());
 vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -35,6 +37,10 @@ vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/providers/index', () => ({
+  loadApiProvider: mockLoadApiProvider,
+}));
+
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
   let originalProvider: MockApiProvider;
@@ -42,6 +48,9 @@ describe('SimulatedUser', () => {
   beforeEach(() => {
     mockUserProviderCallApi.mockClear();
     mockUserProviderCallApi.mockResolvedValue({ output: 'user response' });
+    mockLoadApiProvider.mockReset();
+    mockCustomUserProviderCallApi.mockReset();
+    mockCustomUserProviderCallApi.mockResolvedValue({ output: 'custom user response' });
 
     originalProvider = createMockProvider({
       id: 'test-agent',
@@ -98,6 +107,137 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.numRequests).toBe(4);
       expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should load a configured custom user provider', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'Act as a {{role}} user.',
+          maxTurns: 1,
+          userProvider: {
+            id: 'openai:chat:gpt-4.1-mini',
+            config: {
+              temperature: 0.2,
+            },
+          },
+        },
+      });
+
+      const result = await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { role: 'curious' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockLoadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4.1-mini', {
+        basePath: undefined,
+        env: undefined,
+        options: {
+          id: 'openai:chat:gpt-4.1-mini',
+          config: {
+            temperature: 0.2,
+          },
+        },
+      });
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(1);
+      const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(customUserPrompt).toHaveLength(1);
+      expect(customUserPrompt[0]).toMatchObject({ role: 'system' });
+      expect(customUserPrompt[0].content).toContain(
+        'You are simulating the user in a conversation with an assistant.',
+      );
+      expect(customUserPrompt[0].content).toContain('produce only the next user message');
+      expect(customUserPrompt[0].content).toContain('include ###STOP###');
+      expect(customUserPrompt[0].content).toContain('Act as a curious user.');
+      expect(originalProvider.callApi).not.toHaveBeenCalled();
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should support custom user providers configured by id', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockLoadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4.1-mini', {
+        basePath: undefined,
+        env: undefined,
+      });
+    });
+
+    it('should reject promptfoo:simulated-user as a custom user provider', async () => {
+      const recursiveUserProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          userProvider: {
+            id: 'promptfoo:simulated-user',
+          },
+        },
+      });
+
+      await expect(
+        recursiveUserProvider.callApi('test prompt', {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        }),
+      ).rejects.toThrow(
+        'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider',
+      );
+      expect(mockLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('should reject custom user providers that resolve to SimulatedUser', async () => {
+      mockLoadApiProvider.mockResolvedValue(
+        new SimulatedUser({
+          config: {
+            instructions: 'nested instructions',
+          },
+        }),
+      );
+
+      const recursiveUserProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          userProvider: 'file://user-provider.yaml',
+        },
+      });
+
+      await expect(
+        recursiveUserProvider.callApi('test prompt', {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        }),
+      ).rejects.toThrow(
+        'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider',
+      );
     });
 
     it('should accumulate token usage from both agent and user providers', async () => {

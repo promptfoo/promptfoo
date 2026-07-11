@@ -56,11 +56,12 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                    |
-| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
+| Option            | Type                      | Description                                                                                                                    |
+| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `instructions`    | string                    | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
+| `maxTurns`        | number                    | Maximum number of conversation turns. Defaults to 10.                                                                          |
+| `initialMessages` | Message[] or string       | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
+| `userProvider`    | string or ProviderOptions | Optional. Provider used to generate simulated user messages instead of Promptfoo's hosted conversation models.                 |
 
 ## Initial Messages
 
@@ -276,9 +277,29 @@ The conversation will automatically stop when:
 
 The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
 
+## Custom Simulated User Provider
+
+By default, Simulated User uses Promptfoo's hosted conversation models to generate simulated user messages. To use your own model for the simulated user, set `config.userProvider`:
+
+```yaml
+defaultTest:
+  provider:
+    id: promptfoo:simulated-user
+    config:
+      maxTurns: 5
+      instructions: |
+        You've selected a flight and want to pay with travel certificates
+      userProvider:
+        id: openai:chat:gpt-5-mini
+        config:
+          temperature: 0.7
+```
+
+The custom user provider receives the conversation history in OpenAI chat message format. promptfoo adds a system message instructing the model to act as the simulated user and return only the next user message.
+
 ## Remote Generation
 
-By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
+By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely. To use your own model for simulated user responses, configure `userProvider`.
 
 To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Notice](/privacy/) for details on what data is sent.
 

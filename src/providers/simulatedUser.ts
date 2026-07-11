@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import logger from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
@@ -7,6 +8,7 @@ import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -22,9 +24,23 @@ export type Message = {
   content: string;
 };
 
+const DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS = dedent`
+  You are simulating the user in a conversation with an assistant.
+  Your task is to produce only the next user message.
+  Do not answer as the assistant, do not explain your reasoning, and do not include role labels.
+  If the conversation goal is complete, include ###STOP### in your response.
+
+  User simulation instructions:
+  {{instructions}}
+`;
+
+const SIMULATED_USER_PROVIDER_ID = 'promptfoo:simulated-user';
+const RECURSIVE_USER_PROVIDER_ERROR =
+  'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider';
+
 type AgentProviderOptions = ProviderOptions & {
   config?: {
-    userProvider?: ProviderOptions;
+    userProvider?: string | ProviderOptions;
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
@@ -51,6 +67,9 @@ export class SimulatedUser implements ApiProvider {
   private readonly redteamGenerationContext?: RemoteGenerationContext;
   private readonly stateful: boolean;
   private readonly configInitialMessages?: Message[] | string;
+  private readonly userProvider?: string | ProviderOptions;
+  private readonly basePath?: string;
+  private readonly env?: EnvOverrides;
 
   /**
    * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
@@ -58,7 +77,7 @@ export class SimulatedUser implements ApiProvider {
    */
   readonly taskId: string = 'tau';
 
-  constructor({ id, label, config }: AgentProviderOptions) {
+  constructor({ id, label, config = {}, env }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
@@ -67,6 +86,9 @@ export class SimulatedUser implements ApiProvider {
       (config.targetId ? { providerTargetIds: [], cloudTargetId: config.targetId } : undefined);
     this.stateful = config.stateful ?? false;
     this.configInitialMessages = config.initialMessages;
+    this.userProvider = config.userProvider;
+    this.basePath = typeof config.basePath === 'string' ? config.basePath : undefined;
+    this.env = env;
   }
 
   id() {
@@ -186,7 +208,8 @@ export class SimulatedUser implements ApiProvider {
 
   private async sendMessageToUser(
     messages: Message[],
-    userProvider: PromptfooSimulatedUserProvider,
+    userProvider: ApiProvider,
+    instructions?: string,
   ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
@@ -197,7 +220,14 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+    const renderedInstructions = instructions
+      ? DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace('{{instructions}}', instructions)
+      : undefined;
+    const userPrompt = instructions
+      ? [{ role: 'system', content: renderedInstructions }, ...flippedMessages]
+      : flippedMessages;
+
+    const response = await userProvider.callApi(JSON.stringify(userPrompt));
 
     // Propagate error from remote generation disable check
     if (response.error) {
@@ -211,6 +241,47 @@ export class SimulatedUser implements ApiProvider {
     return {
       messages: [...messages, { role: 'user', content: String(response.output || '') }],
       tokenUsage: response.tokenUsage,
+    };
+  }
+
+  private async createUserProvider(
+    instructions: string,
+  ): Promise<{ provider: ApiProvider; includeSystemInstructions: boolean }> {
+    if (!this.userProvider) {
+      return {
+        provider: new PromptfooSimulatedUserProvider(
+          { instructions, redteamGenerationContext: this.redteamGenerationContext },
+          this.taskId,
+        ),
+        includeSystemInstructions: false,
+      };
+    }
+
+    const userProviderId =
+      typeof this.userProvider === 'string' ? this.userProvider : this.userProvider.id;
+    invariant(userProviderId, 'Expected config.userProvider.id to be set');
+    if (userProviderId === SIMULATED_USER_PROVIDER_ID) {
+      throw new Error(RECURSIVE_USER_PROVIDER_ERROR);
+    }
+
+    // Avoid a static import cycle: index -> registry -> simulatedUser -> index.
+    const { loadApiProvider } = await import('./index');
+
+    const userProviderOptions =
+      typeof this.userProvider === 'string' ? undefined : this.userProvider;
+    const provider = await loadApiProvider(userProviderId, {
+      basePath: this.basePath,
+      env: this.env,
+      ...(userProviderOptions && { options: userProviderOptions }),
+    });
+
+    if (provider instanceof SimulatedUser) {
+      throw new Error(RECURSIVE_USER_PROVIDER_ERROR);
+    }
+
+    return {
+      provider,
+      includeSystemInstructions: true,
     };
   }
 
@@ -268,10 +339,8 @@ export class SimulatedUser implements ApiProvider {
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
-    const userProvider = new PromptfooSimulatedUserProvider(
-      { instructions, redteamGenerationContext: this.redteamGenerationContext },
-      this.taskId,
-    );
+    const { provider: userProvider, includeSystemInstructions } =
+      await this.createUserProvider(instructions);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 
@@ -324,7 +393,11 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const userResult = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(
+        messages,
+        userProvider,
+        includeSystemInstructions ? instructions : undefined,
+      );
 
       // Check for errors from remote generation disable
       if (userResult.error) {
