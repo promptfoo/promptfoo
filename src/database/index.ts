@@ -40,9 +40,37 @@ function isMissingPathError(error: unknown): boolean {
   return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
+function resolveDatabaseFileSymlinks(filePath: string): string {
+  let resolvedPath = path.resolve(filePath);
+  const visitedPaths = new Set<string>();
+
+  while (true) {
+    if (visitedPaths.has(resolvedPath)) {
+      throw new Error(`Refusing to resolve a database symlink cycle at ${resolvedPath}`);
+    }
+    visitedPaths.add(resolvedPath);
+
+    let stats: fs.Stats;
+    try {
+      stats = fs.lstatSync(resolvedPath);
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return resolvedPath;
+      }
+      throw error;
+    }
+
+    if (!stats.isSymbolicLink()) {
+      return resolvedPath;
+    }
+
+    resolvedPath = path.resolve(path.dirname(resolvedPath), fs.readlinkSync(resolvedPath));
+  }
+}
+
 function databasePathsReferToSameFile(firstPath: string, secondPath: string): boolean {
-  const resolvedFirstPath = path.resolve(firstPath);
-  const resolvedSecondPath = path.resolve(secondPath);
+  const resolvedFirstPath = resolveDatabaseFileSymlinks(firstPath);
+  const resolvedSecondPath = resolveDatabaseFileSymlinks(secondPath);
   if (resolvedFirstPath === resolvedSecondPath) {
     return true;
   }

@@ -294,6 +294,50 @@ describe('database', () => {
       );
     });
 
+    it('should refuse a dangling file symlink to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'dangling-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'dangling-link-config');
+      const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.symlinkSync(defaultDbPath, path.join(aliasedConfigDir, 'promptfoo.db'), 'file');
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(defaultDbPath)).toBe(false);
+    });
+
+    it('should refuse a relative dangling file symlink chain to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'relative-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'relative-link-config');
+      const linkDirectory = path.join(tempConfigDir, 'relative-link-hop');
+      const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
+      const intermediateDbPath = path.join(linkDirectory, 'promptfoo.db');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.mkdirSync(linkDirectory, { recursive: true });
+      fs.symlinkSync(path.relative(linkDirectory, defaultDbPath), intermediateDbPath, 'file');
+      fs.symlinkSync(
+        path.relative(aliasedConfigDir, intermediateDbPath),
+        path.join(aliasedConfigDir, 'promptfoo.db'),
+        'file',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(defaultDbPath)).toBe(false);
+    });
+
     it('should fail closed when stat-based identity checks error', () => {
       const fakeHomeDir = path.join(tempConfigDir, 'eio-home');
       const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
