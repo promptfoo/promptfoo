@@ -48,6 +48,21 @@ export function getMediaStorage(config?: LocalStorageConfig): MediaStorageProvid
 }
 
 /**
+ * Set a custom media storage provider (for cloud deployments)
+ */
+export function setMediaStorage(provider: MediaStorageProvider): void {
+  defaultProvider = provider;
+  logger.debug(`[MediaStorage] Set custom provider: ${provider.providerId}`);
+}
+
+/**
+ * Reset the storage provider (mainly for testing)
+ */
+export function resetMediaStorage(): void {
+  defaultProvider = null;
+}
+
+/**
  * Store media data and return a reference
  */
 export async function storeMedia(data: Buffer, metadata: MediaMetadata): Promise<StoreResult> {

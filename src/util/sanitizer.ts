@@ -776,6 +776,8 @@ export function sanitizeObject(
 
 // Legacy exports for backward compatibility
 export const sanitizeBody = sanitizeObject;
+export const sanitizeHeaders = sanitizeObject;
+export const sanitizeQueryParams = sanitizeObject;
 
 function getSecretLookingRawQueryKeys(search: string): Set<string> {
   const secretKeys = new Set<string>();
