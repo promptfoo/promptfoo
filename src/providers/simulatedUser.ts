@@ -209,7 +209,9 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: ApiProvider,
-    instructions?: string,
+    context: CallApiContextParams | undefined,
+    includeSystemInstructions: boolean,
+    instructions: string,
   ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
@@ -220,14 +222,24 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    const renderedInstructions = instructions
+    const renderedInstructions = includeSystemInstructions
       ? DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace('{{instructions}}', instructions)
       : undefined;
-    const userPrompt = instructions
+    const userPrompt = includeSystemInstructions
       ? [{ role: 'system', content: renderedInstructions }, ...flippedMessages]
       : flippedMessages;
+    const userPromptString = JSON.stringify(userPrompt);
+    const userContext = context
+      ? {
+          ...context,
+          prompt: {
+            raw: userPromptString,
+            label: 'simulated-user',
+          },
+        }
+      : undefined;
 
-    const response = await userProvider.callApi(JSON.stringify(userPrompt));
+    const response = await userProvider.callApi(userPromptString, userContext);
 
     // Propagate error from remote generation disable check
     if (response.error) {
@@ -396,7 +408,9 @@ export class SimulatedUser implements ApiProvider {
       const userResult = await this.sendMessageToUser(
         messages,
         userProvider,
-        includeSystemInstructions ? instructions : undefined,
+        context,
+        includeSystemInstructions,
+        instructions,
       );
 
       // Check for errors from remote generation disable

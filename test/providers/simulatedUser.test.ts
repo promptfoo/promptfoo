@@ -162,6 +162,80 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it('should include custom provider system instructions even when rendered instructions are empty', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: '{{instructions}}',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'target prompt', display: 'target prompt', label: 'target' },
+      });
+
+      const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(customUserPrompt).toHaveLength(1);
+      expect(customUserPrompt[0]).toMatchObject({ role: 'system' });
+      expect(customUserPrompt[0].content).toContain(
+        'You are simulating the user in a conversation with an assistant.',
+      );
+      expect(customUserPrompt[0].content).toContain('User simulation instructions:');
+    });
+
+    it('should pass vars to custom user providers without target prompt config', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'Act as {{role}}.',
+          maxTurns: 1,
+          userProvider: 'file://user-provider.yaml',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { role: 'curious', accountId: 'acct_123' },
+        prompt: {
+          raw: 'target prompt {{accountId}}',
+          display: 'target prompt {{accountId}}',
+          label: 'target',
+          config: {
+            temperature: 0.9,
+          },
+        },
+      });
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(1);
+      const [customUserPrompt, customUserContext] = mockCustomUserProviderCallApi.mock.calls[0];
+      expect(customUserContext?.vars).toMatchObject({
+        role: 'curious',
+        accountId: 'acct_123',
+      });
+      expect(customUserContext?.prompt.raw).toBe(customUserPrompt);
+      expect(customUserContext?.prompt.label).toBe('simulated-user');
+      expect(customUserContext?.prompt).not.toHaveProperty('config');
+      expect(customUserContext?.prompt.raw).not.toContain('target prompt');
+    });
+
     it('should support custom user providers configured by id', async () => {
       const customUserProvider = createMockProvider({
         id: 'custom-user-provider',
