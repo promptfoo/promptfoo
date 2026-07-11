@@ -123,6 +123,14 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
+// These tier IDs auto-routed to Responses during the GPT-5.6 preview. Preserve existing bare
+// provider configs while allowing every tier through an explicit openai:chat: prefix.
+const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+]);
+
 export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'a2a' || providerPath.startsWith('a2a:'),
@@ -967,6 +975,9 @@ export const providerMap: ProviderFactory[] = [
           modelName || configuredModel || 'gpt-4o-transcribe-diarize',
           providerOptions,
         );
+      }
+      if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
+        return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
