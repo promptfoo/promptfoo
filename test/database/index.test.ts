@@ -338,6 +338,35 @@ describe('database', () => {
       expect(fs.existsSync(defaultDbPath)).toBe(false);
     });
 
+    it('should preserve filesystem semantics for dangling symlinks containing dot-dot', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'pivot-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const pivotTarget = path.join(fakeHomeDir, 'subdir');
+      const aliasedConfigDir = path.join(tempConfigDir, 'pivot-link-config');
+      const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(pivotTarget, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.symlinkSync(
+        pivotTarget,
+        path.join(aliasedConfigDir, 'pivot'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      fs.symlinkSync(
+        ['pivot', '..', '.promptfoo', 'promptfoo.db'].join(path.sep),
+        path.join(aliasedConfigDir, 'promptfoo.db'),
+        'file',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(defaultDbPath)).toBe(false);
+    });
+
     it('should fail closed when stat-based identity checks error', () => {
       const fakeHomeDir = path.join(tempConfigDir, 'eio-home');
       const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');

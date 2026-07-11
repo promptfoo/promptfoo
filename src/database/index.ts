@@ -44,7 +44,7 @@ function resolveDatabaseFileSymlinks(filePath: string): string {
   let resolvedPath = path.resolve(filePath);
   const visitedPaths = new Set<string>();
 
-  while (true) {
+  while (visitedPaths.size < 40) {
     if (visitedPaths.has(resolvedPath)) {
       throw new Error(`Refusing to resolve a database symlink cycle at ${resolvedPath}`);
     }
@@ -64,8 +64,13 @@ function resolveDatabaseFileSymlinks(filePath: string): string {
       return resolvedPath;
     }
 
-    resolvedPath = path.resolve(path.dirname(resolvedPath), fs.readlinkSync(resolvedPath));
+    const linkTarget = fs.readlinkSync(resolvedPath);
+    resolvedPath = path.isAbsolute(linkTarget)
+      ? linkTarget
+      : `${path.dirname(resolvedPath)}${path.sep}${linkTarget}`;
   }
+
+  throw new Error(`Refusing to resolve an excessive database symlink chain at ${resolvedPath}`);
 }
 
 function databasePathsReferToSameFile(firstPath: string, secondPath: string): boolean {
