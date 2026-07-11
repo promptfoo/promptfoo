@@ -105,6 +105,10 @@ tests:
           - 'reimbursement.md'
           - 'hr-policies.html'
           - 'Employee Reimbursement Policy'
+      - type: context-recall
+        value: 'Employees are reimbursed for approved expenses within 30 days of submission.'
+        contextTransform: 'output' # retrieve.py returns the joined documents as `output`
+        threshold: 0.8
   - vars:
       query: How many weeks is maternity leave?
     assert:
@@ -113,9 +117,13 @@ tests:
           - 'parental-leave.md'
           - 'hr-policies.html'
           - 'Maternity Leave'
+      - type: context-recall
+        value: 'Maternity leave is 16 weeks.'
+        contextTransform: 'output'
+        threshold: 0.8
 ```
 
-In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
+In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertion uses an LLM to check whether the retrieved documents actually contain the information needed to answer the query — since `retrieve.py` returns the joined documents as the provider's `output` (not a separate `context` var), you must set `contextTransform: 'output'` so the assertion grades the retrieved documents rather than the query prompt. Without that wiring, copying this config as-is will silently grade the wrong field.
 
 **You will get the most value out of this eval if you set up your own evaluation test cases.** View other [assertion types](/docs/configuration/expected-outputs) that you can use.
 

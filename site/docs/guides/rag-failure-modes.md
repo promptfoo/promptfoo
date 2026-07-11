@@ -167,15 +167,19 @@ assert:
     value: |
       const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
       const allowedUrls = new Set(['https://kb.example.com/benefits']);
-      const files = Array.from(output.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
       const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
         m[0].replace(/[.,;:!?]+$/, ''),
       );
+      // Strip matched URLs before scanning for bare file tokens, otherwise a URL like
+      // https://kb.example.com/reports/quarterly.pdf also matches the file regex on its
+      // basename ("quarterly.pdf"), which then fails allowedFiles even though the URL
+      // itself is allowlisted.
+      const outputWithoutUrls = urls.reduce((text, url) => text.replaceAll(url, ''), output);
+      const files = Array.from(outputWithoutUrls.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
       return (
         files.length + urls.length > 0 &&
         files.every((name) => allowedFiles.has(name)) &&
         urls.every((url) => allowedUrls.has(url))
-
       );
 ```
 
