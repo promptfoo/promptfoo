@@ -1481,6 +1481,37 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('createManyFromEvaluateResult inline media imports', () => {
+    it('preserves inline b64_json image response JSON during bulk import persistence', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
+      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+      const output = JSON.stringify({
+        created: 1234,
+        data: [{ b64_json: pngBase64, revised_prompt: 'Keep this imported metadata.' }],
+      });
+
+      try {
+        const results = await EvalResult.createManyFromEvaluateResult(
+          [
+            {
+              ...mockEvaluateResult,
+              response: {
+                output,
+                isBase64: true,
+                format: 'json',
+              },
+            },
+          ],
+          'test-bulk-inline-image-result',
+        );
+
+        expect(results[0].response?.output).toBe(output);
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
+
   describe('getCompletedIndexPairs', () => {
     it('should return all completed pairs by default', async () => {
       const evalId = 'test-completed-pairs-all';

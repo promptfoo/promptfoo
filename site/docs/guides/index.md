@@ -20,6 +20,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Testing Agent Skills](/docs/guides/test-agent-skills) — Compare Claude and Codex skill versions with routing, quality, cost, latency, and trace checks
 - [Evaluating Factuality](/docs/guides/factuality-eval) — Score responses for factual accuracy
 - [LLM as a Judge](/docs/guides/llm-as-a-judge) — Build reliable model-graded evals with rubrics, calibration, and multi-judge checks
+- [Evaluating Image Generation](/docs/guides/image-evaluation) — Grade generated images with vision-capable model judges
 - [Testing LLM Chains](/docs/configuration/testing-llm-chains) — Evaluate multi-step LLM pipelines
 - [Choosing the Right Temperature](/docs/guides/evaluate-llm-temperature) — Find the optimal temperature setting for your use case
 - [Evaluating Text-to-SQL](/docs/guides/text-to-sql-evaluation) — Measure SQL generation accuracy
