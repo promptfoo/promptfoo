@@ -343,10 +343,12 @@ describe('database', () => {
       const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
       const pivotTarget = path.join(fakeHomeDir, 'subdir');
       const aliasedConfigDir = path.join(tempConfigDir, 'pivot-link-config');
+      const isolatedConfigDir = path.join(aliasedConfigDir, '.promptfoo');
       const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
       fs.mkdirSync(defaultConfigDir, { recursive: true });
       fs.mkdirSync(pivotTarget, { recursive: true });
       fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.mkdirSync(isolatedConfigDir, { recursive: true });
       fs.symlinkSync(
         pivotTarget,
         path.join(aliasedConfigDir, 'pivot'),
@@ -361,9 +363,20 @@ describe('database', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
       vi.stubEnv('VITEST', 'true');
 
-      expect(() => getDbPath()).toThrow(
-        'Refusing to open the default Promptfoo database while running tests',
-      );
+      const linkTarget = fs.readlinkSync(path.join(aliasedConfigDir, 'promptfoo.db'));
+      const pivotedConfigDir = path.isAbsolute(linkTarget)
+        ? path.dirname(linkTarget)
+        : `${aliasedConfigDir}${path.sep}${path.dirname(linkTarget)}`;
+      const reachesDefaultConfig =
+        fs.realpathSync.native(pivotedConfigDir) === fs.realpathSync.native(defaultConfigDir);
+
+      if (reachesDefaultConfig) {
+        expect(() => getDbPath()).toThrow(
+          'Refusing to open the default Promptfoo database while running tests',
+        );
+      } else {
+        expect(getDbPath()).toBe(path.join(aliasedConfigDir, 'promptfoo.db'));
+      }
       expect(fs.existsSync(defaultDbPath)).toBe(false);
     });
 
