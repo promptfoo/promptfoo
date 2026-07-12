@@ -1,14 +1,14 @@
 ---
 sidebar_label: Goblin Multi-turn
 title: Goblin Multi-turn Strategy
-description: Adaptive multi-turn jailbreak agent inspired by IICL pattern completion and occasional encoding shifts
+description: Adaptive multi-turn jailbreak agent focused on encoding, math, and logic techniques
 ---
 
 # Goblin Multi-turn Strategy
 
-The Goblin strategy (`jailbreak:goblin`) uses the same multi-turn execution, backtracking, and scan-wide learning mechanics as [Hydra](hydra.md). Its attacker prompt is biased toward techniques described in the [Involuntary In-Context Learning paper](https://arxiv.org/abs/2604.19461): abstract operator framing, few-shot pattern completion, interleaved examples, and changes in example ordering.
+The Goblin strategy (`jailbreak:goblin`) uses the same multi-turn execution, backtracking, and scan-wide learning mechanics as [Hydra](hydra.md). Its attacker prompt is biased toward adversarial techniques such as exotic encodings, interleaving questions, logic problems, and other approaches that might bypass semantic guardrails and basic safety training.
 
-Goblin still has freedom to choose any promising approach. It can combine IICL-inspired framing with the conversation history and, occasionally, a reversible representation shift such as cipher-like text, structured code, or an ASCII-style layout when that fits the target.
+Goblin is designed to complement Hydra. Whereas Hydra is more likely to expose weaknesses via natural language, Goblin is intended to help test edge cases and techniques that may be used against more advanced attackers.
 
 ## Implementation
 
@@ -36,7 +36,7 @@ Goblin relies on Promptfoo Cloud for its attacker agent and scan-wide learnings.
 
 ## When to Use Goblin
 
-Use Goblin when straightforward multi-turn attacks are being recognized and you want an attacker that can explore abstract pattern-completion framing without committing to one fixed template. Prefer Hydra for general-purpose adaptive multi-turn coverage; use Goblin as a complementary, research-inspired strategy.
+Use Goblin when straightforward multi-turn attacks are being recognized and you want an attacker that can explore abstract pattern-completion framing without committing to one fixed template. Prefer Hydra for general-purpose adaptive multi-turn coverage across multiple modalities; use Goblin as a complementary, advanced strategy for testing applications that may be exposed to more adversarial users.
 
 ## Related Concepts
 
