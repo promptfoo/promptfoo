@@ -223,9 +223,10 @@ export class SimulatedUser implements ApiProvider {
         content: message.content,
       };
     });
+    const { sessionId: _sessionId, ...varsWithoutSessionId } = context?.vars ?? {};
 
     const renderedInstructions = includeSystemInstructions
-      ? DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace('{{instructions}}', instructions)
+      ? DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace('{{instructions}}', () => instructions)
       : undefined;
     const userPrompt = includeSystemInstructions
       ? [{ role: 'system', content: renderedInstructions }, ...flippedMessages]
@@ -243,7 +244,7 @@ export class SimulatedUser implements ApiProvider {
           label: 'simulated-user',
         },
         vars: {
-          ...context.vars,
+          ...varsWithoutSessionId,
           ...(sessionId ? { sessionId } : {}),
         },
       };
