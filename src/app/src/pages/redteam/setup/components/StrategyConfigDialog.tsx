@@ -37,6 +37,39 @@ import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
 
+const MAX_ITERATIONS_LIMIT = 30;
+const MIN_ITERATIONS = 3;
+const MIN_TURNS = 1;
+const MAX_ITERATIONS_LIMIT_MESSAGE =
+  'This is the maximum - higher values show diminishing returns while increasing scan time and cost.';
+const MAX_ITERATIONS_ERROR_MESSAGE =
+  'Must be 30 or less. Higher values show diminishing returns while increasing scan time and cost.';
+const INVALID_NUMBER_ERROR_MESSAGE = 'Please enter a valid positive number.';
+const WHOLE_NUMBER_ERROR_MESSAGE = 'Must be a whole number.';
+
+function validateIterationValue(value: unknown, min: number): string | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return INVALID_NUMBER_ERROR_MESSAGE;
+  }
+  if (!Number.isInteger(value)) {
+    return WHOLE_NUMBER_ERROR_MESSAGE;
+  }
+  if (value < min) {
+    return `Must be at least ${min}.`;
+  }
+  if (value > MAX_ITERATIONS_LIMIT) {
+    return MAX_ITERATIONS_ERROR_MESSAGE;
+  }
+  return null;
+}
+
+function parseIterationInputValue(rawValue: string): number | undefined {
+  return rawValue === '' ? undefined : Number(rawValue);
+}
+
 // ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
 // We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
 // like 'default', 'multilingual' which aren't meant to be composed as layer steps.
@@ -79,9 +112,9 @@ export default function StrategyConfigDialog({
   const { data: cloudConfig } = useCloudConfig();
   const isCloudEnabled = cloudConfig?.isEnabled ?? false;
 
-  // Auth-aware max values for strategy parameters
-  const maxTurnsLimit = isCloudEnabled ? 20 : 10;
-  const maxIterationsLimit = isCloudEnabled ? 50 : 10;
+  // Agentic strategy iterations are capped globally because higher values have diminishing returns.
+  const maxTurnsLimit = MAX_ITERATIONS_LIMIT;
+  const maxIterationsLimit = MAX_ITERATIONS_LIMIT;
   const treeMaxDepthLimit = isCloudEnabled ? 50 : 5;
   const treeMaxAttemptsLimit = isCloudEnabled ? 500 : 30;
   const treeMaxWidthLimit = isCloudEnabled ? 20 : 3;
@@ -413,8 +446,39 @@ export default function StrategyConfigDialog({
     return true;
   };
 
+  const getIterationHelperText = (value: unknown, min: number, defaultText: string) =>
+    validateIterationValue(value, min) ??
+    (value === MAX_ITERATIONS_LIMIT ? MAX_ITERATIONS_LIMIT_MESSAGE : defaultText);
+
+  const getIterationHelperClassName = (value: unknown, min: number) =>
+    cn(
+      'text-xs',
+      validateIterationValue(value, min) ? 'text-destructive' : 'text-muted-foreground',
+    );
+
+  const getIterationInputClassName = (value: unknown, min: number) =>
+    validateIterationValue(value, min) ? 'border-destructive' : undefined;
+
+  const isIterationLimitValid = React.useCallback(() => {
+    const { maxTurns, numIterations } = localConfig;
+    if (maxTurns !== undefined && validateIterationValue(maxTurns, MIN_TURNS) !== null) {
+      return false;
+    }
+    if (
+      numIterations !== undefined &&
+      validateIterationValue(numIterations, MIN_ITERATIONS) !== null
+    ) {
+      return false;
+    }
+    return true;
+  }, [localConfig]);
+
   const handleSave = () => {
     if (!strategy) {
+      return;
+    }
+
+    if (!isIterationLimitValid()) {
       return;
     }
 
@@ -509,19 +573,23 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
           onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
             setLocalConfig({
               ...localConfig,
-              numIterations: clampValue(value, 3, maxIterationsLimit),
+              numIterations: parseIterationInputValue(e.target.value),
             });
           }}
           placeholder="Number of iterations (default: 10)"
-          min={3}
+          min={MIN_ITERATIONS}
           max={maxIterationsLimit}
+          step={1}
+          className={getIterationInputClassName(localConfig.numIterations, MIN_ITERATIONS)}
         />
-        <p className="text-xs text-muted-foreground">
-          Number of iterations to try (more iterations increase chance of success)
-          {!isCloudEnabled && ' — sign in for higher limits'}
+        <p className={getIterationHelperClassName(localConfig.numIterations, MIN_ITERATIONS)}>
+          {getIterationHelperText(
+            localConfig.numIterations,
+            MIN_ITERATIONS,
+            'Number of iterations to try (more iterations increase chance of success)',
+          )}
         </p>
       </div>
     </div>
@@ -661,19 +729,23 @@ export default function StrategyConfigDialog({
             type="number"
             value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
               setLocalConfig({
                 ...localConfig,
-                maxTurns: clampValue(value, 1, maxTurnsLimit),
+                maxTurns: parseIterationInputValue(e.target.value),
               });
             }}
             placeholder="Maximum number of conversation turns (default: 10)"
-            min={1}
+            min={MIN_TURNS}
             max={maxTurnsLimit}
+            step={1}
+            className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
           />
-          <p className="text-xs text-muted-foreground">
-            Maximum number of back-and-forth exchanges with the model
-            {!isCloudEnabled && ' — sign in for higher limits'}
+          <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
+            {getIterationHelperText(
+              localConfig.maxTurns,
+              MIN_TURNS,
+              'Maximum number of back-and-forth exchanges with the model',
+            )}
           </p>
         </div>
 
@@ -707,21 +779,23 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
           onChange={(e) => {
-            const parsedValue = Number.parseInt(e.target.value, 10);
             setLocalConfig({
               ...localConfig,
-              maxTurns: Number.isNaN(parsedValue)
-                ? undefined
-                : clampValue(parsedValue, 1, maxTurnsLimit),
+              maxTurns: parseIterationInputValue(e.target.value),
             });
           }}
           placeholder="Maximum conversation turns (default: 10)"
-          min={1}
+          min={MIN_TURNS}
           max={maxTurnsLimit}
+          step={1}
+          className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
         />
-        <p className="text-xs text-muted-foreground">
-          Maximum number of back-and-forth exchanges with the target model.
-          {!isCloudEnabled && ' — sign in for higher limits'}
+        <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
+          {getIterationHelperText(
+            localConfig.maxTurns,
+            MIN_TURNS,
+            'Maximum number of back-and-forth exchanges with the target model.',
+          )}
         </p>
       </div>
 
@@ -755,27 +829,29 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.maxTurns === undefined ? 5 : Number(localConfig.maxTurns)}
           onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
             setLocalConfig({
               ...localConfig,
-              maxTurns: value === undefined ? value : clampValue(value, 1, maxTurnsLimit),
+              maxTurns: parseIterationInputValue(e.target.value),
             });
           }}
           onBlur={(e) => {
-            const parsed = Number.parseInt(e.target.value, 10);
-            if (!e.target.value || Number.isNaN(parsed) || parsed < 1) {
+            const parsed = parseIterationInputValue(e.target.value);
+            if (parsed === undefined || !Number.isFinite(parsed) || parsed < MIN_TURNS) {
               setLocalConfig({ ...localConfig, maxTurns: 5 });
-            } else if (parsed > maxTurnsLimit) {
-              setLocalConfig({ ...localConfig, maxTurns: maxTurnsLimit });
             }
           }}
           placeholder="5"
-          min={1}
+          min={MIN_TURNS}
           max={maxTurnsLimit}
+          step={1}
+          className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
         />
-        <p className="text-xs text-muted-foreground">
-          Maximum number of back-and-forth exchanges with the model (default: 5)
-          {!isCloudEnabled && ' — sign in for higher limits'}
+        <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
+          {getIterationHelperText(
+            localConfig.maxTurns,
+            MIN_TURNS,
+            'Maximum number of back-and-forth exchanges with the model (default: 5)',
+          )}
         </p>
       </div>
 
@@ -807,20 +883,23 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
           onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
             setLocalConfig({
               ...localConfig,
-              numIterations: clampValue(value, 3, maxIterationsLimit),
+              numIterations: parseIterationInputValue(e.target.value),
             });
           }}
           placeholder="Number of iterations (default: 10)"
-          min={3}
+          min={MIN_ITERATIONS}
           max={maxIterationsLimit}
+          step={1}
+          className={getIterationInputClassName(localConfig.numIterations, MIN_ITERATIONS)}
         />
-        <p className="text-xs text-muted-foreground">
-          Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes
-          strategic decisions.
-          {!isCloudEnabled && ' — sign in for higher limits'}
+        <p className={getIterationHelperClassName(localConfig.numIterations, MIN_ITERATIONS)}>
+          {getIterationHelperText(
+            localConfig.numIterations,
+            MIN_ITERATIONS,
+            'Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions.',
+          )}
         </p>
       </div>
     </div>
@@ -1356,6 +1435,7 @@ export default function StrategyConfigDialog({
             disabled={
               (strategy === 'retry' && (!!error || !numTests)) ||
               !isCustomStrategyValid() ||
+              !isIterationLimitValid() ||
               (strategy === 'layer' && steps.length === 0)
             }
           >
