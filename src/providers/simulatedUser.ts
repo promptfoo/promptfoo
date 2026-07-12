@@ -213,7 +213,8 @@ export class SimulatedUser implements ApiProvider {
     callApiOptions: CallApiOptionsParams | undefined,
     includeSystemInstructions: boolean,
     instructions: string,
-  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
+    sessionId: string | undefined,
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string; sessionId?: string }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -241,6 +242,10 @@ export class SimulatedUser implements ApiProvider {
           raw: userPromptString,
           label: 'simulated-user',
         },
+        vars: {
+          ...context.vars,
+          ...(sessionId ? { sessionId } : {}),
+        },
       };
     })();
 
@@ -263,6 +268,7 @@ export class SimulatedUser implements ApiProvider {
     return {
       messages: [...messages, { role: 'user', content: String(response.output || '') }],
       tokenUsage: response.tokenUsage,
+      sessionId: response.sessionId,
     };
   }
 
@@ -391,6 +397,7 @@ export class SimulatedUser implements ApiProvider {
     const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
+    let userProviderSessionId: string | undefined;
 
     // If initial messages end with user message, agent needs to respond first to avoid consecutive user messages
     const lastInitialRole = messages.length > 0 ? messages[messages.length - 1].role : null;
@@ -429,6 +436,7 @@ export class SimulatedUser implements ApiProvider {
         callApiOptions,
         includeSystemInstructions,
         instructions,
+        userProviderSessionId,
       );
 
       // Check for errors from remote generation disable
@@ -440,6 +448,9 @@ export class SimulatedUser implements ApiProvider {
       }
 
       const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
+      if (userResult.sessionId) {
+        userProviderSessionId = userResult.sessionId;
+      }
       accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 

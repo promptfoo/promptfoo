@@ -8,7 +8,7 @@ import {
   type MockApiProvider,
 } from '../factories/provider';
 
-import type { ApiProvider } from '../../src/types/index';
+import type { ApiProvider, CallApiContextParams } from '../../src/types/index';
 
 vi.mock('../../src/util/time', async (importOriginal) => {
   return {
@@ -268,6 +268,53 @@ describe('SimulatedUser', () => {
       expect(mockCustomUserProviderCallApi.mock.calls[0][2]).toEqual({
         abortSignal: abortController.signal,
       });
+    });
+
+    it('should preserve custom user provider sessions separately from target sessions', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({
+            output: 'first custom user response',
+            sessionId: 'user-provider-session',
+          })
+          .mockResolvedValueOnce({
+            output: 'second custom user response ###STOP###',
+          }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: 'first agent response',
+          sessionId: 'target-session',
+        })
+        .mockResolvedValueOnce({
+          output: 'second agent response',
+        });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+      const context: CallApiContextParams = {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      };
+
+      await userWithCustomProvider.callApi('test prompt', context);
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+      expect(mockCustomUserProviderCallApi.mock.calls[0][1]?.vars.sessionId).toBeUndefined();
+      expect(mockCustomUserProviderCallApi.mock.calls[1][1]?.vars.sessionId).toBe(
+        'user-provider-session',
+      );
+      expect(context.vars.sessionId).toBe('target-session');
     });
 
     it('should apply delay configured on custom user providers', async () => {
