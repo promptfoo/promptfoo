@@ -210,6 +210,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     userProvider: ApiProvider,
     context: CallApiContextParams | undefined,
+    callApiOptions: CallApiOptionsParams | undefined,
     includeSystemInstructions: boolean,
     instructions: string,
   ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
@@ -229,17 +230,21 @@ export class SimulatedUser implements ApiProvider {
       ? [{ role: 'system', content: renderedInstructions }, ...flippedMessages]
       : flippedMessages;
     const userPromptString = JSON.stringify(userPrompt);
-    const userContext = context
-      ? {
-          ...context,
-          prompt: {
-            raw: userPromptString,
-            label: 'simulated-user',
-          },
-        }
-      : undefined;
+    const userContext = (() => {
+      if (!context) {
+        return undefined;
+      }
+      const { originalProvider: _originalProvider, prompt: _prompt, ...userContextBase } = context;
+      return {
+        ...userContextBase,
+        prompt: {
+          raw: userPromptString,
+          label: 'simulated-user',
+        },
+      };
+    })();
 
-    const response = await userProvider.callApi(userPromptString, userContext);
+    const response = await userProvider.callApi(userPromptString, userContext, callApiOptions);
 
     if (userProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${userProvider.delay}ms`);
@@ -307,6 +312,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
 
@@ -330,7 +336,7 @@ export class SimulatedUser implements ApiProvider {
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
-    const response = await targetProvider.callApi(targetPrompt, context);
+    const response = await targetProvider.callApi(targetPrompt, context, callApiOptions);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -349,7 +355,7 @@ export class SimulatedUser implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     const targetProvider = context.originalProvider;
@@ -392,7 +398,13 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      agentResponse = await this.sendMessageToAgent(
+        prompt,
+        messages,
+        targetProvider,
+        context,
+        callApiOptions,
+      );
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -414,6 +426,7 @@ export class SimulatedUser implements ApiProvider {
         messages,
         userProvider,
         context,
+        callApiOptions,
         includeSystemInstructions,
         instructions,
       );
@@ -446,6 +459,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         targetProvider,
         context,
+        callApiOptions,
       );
 
       // Check for errors from agent response

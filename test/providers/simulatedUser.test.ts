@@ -234,6 +234,40 @@ describe('SimulatedUser', () => {
       expect(customUserContext?.prompt.label).toBe('simulated-user');
       expect(customUserContext?.prompt).not.toHaveProperty('config');
       expect(customUserContext?.prompt.raw).not.toContain('target prompt');
+      expect(customUserContext).not.toHaveProperty('originalProvider');
+    });
+
+    it('should pass call options to custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+      const abortController = new AbortController();
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi(
+        'test prompt',
+        {
+          originalProvider,
+          vars: {},
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        },
+        { abortSignal: abortController.signal },
+      );
+
+      expect(mockCustomUserProviderCallApi.mock.calls[0][2]).toEqual({
+        abortSignal: abortController.signal,
+      });
     });
 
     it('should apply delay configured on custom user providers', async () => {
@@ -261,6 +295,25 @@ describe('SimulatedUser', () => {
       });
 
       expect(timeUtils.sleep).toHaveBeenCalledWith(250);
+    });
+
+    it('should pass call options to target providers', async () => {
+      const abortController = new AbortController();
+
+      await simulatedUser.callApi(
+        'test prompt',
+        {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        },
+        { abortSignal: abortController.signal },
+      );
+
+      expect(originalProvider.callApi).toHaveBeenCalled();
+      for (const call of vi.mocked(originalProvider.callApi).mock.calls) {
+        expect(call[2]).toEqual({ abortSignal: abortController.signal });
+      }
     });
 
     it('should support custom user providers configured by id', async () => {
@@ -484,6 +537,7 @@ describe('SimulatedUser', () => {
             instructions: 'test instructions',
           }),
         }),
+        undefined,
       );
     });
 
