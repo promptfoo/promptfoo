@@ -84,7 +84,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
 
@@ -96,7 +96,7 @@ jobs:
           cache: 'npm'
 
       - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.14.4
 
@@ -110,7 +110,7 @@ jobs:
       # Key includes OS and Node version since native modules are platform/version specific
       - name: Cache node_modules
         id: cache-node-modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
@@ -167,7 +167,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -224,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -232,9 +232,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: |
@@ -278,7 +280,7 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
@@ -291,7 +293,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -300,13 +302,15 @@ jobs:
           cache: 'npm'
 
       - name: Use Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -338,10 +342,10 @@ jobs:
         python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -365,7 +369,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -373,9 +377,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -396,7 +402,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -404,9 +410,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
       - name: Install Root Dependencies
@@ -434,7 +442,7 @@ jobs:
       id-token: write # Required for OIDC authentication with Codecov
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -442,9 +450,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -483,7 +493,7 @@ jobs:
       id-token: write # Required for OIDC authentication with Codecov
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
 
@@ -493,9 +503,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -529,7 +541,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -537,12 +549,14 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.14.4
 
@@ -564,7 +578,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -572,12 +586,14 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.14.4
 
@@ -604,7 +620,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -612,9 +628,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -699,7 +717,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -707,9 +725,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -727,7 +747,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -735,9 +755,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci
@@ -767,7 +789,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Install and run actionlint
         run: |
@@ -783,7 +805,7 @@ jobs:
         ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Use Ruby ${{ matrix.ruby-version }}
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
@@ -828,10 +850,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: src/golang/go.mod
           check-latest: true

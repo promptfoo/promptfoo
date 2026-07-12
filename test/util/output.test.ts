@@ -2,7 +2,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
