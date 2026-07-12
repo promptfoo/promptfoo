@@ -710,7 +710,7 @@ export function isReservedAssertionAliasLabel(label: string): boolean {
   const isRedteamType =
     label.startsWith('promptfoo:redteam:') || label.startsWith('not-promptfoo:redteam:');
 
-  return isBuiltInType || isRedteamType;
+  return isBuiltInType || label.startsWith('select-') || isRedteamType;
 }
 
 export const AssertionAliasesSchema = z.array(AssertionAliasSchema).superRefine((aliases, ctx) => {

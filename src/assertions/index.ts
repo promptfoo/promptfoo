@@ -321,6 +321,19 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+function renderAliasCallSiteValue(
+  value: AssertionValue,
+  vars: Record<string, VarValue>,
+): AssertionValue {
+  if (typeof value === 'string') {
+    return nunjucks.renderString(value, vars);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => nunjucks.renderString(item, vars));
+  }
+  return value;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -457,8 +470,12 @@ export async function runAssertion({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
-  if (assertionAlias?.value !== undefined) {
-    context.value = assertionAlias.value;
+  const renderedAliasCallSiteValue =
+    assertionAlias?.value === undefined
+      ? undefined
+      : renderAliasCallSiteValue(assertionAlias.value, resolvedVars);
+  if (renderedAliasCallSiteValue !== undefined) {
+    context.value = renderedAliasCallSiteValue;
   }
 
   // Add trace data if traceId is available
@@ -649,13 +666,14 @@ export async function runAssertion({
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
+    const renderedAssertionValue = assertionAlias ? renderedAliasCallSiteValue : renderedValue;
     if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
+      renderedAssertionValue !== undefined &&
+      renderedAssertionValue !== assertion.value &&
+      typeof renderedAssertionValue === 'string'
     ) {
       result.metadata = result.metadata || {};
-      result.metadata.renderedAssertionValue = renderedValue;
+      result.metadata.renderedAssertionValue = renderedAssertionValue;
     }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail

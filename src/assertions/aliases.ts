@@ -57,6 +57,7 @@ function resolveAssertion(
   }
 
   return Object.defineProperty({ ...assertion }, resolvedAssertionAlias, {
+    enumerable: true,
     value: {
       type: alias.type,
       script: alias.script,
@@ -98,6 +99,9 @@ export function copyResolvedAssertionAlias<T extends AssertionOrSet>(source: T, 
 
   const alias = getResolvedAssertionAlias(source);
   return alias
-    ? (Object.defineProperty(target, resolvedAssertionAlias, { value: alias }) as T)
+    ? (Object.defineProperty(target, resolvedAssertionAlias, {
+        enumerable: true,
+        value: alias,
+      }) as T)
     : target;
 }

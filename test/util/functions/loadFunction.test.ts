@@ -308,6 +308,14 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should parse JavaScript Windows drive-letter file URLs at the last colon', () => {
+    const result = parseFileUrl('file://C:\\path\\to\\check.mjs:checkValue');
+    expect(result).toEqual({
+      filePath: 'C:\\path\\to\\check.mjs',
+      functionName: 'checkValue',
+    });
+  });
+
   it('should handle standard Windows file URLs on Windows', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });

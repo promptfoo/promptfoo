@@ -587,7 +587,8 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     }
     // Strip large fields not needed for permission validation.
     // The server only needs providers, metadata, and whether redteam exists.
-    const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
+    const { tests, scenarios, defaultTest, evaluateOptions, assertionAliases, ...minimalConfig } =
+      config;
     if (minimalConfig.redteam) {
       minimalConfig.redteam = {} as typeof minimalConfig.redteam;
     }

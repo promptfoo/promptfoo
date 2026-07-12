@@ -234,11 +234,21 @@ async function createRuntimeTestSuite(
   const scenarios = Array.isArray(rawScenarios)
     ? (rawScenarios as Scenario[]).flat()
     : (rawScenarios as Scenario[] | undefined);
+  const loadedScenarios = scenarios
+    ? await Promise.all(
+        scenarios.map(async (scenario) => ({
+          ...scenario,
+          ...(scenario.tests === undefined
+            ? {}
+            : { tests: await readTests(scenario.tests as TestSuiteConfig['tests']) }),
+        })),
+      )
+    : undefined;
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios,
+    scenarios: loadedScenarios,
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests as TestSuiteConfig['tests']),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),

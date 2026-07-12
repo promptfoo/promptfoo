@@ -83,6 +83,78 @@ describe('named script assertion aliases', () => {
     });
   });
 
+  it('renders templated alias call-site values before passing them to scripts', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-assertion-alias-'));
+    temporaryDirectories.push(directory);
+    const scriptPath = path.join(directory, 'check-value.mjs');
+    await writeFile(
+      scriptPath,
+      "export function checkValue(_output, context) {\n  return context.value === 'rendered';\n}\n",
+    );
+    const [test] = resolveAssertionAliases(
+      [
+        {
+          assert: [{ type: 'checks-templated-value', value: '{{expected}}' }],
+        } as unknown as AtomicTestCase,
+      ],
+      [
+        {
+          label: 'checks-templated-value',
+          type: 'javascript',
+          script: `file://${scriptPath}:checkValue`,
+        },
+      ],
+    );
+    const assertion = test.assert?.[0];
+
+    if (!assertion || assertion.type === 'assert-set') {
+      throw new Error('Expected the configured script assertion alias');
+    }
+
+    await expect(
+      runAssertion({
+        assertion,
+        test,
+        vars: { expected: 'rendered' },
+        providerResponse: { output: 'ignored' },
+      }),
+    ).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('does not expose alias script paths as rendered assertion values', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-assertion-alias-'));
+    temporaryDirectories.push(directory);
+    const scriptPath = path.join(directory, 'check-value.mjs');
+    await writeFile(scriptPath, 'export function checkValue() { return true; }\n');
+    const [test] = resolveAssertionAliases(
+      [
+        {
+          assert: [{ type: 'checks-metadata', value: 'expected output' }],
+        } as unknown as AtomicTestCase,
+      ],
+      [
+        {
+          label: 'checks-metadata',
+          type: 'javascript',
+          script: `file://${scriptPath}:checkValue`,
+        },
+      ],
+    );
+    const assertion = test.assert?.[0];
+
+    if (!assertion || assertion.type === 'assert-set') {
+      throw new Error('Expected the configured script assertion alias');
+    }
+
+    const result = await runAssertion({
+      assertion,
+      test,
+      providerResponse: { output: 'ignored' },
+    });
+
+    expect(result.metadata?.renderedAssertionValue).toBeUndefined();
+  });
+
   it('passes the call-site value and config to Python aliases', async () => {
     vi.mocked(runPython).mockResolvedValue(true);
     const { assertion, directory, test } = await resolveAssertionAlias('python', 'check-value.py');
@@ -223,6 +295,32 @@ describe('named script assertion aliases', () => {
     expect(summary.stats.errors).toBe(0);
   });
 
+  it('loads nested file-reference tests for programmatic scenarios', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-assertion-alias-'));
+    temporaryDirectories.push(directory);
+
+    const scenariosPath = path.join(directory, 'scenarios.yaml');
+    const testsPath = path.join(directory, 'tests.yaml');
+    await writeFile(scenariosPath, `- config:\n    - vars: {}\n  tests: file://${testsPath}\n`);
+    await writeFile(
+      testsPath,
+      `- vars:\n    message: nested test loaded\n  assert:\n    - type: equals\n      value: nested test loaded\n`,
+    );
+
+    const evalRecord = await evaluate(
+      {
+        prompts: ['{{message}}'],
+        providers: ['echo'],
+        scenarios: [`file://${scenariosPath}`],
+      },
+      { cache: false },
+    );
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.errors).toBe(0);
+  });
+
   it('preserves pre-resolved aliases when programmatic evaluation clones tests', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-assertion-alias-'));
     temporaryDirectories.push(directory);
@@ -255,6 +353,30 @@ describe('named script assertion aliases', () => {
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.errors).toBe(0);
+  });
+
+  it('preserves resolved alias metadata through assertion spread clones', () => {
+    const [test] = resolveAssertionAliases(
+      [{ assert: [{ type: 'checks-spread-clone', value: 'test' }] } as unknown as TestCase],
+      [
+        {
+          label: 'checks-spread-clone',
+          type: 'javascript',
+          script: 'file://check-value.mjs:checkValue',
+        },
+      ],
+    );
+    const assertion = test.assert?.[0];
+
+    if (!assertion || assertion.type === 'assert-set') {
+      throw new Error('Expected the configured script assertion alias');
+    }
+
+    expect(getResolvedAssertionAlias({ ...assertion })).toEqual({
+      type: 'javascript',
+      script: 'file://check-value.mjs:checkValue',
+      value: 'test',
+    });
   });
 
   it('rejects an alias that collides with a built-in assertion type', async () => {

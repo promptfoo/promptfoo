@@ -56,6 +56,21 @@ describe('assertionAliases configuration', () => {
     ).toBe(false);
   });
 
+  it('rejects aliases whose labels use the select assertion prefix', () => {
+    const label = 'select-length';
+    const result = TestSuiteConfigSchema.safeParse({
+      ...config,
+      assertionAliases: [{ ...config.assertionAliases[0], label }],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(
+        `Assertion alias label conflicts with built-in assertion type: ${label}`,
+      );
+    }
+  });
+
   it.each([
     'promptfoo:redteam:harmful',
     'not-promptfoo:redteam:harmful',
