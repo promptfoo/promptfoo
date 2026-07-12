@@ -398,7 +398,8 @@ export class SimulatedUser implements ApiProvider {
     const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
-    let userProviderSessionId: string | undefined;
+    let userProviderSessionId =
+      typeof context.vars.sessionId === 'string' ? context.vars.sessionId : undefined;
 
     // If initial messages end with user message, agent needs to respond first to avoid consecutive user messages
     const lastInitialRole = messages.length > 0 ? messages[messages.length - 1].role : null;

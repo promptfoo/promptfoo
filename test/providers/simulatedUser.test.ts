@@ -380,6 +380,47 @@ describe('SimulatedUser', () => {
       expect(mockCustomUserProviderCallApi.mock.calls[1][1]?.vars.sessionId).toBeUndefined();
     });
 
+    it('should preserve test-level session ids for custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({
+            output: 'first custom user response',
+          })
+          .mockResolvedValueOnce({
+            output: 'second custom user response ###STOP###',
+          }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi.mockReset().mockResolvedValueOnce({
+        output: 'first agent response',
+        sessionId: 'target-session',
+      });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { sessionId: 'user-session-from-vars' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+      expect(mockCustomUserProviderCallApi.mock.calls[0][1]?.vars.sessionId).toBe(
+        'user-session-from-vars',
+      );
+      expect(mockCustomUserProviderCallApi.mock.calls[1][1]?.vars.sessionId).toBe(
+        'user-session-from-vars',
+      );
+    });
+
     it('should apply delay configured on custom user providers', async () => {
       const customUserProvider = createMockProvider({
         id: 'custom-user-provider',
