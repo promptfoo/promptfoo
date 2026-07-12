@@ -1,5 +1,7 @@
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
+export type { TestCase };
+
 export interface Strategy {
   id: string;
   action: (

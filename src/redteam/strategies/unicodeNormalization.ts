@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types/index';
+import type { TestCase } from './types';
 
 export const UNICODE_NORMALIZATION_FORMS = ['NFC', 'NFD', 'NFKC', 'NFKD'] as const;
 
