@@ -103,6 +103,7 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
   'retry',
   'rot13',
+  'unicode-normalization',
   'video',
 ] as const;
 
@@ -151,6 +152,7 @@ export const ENCODING_STRATEGIES = new Set([
   'rot13',
   'leetspeak',
   'homoglyph',
+  'unicode-normalization',
   'morse',
   'atbash',
   'piglatin',

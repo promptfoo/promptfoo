@@ -40,6 +40,7 @@ describe('validateStrategies', () => {
       { id: 'camelcase' },
       { id: 'emoji' },
       { id: 'mischievous-user' },
+      { id: 'unicode-normalization', config: { form: 'NFD' } },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -55,6 +56,16 @@ describe('validateStrategies', () => {
     ];
     await expect(validateStrategies(strategies)).rejects.toThrow(
       'Basic strategy enabled config must be a boolean',
+    );
+  });
+
+  it('should throw an error for an invalid Unicode normalization form', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'unicode-normalization', config: { form: 'nfkd' } },
+    ];
+
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
     );
   });
 

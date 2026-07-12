@@ -32,6 +32,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { addUnicodeNormalization, resolveUnicodeNormalizationForm } from './unicodeNormalization';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
@@ -336,6 +337,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'unicode-normalization',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Unicode normalization to ${testCases.length} test cases`);
+      const newTestCases = addUnicodeNormalization(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Unicode-normalized test cases`);
+      return newTestCases;
+    },
+  },
+  {
     // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
     action: async (testCases, injectVar, config) => {
@@ -406,6 +416,10 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
         throw new Error('Basic strategy enabled config must be a boolean');
       }
       continue;
+    }
+
+    if (strategy.id === 'unicode-normalization') {
+      resolveUnicodeNormalizationForm(strategy.config);
     }
   }
 
