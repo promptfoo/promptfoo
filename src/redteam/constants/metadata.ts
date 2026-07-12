@@ -108,7 +108,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:goblin':
-    'IICL-inspired adaptive multi-turn attacks that can combine abstract few-shot framing with occasional encoding shifts',
+    'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
@@ -1296,7 +1296,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
     '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:goblin':
-    'Adaptive multi-turn attacks inspired by IICL pattern completion and occasional encoding shifts',
+    'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',

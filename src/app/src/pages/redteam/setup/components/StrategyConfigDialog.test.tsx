@@ -632,7 +632,8 @@ describe('StrategyConfigDialog', () => {
         strategyData={{
           id: 'jailbreak:goblin',
           name: 'Goblin',
-          description: 'IICL-inspired multi-turn jailbreak',
+          description:
+            'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
         }}
       />,
     );
