@@ -103,6 +103,7 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
+import { createRequestyProvider } from './requesty';
 import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
@@ -1435,6 +1436,19 @@ export const providerMap: ProviderFactory[] = [
   },
   configuredProviderFactory('openrouter:', () => createOpenRouterProvider),
   configuredProviderFactory('orcarouter:', () => createOrcaRouterProvider),
+  {
+    test: (providerPath: string) => providerPath.startsWith('requesty:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createRequestyProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
   {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
