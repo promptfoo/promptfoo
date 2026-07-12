@@ -498,6 +498,97 @@ describe('TrueFoundry', () => {
         });
       });
 
+      it.each([
+        'Content filtering system is down or otherwise unable to complete the request in time',
+        'Unable to determine whether the response was filtered because the content filtering system timed out',
+        "Unable to determine whether response content blocked by label 'MultiSeverity_HateSpeechScore' because the content filtering system timed out",
+        'Content management policy check did not complete because the content filtering system timed out',
+        'Responsible AI policy check did not complete because the content filtering system timed out',
+      ])('should preserve downstream content filter failures as API errors: %s', async (message) => {
+        const errorResponse = {
+          error: {
+            message,
+            code: 'content_filter_error',
+          },
+        };
+
+        const response = new Response(JSON.stringify(errorResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('400 Bad Request');
+        expect(result.error).toContain('content_filter_error');
+        expect(result.isRefusal).toBeUndefined();
+        expect(result.guardrails).toBeUndefined();
+      });
+
+      it('should preserve nested downstream content filter failures as API errors', async () => {
+        const errorResponse = {
+          error: {
+            message:
+              'Unable to determine whether the response was filtered because the content filtering system timed out',
+            code: '400',
+            innererror: {
+              code: 'content_filter_error',
+            },
+          },
+        };
+
+        const response = new Response(JSON.stringify(errorResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('400 Bad Request');
+        expect(result.error).toContain('content_filter_error');
+        expect(result.isRefusal).toBeUndefined();
+        expect(result.guardrails).toBeUndefined();
+      });
+
+      it('should preserve structured downstream guardrail blocks when a filter error is present', async () => {
+        const guardrailResponse = {
+          error: {
+            message:
+              'Unable to determine whether the response was filtered because the content filtering system timed out',
+            code: 'content_filter_error',
+            content_filter_results: {
+              hate: {
+                filtered: true,
+                severity: 'high',
+              },
+            },
+          },
+        };
+
+        const response = new Response(JSON.stringify(guardrailResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.isRefusal).toBe(true);
+        expect(result.guardrails).toEqual({
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+          reason:
+            'Unable to determine whether the response was filtered because the content filtering system timed out',
+        });
+      });
+
       it('should handle network errors', async () => {
         mockedFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
 
