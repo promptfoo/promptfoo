@@ -110,6 +110,7 @@ export const ProviderEnvOverridesSchema = z.object({
   QUIVERAI_API_KEY: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),
+  REQUESTY_API_KEY: z.string().optional(),
   SHAREPOINT_BASE_URL: z.string().optional(),
   SHAREPOINT_CERT_PATH: z.string().optional(),
   SHAREPOINT_CLIENT_ID: z.string().optional(),

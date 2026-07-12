@@ -416,6 +416,9 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // Requesty
+  REQUESTY_API_KEY?: string;
+
   // SharePoint
   SHAREPOINT_BASE_URL?: string;
   SHAREPOINT_CERT_PATH?: string;
