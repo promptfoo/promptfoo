@@ -41,6 +41,11 @@ import type {
 } from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
+export type OpenAiChatCompletionCostData = Pick<
+  OpenAI.Chat.Completions.ChatCompletion,
+  'service_tier' | 'usage'
+>;
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
@@ -340,6 +345,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return { body, config };
   }
 
+  /**
+   * Calculate the response cost from the provider's raw usage payload.
+   *
+   * OpenAI-compatible providers can override this hook when their API exposes
+   * authoritative billing data or uses provider-specific token accounting.
+   */
+  protected calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    return calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+      apiUrl: this.getApiUrl(),
+      cachedResponse: cached,
+      serviceTier: data.service_tier ?? config.service_tier,
+    });
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -522,6 +545,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+      const cost = this.calculateResponseCost(data, config, cached);
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
@@ -532,6 +556,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           tokenUsage: getTokenUsage(data, cached),
           cached,
           latencyMs,
+          ...(cost === undefined ? {} : { cost }),
           isRefusal: true,
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
@@ -552,6 +577,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           tokenUsage: getTokenUsage(data, cached),
           cached,
           latencyMs,
+          ...(cost === undefined ? {} : { cost }),
           isRefusal: true,
           finishReason: FINISH_REASON_MAP.content_filter,
           guardrails: {
@@ -603,12 +629,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (reasoning && typeof output === 'string' && (this.config.showThinking ?? true)) {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
-
-      const cost = calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-        apiUrl: this.getApiUrl(),
-        cachedResponse: cached,
-        serviceTier: data.service_tier ?? config.service_tier,
-      });
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
