@@ -6,8 +6,8 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
+  extractProviderResponseAttributes,
   type GenAISpanContext,
-  type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -282,6 +282,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.prompt_cache_key === undefined
         ? {}
         : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options === undefined
+        ? {}
+        : { prompt_cache_options: config.prompt_cache_options }),
       ...(config.prompt_cache_retention === undefined
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
@@ -298,7 +301,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
     if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
-      body.reasoning_effort = config.reasoning_effort;
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
     if (
@@ -370,48 +373,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       requestBody: prompt,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-          completionDetails: {
-            reasoning: response.tokenUsage.completionDetails?.reasoning,
-            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
-            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
-          },
-        };
-      }
-
-      // Extract finish reason if available
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-
-      // Cache hit status
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-
-      // Response body for debugging/observability
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-
-      return result;
-    };
-
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, callApiOptions),
-      resultExtractor,
+      extractProviderResponseAttributes,
     );
   }
 
@@ -638,6 +604,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
+      const cost = calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+        apiUrl: this.getApiUrl(),
+        cachedResponse: cached,
+        serviceTier: data.service_tier ?? config.service_tier,
+      });
+
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
         ? [message.function_call]
@@ -738,10 +710,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
-            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-              cachedResponse: cached,
-              serviceTier: data.service_tier ?? config.service_tier,
-            }),
+            cost,
             guardrails: { flagged: contentFiltered },
             metadata: {
               http: {
@@ -778,10 +747,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
-          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-            cachedResponse: cached,
-            serviceTier: data.service_tier ?? config.service_tier,
-          }),
+          cost,
           guardrails: { flagged: contentFiltered },
           metadata: {
             http: {
@@ -800,10 +766,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
-        cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-          cachedResponse: cached,
-          serviceTier: data.service_tier ?? config.service_tier,
-        }),
+        cost,
         guardrails: { flagged: contentFiltered },
         metadata: {
           http: {

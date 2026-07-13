@@ -85,7 +85,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
-    // GPT-5.6 limited-preview models
+    // GPT-5.6 models
+    'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
@@ -175,6 +176,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config,
       this.getBillingUsage(data, config),
       {
+        apiUrl: this.getApiUrl(),
         cachedResponse: cached,
         serviceTier,
       },
@@ -365,6 +367,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.prompt_cache_key === undefined
         ? {}
         : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options === undefined
+        ? {}
+        : { prompt_cache_options: config.prompt_cache_options }),
       ...(config.prompt_cache_retention === undefined
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
@@ -395,6 +400,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // through the Responses wire format override this so traces attribute to the
+  // actual provider system.
+  protected getGenAISystem(): string {
+    return 'openai';
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -416,7 +428,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const asNumber = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
     const spanContext = buildChatSpanContext({
-      system: 'openai',
+      system: this.getGenAISystem(),
       model: this.modelName,
       providerId: this.id(),
       prompt,
