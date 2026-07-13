@@ -251,6 +251,9 @@
         "CLAUDE_CODE_USE_VERTEX": {
           "type": "string"
         },
+        "CLAUDE_CONFIG_DIR": {
+          "type": "string"
+        },
         "CLOUDFLARE_ACCOUNT_ID": {
           "type": "string"
         },
@@ -378,6 +381,9 @@
           "type": "string"
         },
         "MLFLOW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "MODEL_API_KEY": {
           "type": "string"
         },
         "MODELSLAB_API_KEY": {
@@ -1719,6 +1725,9 @@
                     "CLAUDE_CODE_USE_VERTEX": {
                       "type": "string"
                     },
+                    "CLAUDE_CONFIG_DIR": {
+                      "type": "string"
+                    },
                     "CLOUDFLARE_ACCOUNT_ID": {
                       "type": "string"
                     },
@@ -1846,6 +1855,9 @@
                       "type": "string"
                     },
                     "MLFLOW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "MODEL_API_KEY": {
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {

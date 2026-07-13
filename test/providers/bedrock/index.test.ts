@@ -913,6 +913,34 @@ describe('AwsBedrockGenericProvider', () => {
     });
   });
 
+  describe('BEDROCK_MODEL TITAN_TEXT', () => {
+    const modelHandler = BEDROCK_MODEL.TITAN_TEXT;
+
+    it('should extract outputText from the first result', () => {
+      const mockResponse = { results: [{ outputText: 'This is a test response.' }] };
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined when results are missing instead of throwing', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+      expect(modelHandler.output({}, { results: [] })).toBeUndefined();
+    });
+  });
+
+  describe('BEDROCK_MODEL COHERE_COMMAND', () => {
+    const modelHandler = BEDROCK_MODEL.COHERE_COMMAND;
+
+    it('should extract text from the first generation', () => {
+      const mockResponse = { generations: [{ text: 'This is a test response.' }] };
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined when generations are missing instead of throwing', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+      expect(modelHandler.output({}, { generations: [] })).toBeUndefined();
+    });
+  });
+
   describe('getCredentials', () => {
     it('should return credentials if accessKeyId and secretAccessKey are provided', async () => {
       const provider = new (class extends AwsBedrockGenericProvider {

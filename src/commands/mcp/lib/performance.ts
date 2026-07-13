@@ -183,4 +183,3 @@ export async function* streamProcess<T, R>(
  * Default cache instances
  */
 export const evaluationCache = new EvaluationCache();
-export const configCache = new EvaluationCache(50, 10 * 60 * 1000); // 10 minutes for configs

@@ -5,8 +5,8 @@ prompts:
 
 providers:
   # GPT-5 models showcasing latest capabilities
-  - id: openai:responses:gpt-5.5
-    label: gpt-5.5-json-schema
+  - id: openai:responses:gpt-5.6
+    label: gpt-5.6-json-schema
     config:
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format:

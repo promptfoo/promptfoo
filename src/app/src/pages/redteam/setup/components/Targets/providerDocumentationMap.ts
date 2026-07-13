@@ -124,18 +124,3 @@ export function hasSpecificDocumentation(providerType?: string): boolean {
 
   return providerType in PROVIDER_DOCUMENTATION_MAP;
 }
-
-/**
- * Gets a help text for a provider with documentation link
- * @param providerType The provider type
- * @returns Formatted help text with documentation link
- */
-export function getProviderHelpText(providerType?: string): string {
-  const hasSpecific = hasSpecificDocumentation(providerType);
-
-  if (hasSpecific && providerType) {
-    return `Learn how to configure ${providerType} in our documentation.`;
-  }
-
-  return 'Learn how to configure providers in our documentation.';
-}

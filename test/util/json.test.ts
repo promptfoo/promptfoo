@@ -408,6 +408,12 @@ describe('json utilities', () => {
         expect(convertSlashCommentsToHash(input)).toBe(expected);
       });
 
+      it('should convert comments after a string ending with an even backslash sequence', () => {
+        const input = String.raw`{ "path": "C:\\" } // comment`;
+        const expected = String.raw`{ "path": "C:\\" } # comment`;
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
       it('should handle multiple sequential comment markers', () => {
         const input = 'text //// double comment';
         const expected = 'text ## double comment';
