@@ -50,9 +50,9 @@ export async function matchesAgentRubric(
     label: 'agent-rubric',
     providerCallContext,
     vars: {
+      ...(vars || {}),
       output: tryParse(llmOutput),
       rubric,
-      ...(vars || {}),
     },
   });
 

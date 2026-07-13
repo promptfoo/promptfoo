@@ -1,6 +1,10 @@
 import logger from '../logger';
 import { sanitizeProviderIdForLog } from './provider';
-import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from './tokenUsageUtils';
 
 import type { TokenUsage } from '../types/shared';
 
@@ -47,6 +51,23 @@ export class TokenUsageTracker {
     this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked token usage for ${sanitizeProviderIdForLog(providerId)}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
+    );
+  }
+
+  /**
+   * Track token usage from one provider response while preserving the shared
+   * response-aware request-counting contract.
+   */
+  public trackResponseUsage(
+    providerId: string,
+    response: { tokenUsage?: TokenUsage } | undefined,
+  ): void {
+    const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
+    const updated = { ...current };
+    accumulateResponseTokenUsage(updated, response);
+    this.providersMap.set(providerId, updated);
+    logger.debug(
+      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
     );
   }
 

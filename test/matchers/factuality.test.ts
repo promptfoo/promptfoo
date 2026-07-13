@@ -393,4 +393,39 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
     expect(actualPrompt).not.toContain('{{ideal}}');
     expect(actualPrompt).not.toContain('{{completion}}');
   });
+
+  it('should keep reserved factuality vars ahead of user vars', async () => {
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
+
+    await matchesFactuality(
+      'input from prompt',
+      'ideal from assertion',
+      'completion from provider',
+      {
+        rubricPrompt:
+          'input={{ input }}\nideal={{ ideal }}\ncompletion={{ completion }}\nextra={{ extra }}',
+      },
+      {
+        input: 'vars input sentinel',
+        ideal: 'vars ideal sentinel',
+        completion: 'vars completion sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [prompt, callApiContext] = mockCallApi.mock.calls[0];
+    expect(prompt).toContain('input=input from prompt');
+    expect(prompt).toContain('ideal=ideal from assertion');
+    expect(prompt).toContain('completion=completion from provider');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars input sentinel');
+    expect(prompt).not.toContain('vars ideal sentinel');
+    expect(prompt).not.toContain('vars completion sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      input: 'input from prompt',
+      ideal: 'ideal from assertion',
+      completion: 'completion from provider',
+      extra: 'kept user var',
+    });
+  });
 });

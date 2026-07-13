@@ -78,6 +78,38 @@ describe('matchesSearchRubric', () => {
     );
   });
 
+  it('keeps reserved output and rubric vars ahead of user vars', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
+
+    await matchesSearchRubric(
+      'rubric from assertion',
+      'output from provider',
+      {
+        provider: 'openai:responses:gpt-5.5-2026-04-23',
+        rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}',
+      },
+      {
+        output: 'vars output sentinel',
+        rubric: 'vars rubric sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const callApiMock = vi.mocked(mocks.webSearchProvider.callApi);
+    const [prompt, callApiContext] = callApiMock.mock.calls[0];
+    expect(prompt).toContain('output=output from provider');
+    expect(prompt).toContain('rubric=rubric from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars output sentinel');
+    expect(prompt).not.toContain('vars rubric sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      output: 'output from provider',
+      rubric: 'rubric from assertion',
+      extra: 'kept user var',
+    });
+  });
+
   it('throws when grading config is missing', async () => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
 

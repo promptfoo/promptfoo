@@ -400,6 +400,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // through the Responses wire format override this so traces attribute to the
+  // actual provider system.
+  protected getGenAISystem(): string {
+    return 'openai';
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -421,7 +428,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const asNumber = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
     const spanContext = buildChatSpanContext({
-      system: 'openai',
+      system: this.getGenAISystem(),
       model: this.modelName,
       providerId: this.id(),
       prompt,
