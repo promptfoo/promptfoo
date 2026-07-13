@@ -4,16 +4,6 @@ import {
   type TokenUsage,
 } from '../types/shared';
 
-export type NormalizedTokenUsage = Omit<
-  Required<TokenUsage>,
-  'assertions' | 'completionDetails'
-> & {
-  completionDetails: Required<CompletionTokenDetails>;
-  assertions: Omit<Required<NonNullable<TokenUsage['assertions']>>, 'completionDetails'> & {
-    completionDetails: Required<CompletionTokenDetails>;
-  };
-};
-
 /**
  * Safely extract token usage carried by a thrown value.
  */
