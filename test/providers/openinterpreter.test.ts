@@ -386,6 +386,30 @@ describe('OpenInterpreterProvider', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
   });
 
+  it('resolves relative structured-input workspaces from the provider config base path', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-base-path-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'image');
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: { basePath: root, working_dir: 'workspace', skip_git_repo_check: true },
+    });
+
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
+    );
+    const { threadStart, turnStart } = await startTurn(server);
+
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.input).toEqual([{ type: 'localImage', path: 'inside.png' }]);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it('rejects remote and private image inputs by default and permits an explicitly enabled public URL', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const provider = new OpenInterpreterProvider();

@@ -4,18 +4,17 @@ import os from 'os';
 import path from 'path';
 
 import { z } from 'zod';
-import cliState from '../cliState';
 import { OpenAICodexAppServerProvider } from './openai/codex-app-server';
 import { providerRegistry } from './providerRegistry';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  EnvOverrides,
-  ProviderResponse,
-} from '../types/index';
 import type { CodexAppServerConfig } from './openai/codex-app-server';
+
+type CodexAppServerProviderOptions = NonNullable<
+  ConstructorParameters<typeof OpenAICodexAppServerProvider>[0]
+>;
+type CodexAppServerCallContext = Parameters<OpenAICodexAppServerProvider['callApi']>[1];
+type CodexAppServerCallOptions = Parameters<OpenAICodexAppServerProvider['callApi']>[2];
+type CodexAppServerResponse = Awaited<ReturnType<OpenAICodexAppServerProvider['callApi']>>;
 
 const OPEN_INTERPRETER_HARNESSES = [
   'native',
@@ -55,7 +54,7 @@ export interface OpenInterpreterConfig extends Omit<CodexAppServerConfig, 'codex
 interface OpenInterpreterProviderOptions {
   id?: string;
   config?: OpenInterpreterConfig;
-  env?: EnvOverrides;
+  env?: CodexAppServerProviderOptions['env'];
 }
 
 interface ChatMessage {
@@ -228,9 +227,9 @@ function normalizeChatMessages(prompt: string): string {
   return parsed.map((message) => `[${message.role}]\n${message.content}`).join('\n\n');
 }
 
-export class OpenInterpreterProvider implements ApiProvider {
+export class OpenInterpreterProvider {
   readonly config: OpenInterpreterConfig;
-  readonly env?: EnvOverrides;
+  readonly env?: CodexAppServerProviderOptions['env'];
 
   private readonly providerId: string;
   private readonly delegate: OpenAICodexAppServerProvider;
@@ -316,9 +315,9 @@ export class OpenInterpreterProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    callOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+    context?: CodexAppServerCallContext,
+    callOptions?: CodexAppServerCallOptions,
+  ): Promise<CodexAppServerResponse> {
     let promptConfig: OpenInterpreterConfig | undefined;
     try {
       promptConfig = context?.prompt?.config
@@ -334,7 +333,7 @@ export class OpenInterpreterProvider implements ApiProvider {
       return { error: validationError };
     }
 
-    const mappedContext: CallApiContextParams | undefined =
+    const mappedContext: CodexAppServerCallContext =
       promptConfig && context
         ? {
             ...context,
@@ -413,7 +412,7 @@ export class OpenInterpreterProvider implements ApiProvider {
       return undefined;
     }
 
-    const basePath = config.basePath || cliState.basePath || process.cwd();
+    const basePath = config.basePath || process.cwd();
     const workingDir = path.resolve(basePath, config.working_dir ?? this.temporaryWorkspace ?? '.');
     const roots = [
       workingDir,
