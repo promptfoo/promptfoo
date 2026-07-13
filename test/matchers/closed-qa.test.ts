@@ -203,4 +203,39 @@ Does the answer meet the criteria? Answer Y or N.`;
     expect(actualPrompt).not.toContain('{{criteria}}');
     expect(actualPrompt).not.toContain('{{completion}}');
   });
+
+  it('should keep reserved closed-qa vars ahead of user vars', async () => {
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
+
+    await matchesClosedQa(
+      'input from prompt',
+      'criteria from assertion',
+      'completion from provider',
+      {
+        rubricPrompt:
+          'input={{ input }}\ncriteria={{ criteria }}\ncompletion={{ completion }}\nextra={{ extra }}',
+      },
+      {
+        input: 'vars input sentinel',
+        criteria: 'vars criteria sentinel',
+        completion: 'vars completion sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [prompt, callApiContext] = mockCallApi.mock.calls[0];
+    expect(prompt).toContain('input=input from prompt');
+    expect(prompt).toContain('criteria=criteria from assertion');
+    expect(prompt).toContain('completion=completion from provider');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars input sentinel');
+    expect(prompt).not.toContain('vars criteria sentinel');
+    expect(prompt).not.toContain('vars completion sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      input: 'input from prompt',
+      criteria: 'criteria from assertion',
+      completion: 'completion from provider',
+      extra: 'kept user var',
+    });
+  });
 });

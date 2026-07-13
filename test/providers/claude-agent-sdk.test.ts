@@ -1349,6 +1349,38 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
       });
+
+      // Regression for the Meta Model API recipe: a suite-level
+      // ANTHROPIC_BASE_URL (e.g. an Anthropic gateway) must not out-rank the
+      // recipe's provider-level pin — otherwise the explicitly supplied Meta
+      // credential would be sent to that gateway URL.
+      it('keeps a provider-level ANTHROPIC_BASE_URL pin ahead of suite-level env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+        const { loadApiProvider } = await import('../../src/providers/index');
+
+        const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+          options: {
+            config: {
+              apiKey: 'meta-model-api-key',
+              env: {
+                ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+                ANTHROPIC_CUSTOM_HEADERS: '',
+              },
+            },
+            env: {
+              ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+              ANTHROPIC_CUSTOM_HEADERS: '',
+            } as EnvOverrides,
+          },
+          env: { ANTHROPIC_BASE_URL: 'https://anthropic-gateway.example' } as EnvOverrides,
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.ANTHROPIC_BASE_URL).toBe('https://api.meta.ai');
+        expect(callArgs.options.env.ANTHROPIC_CUSTOM_HEADERS).toBe('');
+        expect(callArgs.options.env.ANTHROPIC_API_KEY).toBe('meta-model-api-key');
+      });
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
