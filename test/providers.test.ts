@@ -490,21 +490,47 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should route a bare GPT-5.6 preview model to the Responses API', async () => {
-    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
-    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
-      .OPENAI_RESPONSES_MODEL_NAMES;
-    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
-    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = ['gpt-5.6-sol'];
-    try {
-      const provider = await loadApiProvider('openai:gpt-5.6-sol');
+  it('should route the new bare gpt-5.6 alias to Chat Completions', async () => {
+    const provider = await loadApiProvider('openai:gpt-5.6');
 
-      expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.6-sol', expect.any(Object));
-      expect(provider).toBeDefined();
-    } finally {
-      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
-      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
-    }
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it.each([
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ])('should preserve bare %s Responses routing', async (model) => {
+    const provider = await loadApiProvider(`openai:${model}`);
+
+    expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
+    expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+    expect(provider).toBeDefined();
+  });
+
+  it.each([
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ])('should route explicit Chat %s IDs to Chat Completions', async (model) => {
+    const provider = await loadApiProvider(`openai:chat:${model}`);
+
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it.each([
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ])('should route explicit Responses %s IDs to Responses', async (model) => {
+    const provider = await loadApiProvider(`openai:responses:${model}`);
+
+    expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
+    expect(provider).toBeDefined();
   });
 
   it('should load OpenAI Codex provider with model from provider path', async () => {

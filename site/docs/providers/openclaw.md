@@ -172,7 +172,7 @@ providers:
       # Use auth_password instead when gateway.auth.mode=password
       session_key: custom-session
       # Optional backend model override, sent as x-openclaw-model:
-      backend_model: openai/gpt-5.4
+      backend_model: openai/gpt-5.6-terra
 ```
 
 ### Environment Variables
@@ -301,14 +301,16 @@ this eval without changing the agent's normal default model.
 providers:
   - id: openclaw:main
     config:
-      backend_model: openai/gpt-5.4
+      backend_model: openai/gpt-5.6-terra
 ```
 
 For billing, OpenClaw's visible `model` remains the agent target (`openclaw/<agent-id>`). Promptfoo
 can estimate OpenAI token spend only when `backend_model` or `model_override` names the actual
-OpenAI backend model, such as `openai/gpt-5.4` or `gpt-5.4`. If the backend model is selected only
-inside OpenClaw's own agent config, Promptfoo leaves `cost` unset because the gateway response does
-not expose enough information to price that request safely.
+OpenAI backend model, such as `openai/gpt-5.6-terra` or `gpt-5.6-terra`. Use a current OpenClaw
+installation and run `openclaw models list --provider openai` to verify that the selected tier is
+present in its catalog. Current OpenClaw HTTP responses omit the cache-write usage needed to price
+GPT-5.6 safely, so Promptfoo leaves `cost` unset for those tiers even with a backend override. It
+also leaves `cost` unset when the backend model is selected only inside OpenClaw's own agent config.
 
 ### WebSocket Agent
 

@@ -705,6 +705,42 @@ Prompt:
       ]);
     });
 
+    it('should stop pretty-printed empty-marker prompts before the next case metadata', () => {
+      const input = `WARNING: First test case
+Plan: Choose the first tool
+Reason: Verify first route
+Prompt:
+{
+  "tool": "search_docs",
+  "args": { "query": "first" }
+}
+
+WARNING: Second test case
+Plan: Choose the second tool
+Reason: Verify second route
+Prompt:
+{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        {
+          __prompt: `{
+  "tool": "search_docs",
+  "args": { "query": "first" }
+}`,
+        },
+        {
+          __prompt: `{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`,
+        },
+      ]);
+    });
+
     it('should not return empty prompts when Prompt marker has no content', () => {
       const input = `Prompt:
 Plan: No prompt was generated`;

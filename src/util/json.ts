@@ -129,6 +129,14 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   }
 }
 
+function isEscapedQuote(line: string, quoteIndex: number): boolean {
+  let backslashCount = 0;
+  for (let i = quoteIndex - 1; i >= 0 && line[i] === '\\'; i--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 === 1;
+}
+
 export function convertSlashCommentsToHash(str: string): string {
   // Split into lines, process each line, then join back
   return str
@@ -190,7 +198,7 @@ export function convertSlashCommentsToHash(str: string): string {
 
           case 'doubleQuote':
             result += char;
-            if (char === '"' && prevChar !== '\\') {
+            if (char === '"' && !isEscapedQuote(line, i)) {
               state = 'normal';
             }
             break;
