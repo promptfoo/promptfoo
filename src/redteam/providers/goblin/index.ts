@@ -16,5 +16,3 @@ export class GoblinProvider extends HydraProvider {
     });
   }
 }
-
-export default GoblinProvider;
