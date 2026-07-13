@@ -1172,6 +1172,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
     );
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;

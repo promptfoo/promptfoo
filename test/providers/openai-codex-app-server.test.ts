@@ -3542,6 +3542,11 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
+    const attachedProvider: Record<string, unknown> = {
+      id: () => 'attached-provider',
+    };
+    attachedProvider.self = attachedProvider;
+
     const provider = new OpenAICodexAppServerProvider({
       config: {
         thread_cleanup: 'none',
@@ -3559,6 +3564,7 @@ describe('OpenAICodexAppServerProvider', () => {
         config: {
           working_dir: '{{ workspaceDir }}',
           model: '{{ modelName }}',
+          provider: attachedProvider,
           cli_config: {
             rendered_config: '{{ envValue }}',
           },
