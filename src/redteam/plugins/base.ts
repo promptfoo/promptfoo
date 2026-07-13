@@ -477,6 +477,7 @@ export abstract class RedteamGraderBase {
       // This is done after gradingContext so renderedValue properties take precedence
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
       value: renderedValue,
+      output: llmOutput,
       // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,
