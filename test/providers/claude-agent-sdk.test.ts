@@ -2246,6 +2246,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
           const provider = new ClaudeCodeSDKProvider({
             config: {
+              append_allowed_tools: ['AskUserQuestion', 'Read'],
               ask_user_question: { behavior: 'first_option' },
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -2272,8 +2273,10 @@ describe('ClaudeCodeSDKProvider', () => {
                 },
               ],
             },
-            { signal: new AbortController().signal, toolUseID: 'test-id' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
           );
+
+          expect(callArgs.options.allowedTools).toEqual(['Read']);
 
           expect(result).toEqual({
             behavior: 'allow',
@@ -2327,13 +2330,41 @@ describe('ClaudeCodeSDKProvider', () => {
           await callArgs.options.canUseTool(
             'Read',
             { file_path: '/tmp/test.txt' },
-            { signal: new AbortController().signal, toolUseID: 'test-id' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
           );
 
           expect(canUseTool).toHaveBeenCalledWith(
             'Read',
             { file_path: '/tmp/test.txt' },
-            { signal: expect.any(AbortSignal), toolUseID: 'test-id' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id', requestId: 'request-id' },
+          );
+        });
+
+        it('preserves out-of-band can_use_tool responses for non-question tools', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async () => null);
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          const result = await callArgs.options.canUseTool(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
+          );
+
+          expect(result).toBeNull();
+          expect(canUseTool).toHaveBeenCalledWith(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id', requestId: 'request-id' },
           );
         });
 
