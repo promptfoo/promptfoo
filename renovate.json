@@ -114,7 +114,7 @@
     },
     {
       "description": "Group IBM packages together across all dependency types",
-      "matchPackagePatterns": ["^@ibm-cloud/", "^@ibm-generative-ai/", "^ibm-cloud-sdk-core$"],
+      "matchPackagePatterns": ["^@ibm-cloud/", "^ibm-cloud-sdk-core$"],
       "matchDepTypes": [
         "dependencies",
         "devDependencies",
@@ -278,7 +278,6 @@
         "^@azure/openai",
         "^@fal-ai/",
         "^@ibm-cloud/watsonx",
-        "^@ibm-generative-ai/",
         "^@modelcontextprotocol/",
         "^@openai/",
         "^google-auth-library$",

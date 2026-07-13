@@ -90,6 +90,42 @@ describe('matchesConversationRelevance with template', () => {
     expect(callArg).toContain('"role": "user"');
     expect(callArg).toContain('"role": "assistant"');
   });
+
+  it('keeps the reserved messages var ahead of user vars', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ verdict: 'yes' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const messages = [{ input: 'What is 2+2?', output: '4' }];
+
+    await matchesConversationRelevance(
+      messages,
+      0.5,
+      { messages: 'vars messages sentinel', extra: 'kept user var' },
+      { rubricPrompt: 'messages={{ messages | dump }}\nextra={{ extra }}' },
+    );
+
+    const [prompt, callApiContext] = mockProvider.callApi.mock.calls[0];
+    expect(prompt).toContain('What is 2+2?');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars messages sentinel');
+    expect(callApiContext.vars.messages).toEqual(messages);
+    expect(callApiContext.vars.extra).toBe('kept user var');
+  });
 });
 
 describe('handleConversationRelevance with reason generation', () => {

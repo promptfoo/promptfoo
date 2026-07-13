@@ -69,6 +69,21 @@ describe('calculateDeepSeekCost', () => {
     const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1000000);
     expect(cost).toBeCloseTo(0.2828); // (0.0028 + 0.28) - all input tokens are cached
   });
+
+  it('should clamp cached tokens that exceed prompt tokens', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1500000);
+    expect(cost).toBeCloseTo(0.2828); // capped at all-cached price, never negative
+  });
+
+  it('should clamp negative cached tokens to zero', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, -500000);
+    expect(cost).toBeCloseTo(0.42); // (0.14 + 0.28) - treated as no cache hits
+  });
+
+  it('should treat non-finite cached tokens as no cache hits', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, Number.NaN);
+    expect(cost).toBeCloseTo(0.42); // (0.14 + 0.28) - same as no cachedTokens
+  });
 });
 
 describe('DEEPSEEK_CHAT_MODELS', () => {

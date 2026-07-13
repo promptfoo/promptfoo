@@ -11,6 +11,7 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -61,7 +62,7 @@ import {
 } from './util';
 
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs } from '../types/shared';
+import type { Inputs, TokenUsage } from '../types/shared';
 import type {
   FailedPluginInfo,
   Policy,
@@ -72,6 +73,27 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
+
+function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
+  const callApi = provider.callApi.bind(provider);
+  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
+    const response = await callApi(...args);
+    accumulateResponseTokenUsage(tokenUsage, response);
+    return response;
+  };
+  trackedCallApi.label = provider.callApi.label;
+
+  return new Proxy(provider, {
+    get(target, property) {
+      if (property === 'callApi') {
+        return trackedCallApi;
+      }
+
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -599,6 +621,7 @@ async function applyStrategies(
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
   redteamGenerationContext?: RedteamGenerationContext,
+  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -677,6 +700,8 @@ async function applyStrategies(
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
+        // Generation-time strategies that load a specialized local provider must remain in usage totals.
+        __wrapGenerationProvider: wrapGenerationProvider,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
@@ -979,6 +1004,7 @@ export async function synthesize({
   testCases: TestCaseWithPlugin[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
+  generationTokenUsage?: TokenUsage;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1067,9 +1093,17 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const redteamProvider = await redteamProviderManager.getProvider({
+  const providerForGeneration = await redteamProviderManager.getProvider({
     provider,
   });
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
+  const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1680,6 +1714,7 @@ export async function synthesize({
       undefined,
       maxCharsPerMessage,
       redteamGenerationContext,
+      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1705,6 +1740,7 @@ export async function synthesize({
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
       redteamGenerationContext,
+      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
     );
 
   Object.assign(strategyResults, otherStrategyResults);
@@ -1733,5 +1769,12 @@ export async function synthesize({
     .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
     .map(([pluginId, { requested }]) => ({ pluginId, requested }));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar, failedPlugins };
+  return {
+    purpose,
+    entities,
+    testCases: finalTestCases,
+    injectVar,
+    failedPlugins,
+    generationTokenUsage,
+  };
 }

@@ -32,7 +32,7 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     enable-fork-prs: true
 ```
@@ -45,21 +45,47 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
   if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
-  uses: github/codeql-action/upload-sarif@v4
+  uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
     category: promptfoo-code-scan
 ```
 
+## Supply Chain Security
+
+The hardening below applies to releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
+
+- **Pinned scanner install.** The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input (exact versions only) to override the pin.
+- **Pin by commit SHA for maximum assurance.** Version tags like `v0` and `v0.1.8` are managed by release automation and, like all git tags, are not cryptographically immutable — only a full commit SHA is. Resolve a release tag to its commit and pin that:
+
+  ```bash
+  gh api repos/promptfoo/code-scan-action/commits/<tag> --jq .sha
+  ```
+
+  ```yaml
+  uses: promptfoo/code-scan-action@<full-commit-sha> # <tag>
+  ```
+
+- **Verify build provenance.** The committed `dist/` bundle and the `action.yml` that selects the entrypoint are built and exported by the [promptfoo monorepo release workflow](https://github.com/promptfoo/promptfoo/blob/main/.github/workflows/release-please.yml), which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout of this repository with:
+
+  ```bash
+  gh attestation verify dist/index.js --repo promptfoo/promptfoo
+  gh attestation verify action.yml --repo promptfoo/promptfoo
+  ```
+
+  Additionally, every release PR in this repository is validated by a workflow that rebuilds `dist/` from the pinned monorepo source commit and fails on any byte difference.
+
+- **Don't run untrusted PR code before the scan in the same job.** The scanner install strips npm config and `NODE_OPTIONS` from its environment and isolates its npm config files, but a step that executes pull-request-controlled code earlier in the same job (for example `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and such a step already runs with the job's token. Keep the scan in a job that only checks out the PR and scans it, or run untrusted build steps in a separate job.
+
 ## Contributing
 
-Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/code-scan-action) in the main promptfoo repository.
+Please note that this is a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/code-scan-action) in the main promptfoo repository.
 
 ## License
 

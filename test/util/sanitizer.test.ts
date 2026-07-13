@@ -3,7 +3,9 @@ import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
+  sanitizeHeaders,
   sanitizeObject,
+  sanitizeQueryParams,
   sanitizeRuntimeOptions,
   sanitizeUrl,
   sanitizeUrlEncodedString,
@@ -1406,6 +1408,13 @@ describe('sanitizeBody', () => {
   it('should be an alias for sanitizeObject', () => {
     const input = { password: 'secret', data: 'public' };
     expect(sanitizeBody(input)).toEqual(sanitizeObject(input));
+  });
+});
+
+describe('legacy sanitizer aliases', () => {
+  it('preserves the header and query parameter aliases', () => {
+    expect(sanitizeHeaders).toBe(sanitizeObject);
+    expect(sanitizeQueryParams).toBe(sanitizeObject);
   });
 });
 
