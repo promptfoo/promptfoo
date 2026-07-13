@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
-import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { OpenAiChatCompletionProvider, type OpenAiChatCompletionCostData } from '../openai/chat';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -117,8 +117,8 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 };
 
 // Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
-// reports per-token prices in "ticks" (1 tick = $1e-10). The same scale is used
-// by `usage.cost_in_usd_ticks` on chat/responses results.
+// reports USD cents per 100M tokens (equivalent to $1e-10 per-token increments).
+// Response billing uses the same scale in `usage.cost_in_usd_ticks`.
 export const XAI_CHAT_MODELS: XAIModel[] = [
   // Grok 4.5 Models (500K context; flagship model recommended by xAI's catalog)
   {
@@ -407,6 +407,12 @@ export const GROK_REASONING_EFFORT_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
+export const GROK_45_MODELS: ReadonlySet<string> = new Set([
+  'grok-4.5',
+  'grok-4.5-latest',
+  'grok-build-latest',
+]);
+
 // All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
   // Grok 4.5
@@ -577,10 +583,10 @@ export function calculateXAICost(
   }
 
   const inputCostOverride = config.inputCost ?? config.cost;
-  // xAI charges the higher tier for requests that "exceed" the threshold, so the
-  // switch is exclusive (>), matching the minimax/azure/google tiered-cost paths.
+  // xAI's language-model REST schema defines long_context_threshold as the token
+  // count "at or above" which long-context prices apply.
   const modelCost: XAIModelCost =
-    model.cost.longContext && promptTokens > model.cost.longContext.threshold
+    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
       ? model.cost.longContext
       : model.cost;
   const inputCost = inputCostOverride ?? modelCost.input;
@@ -610,11 +616,24 @@ export function calculateXAICost(
 }
 
 export function getXAICostInUsd(usage?: { cost_in_usd_ticks?: number }): number | undefined {
-  if (typeof usage?.cost_in_usd_ticks !== 'number') {
+  if (
+    typeof usage?.cost_in_usd_ticks !== 'number' ||
+    !Number.isFinite(usage.cost_in_usd_ticks) ||
+    usage.cost_in_usd_ticks < 0
+  ) {
     return undefined;
   }
 
   return usage.cost_in_usd_ticks / 1e10;
+}
+
+export function hasXAICostOverrides(config?: XAICostConfig): boolean {
+  return (
+    config?.cost !== undefined ||
+    config?.inputCost !== undefined ||
+    config?.outputCost !== undefined ||
+    config?.cacheReadCost !== undefined
+  );
 }
 
 class XAIProvider extends OpenAiChatCompletionProvider {
@@ -629,15 +648,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   protected supportsReasoningEffort(): boolean {
-    // Codex Review (b7875171) suggested forwarding reasoning_effort on
-    // redirected legacy slugs because xAI's retirement email says those
-    // requests now route to grok-4.3 (which accepts the parameter). In
-    // practice the chat-completions endpoint still rejects the parameter on
-    // pre-cutoff slugs with `Model <name> does not support parameter
-    // reasoningEffort.` (verified live against grok-4-fast-reasoning, 400
-    // Client specified an invalid argument). Keep stripping until the
-    // server-side redirect is actually in effect — users who want to tune
-    // effort should target `grok-4.3` (or `grok-4.3-latest`) directly.
+    // Redirected legacy aliases still reject reasoning_effort under their old
+    // request contract. Strip it for those aliases; users who want to tune
+    // effort should target grok-4.3 directly.
     return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
   }
 
@@ -658,6 +671,18 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
+    }
+
+    const reasoningEffort = result.body.reasoning_effort;
+    if (
+      GROK_45_MODELS.has(this.modelName) &&
+      reasoningEffort !== undefined &&
+      !['low', 'medium', 'high'].includes(reasoningEffort)
+    ) {
+      throw new Error(
+        `xAI model ${this.modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
+          'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".',
+      );
     }
 
     // Filter reasoning_effort for models that don't support it
@@ -717,6 +742,35 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     };
   }
 
+  protected calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return 0;
+    }
+
+    const xaiConfig = config as XAIConfig;
+    const usage = data.usage as
+      | (NonNullable<OpenAiChatCompletionCostData['usage']> & { cost_in_usd_ticks?: number })
+      | undefined;
+    const reportedCost = hasXAICostOverrides(xaiConfig) ? undefined : getXAICostInUsd(usage);
+
+    return (
+      reportedCost ??
+      calculateXAICost(
+        this.modelName,
+        xaiConfig,
+        usage?.prompt_tokens,
+        usage?.completion_tokens,
+        usage?.completion_tokens_details?.reasoning_tokens,
+        usage?.prompt_tokens_details?.cached_tokens,
+        { reasoningBilledSeparately: true },
+      )
+    );
+  }
+
   async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
     try {
       const response = await super.callApi(prompt, context, callApiOptions);
@@ -736,25 +790,6 @@ class XAIProvider extends OpenAiChatCompletionProvider {
           };
         }
         return response;
-      }
-
-      if (response.tokenUsage && !response.cached) {
-        // The OpenAI base provider normalizes xAI's OpenAI-compatible usage
-        // details but does not surface `usage.cost_in_usd_ticks`. Fall back to
-        // local pricing math. The chat-completions endpoint reports reasoning
-        // tokens separately from completion tokens and bills them at the output
-        // rate (see calculateXAICost), so they are added on top here.
-        const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
-        const cachedTokens = response.tokenUsage.completionDetails?.cacheReadInputTokens ?? 0;
-        response.cost = calculateXAICost(
-          this.modelName,
-          this.config || {},
-          response.tokenUsage.prompt,
-          response.tokenUsage.completion,
-          reasoningTokens,
-          cachedTokens,
-          { reasoningBilledSeparately: true },
-        );
       }
 
       return response;

@@ -204,6 +204,8 @@ describe('xAI Chat Provider', () => {
   describe('Reported cost handling', () => {
     it('converts xAI cost ticks to USD', () => {
       expect(getXAICostInUsd({ cost_in_usd_ticks: 37_756_000 })).toBe(0.0037756);
+      expect(getXAICostInUsd({ cost_in_usd_ticks: -1 })).toBeUndefined();
+      expect(getXAICostInUsd({ cost_in_usd_ticks: Number.NaN })).toBeUndefined();
       expect(getXAICostInUsd()).toBeUndefined();
     });
   });
@@ -372,6 +374,33 @@ describe('xAI Chat Provider', () => {
         expect(result.body.frequency_penalty).toBeUndefined();
         expect(result.body.stop).toBeUndefined();
         expect(result.body.temperature).toBe(0.8);
+      }
+    });
+
+    it('rejects unsupported reasoning_effort values for Grok 4.5', async () => {
+      for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
+        for (const reasoningEffort of ['none', 'xhigh', 'minimal']) {
+          const provider = createXAIProvider(`xai:${modelName}`) as any;
+
+          await expect(
+            provider.getOpenAiBody('test prompt', {
+              prompt: { config: { reasoning_effort: reasoningEffort } },
+            }),
+          ).rejects.toThrow(
+            `xAI model ${modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+          );
+        }
+      }
+    });
+
+    it('preserves reasoning_effort none for Grok 4.3 and its aliases', async () => {
+      for (const modelName of ['grok-4.3', 'grok-4.3-latest', 'grok-latest']) {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: { config: { reasoning_effort: 'none' } },
+        });
+
+        expect(result.body.reasoning_effort).toBe('none');
       }
     });
 
@@ -603,7 +632,7 @@ describe('xAI Chat Provider', () => {
       expect(grok45?.aliases).toContain('grok-4.5-latest');
       expect(grok45?.aliases).toContain('grok-build-latest');
       // Verified against xAI /v1/language-models/grok-4.5 on 2026-07-09
-      // (20000/60000/5000 ticks, long-context 40000/120000/10000 above 200K).
+      // (20000/60000/5000 price units, long-context 40000/120000/10000 at 200K+).
       expect(grok45?.cost?.input).toBe(2.0 / 1e6);
       expect(grok45?.cost?.output).toBe(6.0 / 1e6);
       expect(grok45?.cost?.cache_read).toBe(0.5 / 1e6);
@@ -784,21 +813,21 @@ describe('xAI Chat Provider', () => {
       }
     });
 
-    it('switches grok-build-0.1 and its aliases to higher-context pricing above 200k tokens', () => {
+    it('switches grok-build-0.1 and its aliases to higher-context pricing at 200k tokens', () => {
       for (const modelName of [
         'grok-build-0.1',
         'grok-code-fast-1',
         'grok-code-fast',
         'grok-code-fast-1-0825',
       ]) {
-        // Exactly at the threshold stays on the standard tier (exclusive >).
-        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
-          (200_000 * 1 + 1_000 * 2) / 1e6,
+        // One token below the threshold stays on the standard tier.
+        expect(calculateXAICost(modelName, {}, 199_999, 1_000)).toBeCloseTo(
+          (199_999 * 1 + 1_000 * 2) / 1e6,
           10,
         );
-        // One token over switches the whole request to the higher tier.
-        expect(calculateXAICost(modelName, {}, 200_001, 1_000)).toBeCloseTo(
-          (200_001 * 2 + 1_000 * 4) / 1e6,
+        // The REST schema defines the threshold as inclusive (at or above).
+        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
+          (200_000 * 2 + 1_000 * 4) / 1e6,
           10,
         );
       }
@@ -818,15 +847,15 @@ describe('xAI Chat Provider', () => {
       }
     });
 
-    it('switches grok-4.5 to higher-context pricing above 200k input tokens', () => {
-      // Exactly at the threshold stays on the standard tier (exclusive >).
-      expect(calculateXAICost('grok-4.5', {}, 200_000, 1_000)).toBeCloseTo(
-        (200_000 * 2 + 1_000 * 6) / 1e6,
+    it('switches grok-4.5 to higher-context pricing at 200k input tokens', () => {
+      // One token below the threshold stays on the standard tier.
+      expect(calculateXAICost('grok-4.5', {}, 199_999, 1_000)).toBeCloseTo(
+        (199_999 * 2 + 1_000 * 6) / 1e6,
         10,
       );
-      // One token over switches the whole request to the higher tier ($4/$12).
-      expect(calculateXAICost('grok-4.5', {}, 200_001, 1_000)).toBeCloseTo(
-        (200_001 * 4 + 1_000 * 12) / 1e6,
+      // The REST schema defines the threshold as inclusive (at or above).
+      expect(calculateXAICost('grok-4.5', {}, 200_000, 1_000)).toBeCloseTo(
+        (200_000 * 4 + 1_000 * 12) / 1e6,
         10,
       );
     });
@@ -858,7 +887,7 @@ describe('xAI Chat Provider', () => {
       expect(calculateXAICost('grok-4.5', {}, 219, 51, 50, 128)).toBeCloseTo(0.000552, 12);
     });
 
-    it('bills separately-reported reasoning at the long-context output rate above the threshold', () => {
+    it('bills separately-reported reasoning at the long-context output rate at the threshold', () => {
       // Chat completions with a >200K prompt: the whole request (including the
       // separately-reported reasoning tokens) switches to the $4/$12/$1 tier.
       expect(
@@ -1217,7 +1246,7 @@ describe('xAI Chat Provider', () => {
       expect(result.cost).toBeCloseTo(0.0005, 10);
     });
 
-    it('reproduces the live-verified grok-4.5 chat completion cost', async () => {
+    it('reproduces the live-verified grok-4.5 chat completion cost when ticks are absent', async () => {
       // Real grok-4.5 response captured 2026-07-09; the API reported
       // usage.cost_in_usd_ticks = 5_520_000 → $0.000552.
       mockFetchWithCache.mockResolvedValueOnce({
@@ -1244,6 +1273,94 @@ describe('xAI Chat Provider', () => {
 
       // (91 uncached * $2/M) + (128 cached * $0.50/M) + (51 output * $6/M) = $0.000552.
       expect(result.cost).toBeCloseTo(0.000552, 12);
+    });
+
+    it('prefers xAI exact billed ticks over catalog estimates for chat completions', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'priority response' } }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 10,
+            total_tokens: 110,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // Catalog math would be $0.00026. The API's exact billed amount includes
+      // any priority pricing, discounts, and other request-level adjustments.
+      expect(result.cost).toBe(0.0123456789);
+    });
+
+    it('preserves exact billed ticks on refusal responses', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: { content: null, refusal: 'I cannot help with that.' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 10,
+            total_tokens: 110,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.isRefusal).toBe(true);
+      expect(result.cost).toBe(0.0123456789);
+    });
+
+    it('honors explicit custom cost overrides instead of reported ticks', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'custom-priced response' } }],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            cost: 0.001,
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBe(0.015);
     });
   });
 });

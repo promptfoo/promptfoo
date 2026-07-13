@@ -6,7 +6,7 @@ prompts:
   - file://./prompt.yaml
 
 providers:
-  # Grok 4.5 (flagship model recommended by xAI's catalog)
+  # Grok 4.5 (flagship; currently unavailable to EU API Console users)
   - id: xai:grok-4.5
     config:
       temperature: 0.7

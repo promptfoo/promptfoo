@@ -67,6 +67,8 @@ xAI's flagship model for coding, agentic tasks, and knowledge work (500K context
 - `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
 - `xai:responses:grok-4.5` - Recommended form for server-side tools
 
+xAI currently excludes Grok 4.5 from the EU API Console. Use the included Grok 4.3 provider when running this example from an EU account.
+
 ### Grok 4.3
 
 A general-purpose alternative for text workflows:
