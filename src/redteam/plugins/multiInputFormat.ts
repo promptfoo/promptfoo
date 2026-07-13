@@ -183,15 +183,11 @@ function parseMultiLinePrompts(
       continue;
     }
 
+    // Inline "Prompt: <content>": append every line up to the next marker. `prompt`
+    // is non-empty here (removePrefix trims), so all lines join unconditionally.
     const nextPromptIndex = promptLineIndices[i + 1] ?? lines.length;
-    let currentPrompt = prompt;
-    for (let j = promptIndex + 1; j < nextPromptIndex; j++) {
-      const line = lines[j];
-      if (currentPrompt || line.trim()) {
-        currentPrompt += (currentPrompt ? '\n' : '') + line;
-      }
-    }
-    prompts.push(currentPrompt.trim());
+    const blockLines = lines.slice(promptIndex + 1, nextPromptIndex);
+    prompts.push([prompt, ...blockLines].join('\n').trim());
   }
 
   return toPromptObjects(
