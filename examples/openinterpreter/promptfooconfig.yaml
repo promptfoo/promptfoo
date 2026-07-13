@@ -8,6 +8,7 @@ providers:
   - id: openinterpreter:gpt-5.4
     config:
       working_dir: ./workspace
+      skip_git_repo_check: true
       sandbox_mode: read-only
       turn_timeout_ms: 120000
 
