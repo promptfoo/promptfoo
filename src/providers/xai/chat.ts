@@ -2,6 +2,7 @@ import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
+import { clampCachedTokens } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -594,9 +595,7 @@ export function calculateXAICost(
   const cacheReadCost =
     config.cacheReadCost ?? inputCostOverride ?? modelCost.cache_read ?? inputCost;
 
-  const billableCachedTokens = Number.isFinite(cachedTokens)
-    ? Math.min(Math.max(cachedTokens!, 0), promptTokens)
-    : 0;
+  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
 
   // Cached prompt tokens (prompt_tokens_details.cached_tokens) use the reduced
