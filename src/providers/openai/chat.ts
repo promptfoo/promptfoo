@@ -306,7 +306,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
     if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
-      body.reasoning_effort = config.reasoning_effort;
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
     if (

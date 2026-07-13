@@ -1,4 +1,30 @@
-import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
+import {
+  BaseTokenUsageSchema,
+  type CompletionTokenDetails,
+  type TokenUsage,
+} from '../types/shared';
+
+export type NormalizedTokenUsage = Omit<
+  Required<TokenUsage>,
+  'assertions' | 'completionDetails'
+> & {
+  completionDetails: Required<CompletionTokenDetails>;
+  assertions: Omit<Required<NonNullable<TokenUsage['assertions']>>, 'completionDetails'> & {
+    completionDetails: Required<CompletionTokenDetails>;
+  };
+};
+
+/**
+ * Safely extract token usage carried by a thrown value.
+ */
+export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
+}
 
 /**
  * Helper to create empty completion details
@@ -220,6 +246,27 @@ export function accumulateResponseTokenUsage(
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
   }
+}
+
+/**
+ * Fold generation-time provider tokens into evaluation totals without treating
+ * internal generation calls as target probes. Returns whether the payload was valid.
+ */
+export function accumulateGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
+  const parsed = BaseTokenUsageSchema.safeParse(update);
+  if (!parsed.success) {
+    return false;
+  }
+
+  const { assertions: _assertions, numRequests: _numRequests, ...tokenTotals } = parsed.data;
+  const hasTokenTotals =
+    Object.values(tokenTotals).some((value) => typeof value === 'number' && value !== 0) ||
+    Object.values(tokenTotals.completionDetails ?? {}).some((value) => value !== 0);
+  if (!hasTokenTotals) {
+    return false;
+  }
+  accumulateTokenUsage(target, tokenTotals);
+  return true;
 }
 
 /**
