@@ -648,27 +648,13 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 /**
  * Processes tools configuration to handle web fetch and web search tools
  */
-export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConfig)[] = []): {
-  processedTools: (
-    | Anthropic.Tool
-    | Anthropic.Messages.WebFetchTool20250910
-    | Anthropic.Messages.WebFetchTool20260209
-    | Anthropic.Messages.WebFetchTool20260309
-    | Anthropic.Messages.MemoryTool20250818
-    | Anthropic.Messages.WebSearchTool20250305
-    | Anthropic.Messages.WebSearchTool20260209
-  )[];
+export function processAnthropicTools(
+  tools: (Anthropic.Messages.ToolUnion | AnthropicToolConfig)[] = [],
+): {
+  processedTools: Anthropic.Messages.ToolUnion[];
   requiredBetaFeatures: string[];
 } {
-  const processedTools: (
-    | Anthropic.Tool
-    | Anthropic.Messages.WebFetchTool20250910
-    | Anthropic.Messages.WebFetchTool20260209
-    | Anthropic.Messages.WebFetchTool20260309
-    | Anthropic.Messages.MemoryTool20250818
-    | Anthropic.Messages.WebSearchTool20250305
-    | Anthropic.Messages.WebSearchTool20260209
-  )[] = [];
+  const processedTools: Anthropic.Messages.ToolUnion[] = [];
   const requiredBetaFeatures: string[] = [];
 
   const addRequiredBetaFeature = (feature: string) => {
@@ -697,11 +683,11 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
         processedTools.push(tool as Anthropic.Messages.MemoryTool20250818);
       } else {
         // Pass through other tool types (standard Anthropic tools)
-        processedTools.push(tool as Anthropic.Tool);
+        processedTools.push(tool as Anthropic.Messages.ToolUnion);
       }
     } else {
       // Standard Anthropic tool
-      processedTools.push(tool as Anthropic.Tool);
+      processedTools.push(tool as Anthropic.Messages.ToolUnion);
     }
 
     // Check if tool uses strict mode (structured outputs for tools)

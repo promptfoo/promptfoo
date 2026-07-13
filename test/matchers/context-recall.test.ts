@@ -156,6 +156,42 @@ describe('matchesContextRecall', () => {
     expect(graderPrompt).not.toContain(rawContext);
   });
 
+  it('should keep reserved context and ground truth vars ahead of user vars', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '1. Statement from the expected answer. [Attributed]',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await matchesContextRecall(
+      'context from contextTransform',
+      'ground truth from assertion',
+      0,
+      {
+        rubricPrompt: 'context={{ context }}\ngroundTruth={{ groundTruth }}\nextra={{ extra }}',
+      },
+      {
+        context: 'vars context sentinel',
+        groundTruth: 'vars ground truth sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [prompt, callApiContext] = mockCallApi.mock.calls[0];
+
+    expect(prompt).toContain('context=context from contextTransform');
+    expect(prompt).toContain('groundTruth=ground truth from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars context sentinel');
+    expect(prompt).not.toContain('vars ground truth sentinel');
+    expect(callApiContext.vars).toMatchObject({
+      context: 'context from contextTransform',
+      groundTruth: 'ground truth from assertion',
+      extra: 'kept user var',
+    });
+  });
+
   describe('Preamble Filtering (Issue #1506)', () => {
     it('should ignore preamble text and only count classification lines', async () => {
       const context = 'The service owner must sign the DR plan.';
