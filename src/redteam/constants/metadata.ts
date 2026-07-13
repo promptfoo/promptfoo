@@ -135,6 +135,14 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for inappropriate off-label medication recommendations without proper disclaimers',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
+  'mental-health:crisis-mishandling':
+    'Tests for inappropriate responses during mental health crises',
+  'mental-health:dangerous-encouragement':
+    'Tests for encouragement of physically dangerous behaviors',
+  'mental-health:identity-manipulation': 'Tests for reinforcement of grandiose delusions',
+  'mental-health:isolation': 'Tests for encouragement of social isolation',
+  'mental-health:reality-distortion': 'Tests for reinforcement of reality distortion beliefs',
+  'mental-health:sycophancy': 'Tests for inappropriate agreement with delusional thinking',
   'financial:calculation-error':
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
   'financial:compliance-violation':
@@ -309,6 +317,12 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:off-label-use': 'Medical Off-Label Use',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
+  'mental-health:crisis-mishandling': 'Mental Health Crisis Mishandling',
+  'mental-health:dangerous-encouragement': 'Mental Health Dangerous Encouragement',
+  'mental-health:identity-manipulation': 'Mental Health Identity Manipulation',
+  'mental-health:isolation': 'Mental Health Isolation',
+  'mental-health:reality-distortion': 'Mental Health Reality Distortion',
+  'mental-health:sycophancy': 'Mental Health Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
   'financial:compliance-violation': 'Financial Compliance Violation',
   'financial:confidential-disclosure': 'Financial Confidential Disclosure',
@@ -542,6 +556,12 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:off-label-use': Severity.High,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
+  'mental-health:crisis-mishandling': Severity.Critical,
+  'mental-health:dangerous-encouragement': Severity.Critical,
+  'mental-health:identity-manipulation': Severity.High,
+  'mental-health:isolation': Severity.High,
+  'mental-health:reality-distortion': Severity.High,
+  'mental-health:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
@@ -791,6 +811,12 @@ export const riskCategories: Record<string, Plugin[]> = {
     'medical:off-label-use',
     'medical:prioritization-error',
     'medical:sycophancy',
+    'mental-health:crisis-mishandling',
+    'mental-health:dangerous-encouragement',
+    'mental-health:identity-manipulation',
+    'mental-health:isolation',
+    'mental-health:reality-distortion',
+    'mental-health:sycophancy',
     'pharmacy:controlled-substance-compliance',
     'pharmacy:dosage-calculation',
     'pharmacy:drug-interaction',
@@ -885,6 +911,12 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
+  'mental-health:crisis-mishandling': 'MentalHealthCrisisMishandling',
+  'mental-health:dangerous-encouragement': 'MentalHealthDangerousEncouragement',
+  'mental-health:identity-manipulation': 'MentalHealthIdentityManipulation',
+  'mental-health:isolation': 'MentalHealthIsolation',
+  'mental-health:reality-distortion': 'MentalHealthRealityDistortion',
+  'mental-health:sycophancy': 'MentalHealthSycophancy',
   'ecommerce:compliance-bypass': 'EcommerceComplianceBypass',
   'ecommerce:order-fraud': 'EcommerceOrderFraud',
   'ecommerce:pci-dss': 'EcommercePciDss',
@@ -1193,6 +1225,18 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
+  'mental-health:crisis-mishandling':
+    'Tests for inappropriate responses during mental health crises, including failure to recognize crisis situations or provide appropriate resources',
+  'mental-health:dangerous-encouragement':
+    'Tests for encouragement of physically dangerous behaviors that could result in self-harm or harm to others',
+  'mental-health:identity-manipulation':
+    'Tests for reinforcement of grandiose delusions or false identity claims that could worsen mental health conditions',
+  'mental-health:isolation':
+    'Tests for encouragement of social isolation from family, friends, or professional mental health support',
+  'mental-health:reality-distortion':
+    'Tests for reinforcement of alternate reality beliefs, simulation theory delusions, or other reality distortion symptoms',
+  'mental-health:sycophancy':
+    'Tests for inappropriate agreement with delusional thinking, conspiracy theories, or false pattern recognition that could worsen mental health conditions',
   'financial:calculation-error':
     'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
   'financial:compliance-violation':

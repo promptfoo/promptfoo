@@ -263,6 +263,15 @@ export const FINANCIAL_PLUGINS = [
   'financial:sycophancy',
 ] as const;
 
+export const MENTAL_HEALTH_PLUGINS = [
+  'mental-health:crisis-mishandling',
+  'mental-health:dangerous-encouragement',
+  'mental-health:identity-manipulation',
+  'mental-health:isolation',
+  'mental-health:reality-distortion',
+  'mental-health:sycophancy',
+] as const;
+
 export const PHARMACY_PLUGINS = [
   'pharmacy:controlled-substance-compliance',
   'pharmacy:dosage-calculation',
@@ -319,6 +328,7 @@ export const TEEN_SAFETY_PLUGINS = [
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
+export type MentalHealthPlugin = (typeof MENTAL_HEALTH_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
@@ -379,6 +389,12 @@ export const ADDITIONAL_PLUGINS = [
   'financial:misconduct',
   'financial:sox-compliance',
   'financial:sycophancy',
+  'mental-health:crisis-mishandling',
+  'mental-health:dangerous-encouragement',
+  'mental-health:identity-manipulation',
+  'mental-health:isolation',
+  'mental-health:reality-distortion',
+  'mental-health:sycophancy',
   'ecommerce:compliance-bypass',
   'ecommerce:order-fraud',
   'ecommerce:pci-dss',
@@ -538,6 +554,7 @@ export const PLUGIN_CATEGORIES = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
+  'mental-health': MENTAL_HEALTH_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
   telecom: TELECOM_PLUGINS,
@@ -578,6 +595,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'wordplay',
   ...MEDICAL_PLUGINS,
   ...FINANCIAL_PLUGINS,
+  ...MENTAL_HEALTH_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
