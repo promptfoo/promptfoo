@@ -165,6 +165,26 @@ function scrubOutputForHistory(output: string): string {
   return output;
 }
 
+function extractAgentMessage(output: unknown): string | undefined {
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  if (!output || typeof output !== 'object') {
+    return undefined;
+  }
+
+  const cloudResponse = output as Record<string, unknown>;
+  for (const key of ['result', 'message', 'prompt'] as const) {
+    const value = cloudResponse[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 export class HydraProvider implements ApiProvider {
   readonly config: HydraConfig;
   private readonly providerOptions: HydraProviderOptions;
@@ -430,16 +450,9 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
 
-      // Extract message from cloud response
-      let nextMessage: string;
-
-      if (typeof agentResp.output === 'string') {
-        // PromptfooChatCompletionProvider extracts data.result as string
-        nextMessage = agentResp.output;
-      } else {
-        const cloudResponse = agentResp.output as any;
-        nextMessage = cloudResponse.result || cloudResponse.message;
-      }
+      // PromptfooChatCompletionProvider usually extracts data.result as a string, but
+      // task-specific handlers may return a structured response instead.
+      const nextMessage = extractAgentMessage(agentResp.output);
 
       if (!nextMessage) {
         logger.info(`${this.logPrefix} Missing message from agent`, { turn });
