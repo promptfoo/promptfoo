@@ -104,6 +104,34 @@ describe('matchesAgentRubric', () => {
     );
   });
 
+  it('keeps reserved output and rubric vars ahead of user vars', async () => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+
+    await matchesAgentRubric(
+      'rubric from assertion',
+      'output from provider',
+      { rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}' },
+      {
+        output: 'vars output sentinel',
+        rubric: 'vars rubric sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const callApiMock = vi.mocked(mocks.codexProvider.callApi);
+    const [prompt, callApiContext] = callApiMock.mock.calls[0];
+    expect(prompt).toContain('output=output from provider');
+    expect(prompt).toContain('rubric=rubric from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars output sentinel');
+    expect(prompt).not.toContain('vars rubric sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      output: 'output from provider',
+      rubric: 'rubric from assertion',
+      extra: 'kept user var',
+    });
+  });
+
   it('rejects an explicitly configured plain text grader instead of falling back', async () => {
     const { matchesAgentRubric } = await import('../../src/matchers/agent');
     mocks.loadApiProvider.mockResolvedValue(mocks.textProvider);

@@ -460,6 +460,7 @@ gh pr comment --body "
 
 ## Caching Strategies
 
+<!-- prettier-ignore -->
 Optimize CI/CD performance with proper caching [[memory:3455374]]:
 
 ```yaml

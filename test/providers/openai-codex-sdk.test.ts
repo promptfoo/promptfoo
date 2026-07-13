@@ -186,14 +186,12 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it('should warn about unknown model', () => {
+    it.each(['unknown-model', 'gpt-5.6'])('should warn about unknown model %s', (model) => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
+      new OpenAICodexSDKProvider({ config: { model } });
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK: unknown-model',
-      );
+      expect(warnSpy).toHaveBeenCalledWith(`Using unknown model for OpenAI Codex SDK: ${model}`);
 
       warnSpy.mockRestore();
     });
@@ -1650,14 +1648,17 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
-        'max',
-        'ultra',
-      ] as const)('should pass GPT-5.6 %s reasoning to thread options', async (effort) => {
+        ['gpt-5.6-sol', 'max'],
+        ['gpt-5.6-sol', 'ultra'],
+        ['gpt-5.6-terra', 'max'],
+        ['gpt-5.6-terra', 'ultra'],
+        ['gpt-5.6-luna', 'max'],
+      ] as const)('should pass %s %s reasoning to thread options', async (model, effort) => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-5.6-sol',
+            model,
             model_reasoning_effort: effort,
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -1667,7 +1668,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'gpt-5.6-sol',
+            model,
             modelReasoningEffort: effort,
           }),
         );
@@ -2516,6 +2517,35 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should ignore attached live provider objects before rendering prompt config vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const attachedProvider: Record<string, unknown> = {
+          id: () => 'attached-provider',
+        };
+        attachedProvider.self = attachedProvider;
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              config: {
+                model: '{{ model }}',
+                provider: attachedProvider,
+              } as any,
+            },
+            vars: { model: 'gpt-5.2' },
+          } as any),
+        ).resolves.toMatchObject({
+          output: 'Response',
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
       it('should use CODEX_API_KEY from env if available', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -2839,7 +2869,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(provider.config.model).toBe(model);
       });
 
-      it('should calculate cost for gpt-5.6-sol with cached input tokens', async () => {
+      it('should omit gpt-5.6 cost when Codex does not report cache-write tokens', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
@@ -2855,7 +2885,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBeCloseTo(0.03775, 6);
+        expect(result.cost).toBeUndefined();
       });
 
       it('should recognize gpt-5.5 as a known model', () => {

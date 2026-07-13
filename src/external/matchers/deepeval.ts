@@ -70,8 +70,8 @@ export async function matchesConversationRelevance(
   if (loadedRubricPrompt) {
     // Use custom rubric prompt with nunjucks rendering
     promptText = nunjucks.renderString(loadedRubricPrompt, {
-      messages,
       ...(vars || {}),
+      messages,
     });
   } else {
     // Use the template which already includes the messages
@@ -82,7 +82,7 @@ export async function matchesConversationRelevance(
     textProvider,
     promptText,
     'conversation-relevance',
-    { messages, ...(vars || {}) },
+    { ...(vars || {}), messages },
     providerCallContext,
   );
   if (resp.error || !resp.output) {

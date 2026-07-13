@@ -118,7 +118,10 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   it.each([
+    { model: 'gpt-5.6', reasoningEffort: 'max', maxOutputTokens: 4000 },
     { model: 'gpt-5.6-sol', reasoningEffort: 'max', maxOutputTokens: 4000 },
+    { model: 'gpt-5.6-terra', reasoningEffort: 'max', maxOutputTokens: 4000 },
+    { model: 'gpt-5.6-luna', reasoningEffort: 'max', maxOutputTokens: 4000 },
     { model: 'o3', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
@@ -172,6 +175,18 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect(body.reasoning).toEqual({ effort: reasoningEffort });
     expect(body.max_output_tokens).toBe(maxOutputTokens);
     expect(body.temperature).toBeUndefined();
+  });
+
+  it('should forward GPT-5.6 persisted reasoning and Pro mode', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-sol', {
+      config: {
+        reasoning: { effort: 'max', context: 'all_turns', mode: 'pro' },
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.reasoning).toEqual({ effort: 'max', context: 'all_turns', mode: 'pro' });
   });
 
   describe('deep research model validation', () => {
