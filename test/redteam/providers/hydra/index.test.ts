@@ -115,6 +115,11 @@ describe('HydraProvider', () => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
+    mockApplyRuntimeTransforms.mockReset().mockImplementation(async ({ prompt }) => ({
+      transformedPrompt: prompt,
+      audio: undefined,
+      image: undefined,
+    }));
     mockGetSessionId.mockReset().mockImplementation((response, context) => {
       return response?.sessionId ?? context?.vars?.sessionId;
     });
