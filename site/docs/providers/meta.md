@@ -116,6 +116,12 @@ The [`anthropic:claude-agent-sdk` provider](/docs/providers/claude-agent-sdk/) f
 ```yaml
 providers:
   - id: anthropic:claude-agent-sdk
+    # Provider-level `env` outranks the eval's top-level `env`, pinning the
+    # routing values a suite-wide ANTHROPIC_BASE_URL (e.g. an Anthropic
+    # gateway) would otherwise override — which would send the Meta key there.
+    env:
+      ANTHROPIC_BASE_URL: https://api.meta.ai
+      ANTHROPIC_CUSTOM_HEADERS: ''
     config:
       apiKey: '{{env.MODEL_API_KEY}}'
       env:
@@ -132,7 +138,7 @@ providers:
 
 :::warning
 
-Do not omit `apiKey` or the empty `ANTHROPIC_CUSTOM_HEADERS` override. The provider forwards its resolved API key into the agent subprocess as `ANTHROPIC_API_KEY` after `env:` is applied — if `apiKey` is unset and a real `ANTHROPIC_API_KEY` is exported in your shell, that Anthropic credential would be transmitted to Meta's endpoint. Clearing `ANTHROPIC_CUSTOM_HEADERS` also prevents an inherited gateway or proxy secret from being sent to Meta.
+Do not omit `apiKey`, the empty `ANTHROPIC_CUSTOM_HEADERS` override, or the provider-level `env` block. The provider forwards its resolved API key into the agent subprocess as `ANTHROPIC_API_KEY` after `env:` is applied — if `apiKey` is unset and a real `ANTHROPIC_API_KEY` is exported in your shell, that Anthropic credential would be transmitted to Meta's endpoint. Clearing `ANTHROPIC_CUSTOM_HEADERS` prevents an inherited gateway or proxy secret from being sent to Meta. The provider-level `env` block matters because the subprocess environment is layered `process.env` < `config.env` < provider/suite `env`: without the pin, a top-level `env.ANTHROPIC_BASE_URL` in the same config would silently re-route the agent — and your Meta key — to that URL.
 
 :::
 
