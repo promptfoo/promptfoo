@@ -114,7 +114,7 @@
   "overrides": {
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
-    "whatwg-url": "16.0.1",
+    "whatwg-url": "17.0.0",
     "esbuild": "0.28.1",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
@@ -126,7 +126,7 @@
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
     "*": {
-      "whatwg-url": "16.0.1",
+      "whatwg-url": "17.0.0",
       "chokidar": "5.0.0",
       "esbuild": "0.28.1",
       "react": "^19.2.4",
