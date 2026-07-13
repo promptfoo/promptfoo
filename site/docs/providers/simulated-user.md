@@ -297,6 +297,14 @@ defaultTest:
 
 The custom user provider receives the conversation history in OpenAI chat message format. promptfoo adds a system message instructing the model to act as the simulated user and return only the next user message.
 
+Custom user providers behave like ordinary providers: `file://` references resolve relative to the config file, response `transform`s are applied, `delay` is honored between turns, and a sessionful user provider keeps its own `sessionId` across turns, tracked separately from the target's session.
+
+:::note
+
+If a test supplies `vars.sessionId`, it seeds **both** the target's stateful session and the custom user provider's first turn. After that, each provider's returned session ID is tracked independently.
+
+:::
+
 ## Remote Generation
 
 By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely. To use your own model for simulated user responses, configure `userProvider`.

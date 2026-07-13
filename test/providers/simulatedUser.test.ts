@@ -545,6 +545,130 @@ describe('SimulatedUser', () => {
       );
     });
 
+    it('should load the custom user provider once and reuse it across calls', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: { id: 'openai:chat:gpt-4.1-mini' },
+        },
+      });
+
+      const callContext = {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      };
+      await userWithCustomProvider.callApi('test prompt', callContext);
+      await userWithCustomProvider.callApi('test prompt', callContext);
+
+      expect(mockLoadApiProvider).toHaveBeenCalledTimes(1);
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry loading the custom user provider after a failed load', async () => {
+      mockLoadApiProvider.mockRejectedValueOnce(new Error('transient load failure'));
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: { id: 'openai:chat:gpt-4.1-mini' },
+        },
+      });
+
+      const callContext = {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      };
+      await expect(userWithCustomProvider.callApi('test prompt', callContext)).rejects.toThrow(
+        'transient load failure',
+      );
+
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const result = await userWithCustomProvider.callApi('test prompt', callContext);
+      expect(result.error).toBeUndefined();
+      expect(mockLoadApiProvider).toHaveBeenCalledTimes(2);
+    });
+
+    it('should forward config.basePath when loading the custom user provider', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          basePath: '/config/dir',
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'file://user-provider.js',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockLoadApiProvider).toHaveBeenCalledWith(
+        'file://user-provider.js',
+        expect.objectContaining({ basePath: '/config/dir' }),
+      );
+    });
+
+    it('should apply the custom user provider response transform', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: { nextUserMessage: 'transformed reply' },
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      customUserProvider.transform = 'output.nextUserMessage';
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: { id: 'openai:chat:gpt-4.1-mini', transform: 'output.nextUserMessage' },
+        },
+      });
+
+      const result = await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toContain('User: transformed reply');
+      expect(result.output).not.toContain('nextUserMessage');
+    });
+
     it('should accumulate token usage from both agent and user providers', async () => {
       // Set up user provider to return token usage
       mockUserProviderCallApi
@@ -634,6 +758,7 @@ describe('SimulatedUser', () => {
           '{"role":"user","content":"{\\"reply\\":\\"I like that idea\\",\\"preference\\":\\"outdoor\\"}"}',
         ),
         expect.anything(),
+        undefined,
       );
     });
 

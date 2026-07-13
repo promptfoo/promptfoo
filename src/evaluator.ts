@@ -2357,6 +2357,9 @@ async function resolveDefaultTestProvider(
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
     return loadApiProvider(providerId, {
       options: defaultProvider as ProviderOptions,
+      // Resolve relative file:// references against the config directory, like
+      // test-case provider loading does.
+      basePath: cliState.basePath,
     });
   }
   return defaultProvider;
