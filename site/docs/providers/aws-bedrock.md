@@ -516,7 +516,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:openai.gpt-5.5 # frontier: Responses API, needs a Bedrock API key
+  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, needs a Bedrock API key
     config:
       region: 'us-east-2'
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
@@ -1038,35 +1038,72 @@ APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatic
 
 #### Frontier models (GPT-5.x)
 
-- **`openai.gpt-5.5`**: Flagship frontier model (US East / Ohio `us-east-2`)
-- **`openai.gpt-5.4`**: Frontier model (US East / Ohio `us-east-2` and US West / Oregon `us-west-2`)
+- **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
+- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-2`)
+- **`openai.gpt-5.4`**: Earlier frontier model (`us-east-2`, `us-west-2`)
 
 The frontier models are served only through Bedrock's **OpenAI-compatible Responses API**
-on the regional "mantle" endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) —
-not the native `InvokeModel` API. promptfoo routes `bedrock:openai.gpt-5.5` to its OpenAI
-Responses provider pointed at that endpoint, so the output is **identical to the
-[`openai:responses:gpt-5.5`](/docs/providers/openai/) provider** (the clean final answer;
-chain-of-thought is hidden).
+on the regional mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) —
+not the native `InvokeModel` or `Converse` APIs. Promptfoo routes the bare
+`bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
+model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
+configured; GPT-5.6 region availability is checked before a request is made.
 
 Authentication uses an **Amazon Bedrock API key**, not the AWS SDK credential chain. Set
 `AWS_BEARER_TOKEN_BEDROCK` (or `config.apiKey`):
 
 ```yaml
 providers:
-  - id: bedrock:openai.gpt-5.5
+  - id: bedrock:openai.gpt-5.6-sol
     config:
-      region: us-east-2 # gpt-5.5: us-east-2; gpt-5.4: us-east-2 or us-west-2
-      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
-      reasoning_effort: low # none | low | medium | high | xhigh
+      region: us-east-2
+      reasoning_effort: max
+      verbosity: low
       max_output_tokens: 2048
+      store: false
+
+  - id: bedrock:openai.gpt-5.6-terra
+    config:
+      region: us-west-2
+      reasoning_effort: medium
+      store: false
+      prompt_cache_key: support-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+
+  - id: bedrock:openai.gpt-5.6-luna
+    config:
+      region: us-east-1
+      reasoning_effort: low
+      store: false
 ```
 
-Prefer the `bedrock:openai.gpt-5.5` form above. It wraps the OpenAI Responses provider,
+Prefer the `bedrock:openai.gpt-5.6-sol` form above. It wraps the OpenAI Responses provider,
 points it at the mantle endpoint, and normalizes the `openai.`-prefixed id for GPT-5
 capability detection (reasoning effort, verbosity) and billing. Using
-`openai:responses:openai.gpt-5.5` directly is **not** equivalent — the base provider does
+`openai:responses:openai.gpt-5.6-sol` directly is **not** equivalent — the base provider does
 not recognize the `openai.` prefix as a GPT-5 model, so reasoning/verbosity controls would
-be dropped.
+be dropped. An explicit `config.apiBaseUrl` can target a proxy or local Responses fixture;
+it takes precedence over ambient `OPENAI_API_HOST`/`OPENAI_BASE_URL`, preventing an unrelated
+OpenAI endpoint from receiving a Bedrock bearer token.
+
+The Responses API stores conversation state by default. Set `store: false` on every request
+when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
+days in the source Region and allows follow-up requests with `previous_response_id`.
+
+GPT-5.6 pricing on Bedrock matches first-party OpenAI rates: Sol is $5 input / $30 output,
+Terra $2.50 / $15, and Luna $1 / $6 per million tokens. Cache reads receive a 90% discount,
+cache writes cost 1.25x the uncached input rate, and cached prefixes remain available for at
+least 30 minutes. Place `prompt_cache_breakpoint: { mode: explicit }` on a stable
+`input_text`, `input_image`, or `input_file` content block and set a stable
+`prompt_cache_key` when using explicit caching. Promptfoo records returned cache-read and
+cache-write usage and leaves GPT-5.6 `cost` unset when cache-write usage is missing instead
+of underestimating cost. Requests above 272,000 input tokens use 2x input and 1.5x output
+pricing for the full request. Do not assume first-party Flex, Priority, or regional-processing
+options are available on Bedrock; use the service behavior documented for the selected model.
 
 #### Open-weight models (GPT OSS)
 
@@ -1095,11 +1132,13 @@ providers:
 
 #### Reasoning Effort
 
-Both families accept the native `reasoning_effort` request parameter, which promptfoo
-forwards as-is so the API validates it for the specific model:
+Both families accept the `reasoning_effort` provider option. Promptfoo forwards it as the
+native request field for GPT OSS and as `reasoning.effort` for the Responses API, allowing the
+selected model to validate the value:
 
 - **GPT OSS** (`openai.gpt-oss-*`): `low`, `medium`, `high`
-- **Frontier** (`openai.gpt-5.x`): `none`, `low`, `medium`, `high`, `xhigh`
+- **GPT-5.6 frontier**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
+- **GPT-5.5 / GPT-5.4 frontier**: `none`, `low`, `medium`, `high`, `xhigh`
 
 Note that `minimal` is **not** a valid value for these Bedrock models (the API rejects it).
 Higher effort produces more thorough reasoning at the cost of latency and output tokens.
@@ -1124,10 +1163,11 @@ The frontier models return clean output already, so this option does not apply t
 :::note Codex on Bedrock
 
 OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
-frontier model IDs (`openai.gpt-5.5`, `openai.gpt-5.4`). To run the full coding agent
+frontier model IDs (`openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, `openai.gpt-5.6-luna`,
+`openai.gpt-5.5`, `openai.gpt-5.4`). To run the full coding agent
 against Bedrock, use `openai:codex-sdk` with `model_provider: amazon-bedrock` — see
 [Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
-in the Codex SDK docs. For direct (non-agentic) inference, use `bedrock:openai.gpt-5.5`
+in the Codex SDK docs. For direct (non-agentic) inference, use `bedrock:openai.gpt-5.6-sol`
 as shown above.
 
 :::
@@ -1191,7 +1231,7 @@ providers:
 - **The mantle catalog is regional.** List the models available in a Region with
   `GET https://bedrock-mantle.<region>.api.aws/v1/models`, and set `region` accordingly —
   the default is `us-east-1`.
-- Use the bare `bedrock:openai.gpt-5.5` / `bedrock:xai.grok-4.3` forms (above) for the OpenAI
+- Use the bare `bedrock:openai.gpt-5.6-sol` / `bedrock:xai.grok-4.3` forms (above) for the OpenAI
   frontier and Grok models: those go through the **Responses API** and surface reasoning
   tokens. `bedrock:mantle:` is the **Chat Completions** path for mantle chat models such as
   `zai.glm-4.6`, `deepseek.v3.1`, `google.gemma-4-*`, and supported xAI chat ids.

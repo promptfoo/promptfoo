@@ -271,14 +271,14 @@ export interface OpenAICodexSDKConfig {
   /**
    * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
-   * provider's model id instead (e.g., 'openai.gpt-5.5' for Amazon Bedrock).
+   * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
   model?: string;
 
   /**
    * Codex model provider to route through, mapped to the CLI's `model_provider` config.
    * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
-   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.5'` and AWS credentials in `cli_env`).
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.6-sol'` and AWS credentials in `cli_env`).
    * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
    *
    * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
