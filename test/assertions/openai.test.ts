@@ -893,6 +893,36 @@ describe('OpenAI assertions', () => {
       });
     });
 
+    it('should return pass:false instead of throwing when a tool call has no function object', async () => {
+      // Reachable via OpenAI custom tools (type: 'custom'), a null function, or any other
+      // malformed tool_calls entry. The guard is meant to reject these with a clear reason,
+      // not crash on `toolsOutput[0].function.name` when `.function` is missing/null.
+      const malformedOutputs = [
+        [{ type: 'custom', custom: { name: 'exec', input: '{}' } }],
+        [{ id: 'call_1', type: 'function', function: null }],
+        ['not-an-object'],
+        [{}],
+      ];
+
+      for (const toolsOutput of malformedOutputs) {
+        const result = await handleIsValidOpenAiToolsCall({
+          assertion: toolsAssertion,
+          output: toolsOutput,
+          provider: mockProvider,
+          test: { vars: {} },
+          baseType: toolsAssertion.type,
+          assertionValueContext: mockContext,
+          inverse: false,
+          outputString: JSON.stringify(toolsOutput),
+          providerResponse: { output: toolsOutput },
+        });
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('OpenAI did not return a valid-looking tools response');
+      }
+    });
+
     it('should fail when tool call does not match schema', async () => {
       const toolsOutput = [
         {

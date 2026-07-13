@@ -50,8 +50,8 @@ export const handleIsValidOpenAiToolsCall = async ({
   if (
     !Array.isArray(toolsOutput) ||
     toolsOutput.length === 0 ||
-    typeof toolsOutput[0].function.name !== 'string' ||
-    typeof toolsOutput[0].function.arguments !== 'string'
+    typeof toolsOutput[0]?.function?.name !== 'string' ||
+    typeof toolsOutput[0]?.function?.arguments !== 'string'
   ) {
     return {
       pass: false,
