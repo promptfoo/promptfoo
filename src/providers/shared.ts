@@ -84,6 +84,17 @@ export function calculateCost(
 }
 
 /**
+ * Clamp reported cached prompt tokens to [0, promptTokens] for cost billing.
+ *
+ * Providers occasionally report cached token counts that exceed prompt tokens
+ * (rounding) or values that are negative or non-finite; billing those raw would
+ * produce negative or NaN costs.
+ */
+export function clampCachedTokens(cachedTokens: number | undefined, promptTokens: number): number {
+  return Number.isFinite(cachedTokens) ? Math.min(Math.max(cachedTokens!, 0), promptTokens) : 0;
+}
+
+/**
  * Checks if a string looks like it's attempting to be JSON.
  * This helps distinguish between actual JSON attempts and plain text that happens to start/end with brackets.
  */

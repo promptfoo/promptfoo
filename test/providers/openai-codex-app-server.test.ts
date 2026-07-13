@@ -223,12 +223,18 @@ describe('OpenAICodexAppServerProvider', () => {
         }),
     ).not.toThrow();
 
-    for (const effort of ['max', 'ultra'] as const) {
+    for (const [model, effort] of [
+      ['gpt-5.6-sol', 'max'],
+      ['gpt-5.6-sol', 'ultra'],
+      ['gpt-5.6-terra', 'max'],
+      ['gpt-5.6-terra', 'ultra'],
+      ['gpt-5.6-luna', 'max'],
+    ] as const) {
       expect(
         () =>
           new OpenAICodexAppServerProvider({
             config: {
-              model: 'gpt-5.6-sol',
+              model,
               model_reasoning_effort: effort,
             },
           }),

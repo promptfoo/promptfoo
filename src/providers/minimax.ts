@@ -1,7 +1,7 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost } from './shared';
+import { calculateCost, clampCachedTokens } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -106,9 +106,7 @@ export function calculateMiniMaxCost(
     return calculateCost(modelName, config, promptTokens, completionTokens, MINIMAX_CHAT_MODELS);
   }
 
-  const billableCachedTokens = Number.isFinite(cachedTokens)
-    ? Math.min(Math.max(cachedTokens!, 0), promptTokens!)
-    : 0;
+  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens!);
   const uncachedPromptTokens = promptTokens! - billableCachedTokens;
   const modelCost =
     model.cost.longContext && promptTokens! > model.cost.longContext.threshold

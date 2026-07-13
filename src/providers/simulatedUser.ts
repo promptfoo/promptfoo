@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import logger from '../logger';
+import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -37,6 +38,16 @@ const DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS = dedent`
 const SIMULATED_USER_PROVIDER_ID = 'promptfoo:simulated-user';
 const RECURSIVE_USER_PROVIDER_ERROR =
   'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider';
+
+function providerOutputToString(output: unknown): string {
+  if (output == null) {
+    return '';
+  }
+  if (typeof output === 'string') {
+    return output;
+  }
+  return safeJsonStringify(output) ?? String(output);
+}
 
 type AgentProviderOptions = ProviderOptions & {
   config?: {
@@ -265,9 +276,10 @@ export class SimulatedUser implements ApiProvider {
       };
     }
 
-    logger.debug(`User: ${response.output}`);
+    const content = providerOutputToString(response.output);
+    logger.debug(`User: ${content}`);
     return {
-      messages: [...messages, { role: 'user', content: String(response.output || '') }],
+      messages: [...messages, { role: 'user', content }],
       tokenUsage: response.tokenUsage,
       sessionId: response.sessionId,
     };
@@ -355,7 +367,9 @@ export class SimulatedUser implements ApiProvider {
       await sleep(targetProvider.delay);
     }
 
-    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
+    if (isDebugEnabled()) {
+      logger.debug(`[SimulatedUser] Agent: ${providerOutputToString(response.output)}`);
+    }
     return response;
   }
 
@@ -423,7 +437,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
@@ -483,7 +497,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
 
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }

@@ -124,6 +124,37 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should keep reserved output and rubric vars ahead of user vars', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      },
+    });
+    const options: GradingConfig = {
+      rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}',
+      provider,
+    };
+
+    await matchesLlmRubric('rubric from assertion', 'output from provider', options, {
+      output: 'vars output sentinel',
+      rubric: 'vars rubric sentinel',
+      extra: 'kept user var',
+    });
+
+    const [prompt, callApiContext] = provider.callApi.mock.calls[0];
+    expect(prompt).toContain('output=output from provider');
+    expect(prompt).toContain('rubric=rubric from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars output sentinel');
+    expect(prompt).not.toContain('vars rubric sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      output: 'output from provider',
+      rubric: 'rubric from assertion',
+      extra: 'kept user var',
+    });
+  });
+
   it('should handle when provider returns direct object output instead of string', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';

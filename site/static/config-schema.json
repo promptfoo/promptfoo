@@ -383,6 +383,9 @@
         "MLFLOW_GATEWAY_URL": {
           "type": "string"
         },
+        "MODEL_API_KEY": {
+          "type": "string"
+        },
         "MODELSLAB_API_KEY": {
           "type": "string"
         },
@@ -1852,6 +1855,9 @@
                       "type": "string"
                     },
                     "MLFLOW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "MODEL_API_KEY": {
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {

@@ -267,9 +267,9 @@ jobs:
         run: |
           npm run depcheck
 
-      - name: Check for orphaned files
+      - name: Check for unused files, exports, and dependencies
         run: |
-          npm run knip -- --include files
+          npm run knip -- --no-progress --reporter github-actions
 
       - name: Validate lockfile integrity
         run: |

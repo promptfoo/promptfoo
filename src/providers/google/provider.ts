@@ -605,7 +605,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -701,5 +701,3 @@ export class GoogleProvider extends GoogleGenericProvider {
 
   // cleanup() is inherited from GoogleGenericProvider
 }
-
-export default GoogleProvider;
