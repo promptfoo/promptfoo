@@ -234,7 +234,7 @@ export class QuiverAiProvider implements ApiProvider {
     return {
       cached,
       output: extractSvgOutput(response),
-      tokenUsage: mapTokenUsage(response.usage, 1),
+      tokenUsage: mapTokenUsage(response.usage),
       metadata: buildMetadata({
         responseId: response.id,
         credits: response.credits,
@@ -390,7 +390,7 @@ async function readSSEStream(
 
   return {
     output,
-    tokenUsage: mapTokenUsage(lastUsage, 1),
+    tokenUsage: mapTokenUsage(lastUsage),
     metadata: buildMetadata({ responseId, credits: totalCredits }),
   };
 }
@@ -407,12 +407,13 @@ function formatError(err: QuiverAiErrorResponse): string {
   return err.request_id ? `${base} (request_id: ${err.request_id})` : base;
 }
 
-function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
+function mapTokenUsage(usage: SvgUsage | undefined) {
   return {
     total: usage?.total_tokens || 0,
     prompt: usage?.input_tokens || 0,
     completion: usage?.output_tokens || 0,
-    numRequests,
+    // A response always represents one logical request, cached or not.
+    numRequests: 1,
   };
 }
 
