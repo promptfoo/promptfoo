@@ -31,11 +31,7 @@
         "test/**/*.{js,ts,tsx,cjs,mjs}",
         "!src/app/**/*"
       ],
-      "ignoreFiles": [
-        // Cloud-consumed: server/src/task/multilingual.ts imports
-        // @promptfoo/redteam/strategies/multilingual.
-        "src/redteam/strategies/multilingual.ts"
-      ],
+      "ignoreFiles": [],
       "ignoreDependencies": [
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
