@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.17",
+  "version": "0.121.18",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -209,7 +209,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.108.1",
+    "webpack": "5.108.3",
     "dompurify": "3.4.11",
     "monaco-editor": {
       ".": "0.55.1",
@@ -217,7 +217,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.195",
+    "@anthropic-ai/claude-agent-sdk": "0.3.197",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -276,7 +276,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.195",
+    "@anthropic-ai/claude-agent-sdk": "0.3.197",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -294,7 +294,7 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.11.3",
-    "@openai/codex-sdk": "^0.142.3",
+    "@openai/codex-sdk": "^0.144.0",
     "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
@@ -318,10 +318,10 @@
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
     "read-excel-file": "^9.0.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.106.0",
+    "@anthropic-ai/sdk": "0.109.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
