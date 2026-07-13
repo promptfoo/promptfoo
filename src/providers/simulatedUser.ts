@@ -218,9 +218,10 @@ export class SimulatedUser implements ApiProvider {
       };
     }
 
-    logger.debug(`User: ${response.output}`);
+    const content = providerOutputToString(response.output);
+    logger.debug(`User: ${content}`);
     return {
-      messages: [...messages, { role: 'user', content: providerOutputToString(response.output) }],
+      messages: [...messages, { role: 'user', content }],
       tokenUsage: response.tokenUsage,
     };
   }
