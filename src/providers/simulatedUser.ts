@@ -1,4 +1,4 @@
-import logger from '../logger';
+import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -266,7 +266,9 @@ export class SimulatedUser implements ApiProvider {
       await sleep(targetProvider.delay);
     }
 
-    logger.debug(`[SimulatedUser] Agent: ${providerOutputToString(response.output)}`);
+    if (isDebugEnabled()) {
+      logger.debug(`[SimulatedUser] Agent: ${providerOutputToString(response.output)}`);
+    }
     return response;
   }
 
