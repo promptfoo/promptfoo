@@ -374,8 +374,8 @@ describe('OpenInterpreterProvider', () => {
     const { turnStart } = await startTurn(server);
     expect(turnStart.params.input).toEqual([
       { type: 'text', text: 'Review these inputs.', text_elements: [] },
-      { type: 'localImage', path: path.join(workspace, 'inside.png') },
-      { type: 'skill', name: 'fixture', path: path.join(extra, 'skill.md') },
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
+      { type: 'skill', name: 'fixture', path: fs.realpathSync(path.join(extra, 'skill.md')) },
       { type: 'mention', name: 'connector', path: 'app://connector-id' },
       { type: 'mention', name: 'plugin', path: 'plugin://plugin-name@marketplace' },
     ]);
@@ -413,7 +413,7 @@ describe('OpenInterpreterProvider', () => {
 
     expect(threadStart.params.cwd).toBe(workspace);
     expect(turnStart.params.input).toEqual([
-      { type: 'localImage', path: path.join(workspace, 'inside.png') },
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
     ]);
     completeTurn(server, 'reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
@@ -436,7 +436,7 @@ describe('OpenInterpreterProvider', () => {
     const resultPromise = provider.callApi(JSON.stringify([{ type: 'local_image', path: '.env' }]));
     const { turnStart } = await startTurn(server);
     expect(turnStart.params.input).toEqual([
-      { type: 'localImage', path: path.join(workspace, '.env') },
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, '.env')) },
     ]);
     completeTurn(server, 'reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
@@ -459,8 +459,9 @@ describe('OpenInterpreterProvider', () => {
     const provider = new OpenInterpreterProvider({
       config: { working_dir: workspace, skip_git_repo_check: true },
     });
+    const win32IsAbsolute = path.win32.isAbsolute;
     vi.spyOn(path, 'relative').mockReturnValue('D:\\outside\\secret.png');
-    vi.spyOn(path, 'isAbsolute').mockImplementation(path.win32.isAbsolute);
+    vi.spyOn(path, 'isAbsolute').mockImplementation(win32IsAbsolute);
 
     await expect(
       provider.callApi(JSON.stringify([{ type: 'local_image', path: 'inside.png' }])),
@@ -533,7 +534,7 @@ describe('OpenInterpreterProvider', () => {
     const { turnStart } = await startTurn(server);
     expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
     expect(turnStart.params.input).toEqual([
-      { type: 'localImage', path: path.join(workspace, 'inside.png') },
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
     ]);
     completeTurn(server, 'reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
