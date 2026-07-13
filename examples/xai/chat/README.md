@@ -21,7 +21,7 @@ This example requires the following environment variable:
 # Set your API key
 export XAI_API_KEY=your_api_key_here
 
-# Run the main evaluation
+# Run the main evaluation (EU-safe defaults)
 promptfoo eval
 
 # View results in the web interface
@@ -32,7 +32,7 @@ promptfoo view
 
 This example includes configurations to test different Grok capabilities:
 
-- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with the current Grok 4.5, Grok 4.3, and Grok 4.20 families
+- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with Grok 4.3 and Grok 4.20, plus an opt-in Grok 4.5 provider
 - **Image Generation** (`promptfooconfig.images.yaml`) - Artistic image creation using Grok's image models
 - **Search Tools** (`promptfooconfig.search.yaml`) - Real-time web and X search using the Responses API
 - **Agent Tools (Responses API)** (`promptfooconfig.responses.yaml`) - Autonomous web and X search using Agent Tools
@@ -67,7 +67,7 @@ xAI's flagship model for coding, agentic tasks, and knowledge work (500K context
 - `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
 - `xai:responses:grok-4.5` - Recommended form for server-side tools
 
-xAI currently excludes Grok 4.5 from the EU API Console. Use the included Grok 4.3 provider when running this example from an EU account.
+xAI currently excludes Grok 4.5 from the EU API Console, so its provider block is commented out by default. Non-EU users can opt in by uncommenting that block in `promptfooconfig.yaml`; EU users can run the example unchanged with the included Grok 4.3 and Grok 4.20 providers.
 
 ### Grok 4.3
 
