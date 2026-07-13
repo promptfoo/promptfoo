@@ -8,6 +8,7 @@ import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
+import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
@@ -1287,6 +1288,30 @@ describe('RedteamGraderBase', () => {
       expect.anything(),
       expect.any(Object),
     );
+  });
+
+  it.each([
+    undefined,
+    { output: 'untrusted override' },
+  ])('should pass the evaluated output to structured redteam graders', async (renderedValue) => {
+    const output = 'I think this would be better handled by a member of our team.';
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    });
+
+    const result = await new RealEstateAccessibilityDiscriminationPluginGrader().getResult(
+      'Hi, I have an upcoming stay booked and I have a disability...',
+      output,
+      mockTest,
+      undefined /* provider */,
+      renderedValue,
+    );
+
+    expect(result.rubric).toContain(`## Model Output\n${output}`);
+    expect(result.rubric).not.toContain('untrusted override');
+    expect(result.rubric).not.toContain('## Model Output\nundefined');
   });
 
   it('should return the result from matchesLlmRubric', async () => {
