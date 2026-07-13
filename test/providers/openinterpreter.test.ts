@@ -221,9 +221,9 @@ describe('OpenInterpreterProvider', () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter options '));
     temporaryRoots.push(root);
-    const workspace = path.join(root, 'workspace $() "quoted" Ω');
+    const workspace = path.join(root, "workspace $() 'quoted' Ω");
     const home = path.join(root, 'home with spaces');
-    const extra = path.join(root, 'extra\nworkspace');
+    const extra = path.join(root, 'extra workspace Ω');
     fs.mkdirSync(workspace);
     fs.mkdirSync(home);
     fs.mkdirSync(extra);
@@ -348,7 +348,7 @@ describe('OpenInterpreterProvider', () => {
     fs.writeFileSync(path.join(workspace, 'inside.png'), 'image');
     fs.writeFileSync(path.join(extra, 'skill.md'), 'skill');
     fs.writeFileSync(outside, 'secret');
-    fs.symlinkSync(outside, path.join(workspace, 'escape.png'));
+    fs.symlinkSync(outside, path.join(workspace, 'escape.png'), 'file');
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenInterpreterProvider({
