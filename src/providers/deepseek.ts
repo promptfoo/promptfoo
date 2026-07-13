@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost } from './shared';
+import { calculateCost, clampCachedTokens } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -69,7 +69,7 @@ export function calculateDeepSeekCost(
     return calculateCost(modelName, config, promptTokens, completionTokens, DEEPSEEK_CHAT_MODELS);
   }
 
-  const billableCachedTokens = Math.min(Math.max(cachedTokens ?? 0, 0), promptTokens);
+  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
