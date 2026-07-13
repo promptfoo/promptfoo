@@ -33,9 +33,9 @@ export async function matchesSelectBest(
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    ...(vars || {}),
     criteria,
     outputs: outputs.map((o) => tryParse(o)),
-    ...(vars || {}),
   });
 
   const resp = await callProviderWithContext(
@@ -43,9 +43,9 @@ export async function matchesSelectBest(
     promptText,
     'select-best',
     {
+      ...(vars || {}),
       criteria,
       outputs: outputs.map((o) => tryParse(o)),
-      ...(vars || {}),
     },
     providerCallContext,
   );

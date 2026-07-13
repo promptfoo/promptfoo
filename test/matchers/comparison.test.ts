@@ -48,4 +48,35 @@ describe('matchesSelectBest', () => {
       },
     });
   });
+
+  it('should keep reserved criteria and outputs vars ahead of user vars', async () => {
+    const provider = createMockProvider({
+      id: 'select-best-test-provider',
+      response: {
+        output: '0',
+        tokenUsage: { total: 7, prompt: 3, completion: 4 },
+      },
+    });
+    const grading: GradingConfig = {
+      provider,
+      rubricPrompt: 'criteria={{ criteria }}\noutputs={{ outputs }}\nextra={{ extra }}',
+    };
+
+    await matchesSelectBest('criteria from assertion', ['first output', 'second output'], grading, {
+      criteria: 'vars criteria sentinel',
+      outputs: 'vars outputs sentinel',
+      extra: 'kept user var',
+    });
+
+    const [prompt, callApiContext] = provider.callApi.mock.calls[0];
+    expect(prompt).toContain('criteria=criteria from assertion');
+    expect(prompt).toContain('first output');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars criteria sentinel');
+    expect(prompt).not.toContain('vars outputs sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      criteria: 'criteria from assertion',
+      extra: 'kept user var',
+    });
+  });
 });
