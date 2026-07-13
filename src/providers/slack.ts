@@ -283,16 +283,3 @@ export class SlackProvider implements ApiProvider {
     return responses.join('\n\n');
   }
 }
-
-// Export convenience function for creating from provider string
-export function createSlackProvider(
-  channel: string,
-  options?: Omit<SlackProviderOptions, 'config'>,
-): SlackProvider {
-  return new SlackProvider({
-    ...options,
-    config: {
-      channel,
-    },
-  });
-}

@@ -32,21 +32,18 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
-  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+  const templateVars = {
+    ...(vars || {}),
     criteria,
     outputs: outputs.map((o) => tryParse(o)),
-    ...(vars || {}),
-  });
+  };
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const resp = await callProviderWithContext(
     textProvider,
     promptText,
     'select-best',
-    {
-      criteria,
-      outputs: outputs.map((o) => tryParse(o)),
-      ...(vars || {}),
-    },
+    templateVars,
     providerCallContext,
   );
   if (resp.error || !resp.output) {

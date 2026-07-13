@@ -181,7 +181,7 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.3 with Responses API web search
+  // xAI Grok 4.3 with Responses API web search (available to US and EU accounts)
   const loadXaiWebSearch = async () => {
     try {
       return await loadApiProvider('xai:responses:grok-4.3', {

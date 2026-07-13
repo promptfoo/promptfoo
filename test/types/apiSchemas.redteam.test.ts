@@ -388,8 +388,9 @@ describe('API schema red-team coverage', () => {
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: [{ prompt: 'one', context: 'ctx', metadata: { index: 1 } }],
           count: 1,
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
         }),
-      ).toMatchObject({ count: 1 });
+      ).toMatchObject({ count: 1, tokenUsage: { total: 3, numRequests: 1 } });
       expect(
         RedteamSchemas.GenerateTest.Response.safeParse({
           testCases: [{ prompt: 'one', context: 'ctx' }],
