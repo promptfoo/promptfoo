@@ -3542,8 +3542,9 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
+    const attachedProviderId = vi.fn(() => 'attached-provider');
     const attachedProvider: Record<string, unknown> = {
-      id: () => 'attached-provider',
+      id: attachedProviderId,
     };
     attachedProvider.self = attachedProvider;
 
@@ -3622,6 +3623,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     await expect(resultPromise).resolves.toMatchObject({ output: 'Rendered config done' });
+    expect(attachedProviderId).not.toHaveBeenCalled();
   });
 
   it('applies prompt-level server request policy for each turn on a reused connection', async () => {
