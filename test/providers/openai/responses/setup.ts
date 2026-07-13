@@ -21,13 +21,6 @@ vi.mock('../../../../src/cache', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../../src/util/fetch/index', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    fetchWithRetries: vi.fn(),
-  };
-});
-
 vi.mock('../../../../src/logger', () => ({
   __esModule: true,
   default: {

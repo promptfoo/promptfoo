@@ -13,17 +13,11 @@ import {
 } from '../../../src/providers/bedrock/openaiResponses';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
-import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
   fetchWithCache: vi.fn(),
-}));
-
-vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/util/fetch/index')>()),
-  fetchWithRetries: vi.fn(),
 }));
 
 const GPT_5_6_MODELS = [
@@ -36,7 +30,6 @@ describe('bedrock openaiResponses helper', () => {
   let restoreEnv: (() => void) | undefined;
 
   beforeEach(() => {
-    vi.mocked(fetchWithRetries).mockReset();
     vi.mocked(fetchWithCache)
       .mockReset()
       .mockResolvedValue({
@@ -552,35 +545,37 @@ describe('bedrock openaiResponses helper', () => {
           output_tokens_details: { reasoning_tokens: 5 },
         },
       };
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-        new Response(
-          [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"streamed "}',
-            '',
-            'event: response.completed',
-            `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
-            '',
-            'data: [DONE]',
-            '',
-          ].join('\n'),
-          { status: 200, headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' } },
-        ),
-      );
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"streamed "}',
+          '',
+          'event: response.completed',
+          `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
+      });
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { stream: true, reasoning_effort: 'max', include: ['reasoning.encrypted_content'] },
       });
 
       const result = await provider.callApi('hello');
 
-      expect(fetchWithCache).not.toHaveBeenCalled();
-      expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
           body: expect.stringContaining(`"model":"${modelId}"`),
         }),
         expect.any(Number),
+        'text',
+        true,
         undefined,
       );
       expect(result.output).toBe('streamed answer');
@@ -605,16 +600,13 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it('surfaces a streamed Bedrock error without attempting to parse it as SSE', async () => {
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ error: { code: 'model_not_found', message: 'not enabled' } }),
-          {
-            status: 404,
-            statusText: 'Not Found',
-            headers: { 'content-type': 'application/json' },
-          },
-        ),
-      );
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ error: { code: 'model_not_found', message: 'not enabled' } }),
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+        headers: { 'content-type': 'application/json' },
+      });
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-luna', {
         config: { apiKey: 'bedrock-key', stream: true },
       });

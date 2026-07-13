@@ -1,5 +1,3 @@
-import logger from '../../logger';
-
 type ResponsesStreamEvent = {
   type?: string;
   response?: any;
@@ -8,7 +6,15 @@ type ResponsesStreamEvent = {
   output?: any[];
 };
 
-function parseSseEvent(chunk: string, providerName: string): ResponsesStreamEvent | undefined {
+type ResponsesStreamLogger = {
+  debug(message: string, context?: Record<string, unknown>): unknown;
+};
+
+function parseSseEvent(
+  chunk: string,
+  providerName: string,
+  logger: ResponsesStreamLogger,
+): ResponsesStreamEvent | undefined {
   const data = chunk
     .split(/\r?\n/)
     .filter((line) => line.startsWith('data:'))
@@ -23,12 +29,18 @@ function parseSseEvent(chunk: string, providerName: string): ResponsesStreamEven
   try {
     return JSON.parse(data) as ResponsesStreamEvent;
   } catch {
-    logger.debug(`[${providerName} Responses] Ignoring malformed SSE payload`, { data });
+    logger.debug(`[${providerName} Responses] Ignoring malformed SSE payload`, {
+      dataLength: data.length,
+    });
     return undefined;
   }
 }
 
-export async function readResponsesStream(response: Response, providerName: string): Promise<any> {
+export async function readResponsesStream(
+  response: Response,
+  providerName: string,
+  logger: ResponsesStreamLogger,
+): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
   }
@@ -40,7 +52,7 @@ export async function readResponsesStream(response: Response, providerName: stri
   let outputText = '';
 
   const processChunk = (chunk: string) => {
-    const event = parseSseEvent(chunk, providerName);
+    const event = parseSseEvent(chunk, providerName, logger);
     if (!event) {
       return;
     }

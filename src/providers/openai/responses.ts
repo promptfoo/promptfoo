@@ -6,7 +6,6 @@ import {
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { fetchWithRetries } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -558,23 +557,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);
         try {
-          const response = await fetchWithRetries(
+          const response = await fetchWithCache<string>(
             url,
             { ...request, signal: controller.signal },
             timeout,
+            'text',
+            true,
             this.config.maxRetries,
           );
           status = response.status;
           statusText = response.statusText;
-          responseHeaders = Object.fromEntries(response.headers.entries());
-          if (response.ok) {
-            data = await readResponsesStream(response, 'OpenAI');
+          responseHeaders = response.headers;
+          if (status >= 200 && status < 300) {
+            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
           } else {
-            const responseText = await response.text();
             try {
-              data = JSON.parse(responseText);
+              data = JSON.parse(response.data);
             } catch {
-              data = responseText as OpenAIResponsesResponse;
+              data = response.data as OpenAIResponsesResponse;
             }
           }
         } catch (err) {

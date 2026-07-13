@@ -5,7 +5,6 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
-import * as fetch from '../../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../../util/utils';
 
 describe('OpenAiResponsesProvider HTTP metadata', () => {
@@ -137,12 +136,13 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    vi.mocked(fetch.fetchWithRetries).mockResolvedValue(
-      new Response(
-        `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: mockApiResponse })}\n\ndata: [DONE]\n\n`,
-        { status: 200, headers: { 'content-type': 'text/event-stream' } },
-      ),
-    );
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: mockApiResponse })}\n\ndata: [DONE]\n\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/event-stream' },
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
@@ -153,13 +153,14 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
 
     const result = await provider.callApi('Test prompt');
 
-    expect(cache.fetchWithCache).not.toHaveBeenCalled();
-    expect(fetch.fetchWithRetries).toHaveBeenCalledWith(
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         body: expect.stringContaining('"stream":true'),
       }),
       expect.any(Number),
+      'text',
+      true,
       undefined,
     );
     expect(result.output).toBe('Streaming response');
@@ -167,17 +168,12 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
 
   it('should time out a streaming response that stalls after headers', async () => {
     const restoreEnv = mockProcessEnv({ REQUEST_TIMEOUT_MS: '20' });
-    vi.mocked(fetch.fetchWithRetries).mockImplementation(async (_url, options) => {
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
       const signal = options?.signal;
-      return new Response(
-        new ReadableStream({
-          start(controller) {
-            signal?.addEventListener('abort', () => {
-              controller.error(new DOMException('The operation was aborted.', 'AbortError'));
-            });
-          },
+      return new Promise((_resolve, reject) =>
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
         }),
-        { status: 200, headers: { 'content-type': 'text/event-stream' } },
       );
     });
 

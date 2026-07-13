@@ -423,7 +423,7 @@ export class XAIResponsesProvider implements ApiProvider {
               data = text;
             }
           } else {
-            data = await readResponsesStream(response, 'xAI');
+            data = await readResponsesStream(response, 'xAI', logger);
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {

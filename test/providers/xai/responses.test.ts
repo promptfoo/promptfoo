@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { XAIResponsesProvider } from '../../../src/providers/xai/responses';
 
 const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn());
@@ -587,6 +588,7 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('ignores malformed SSE events when later streamed output is valid', async () => {
+    const sensitivePayload = 'not-json-secret-sentinel';
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
       statusText: 'OK',
@@ -594,7 +596,7 @@ describe('XAIResponsesProvider', () => {
         [
           'data: {"type":"response.output_text.delta","delta":"hel"}',
           '',
-          'data: not-json',
+          `data: ${sensitivePayload}`,
           '',
           'data: {"type":"response.output_text.delta","delta":"lo"}',
           '',
@@ -613,6 +615,10 @@ describe('XAIResponsesProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.output).toBe('final from completed');
+    expect(logger.debug).toHaveBeenCalledWith('[xAI Responses] Ignoring malformed SSE payload', {
+      dataLength: sensitivePayload.length,
+    });
+    expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(sensitivePayload);
   });
 
   it('accumulates nested output_text deltas from streamed Responses API events', async () => {
