@@ -62,7 +62,7 @@
     "webpack": "5.108.3"
   },
   "optionalDependencies": {
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.3"
   },
   "overrides": {
     "lodash-es": "^4.18.1"
