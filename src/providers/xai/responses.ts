@@ -11,8 +11,8 @@ import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs } from '../shared';
 import {
   calculateXAICost,
-  GROK_45_MODELS,
   GROK_4_MODELS,
+  GROK_45_MODELS,
   getXAICostInUsd,
   hasXAICostOverrides,
   type XAICostConfig,
