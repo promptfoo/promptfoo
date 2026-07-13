@@ -18,6 +18,8 @@ providers:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
       transformResponse: 'data.output'
       timeoutMs: 300000
+      protocols:
+        - json
       headers:
         Authorization: 'Bearer your-token-here'
 ```
@@ -29,6 +31,7 @@ providers:
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(accumulator, data, context?)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
 - `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 300000 (5 minutes).
+- `protocols` (optional): A WebSocket subprotocol string or list of strings to request during the connection handshake. Use this instead of setting `Sec-WebSocket-Protocol` in `headers` when the server negotiates a selected subprotocol.
 - `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
 ## Using Variables
@@ -223,14 +226,15 @@ Note that when using the WebSocket provider, the connection will be opened for e
 
 Supported config options:
 
-| Option            | Type     | Description                                                                                                                                                        |
-| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| url               | string   | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                                                                |
-| messageTemplate   | string   | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                                          |
-| transformResponse | string   | A function body or string to parse a single response. Ignored when `streamResponse` is provided.                                                                   |
-| streamResponse    | Function | A function body, function expression, or `file://` reference that receives `(accumulator, data, context?)` and returns `[result, complete]` for streamed messages. |
-| timeoutMs         | number   | The timeout in milliseconds for the WebSocket connection. Defaults to 300000 (5 minutes) if not specified.                                                         |
-| headers           | object   | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.                                           |
+| Option            | Type               | Description                                                                                                                                                        |
+| ----------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| url               | string             | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                                                                |
+| messageTemplate   | string             | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                                          |
+| transformResponse | string             | A function body or string to parse a single response. Ignored when `streamResponse` is provided.                                                                   |
+| streamResponse    | Function           | A function body, function expression, or `file://` reference that receives `(accumulator, data, context?)` and returns `[result, complete]` for streamed messages. |
+| timeoutMs         | number             | The timeout in milliseconds for the WebSocket connection. Defaults to 300000 (5 minutes) if not specified.                                                         |
+| protocols         | string \| string[] | A WebSocket subprotocol or list of subprotocols to request during the connection handshake.                                                                        |
+| headers           | object             | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.                                           |
 
 Note: The `messageTemplate` supports Nunjucks templating, allowing you to use the `{{prompt}}` variable or any other variables passed in the test context.
 

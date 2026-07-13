@@ -700,7 +700,7 @@ assert:
     value: |
       Return 0 if the response is incorrect
       Return 1 if the response is correct
-    threshold: 1  # Only pass when score >= 1
+    threshold: 1 # Only pass when score >= 1
 
 # ✅ Option B: Have grader control pass explicitly
 assert:

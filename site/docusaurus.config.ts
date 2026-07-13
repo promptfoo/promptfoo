@@ -73,6 +73,8 @@ const config: Config = {
           ],
         },
         blog: {
+          blogDescription:
+            'Learn how to test and secure AI applications with practical guides on LLM red teaming, evaluations, real-world vulnerabilities, and updates from Promptfoo.',
           showReadingTime: false,
           blogSidebarCount: 0,
           postsPerPage: 20,
