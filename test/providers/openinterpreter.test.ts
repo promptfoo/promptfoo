@@ -227,6 +227,7 @@ describe('OpenInterpreterProvider', () => {
     const workspace = path.join(root, "workspace $() 'quoted' Ω");
     const home = path.join(root, 'home with spaces');
     const extra = path.join(root, 'extra workspace Ω');
+    const interpreterPath = path.join(root, 'Open Interpreter', 'interpreter $(no-shell)');
     fs.mkdirSync(workspace);
     fs.mkdirSync(home);
     fs.mkdirSync(extra);
@@ -237,7 +238,7 @@ describe('OpenInterpreterProvider', () => {
       id: 'openinterpreter:custom-model',
       config: {
         apiKey: 'explicit-test-key',
-        interpreter_path: '/opt/Open Interpreter/interpreter $(no-shell)',
+        interpreter_path: interpreterPath,
         interpreter_home: home,
         working_dir: workspace,
         additional_directories: [extra],
@@ -263,7 +264,7 @@ describe('OpenInterpreterProvider', () => {
     const { threadStart, turnStart } = await startTurn(server, { apiKey: 'explicit-test-key' });
 
     const [command, args, options] = mocks.spawn.mock.calls[0];
-    expect(command).toBe('/opt/Open Interpreter/interpreter $(no-shell)');
+    expect(command).toBe(interpreterPath);
     expect(args).toEqual([
       'app-server',
       '--listen',
@@ -1016,13 +1017,13 @@ describe('OpenInterpreterProvider', () => {
     expect(
       () =>
         new OpenInterpreterProvider({
-          config: { working_dir: '/tmp', persist_threads: true, reuse_server: false },
+          config: { working_dir: os.tmpdir(), persist_threads: true, reuse_server: false },
         }),
     ).toThrow(/persist_threads cannot be combined with reuse_server: false/);
     expect(
       () =>
         new OpenInterpreterProvider({
-          config: { interpreter_home: '/path/that/does/not/exist' },
+          config: { interpreter_home: path.join(os.tmpdir(), 'openinterpreter-missing-home') },
         }),
     ).toThrow(/Open Interpreter home .* does not exist or is not accessible/);
     expect(() => new OpenInterpreterProvider({ config: { interpreter_home: homeFile } })).toThrow(
