@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { clampCachedTokens } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -70,9 +71,7 @@ export function calculateMoonshotCost(
     return undefined;
   }
 
-  const billableCachedTokens = Number.isFinite(cachedTokens)
-    ? Math.min(Math.max(cachedTokens!, 0), promptTokens!)
-    : 0;
+  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens!);
   const uncachedPromptTokens = promptTokens! - billableCachedTokens;
   const cacheReadCost = config.cacheReadCost ?? inputCost;
 
