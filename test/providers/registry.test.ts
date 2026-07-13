@@ -277,6 +277,65 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle meta providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('meta:muse-spark-1.1'));
+      expect(factory).toBeDefined();
+
+      const metaOptions: ProviderOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { temperature: 0.42, apiKey: 'meta-test-key' },
+      };
+      // Bare meta:<model> defaults to the Responses API surface.
+      const provider = await factory!.create('meta:muse-spark-1.1', metaOptions, mockContext);
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
+      const config = (provider as any).config;
+      expect(config.temperature).toBe(0.42);
+      expect(config.apiKey).toBe('meta-test-key');
+      expect(config.apiBaseUrl).toBe('https://api.meta.ai/v1');
+      expect(config.apiKeyEnvar).toBe('MODEL_API_KEY');
+    });
+
+    it('should route meta sub-types correctly', async () => {
+      const factory = providerMap.find((f) => f.test('meta:chat:muse-spark-1.1'));
+      expect(factory).toBeDefined();
+
+      const chatProvider = await factory!.create(
+        'meta:chat:muse-spark-1.1',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const defaultProvider = await factory!.create(
+        'meta:',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const responsesProvider = await factory!.create(
+        'meta:responses:muse-spark-1.1',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const messagesProvider = await factory!.create(
+        'meta:messages:muse-spark-1.1',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+
+      expect(chatProvider.id()).toBe('meta:chat:muse-spark-1.1');
+      expect(defaultProvider.id()).toBe('meta:responses:muse-spark-1.1');
+      expect(responsesProvider.id()).toBe('meta:responses:muse-spark-1.1');
+      expect(messagesProvider.id()).toBe('meta:messages:muse-spark-1.1');
+
+      await expect(
+        factory!.create(
+          'meta:embedding:foo',
+          { ...mockProviderOptions, id: undefined },
+          mockContext,
+        ),
+      ).rejects.toThrow(/does not expose/);
+    });
+
     it('should handle moonshot providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
       expect(factory).toBeDefined();
@@ -438,7 +497,7 @@ describe('Provider Registry', () => {
       expect(shorthandProvider).toBeDefined();
       expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
-      for (const model of ['claude-fable-5', 'claude-mythos-5']) {
+      for (const model of ['claude-fable-5', 'claude-mythos-5', 'claude-sonnet-5']) {
         const claude5Provider = await factory!.create(
           `anthropic:${model}`,
           anthropicOptions,
@@ -719,6 +778,33 @@ describe('Provider Registry', () => {
       }
     });
 
+    it.each([
+      [
+        'mistral:mistral-large-latest',
+        'MistralChatCompletionProvider',
+        'mistral:mistral-large-latest',
+      ],
+      ['mistral:embedding', 'MistralEmbeddingProvider', 'mistral:embedding:mistral-embed'],
+      [
+        'mistral:embeddings:mistral-embed',
+        'MistralEmbeddingProvider',
+        'mistral:embedding:mistral-embed',
+      ],
+      [
+        'mistral:embedding:codestral-embed',
+        'MistralEmbeddingProvider',
+        'mistral:embedding:codestral-embed',
+      ],
+    ])('should route %s correctly', async (path, expectedProviderName, expectedId) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(path, { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe(expectedProviderName);
+      expect(provider.id()).toBe(expectedId);
+    });
+
     it('should handle bedrock Luma Ray video provider with model version', async () => {
       const factories = await getProviderFactories('bedrock:luma.ray-v2:0');
       const factory = factories.find((f) => f.test('bedrock:luma.ray-v2:0'));
@@ -985,17 +1071,17 @@ describe('Provider Registry', () => {
     });
 
     it('should handle groq provider correctly', async () => {
-      const factory = providerMap.find((f) => f.test('groq:llama-3.3-70b-versatile'));
+      const factory = providerMap.find((f) => f.test('groq:openai/gpt-oss-120b'));
       expect(factory).toBeDefined();
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:llama-3.3-70b-versatile', groqOptions, {
+      const provider = await factory!.create('groq:openai/gpt-oss-120b', groqOptions, {
         ...mockContext,
         options: groqOptions,
       });
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('groq:llama-3.3-70b-versatile');
+      expect(provider.id()).toBe('groq:openai/gpt-oss-120b');
 
       // Test error case with missing model
       await expect(factory!.create('groq:', groqOptions, mockContext)).rejects.toThrow(
@@ -1030,7 +1116,7 @@ describe('Provider Registry', () => {
 
     it('should handle groq:responses provider correctly', async () => {
       // groq:responses: is handled by the same factory as groq:
-      const factory = providerMap.find((f) => f.test('groq:responses:llama-3.3-70b-versatile'));
+      const factory = providerMap.find((f) => f.test('groq:responses:openai/gpt-oss-120b'));
       expect(factory).toBeDefined();
 
       // Use options without id to verify the provider generates its own id
@@ -1207,6 +1293,19 @@ describe('Provider Registry', () => {
       ],
       [
         'google:gemini-2.5-flash-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      // Nano Banana 2 / 2 Lite / Pro GA: bare google:<model> routes dispatch on the '-image' substring.
+      [
+        'google:gemini-3.1-flash-lite-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'google:gemini-3.1-flash-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'google:gemini-3-pro-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],
       // Bare google:<model> default chat route (no service-type segment).

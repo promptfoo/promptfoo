@@ -121,6 +121,11 @@ export interface AzureModelCost {
   cost: {
     input: number;
     output: number;
+    longContext?: {
+      threshold: number;
+      input: number;
+      output: number;
+    };
   };
 }
 
@@ -306,13 +311,4 @@ export interface AzureVideoJob {
   width: number;
   inpaint_items: AzureVideoInpaintItem[] | null;
   failure_reason: string | null;
-}
-
-/**
- * Azure video provider options
- */
-export interface AzureVideoProviderOptions {
-  config?: AzureVideoOptions;
-  id?: string;
-  env?: EnvOverrides;
 }

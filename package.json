@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.17",
+  "version": "0.121.18",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -107,7 +107,7 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium,block-no-verify\" --ignore-dirs=\"dist,site,examples\"",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@actions/core,@actions/exec,@actions/github,@octokit/rest,@vitest/coverage-v8,langium,block-no-verify,yaml\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -187,7 +187,7 @@
     "vite": "^8.0.16",
     "lodash-es": "^4.18.1",
     "langium": {
-      ".": "4.3.0",
+      ".": "4.3.1",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "chevrotain": "11.2.0",
       "chevrotain-allstar": "0.4.1"
@@ -209,7 +209,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.107.2",
+    "webpack": "5.108.3",
     "dompurify": "3.4.11",
     "monaco-editor": {
       ".": "0.55.1",
@@ -217,7 +217,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.179",
+    "@anthropic-ai/claude-agent-sdk": "0.3.197",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -227,17 +227,15 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.4.16",
+    "@biomejs/biome": "2.5.1",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.14",
-    "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/js-yaml": "^4.0.9",
     "@types/jsdom": "^28.0.0",
     "@types/node": "^24.12.0",
     "@types/nunjucks": "^3.2.6",
@@ -257,8 +255,7 @@
     "ibm-cloud-sdk-core": "^5.4.22",
     "knip": "^6.0.0",
     "langfuse": "^3.38.20",
-    "langium": "4.3.0",
-    "nock": "^14.0.11",
+    "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
@@ -273,10 +270,11 @@
     "tsdown": "0.21.9",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
-    "winston-transport": "^4.9.0"
+    "winston-transport": "^4.9.0",
+    "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.179",
+    "@anthropic-ai/claude-agent-sdk": "0.3.197",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -291,10 +289,9 @@
     "@googleapis/sheets": "^13.0.1",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.14",
-    "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.11.3",
-    "@openai/codex-sdk": "^0.130.0",
+    "@openai/codex-sdk": "^0.144.0",
     "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
@@ -306,7 +303,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.41",
     "@swc/core-linux-x64-musl": "^1.15.41",
     "@swc/core-win32-x64-msvc": "^1.15.41",
-    "google-auth-library": "^10.7.0",
+    "google-auth-library": "^10.9.0",
     "hono": "^4.12.25",
     "ibm-cloud-sdk-core": "^5.4.22",
     "jks-js": "^1.1.5",
@@ -318,10 +315,10 @@
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
     "read-excel-file": "^9.0.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.104.2",
+    "@anthropic-ai/sdk": "0.109.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -370,7 +367,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "5.2.1",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",

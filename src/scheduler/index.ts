@@ -39,20 +39,6 @@ export {
 export { SlotQueue } from './slotQueue';
 
 export type { ConcurrencyChangeResult } from './adaptiveConcurrency';
-// Event types
-export type {
-  ConcurrencyDecreasedEvent,
-  ConcurrencyIncreasedEvent,
-  RateLimitHitEvent,
-  RateLimitLearnedEvent,
-  RateLimitWarningEvent,
-  RequestCompletedEvent,
-  RequestFailedEvent,
-  RequestRetryingEvent,
-  RequestStartedEvent,
-  SlotAcquiredEvent,
-  SlotReleasedEvent,
-} from './events';
 export type { ProviderMetrics } from './providerRateLimitState';
 export type { RateLimitRegistryOptions } from './rateLimitRegistry';
 export type { SlotQueueOptions } from './slotQueue';
