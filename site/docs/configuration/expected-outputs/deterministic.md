@@ -104,6 +104,9 @@ assert:
     value: 'The expected substring'
 ```
 
+Both assertions accept string or number values. Numbers are converted to strings, so `value: 0`
+matches output containing `0`.
+
 ### Contains-All
 
 The `contains-all` assertion checks if the LLM output contains all of the specified values.

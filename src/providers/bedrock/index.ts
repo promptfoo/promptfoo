@@ -1740,7 +1740,7 @@ export const BEDROCK_MODEL = {
       );
       return { inputText: prompt, textGenerationConfig };
     },
-    output: (_config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.results?.[0]?.outputText,
     tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
@@ -1781,7 +1781,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'stop_sequences', stop, undefined, undefined);
       return params;
     },
-    output: (_config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
+    output: (_config: BedrockOptions, responseJson: any) => responseJson?.generations?.[0]?.text,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
         const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);

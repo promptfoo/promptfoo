@@ -60,10 +60,10 @@
     "satori": "^0.26.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
-    "webpack": "5.108.1"
+    "webpack": "5.108.3"
   },
   "optionalDependencies": {
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.3"
   },
   "overrides": {
     "lodash-es": "^4.18.1"

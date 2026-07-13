@@ -53,12 +53,14 @@ export interface OpenAiSharedOptions {
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
- * **o-series models only**
+ * Configuration options for OpenAI reasoning models, including o-series and GPT-5 models.
  *
- * Configuration options for
- * [reasoning models](https://platform.openai.com/docs/guides/reasoning).
+ * See the [reasoning models guide](https://platform.openai.com/docs/guides/reasoning).
  */
 export interface Reasoning {
+  /** Controls which reasoning items are rendered back to the model on later turns. */
+  context?: 'auto' | 'current_turn' | 'all_turns' | null;
+
   /**
    * **o-series models only**
    *
@@ -68,6 +70,9 @@ export interface Reasoning {
    * effort can result in faster responses and fewer tokens used on reasoning in a response.
    */
   effort?: ReasoningEffort;
+
+  /** Selects standard reasoning or GPT-5.6 Pro mode. */
+  mode?: 'standard' | 'pro' | null;
 
   /**
    * A summary of the reasoning performed by the model. This can be useful for
@@ -79,7 +84,7 @@ export interface Reasoning {
 
 /**
  * Reasoning effort values accepted by GPT-5 family models. Support varies by model;
- * GPT-5.6 Sol adds `max` reasoning.
+ * GPT-5.6 models add `max` reasoning.
  */
 export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh' | 'max';
 
@@ -122,6 +127,11 @@ export interface OpenAiCodeInterpreterTool {
 
 export type OpenAiPromptCacheRetention = 'in_memory' | '24h' | null;
 
+export interface OpenAiPromptCacheOptions {
+  mode?: 'implicit' | 'explicit';
+  ttl?: '30m';
+}
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -157,6 +167,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   prompt_cache_key?: string;
+  prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
