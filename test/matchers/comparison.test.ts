@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { matchesSelectBest } from '../../src/matchers/comparison';
 import { createMockProvider } from '../factories/provider';
 
@@ -50,13 +50,7 @@ describe('matchesSelectBest', () => {
   });
 
   it('should keep reserved criteria and outputs vars ahead of user vars', async () => {
-    const provider = createMockProvider({
-      id: 'select-best-test-provider',
-      response: {
-        output: '0',
-        tokenUsage: { total: 7, prompt: 3, completion: 4 },
-      },
-    });
+    const provider = createSelectBestProvider('0');
     const grading: GradingConfig = {
       provider,
       rubricPrompt: 'criteria={{ criteria }}\noutputs={{ outputs }}\nextra={{ extra }}',
@@ -68,7 +62,7 @@ describe('matchesSelectBest', () => {
       extra: 'kept user var',
     });
 
-    const [prompt, callApiContext] = provider.callApi.mock.calls[0];
+    const [prompt, callApiContext] = vi.mocked(provider.callApi).mock.calls[0];
     expect(prompt).toContain('criteria=criteria from assertion');
     expect(prompt).toContain('first output');
     expect(prompt).toContain('extra=kept user var');
