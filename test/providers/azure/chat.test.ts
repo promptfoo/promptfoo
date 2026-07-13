@@ -1128,6 +1128,38 @@ describe('AzureChatCompletionProvider', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.logProbs).toBeUndefined();
+      // The nullish output is what routes the row to the evaluator's canonical
+      // "No output" outcome; token usage still reflects the billed prompt.
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, completion: 0 });
+    });
+
+    it('does not crash when the API response has no choices field at all', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 0,
+          total_tokens: 10,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.logProbs).toBeUndefined();
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, completion: 0 });
     });
 
     it('should detect input content filtering', async () => {

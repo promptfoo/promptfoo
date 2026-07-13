@@ -426,12 +426,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       } else {
         const hasDataSources = !!config.dataSources || !!config.data_sources;
+        // Optional-chain `data.choices` too: a degenerate 200 response with no
+        // `choices` field must take the same graceful no-output path as an
+        // empty array instead of throwing on `.find`/`[0]`.
         const choice = hasDataSources
-          ? data.choices.find(
+          ? data.choices?.find(
               (choice: { message: { role: string; content: string } }) =>
                 choice.message.role === 'assistant',
             )
-          : data.choices[0];
+          : data.choices?.[0];
 
         const message = choice?.message;
 
