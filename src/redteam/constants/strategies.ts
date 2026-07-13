@@ -73,6 +73,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'artprompt',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -149,6 +150,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */
 export const ENCODING_STRATEGIES = new Set([
+  'artprompt',
   'base64',
   'hex',
   'rot13',

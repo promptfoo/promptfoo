@@ -291,6 +291,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'artprompt',
+    displayName: 'ArtPrompt (ASCII Art)',
+    description: 'ASCII art word masking',
+    longDescription:
+      'Masks a sensitive word as ASCII art so token-level safety filters miss it while the model still reconstructs the request (Jiang et al., ACL 2024)',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/artprompt/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'jailbreak-templates',
     displayName: 'Jailbreak Templates',
     description: 'Static jailbreak templates',

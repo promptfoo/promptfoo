@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addArtPrompt } from './artprompt';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -273,6 +274,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding leetspeak encoding to ${testCases.length} test cases`);
       const newTestCases = addLeetspeak(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} leetspeak encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'artprompt',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding ArtPrompt encoding to ${testCases.length} test cases`);
+      const newTestCases = addArtPrompt(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ArtPrompt encoded test cases`);
       return newTestCases;
     },
   },

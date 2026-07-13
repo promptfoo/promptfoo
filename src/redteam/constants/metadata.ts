@@ -15,6 +15,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
+  artprompt: 'Tests handling of harmful requests with a sensitive word masked as ASCII art',
   audio: 'Tests handling of audio content',
   'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
   layer: 'Applies multiple strategies in a defined order',
@@ -268,6 +269,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
+  artprompt: 'ArtPrompt ASCII Art',
   audio: 'Audio Content',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Payload Encoding',
@@ -1269,6 +1271,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  artprompt: 'Masks a sensitive word as ASCII art to bypass token-level safety filters',
   audio: 'Tests detection and handling of audio-based malicious payloads',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
@@ -1318,6 +1321,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  artprompt: 'ArtPrompt (ASCII Art)',
   audio: 'Audio',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
