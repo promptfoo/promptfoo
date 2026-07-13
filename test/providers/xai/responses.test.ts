@@ -771,6 +771,30 @@ describe('XAIResponsesProvider', () => {
     expect(result.output).toBe('hello');
   });
 
+  it('fails closed on a terminal SSE error after partial output', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+          '',
+          'data: {"type":"error","error":{"code":"server_error","message":"capacity exhausted"}}',
+          '',
+        ].join('\n'),
+      ),
+    });
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toContain('xAI streaming response error (server_error)');
+    expect(result.error).toContain('capacity exhausted');
+    expect(result.output).toBeUndefined();
+  });
+
   it('preserves completed-response annotations for streamed output text', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,

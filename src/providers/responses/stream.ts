@@ -4,6 +4,9 @@ type ResponsesStreamEvent = {
   delta?: string;
   output_text?: { delta?: string };
   output?: any[];
+  code?: string;
+  message?: string;
+  error?: { code?: string; message?: string };
 };
 
 type ResponsesStreamLogger = {
@@ -55,6 +58,14 @@ export async function readResponsesStream(
     const event = parseSseEvent(chunk, providerName, logger);
     if (!event) {
       return;
+    }
+
+    if (event.type === 'error') {
+      const code = event.error?.code ?? event.code;
+      const message = event.error?.message ?? event.message ?? 'unknown stream error';
+      throw new Error(
+        `${providerName} streaming response error${code ? ` (${code})` : ''}: ${message}`,
+      );
     }
 
     if (event.response && typeof event.response === 'object') {

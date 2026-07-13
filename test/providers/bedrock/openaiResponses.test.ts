@@ -617,6 +617,34 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.error).toContain('not enabled');
     });
 
+    it.each(
+      GPT_5_6_MODELS,
+    )('fails closed on a terminal SSE error after partial output for %s', async (modelId) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+          '',
+          'event: error',
+          'data: {"type":"error","code":"server_error","message":"capacity exhausted"}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toContain('OpenAI streaming response error (server_error)');
+      expect(result.error).toContain('capacity exhausted');
+      expect(result.output).toBeUndefined();
+    });
+
     it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
       // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
       // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
