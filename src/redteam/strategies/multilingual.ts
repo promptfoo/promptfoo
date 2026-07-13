@@ -535,6 +535,11 @@ export async function translateBatch(
   return allTranslations;
 }
 
+/**
+ * Cloud-consumed: promptfoo-cloud's server/src/task/multilingual.ts imports this
+ * via @promptfoo/redteam/strategies/multilingual. Keep the export (and file)
+ * even if in-repo references disappear.
+ */
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
