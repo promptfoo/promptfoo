@@ -209,7 +209,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.108.1",
+    "webpack": "5.108.3",
     "dompurify": "3.4.11",
     "monaco-editor": {
       ".": "0.55.1",
@@ -318,7 +318,7 @@
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
     "read-excel-file": "^9.0.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.3"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.109.0",
@@ -370,7 +370,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "5.2.0",
+    "js-yaml": "5.2.1",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
