@@ -104,6 +104,17 @@ describe('redteamTestCaseGenerationService', () => {
       await expectTaskRequest(fetchWithRetries, 'goat');
     });
 
+    it('should call fetchWithRetries with correct parameters for ODCV strategy', async () => {
+      const fetchWithRetries = mockRemoteGeneration({
+        message: { content: 'test prompt' },
+        tokenUsage: { total: 100 },
+      });
+
+      await generatePromptForStrategy('odcv');
+
+      expectTaskRequest(fetchWithRetries, 'odcv');
+    });
+
     it('should propagate remote generation failures', async () => {
       const remoteError = new Error('remote generation failed');
       const fetchWithRetries = mockRemoteGeneration(undefined, remoteError);

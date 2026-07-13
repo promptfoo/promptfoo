@@ -68,6 +68,13 @@ const rawRedteamProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:odcv',
+    create: async (_providerPath, providerOptions) => {
+      const { default: RedteamOdcvProvider } = await import('./odcv');
+      return new RedteamOdcvProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath === 'promptfoo:redteam:authoritative-markup-injection',
     create: async (_providerPath, providerOptions) => {
