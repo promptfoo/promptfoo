@@ -901,15 +901,16 @@ describe('OpenInterpreterProvider', () => {
   it('returns actionable runtime errors for a missing executable and stderr-only process failure', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const missing = createMockAppServer();
+    const missingPath = path.resolve('/missing/oi');
     mocks.spawn.mockReturnValueOnce(missing.proc);
     const missingProvider = new OpenInterpreterProvider({
-      config: { interpreter_path: '/missing/oi' },
+      config: { interpreter_path: missingPath },
     });
     const missingPromise = missingProvider.callApi('hello');
     await waitForMessage(missing, (message) => message.method === 'initialize');
-    missing.proc.emit('error', new Error('spawn /missing/oi ENOENT'));
+    missing.proc.emit('error', new Error(`spawn ${missingPath} ENOENT`));
     await expect(missingPromise).resolves.toMatchObject({
-      error: expect.stringContaining('Open Interpreter CLI was not found at /missing/oi'),
+      error: expect.stringContaining(`Open Interpreter CLI was not found at ${missingPath}`),
     });
 
     const failed = createMockAppServer();
