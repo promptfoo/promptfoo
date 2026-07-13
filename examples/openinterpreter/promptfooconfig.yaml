@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Open Interpreter read-only workspace eval
+
+prompts:
+  - Read README.md in the workspace and return one sentence that includes the project codename.
+
+providers:
+  - id: openinterpreter:gpt-5.4
+    config:
+      working_dir: ./workspace
+      sandbox_mode: read-only
+      turn_timeout_ms: 120000
+
+tests:
+  - description: Reads the workspace without modifying it
+    assert:
+      - type: contains
+        value: Orchard
