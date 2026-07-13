@@ -345,6 +345,7 @@ export const ADDITIONAL_PLUGINS = [
   ...CODING_AGENT_PLUGINS,
   'competitors',
   'coppa',
+  'cross-agent-injection',
   'cross-session-leak',
   'cyberseceval',
   'data-exfil',
