@@ -191,12 +191,20 @@ function assertSupportedMetaRequest(
   if ('logprobs' in body) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
+  if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
+    throw new Error(
+      'Muse Spark models do not support `logit_bias`; remove it from the provider config.',
+    );
+  }
   if (typeof body.n === 'number' && body.n > 1) {
     throw new Error(
       'Muse Spark models do not support `n > 1`; remove `n` from the provider config.',
     );
   }
-  if (body.stream) {
+  // The chat base builder never copies `config.stream` into the body, so check
+  // the config too — a requested streaming eval must fail fast, not silently
+  // run non-streaming.
+  if (body.stream || config.stream) {
     throw new Error(
       'Meta chat and Responses streaming is not supported by promptfoo; remove `stream` from the provider config.',
     );
@@ -347,6 +355,10 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
+  protected override getGenAISystem(): string {
+    return 'meta';
+  }
+
   id(): string {
     return `meta:chat:${this.modelName}`;
   }
@@ -442,6 +454,10 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
 
   protected override supportsTemperature(): boolean {
     return true;
+  }
+
+  protected override getGenAISystem(): string {
+    return 'meta';
   }
 
   id(): string {
@@ -569,6 +585,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     return (this.config as MetaMessagesConfig).apiBaseUrl || META_MESSAGES_API_BASE_URL;
   }
 
+  protected override getGenAISystem(): string {
+    return 'meta';
+  }
+
   id(): string {
     return `meta:messages:${this.modelName}`;
   }
@@ -618,10 +638,19 @@ export function createMetaProvider(
     );
   }
 
-  const subType =
-    rest[0] === 'chat' || rest[0] === 'responses' || rest[0] === 'messages'
-      ? rest.shift()
-      : 'responses';
+  // Only the three supported surfaces may appear as a sub-type segment. Any
+  // other `meta:<segment>:<model>` form is a routing mistake (e.g.
+  // meta:agents:foo), not a model id — reject it instead of sending a bogus
+  // Responses request.
+  let subType = 'responses';
+  if (rest[0] === 'chat' || rest[0] === 'responses' || rest[0] === 'messages') {
+    subType = rest.shift() as string;
+  } else if (rest.length > 1) {
+    throw new Error(
+      `Unknown Meta Model API sub-type '${rest[0]}' in "${providerPath}". ` +
+        'Use meta:<model>, meta:chat:<model>, meta:responses:<model>, or meta:messages:<model>.',
+    );
+  }
   const modelName = rest.join(':') || DEFAULT_META_MODEL;
 
   switch (subType) {

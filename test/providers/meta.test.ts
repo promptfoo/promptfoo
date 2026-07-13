@@ -97,6 +97,30 @@ describe('createMetaProvider routing', () => {
   ])('fails fast for the unsupported %s sub-type instead of treating it as a model', (subType) => {
     expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(/does not expose/);
   });
+
+  it.each([
+    'agents',
+    'chatkit',
+    'codex-sdk',
+    'voice',
+  ])('rejects the unknown %s sub-type instead of routing it as a Responses model', (subType) => {
+    expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(
+      /Unknown Meta Model API sub-type/,
+    );
+  });
+
+  it('still treats a bare single-segment path as a model id', () => {
+    expect(createMetaProvider('meta:muse-spark-2').id()).toBe('meta:responses:muse-spark-2');
+  });
+
+  it.each([
+    'meta:muse-spark-1.1',
+    'meta:chat:muse-spark-1.1',
+    'meta:messages:muse-spark-1.1',
+  ])('attributes %s tracing spans to the meta system', (providerPath) => {
+    const provider = createMetaProvider(providerPath);
+    expect((provider as unknown as { getGenAISystem: () => string }).getGenAISystem()).toBe('meta');
+  });
 });
 
 describe('MetaProvider configuration', () => {
@@ -353,6 +377,7 @@ describe('MetaProvider request body shaping', () => {
 
   it.each([
     [{ logprobs: true }, /logprobs/],
+    [{ logit_bias: { '50256': -100 } }, /logit_bias/],
     [{ n: 2 }, /n > 1/],
     [{ stream: true }, /streaming is not supported/],
   ])('rejects unsupported chat passthrough options: %j', async (passthrough, error) => {
@@ -362,6 +387,24 @@ describe('MetaProvider request body shaping', () => {
       }),
     );
     await expect(provider.getOpenAiBody('Hello')).rejects.toThrow(error);
+  });
+
+  it('rejects top-level `stream` config instead of silently running non-streaming', async () => {
+    const provider = asChat(
+      createMetaProvider('meta:chat:muse-spark-1.1', {
+        config: { stream: true },
+      }),
+    );
+    await expect(provider.getOpenAiBody('Hello')).rejects.toThrow(/streaming is not supported/);
+  });
+
+  it('rejects top-level `logit_bias` config with a clear error', async () => {
+    const provider = asChat(
+      createMetaProvider('meta:chat:muse-spark-1.1', {
+        config: { logit_bias: { '50256': -100 } } as Record<string, unknown>,
+      }),
+    );
+    await expect(provider.getOpenAiBody('Hello')).rejects.toThrow(/logit_bias/);
   });
 
   it('leaves explicit passthrough values untouched', async () => {
@@ -639,6 +682,7 @@ describe('MetaResponsesProvider request body shaping', () => {
   it.each([
     [{ stop: ['\n'] }, /stop/],
     [{ logprobs: true }, /logprobs/],
+    [{ logit_bias: { '50256': -100 } }, /logit_bias/],
     [{ n: 2 }, /n > 1/],
     [{ stream: true }, /streaming is not supported/],
   ])('rejects unsupported Responses passthrough options: %j', async (passthrough, error) => {

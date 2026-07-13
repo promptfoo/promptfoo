@@ -475,6 +475,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
+  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // through the Anthropic wire format override this so traces attribute to the
+  // actual provider system.
+  protected getGenAISystem(): string {
+    return 'anthropic';
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -509,7 +516,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'anthropic',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
