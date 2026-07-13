@@ -431,8 +431,6 @@ export class ReplicateModerationProvider
 // LlamaGuard 4 is the preferred default on Replicate
 // LlamaGuard 4 adds S14: Code Interpreter Abuse category for enhanced safety
 export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b';
-export const LLAMAGUARD_3_MODEL_ID =
-  'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
 export const DefaultModerationProvider = new ReplicateModerationProvider(
   LLAMAGUARD_4_MODEL_ID, // Using LlamaGuard 4 as the default

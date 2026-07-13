@@ -701,5 +701,3 @@ export class GoogleProvider extends GoogleGenericProvider {
 
   // cleanup() is inherited from GoogleGenericProvider
 }
-
-export default GoogleProvider;
