@@ -303,6 +303,7 @@ interface ServerRequestRecord {
 }
 
 interface CodexAppServerTurnState {
+  connection: CodexAppServerConnection;
   connectionKey: string;
   connectionInstanceId: string;
   threadId: string;
@@ -552,7 +553,7 @@ const CodexAppServerConfigShape = {
   server_request_policy: ServerRequestPolicySchema.optional(),
 } as const;
 
-const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
+export const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
 const CodexAppServerMergedPromptConfigSchema = z.object(CodexAppServerConfigShape).strip();
 
 function createDeferred<T>(): Deferred<T> {
@@ -1337,6 +1338,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return await this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
           turnStarted = true;
           const state = this.createTurnState(
+            connection,
             connectionKey,
             connection.instanceId,
             threadHandle.threadId,
@@ -2173,6 +2175,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private createTurnState(
+    connection: CodexAppServerConnection,
     connectionKey: string,
     connectionInstanceId: string,
     threadId: string,
@@ -2181,6 +2184,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     appServerEnv: Record<string, string>,
   ): CodexAppServerTurnState {
     return {
+      connection,
       connectionKey,
       connectionInstanceId,
       threadId,
@@ -2497,10 +2501,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     state.error = `codex app-server turn events exceeded ${MAX_BUFFERED_TURN_EVENT_CHARS} characters`;
     state.completed.resolve();
-    const connection = this.connections.get(state.connectionKey);
-    if (connection?.instanceId === state.connectionInstanceId) {
-      void connection.close();
-    }
+    void state.connection.close();
     return false;
   }
 

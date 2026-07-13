@@ -4592,6 +4592,61 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(result.output).toBe('Done');
   });
 
+  it.each([
+    ['reusable', true],
+    ['non-reusable', false],
+  ])('closes the active %s connection immediately when buffered turn events overflow', async (_label, reuseServer) => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
+    });
+
+    const resultPromise = provider.callApi('overflow');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
+    });
+
+    for (let index = 0; index < 2; index++) {
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_overflow',
+          turnId: 'turn_overflow',
+          itemId: 'stream',
+          delta: 'x'.repeat(4_000_000),
+        },
+      });
+    }
+    server.send({
+      id: 700,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thr_overflow',
+        turnId: 'turn_overflow',
+        itemId: 'command',
+        command: 'x'.repeat(4_000_000),
+      },
+    });
+
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
+      false,
+    );
+    await expect(resultPromise).resolves.toMatchObject({
+      error: expect.stringContaining('codex app-server turn events exceeded'),
+    });
+  });
+
   it('sanitizes sensitive command metadata', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

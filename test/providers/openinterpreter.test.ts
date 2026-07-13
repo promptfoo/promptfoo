@@ -170,6 +170,9 @@ describe('OpenInterpreterProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
 
     const provider = new OpenInterpreterProvider();
+    expect(provider.getApiKey()).toBeUndefined();
+    expect(provider.requiresApiKey()).toBe(false);
+    expect(provider.toString()).toBe('[Open Interpreter Provider]');
     const resultPromise = provider.callApi('Say hello');
     const { threadStart, turnStart } = await startTurn(server);
 
@@ -211,7 +214,7 @@ describe('OpenInterpreterProvider', () => {
       approvalPolicy: 'untrusted',
     });
 
-    await provider.shutdown();
+    await provider.cleanup();
     expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
     expect(fs.existsSync(options.env.INTERPRETER_HOME)).toBe(false);
     expect(fs.existsSync(threadStart.params.cwd)).toBe(false);
@@ -364,13 +367,17 @@ describe('OpenInterpreterProvider', () => {
         { type: 'text', text: 'Review these inputs.' },
         { type: 'local_image', path: 'inside.png' },
         { type: 'skill', name: 'fixture', path: path.join(extra, 'skill.md') },
+        { type: 'mention', name: 'connector', path: 'app://connector-id' },
+        { type: 'mention', name: 'plugin', path: 'plugin://plugin-name@marketplace' },
       ]),
     );
     const { turnStart } = await startTurn(server);
     expect(turnStart.params.input).toEqual([
       { type: 'text', text: 'Review these inputs.', text_elements: [] },
-      { type: 'localImage', path: 'inside.png' },
+      { type: 'localImage', path: path.join(workspace, 'inside.png') },
       { type: 'skill', name: 'fixture', path: path.join(extra, 'skill.md') },
+      { type: 'mention', name: 'connector', path: 'app://connector-id' },
+      { type: 'mention', name: 'plugin', path: 'plugin://plugin-name@marketplace' },
     ]);
     completeTurn(server, 'reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
@@ -405,43 +412,241 @@ describe('OpenInterpreterProvider', () => {
     const { threadStart, turnStart } = await startTurn(server);
 
     expect(threadStart.params.cwd).toBe(workspace);
-    expect(turnStart.params.input).toEqual([{ type: 'localImage', path: 'inside.png' }]);
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: path.join(workspace, 'inside.png') },
+    ]);
     completeTurn(server, 'reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
-  it('rejects remote and private image inputs by default and permits an explicitly enabled public URL', async () => {
+  it('forwards only the validated absolute local path when the launch directory contains a different file', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
-    const provider = new OpenInterpreterProvider();
-    const disabled = await provider.callApi(
-      JSON.stringify([{ type: 'image', url: 'https://images.example.test/screenshot.png' }]),
-    );
-    expect(disabled.error).toContain('remote image inputs are disabled by default');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-path-leak-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(root, '.env'), 'launch-directory-secret');
+    fs.writeFileSync(path.join(workspace, '.env'), 'workspace-image');
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: { working_dir: workspace, skip_git_repo_check: true },
+    });
 
-    const enabled = new OpenInterpreterProvider({ config: { allow_remote_images: true } });
-    for (const url of [
-      'file:///etc/passwd',
-      'http://127.0.0.1/private',
-      'http://169.254.169.254/latest/meta-data',
-      'http://[::1]/private',
-      'http://[::ffff:127.0.0.1]/private',
-      'http://service.local/private',
-      'https://secret-token@images.example.test/private',
-    ]) {
-      await expect(
-        enabled.callApi(JSON.stringify([{ type: 'image', url }])),
-      ).resolves.toMatchObject({ error: expect.stringContaining('non-public image URL') });
+    const resultPromise = provider.callApi(JSON.stringify([{ type: 'local_image', path: '.env' }]));
+    const { turnStart } = await startTurn(server);
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: path.join(workspace, '.env') },
+    ]);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+
+    fs.rmSync(path.join(workspace, '.env'));
+    await expect(
+      provider.callApi(JSON.stringify([{ type: 'local_image', path: '.env' }])),
+    ).resolves.toMatchObject({
+      error: expect.stringContaining('does not exist or is not accessible'),
+    });
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an absolute cross-drive relative result using portable Windows path semantics', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-win32-path-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'image');
+    const provider = new OpenInterpreterProvider({
+      config: { working_dir: workspace, skip_git_repo_check: true },
+    });
+    vi.spyOn(path, 'relative').mockReturnValue('D:\\outside\\secret.png');
+    vi.spyOn(path, 'isAbsolute').mockImplementation(path.win32.isAbsolute);
+
+    await expect(
+      provider.callApi(JSON.stringify([{ type: 'local_image', path: 'inside.png' }])),
+    ).resolves.toMatchObject({
+      error: expect.stringContaining('outside the configured workspace'),
+    });
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('resolves interpreter_path and interpreter_home from the config directory while preserving PATH lookup', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-config-paths-'));
+    temporaryRoots.push(root);
+    const home = path.join(root, 'oi-home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const relativeServer = createMockAppServer();
+    const pathServer = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(relativeServer.proc).mockReturnValueOnce(pathServer.proc);
+
+    const relative = new OpenInterpreterProvider({
+      config: {
+        basePath: root,
+        interpreter_path: './bin/oi',
+        interpreter_home: './oi-home',
+        working_dir: './workspace',
+        skip_git_repo_check: true,
+      },
+    });
+    const relativePromise = relative.callApi('relative paths');
+    await startTurn(relativeServer);
+    expect(mocks.spawn.mock.calls[0][0]).toBe(path.join(root, 'bin', 'oi'));
+    expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+    completeTurn(relativeServer, 'relative');
+    await expect(relativePromise).resolves.toMatchObject({ output: 'relative' });
+
+    const fromPath = new OpenInterpreterProvider({ config: { interpreter_path: 'oi' } });
+    const pathPromise = fromPath.callApi('PATH lookup');
+    await startTurn(pathServer);
+    expect(mocks.spawn.mock.calls[1][0]).toBe('oi');
+    completeTurn(pathServer, 'path');
+    await expect(pathPromise).resolves.toMatchObject({ output: 'path' });
+  });
+
+  it('uses a config-relative INTERPRETER_HOME from cli_env and ignores a missing optional root', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-env-home-'));
+    temporaryRoots.push(root);
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'image');
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        basePath: root,
+        working_dir: './workspace',
+        additional_directories: ['./optional-missing-root'],
+        skip_git_repo_check: true,
+        cli_env: { INTERPRETER_HOME: './home' },
+      },
+    });
+
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
+    );
+    const { turnStart } = await startTurn(server);
+    expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: path.join(workspace, 'inside.png') },
+    ]);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('passes non-array JSON and malformed structured arrays through as literal text', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const first = createMockAppServer();
+    const second = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(first.proc).mockReturnValueOnce(second.proc);
+    const provider = new OpenInterpreterProvider();
+
+    for (const [server, prompt] of [
+      [first, '{"task":"literal JSON"}'],
+      [second, '[{"unexpected":true}]'],
+    ] as const) {
+      const resultPromise = provider.callApi(prompt);
+      const { turnStart } = await startTurn(server);
+      expect(turnStart.params.input).toEqual([{ type: 'text', text: prompt, text_elements: [] }]);
+      completeTurn(server, 'literal');
+      await expect(resultPromise).resolves.toMatchObject({ output: 'literal' });
     }
+  });
+
+  it('does not leak the generated-workspace Git bypass into a prompt-level real workspace', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-git-check-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'not-a-repo');
+    fs.mkdirSync(workspace);
+    const existsSync = fs.existsSync;
+    vi.spyOn(fs, 'existsSync').mockImplementation((candidate) =>
+      String(candidate).endsWith(`${path.sep}.git`) ? false : existsSync(candidate),
+    );
+    const provider = new OpenInterpreterProvider();
+
+    await expect(
+      provider.callApi('real workspace', {
+        prompt: { config: { working_dir: workspace } },
+        vars: {},
+      } as any),
+    ).resolves.toMatchObject({ error: expect.stringContaining('not inside a Git repository') });
     expect(mocks.spawn).not.toHaveBeenCalled();
 
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
-    const resultPromise = enabled.callApi(
-      JSON.stringify([{ type: 'image', url: 'https://images.example.test/screenshot.png' }]),
+    const defaultPromise = provider.callApi('temporary workspace');
+    const { threadStart } = await startTurn(server);
+    expect(threadStart.params.cwd).toContain('promptfoo-openinterpreter-workspace-');
+    completeTurn(server, 'temporary');
+    await expect(defaultPromise).resolves.toMatchObject({ output: 'temporary' });
+  });
+
+  it.each([
+    ['native', 'harness=""'],
+    ['claude-code', 'harness="claude-code"'],
+    ['claude-code-bare', 'harness="claude-code-bare"'],
+    ['deepseek-tui', 'harness="deepseek-tui"'],
+    ['kimi-code', 'harness="kimi-code"'],
+    ['kimi-cli', 'harness="kimi-cli"'],
+    ['zcode', 'harness="zcode"'],
+    ['little-coder', 'harness="little-coder"'],
+    ['mini-swe-agent', 'harness="mini-swe-agent"'],
+    ['opencode', 'harness="opencode"'],
+    ['pi', 'harness="pi"'],
+    ['qwen-code', 'harness="qwen-code"'],
+    ['swe-agent', 'harness="swe-agent"'],
+    ['terminus-2', 'harness="terminus-2"'],
+    ['minimal', 'harness="minimal"'],
+    ['custom-harness', 'harness="custom-harness"'],
+  ])('maps the upstream %s harness without inventing a native enum value', async (harness, expected) => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({ config: { harness } });
+
+    const resultPromise = provider.callApi('harness mapping');
+    await startTurn(server);
+    expect(mocks.spawn.mock.calls[0][1]).toContain(expected);
+    completeTurn(server, 'mapped');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'mapped' });
+  });
+
+  it('accepts bounded inline image data and rejects all remote or non-data image URLs before spawn', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const provider = new OpenInterpreterProvider();
+    for (const url of [
+      'file:///etc/passwd',
+      'http://127.0.0.1/private',
+      'http://169.254.169.254/latest/meta-data',
+      'https://attacker-controlled.example/private',
+    ]) {
+      await expect(
+        provider.callApi(JSON.stringify([{ type: 'image', url }])),
+      ).resolves.toMatchObject({
+        error: expect.stringContaining('inline data URL'),
+      });
+    }
+    await expect(
+      provider.callApi(
+        JSON.stringify([{ type: 'image', url: `data:image/png;base64,${'x'.repeat(5_000_001)}` }]),
+      ),
+    ).resolves.toMatchObject({ error: expect.stringContaining('inline image inputs exceeded') });
+    expect(mocks.spawn).not.toHaveBeenCalled();
+
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'image', url: 'data:image/png;base64,aW1hZ2U=' }]),
     );
     const { turnStart } = await startTurn(server);
     expect(turnStart.params.input).toEqual([
-      { type: 'image', url: 'https://images.example.test/screenshot.png' },
+      { type: 'image', url: 'data:image/png;base64,aW1hZ2U=' },
     ]);
     completeTurn(server, 'image reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'image reviewed' });
@@ -527,11 +732,23 @@ describe('OpenInterpreterProvider', () => {
     const first = createMockAppServer();
     const second = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(first.proc).mockReturnValueOnce(second.proc);
-    const provider = new OpenInterpreterProvider();
+    const provider = new OpenInterpreterProvider({
+      config: {
+        cli_config: {
+          analytics: { enabled: true, sink: 'base' },
+          feedback: { enabled: true },
+          features: { hooks: false, nested: { base: true } },
+        },
+      },
+    });
 
     const firstPromise = provider.callApi('First row', {
       prompt: {
-        config: { harness: 'minimal', server_request_policy: { command_execution: 'accept' } },
+        config: {
+          harness: 'minimal',
+          cli_config: { features: { memories: true, nested: { row: true } } },
+          server_request_policy: { command_execution: 'accept' },
+        },
       },
       vars: {},
     } as any);
@@ -563,6 +780,17 @@ describe('OpenInterpreterProvider', () => {
     await expect(secondPromise).resolves.toMatchObject({ output: 'second' });
 
     expect(mocks.spawn.mock.calls[0][1]).toContain('harness="minimal"');
+    expect(mocks.spawn.mock.calls[0][1]).toEqual(
+      expect.arrayContaining([
+        'analytics.enabled=true',
+        'analytics.sink="base"',
+        'feedback.enabled=true',
+        'features.hooks=false',
+        'features.memories=true',
+        'features.nested.base=true',
+        'features.nested.row=true',
+      ]),
+    );
     expect(mocks.spawn.mock.calls[1][1]).not.toContain('harness="minimal"');
   });
 
@@ -577,6 +805,11 @@ describe('OpenInterpreterProvider', () => {
     const secondPromise = provider.callApi('row two');
     const firstTurn = await startTurn(first, { threadId: 'thr_one', turnId: 'turn_one' });
     const secondTurn = await startTurn(second, { threadId: 'thr_two', turnId: 'turn_two' });
+    const firstWorkspace = firstTurn.threadStart.params.cwd;
+    const secondWorkspace = secondTurn.threadStart.params.cwd;
+    expect(firstWorkspace).not.toBe(secondWorkspace);
+    fs.writeFileSync(path.join(firstWorkspace, 'row-one.txt'), 'row one state');
+    expect(fs.existsSync(path.join(secondWorkspace, 'row-one.txt'))).toBe(false);
     expect(firstTurn.turnStart.params.input[0].text).toBe('row one');
     expect(secondTurn.turnStart.params.input[0].text).toBe('row two');
 
@@ -589,6 +822,79 @@ describe('OpenInterpreterProvider', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(2);
     expect(first.proc.kill).toHaveBeenCalledWith('SIGTERM');
     expect(second.proc.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(fs.existsSync(firstWorkspace)).toBe(false);
+    expect(fs.existsSync(secondWorkspace)).toBe(false);
+  });
+
+  it('reuses the process and thread when persist_threads is explicitly requested', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-persistent-thread-'));
+    temporaryRoots.push(root);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: { working_dir: root, skip_git_repo_check: true, persist_threads: true },
+    });
+
+    const firstPromise = provider.callApi('same prompt');
+    const firstTurn = await startTurn(server, { threadId: 'thr_persisted', turnId: 'turn_first' });
+    completeTurn(server, 'first', { threadId: 'thr_persisted', turnId: 'turn_first' });
+    await expect(firstPromise).resolves.toMatchObject({
+      output: 'first',
+      sessionId: 'thr_persisted',
+    });
+
+    const secondPromise = provider.callApi('same prompt');
+    const secondTurn = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'turn/start' &&
+        message.params?.threadId === 'thr_persisted' &&
+        message.id !== firstTurn.turnStart.id,
+    );
+    server.send({
+      id: secondTurn.id,
+      result: { turn: { id: 'turn_second', status: 'inProgress' } },
+    });
+    completeTurn(server, 'second', { threadId: 'thr_persisted', turnId: 'turn_second' });
+    await expect(secondPromise).resolves.toMatchObject({
+      output: 'second',
+      sessionId: 'thr_persisted',
+    });
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(server.messages().filter((message) => message.method === 'thread/start')).toHaveLength(
+      1,
+    );
+  });
+
+  it('allocates and removes a fresh writable temporary workspace for sequential rows', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const first = createMockAppServer();
+    const second = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(first.proc).mockReturnValueOnce(second.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        sandbox_mode: 'workspace-write',
+        server_request_policy: { command_execution: 'accept', file_change: 'accept' },
+      },
+    });
+
+    const firstPromise = provider.callApi('first row');
+    const firstTurn = await startTurn(first, { threadId: 'thr_first', turnId: 'turn_first' });
+    const firstWorkspace = firstTurn.threadStart.params.cwd;
+    fs.writeFileSync(path.join(firstWorkspace, 'row-state.txt'), 'must not leak');
+    completeTurn(first, 'first', { threadId: 'thr_first', turnId: 'turn_first' });
+    await expect(firstPromise).resolves.toMatchObject({ output: 'first' });
+    expect(fs.existsSync(firstWorkspace)).toBe(false);
+
+    const secondPromise = provider.callApi('second row');
+    const secondTurn = await startTurn(second, { threadId: 'thr_second', turnId: 'turn_second' });
+    const secondWorkspace = secondTurn.threadStart.params.cwd;
+    expect(secondWorkspace).not.toBe(firstWorkspace);
+    expect(fs.existsSync(path.join(secondWorkspace, 'row-state.txt'))).toBe(false);
+    completeTurn(second, 'second', { threadId: 'thr_second', turnId: 'turn_second' });
+    await expect(secondPromise).resolves.toMatchObject({ output: 'second' });
+    expect(fs.existsSync(secondWorkspace)).toBe(false);
   });
 
   it('returns actionable runtime errors for a missing executable and stderr-only process failure', async () => {
@@ -596,13 +902,13 @@ describe('OpenInterpreterProvider', () => {
     const missing = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(missing.proc);
     const missingProvider = new OpenInterpreterProvider({
-      config: { interpreter_path: '/missing/interpreter' },
+      config: { interpreter_path: '/missing/oi' },
     });
     const missingPromise = missingProvider.callApi('hello');
     await waitForMessage(missing, (message) => message.method === 'initialize');
-    missing.proc.emit('error', new Error('spawn /missing/interpreter ENOENT'));
+    missing.proc.emit('error', new Error('spawn /missing/oi ENOENT'));
     await expect(missingPromise).resolves.toMatchObject({
-      error: expect.stringContaining('Open Interpreter CLI was not found at /missing/interpreter'),
+      error: expect.stringContaining('Open Interpreter CLI was not found at /missing/oi'),
     });
 
     const failed = createMockAppServer();
@@ -679,6 +985,8 @@ describe('OpenInterpreterProvider', () => {
       });
     }
 
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+
     await expect(resultPromise).resolves.toMatchObject({
       error: expect.stringContaining('Open Interpreter app-server turn events exceeded'),
     });
@@ -686,9 +994,11 @@ describe('OpenInterpreterProvider', () => {
   });
 
   it('rejects incompatible config and missing homes before spawning a runtime', () => {
-    expect(() => new OpenInterpreterProvider({ config: { harness: 'unknown' } as any })).toThrow(
-      /Invalid Open Interpreter config: harness/,
-    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-invalid-home-'));
+    temporaryRoots.push(root);
+    const homeFile = path.join(root, 'not-a-directory');
+    fs.writeFileSync(homeFile, 'file');
+
     expect(
       () => new OpenInterpreterProvider({ config: { sandbox_mode: 'readonly' } as any }),
     ).toThrow(/Invalid Open Interpreter config: sandbox_mode/);
@@ -696,11 +1006,38 @@ describe('OpenInterpreterProvider', () => {
       () => new OpenInterpreterProvider({ config: { unsupported_option: true } as any }),
     ).toThrow(/Invalid Open Interpreter config: \(root\)/);
     expect(
+      () => new OpenInterpreterProvider({ config: { allow_remote_images: true } as any }),
+    ).toThrow(/Invalid Open Interpreter config: \(root\)/);
+    expect(() => new OpenInterpreterProvider({ config: { persist_threads: true } })).toThrow(
+      /persist_threads requires an explicit working_dir/,
+    );
+    expect(
+      () =>
+        new OpenInterpreterProvider({
+          config: { working_dir: '/tmp', persist_threads: true, reuse_server: false },
+        }),
+    ).toThrow(/persist_threads cannot be combined with reuse_server: false/);
+    expect(
       () =>
         new OpenInterpreterProvider({
           config: { interpreter_home: '/path/that/does/not/exist' },
         }),
     ).toThrow(/Open Interpreter home .* does not exist or is not accessible/);
+    expect(() => new OpenInterpreterProvider({ config: { interpreter_home: homeFile } })).toThrow(
+      /Open Interpreter home .* not a directory/,
+    );
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('removes an allocated temporary home if delegate construction fails', () => {
+    const prefix = 'promptfoo-openinterpreter-home-';
+    const before = fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(prefix));
+    vi.spyOn(providerRegistry, 'register').mockImplementationOnce(() => {
+      throw new Error('registration failed');
+    });
+
+    expect(() => new OpenInterpreterProvider()).toThrow('registration failed');
+    expect(fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(prefix))).toEqual(before);
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
@@ -709,12 +1046,19 @@ describe('OpenInterpreterProvider', () => {
 
     await expect(
       provider.callApi('hello', {
-        prompt: { config: { harness: 'unsupported-harness' } },
+        prompt: { config: { harness: '' } },
         vars: {},
       } as any),
     ).resolves.toMatchObject({
       error: expect.stringContaining('Invalid Open Interpreter config: harness'),
     });
+    for (const config of [{ approval_policiy: 'never' }, { sandbox: 'workspace-write' }]) {
+      await expect(
+        provider.callApi('hello', { prompt: { config }, vars: {} } as any),
+      ).resolves.toMatchObject({
+        error: expect.stringContaining('Invalid Open Interpreter config'),
+      });
+    }
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 });
