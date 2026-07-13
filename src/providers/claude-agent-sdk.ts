@@ -37,7 +37,6 @@ import type {
   HookEvent,
   OnElicitation,
   OutputFormat,
-  PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
   SDKAssistantMessage,
@@ -700,6 +699,9 @@ export interface ClaudeCodeOptions {
    *   - `allowAllUnixSockets` - Allow all Unix socket connections
    *   - `httpProxyPort` - HTTP proxy port for network access
    *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `credentials` - Credential protection configuration:
+   *   - `envVars` - Environment variables to deny or mask, with optional `injectHosts`
+   *   - `allowPlaintextInject` - Allow masked credentials over plain HTTP (unsafe)
    * - `ripgrep` - Custom ripgrep configuration:
    *   - `command` - Path to ripgrep executable
    *   - `args` - Additional arguments for ripgrep
@@ -920,7 +922,7 @@ function createAskUserQuestionCanUseTool(
   behavior: 'first_option' | 'random' | 'deny' = 'first_option',
   wrappedCanUseTool?: CanUseTool,
 ): CanUseTool {
-  return async (toolName, input, options): Promise<PermissionResult> => {
+  return async (toolName, input, options) => {
     // Only handle AskUserQuestion tool
     if (toolName !== 'AskUserQuestion') {
       // Defer to wrapped callback or allow by default
@@ -1124,6 +1126,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       allowedTools = Array.from(
         new Set([...defaultAllowedTools, ...config.append_allowed_tools]),
       ).sort();
+    }
+
+    // Bare allowedTools entries bypass canUseTool, so keep AskUserQuestion out of
+    // the allow list when the convenience callback needs to answer it.
+    if (config.ask_user_question) {
+      allowedTools = allowedTools?.filter((tool) => tool !== 'AskUserQuestion');
     }
 
     const disallowedTools = config.disallowed_tools
