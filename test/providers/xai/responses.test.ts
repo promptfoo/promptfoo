@@ -188,6 +188,32 @@ describe('XAIResponsesProvider', () => {
     }
   });
 
+  it('renders templated Grok 4.5 reasoning effort before validation', async () => {
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { reasoning: { effort: '{{effort}}' as any } },
+    });
+
+    const { body } = await provider.getRequestBody('hello', {
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: { effort: 'high' },
+    });
+
+    expect(body.reasoning).toEqual({ effort: 'high' });
+  });
+
+  it('rejects unsupported templated Grok 4.5 reasoning effort after rendering', async () => {
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { passthrough: { reasoning: { effort: '{{effort}}' } } },
+    });
+
+    await expect(
+      provider.getRequestBody('hello', {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { effort: 'none' },
+      }),
+    ).rejects.toThrow('xAI model grok-4.5 does not support reasoning.effort "none"');
+  });
+
   it('preserves broader reasoning effort values for models that support them', async () => {
     const grok43 = new XAIResponsesProvider('grok-4.3', {
       config: { reasoning: { effort: 'none' } },

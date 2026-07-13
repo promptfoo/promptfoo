@@ -5,6 +5,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
@@ -444,6 +445,10 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.user ? { user: config.user } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (body.reasoning !== undefined) {
+      body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
+    }
 
     // Filter unsupported parameters for Grok 4-family models
     if (GROK_4_MODELS.includes(this.modelName)) {

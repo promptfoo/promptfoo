@@ -479,10 +479,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
         // Check if this is an invalid_prompt error code (indicates refusal)
         if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          const cost = this.calculateResponseCost(data, config, cached);
+
           return {
             output: errorMessage,
             tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            cached,
             latencyMs,
+            ...(cost === undefined ? {} : { cost }),
             isRefusal: true,
             guardrails: {
               flagged: true,

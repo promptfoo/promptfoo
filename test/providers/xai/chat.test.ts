@@ -1333,6 +1333,38 @@ describe('xAI Chat Provider', () => {
       expect(result.cost).toBe(0.0123456789);
     });
 
+    it('preserves exact billed ticks on non-2xx invalid_prompt refusals', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          error: {
+            code: 'invalid_prompt',
+            message: 'The prompt was rejected by the safety system.',
+          },
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 10,
+            total_tokens: 110,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('blocked prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.isRefusal).toBe(true);
+      expect(result.cached).toBe(false);
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 10, total: 110 });
+      expect(result.cost).toBe(0.0123456789);
+    });
+
     it('honors explicit custom cost overrides instead of reported ticks', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
