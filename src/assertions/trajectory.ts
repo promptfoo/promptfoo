@@ -30,14 +30,6 @@ interface TrajectoryGoalSuccessValue {
 
 type ToolArgsDefaults = Record<string, unknown>;
 
-// A `defaults` entry set to this sentinel strips its key unconditionally, regardless of
-// the actual argument's value (e.g. `cursor: '*'` strips `cursor` no matter what the
-// agent passed), unlike a normal `defaults` entry which only strips on an exact value
-// match. This means a tool that legitimately takes the literal string "*" as an argument
-// value cannot use value-specific `defaults` stripping for that argument -- document this
-// in the config reference so it isn't mistaken for a literal default value.
-const WILDCARD_DEFAULT = '*';
-
 interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
   arguments?: unknown;
@@ -288,7 +280,7 @@ function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined):
   for (const [key, value] of Object.entries(actual)) {
     if (
       Object.prototype.hasOwnProperty.call(defaults, key) &&
-      (defaults[key] === WILDCARD_DEFAULT || isDeepStrictEqual(value, defaults[key]))
+      isDeepStrictEqual(value, defaults[key])
     ) {
       stripped.push(key);
       continue;

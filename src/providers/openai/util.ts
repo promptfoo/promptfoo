@@ -69,6 +69,15 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 15 / 1e6,
     },
   })),
+  // `chat-latest` is the bare alias for the latest Instant model used in ChatGPT
+  // (the pricing page's "Specialized models › ChatGPT" row).
+  ...['chat-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+    },
+  })),
   ...['gpt-4.1', 'gpt-4.1-2025-04-14'].map((model) => ({
     id: model,
     cost: {
@@ -342,6 +351,43 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 4 / 1e6,
     },
   })),
+  // GPT-5.6 models
+  ...['gpt-5.6', 'gpt-5.6-sol'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1e6,
+        output: 45 / 1e6,
+      },
+    },
+  })),
+  {
+    id: 'gpt-5.6-terra',
+    cost: {
+      input: 2.5 / 1e6,
+      output: 15 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1e6,
+        output: 22.5 / 1e6,
+      },
+    },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    cost: {
+      input: 1 / 1e6,
+      output: 6 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 2 / 1e6,
+        output: 9 / 1e6,
+      },
+    },
+  },
   // GPT-5.5 models
   ...['gpt-5.5', 'gpt-5.5-2026-04-23'].map((model) => ({
     id: model,
@@ -383,24 +429,15 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
     },
   })),
   // gpt-audio models
-  ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
+  ...['gpt-audio', 'gpt-audio-2025-08-28', 'gpt-audio-1.5'].map((model) => ({
     id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  })),
-  {
-    id: 'gpt-audio-1.5',
     cost: {
       input: 2.5 / 1e6,
       output: 10 / 1e6,
       audioInput: 32 / 1e6,
       audioOutput: 64 / 1e6,
     },
-  },
+  })),
   ...['gpt-audio-mini', 'gpt-audio-mini-2025-12-15', 'gpt-audio-mini-2025-10-06'].map((model) => ({
     id: model,
     cost: {
@@ -413,28 +450,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
 ];
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
-  // GPT-5.6 limited-preview models
-  {
-    id: 'gpt-5.6-sol',
-    cost: {
-      input: 5 / 1e6,
-      output: 30 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-5.6-terra',
-    cost: {
-      input: 2.5 / 1e6,
-      output: 15 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-5.6-luna',
-    cost: {
-      input: 1 / 1e6,
-      output: 6 / 1e6,
-    },
-  },
   ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
     id: model,
     cost: {
@@ -751,37 +766,60 @@ export function failApiCall(err: any) {
   };
 }
 
+export function getOpenAICacheWriteInputTokens(usage: any): number | undefined {
+  for (const value of [
+    usage?.prompt_tokens_details?.cache_write_tokens,
+    usage?.input_tokens_details?.cache_write_tokens,
+    usage?.input_token_details?.cache_write_tokens,
+    usage?.cache_write_input_tokens,
+  ]) {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+export function getOpenAICompletionTokenDetails(
+  usage: any,
+): TokenUsage['completionDetails'] | undefined {
+  const cachedInputTokens =
+    usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
+  const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
+  const completionDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
+
+  if (!completionDetails && cachedInputTokens <= 0 && cacheWriteInputTokens === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(completionDetails
+      ? {
+          reasoning: completionDetails.reasoning_tokens,
+          acceptedPrediction: completionDetails.accepted_prediction_tokens,
+          rejectedPrediction: completionDetails.rejected_prediction_tokens,
+        }
+      : {}),
+    ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
+    ...(cacheWriteInputTokens === undefined
+      ? {}
+      : { cacheCreationInputTokens: cacheWriteInputTokens }),
+  };
+}
+
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       // Cached responses don't count as a new request
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
-      const cachedInputTokens =
-        data.usage.prompt_tokens_details?.cached_tokens ??
-        data.usage.input_tokens_details?.cached_tokens ??
-        0;
+      const completionDetails = getOpenAICompletionTokenDetails(data.usage);
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
         numRequests: 1,
-        ...(data.usage.completion_tokens_details
-          ? {
-              completionDetails: {
-                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
-                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
-                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-              },
-            }
-          : cachedInputTokens > 0
-            ? {
-                completionDetails: {
-                  cacheReadInputTokens: cachedInputTokens,
-                },
-              }
-            : {}),
+        ...(completionDetails ? { completionDetails } : {}),
       };
     }
   }

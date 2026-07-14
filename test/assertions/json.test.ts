@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { handleContainsJson, handleIsJson } from '../../src/assertions/json';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
+import { createAtomicTestCase } from '../factories/testSuite';
 
-import type { AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AssertionValue } from '../../src/types/index';
 
 const mockProvider = createMockProvider({
   id: 'mock',
@@ -14,7 +15,7 @@ const makeParams = (overrides: Partial<AssertionParams>): AssertionParams =>
     baseType: 'is-json' as const,
     assertionValueContext: {
       vars: {},
-      test: {} as AtomicTestCase,
+      test: createAtomicTestCase(),
       prompt: 'test prompt',
       logProbs: undefined,
       provider: mockProvider,
@@ -22,10 +23,19 @@ const makeParams = (overrides: Partial<AssertionParams>): AssertionParams =>
     },
     output: '{}',
     providerResponse: { output: '{}' },
-    test: {} as AtomicTestCase,
+    test: createAtomicTestCase(),
     inverse: false,
     ...overrides,
   }) as AssertionParams;
+
+const NAME_SCHEMA_YAML = [
+  'type: object',
+  'required:',
+  '  - name',
+  'properties:',
+  '  name:',
+  '    type: string',
+].join('\n');
 
 describe('handleIsJson', () => {
   it('passes for valid JSON with no schema', () => {
@@ -39,18 +49,10 @@ describe('handleIsJson', () => {
   });
 
   it('validates against a YAML string schema', () => {
-    const schema = [
-      'type: object',
-      'required:',
-      '  - name',
-      'properties:',
-      '  name:',
-      '    type: string',
-    ].join('\n');
     const pass = handleIsJson(
       makeParams({
-        assertion: { type: 'is-json', value: schema },
-        renderedValue: schema as AssertionValue,
+        assertion: { type: 'is-json', value: NAME_SCHEMA_YAML },
+        renderedValue: NAME_SCHEMA_YAML as AssertionValue,
         outputString: '{"name": "promptfoo"}',
       }),
     );
@@ -58,8 +60,8 @@ describe('handleIsJson', () => {
 
     const fail = handleIsJson(
       makeParams({
-        assertion: { type: 'is-json', value: schema },
-        renderedValue: schema as AssertionValue,
+        assertion: { type: 'is-json', value: NAME_SCHEMA_YAML },
+        renderedValue: NAME_SCHEMA_YAML as AssertionValue,
         outputString: '{"other": 1}',
       }),
     );
@@ -121,18 +123,10 @@ describe('handleContainsJson', () => {
   });
 
   it('validates contained JSON against a YAML string schema', () => {
-    const schema = [
-      'type: object',
-      'required:',
-      '  - name',
-      'properties:',
-      '  name:',
-      '    type: string',
-    ].join('\n');
     const pass = handleContainsJson(
       makeParams({
-        assertion: { type: 'contains-json', value: schema },
-        renderedValue: schema as AssertionValue,
+        assertion: { type: 'contains-json', value: NAME_SCHEMA_YAML },
+        renderedValue: NAME_SCHEMA_YAML as AssertionValue,
         outputString: 'result: {"name": "promptfoo"}',
       }),
     );
@@ -140,8 +134,8 @@ describe('handleContainsJson', () => {
 
     const fail = handleContainsJson(
       makeParams({
-        assertion: { type: 'contains-json', value: schema },
-        renderedValue: schema as AssertionValue,
+        assertion: { type: 'contains-json', value: NAME_SCHEMA_YAML },
+        renderedValue: NAME_SCHEMA_YAML as AssertionValue,
         outputString: 'result: {"other": 1}',
       }),
     );

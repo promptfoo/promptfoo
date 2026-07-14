@@ -2243,260 +2243,45 @@ describe('trajectory assertions', () => {
         );
       });
 
-      it('strips a key declared with the "*" wildcard default regardless of its actual value', () => {
-        const wildcardTrace: TraceData = {
-          ...mockTraceData,
-          spans: [
-            {
-              spanId: 'span-wildcard-default',
-              name: 'tool.call',
-              startTime: 1000,
-              endTime: 1100,
-              attributes: {
-                'tool.name': 'orders',
-                'tool.arguments': '{"status":"Q","cursor":"eyJvZmZzZXQiOjQyfQ=="}',
-              },
-            },
-          ],
-        };
-        const params: AssertionParams = {
-          ...defaultParams,
-          assertionValueContext: { ...defaultParams.assertionValueContext, trace: wildcardTrace },
-          baseType: 'trajectory:tool-args-match',
-          assertion: {
-            type: 'trajectory:tool-args-match',
-            value: {
-              name: 'orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { cursor: '*' },
-            },
-          },
-          renderedValue: {
-            name: 'orders',
-            mode: 'exact',
-            args: { status: 'Q' },
-            defaults: { cursor: '*' },
-          },
-        };
-
-        const result = handleTrajectoryToolArgsMatch(params);
-        expect(result.pass).toBe(true);
-      });
-
-      it('passes the wildcard default no matter which value the tool call actually used', () => {
-        const runWithCursor = (cursorValue: unknown) => {
+      it('strips a literal "*" default only when the observed value is exactly "*"', () => {
+        // A default of "*" is an ordinary value compared with deep equality — it must not
+        // act as an any-value wildcard (#9842); use `ignore` to drop a key unconditionally.
+        const runWithFields = (fields: string) => {
           const trace: TraceData = {
             ...mockTraceData,
             spans: [
               {
-                spanId: 'span-wildcard-any-value',
+                spanId: 'literal-star-default',
                 name: 'tool.call',
                 startTime: 1000,
                 endTime: 1100,
                 attributes: {
-                  'tool.name': 'orders',
-                  'tool.arguments': JSON.stringify({ status: 'Q', cursor: cursorValue }),
+                  'tool.name': 'search_orders',
+                  'tool.arguments': JSON.stringify({ status: 'Q', fields }),
                 },
               },
             ],
           };
-          const params: AssertionParams = {
+          const value = {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { fields: '*' },
+          };
+          return handleTrajectoryToolArgsMatch({
             ...defaultParams,
             assertionValueContext: { ...defaultParams.assertionValueContext, trace },
             baseType: 'trajectory:tool-args-match',
-            assertion: {
-              type: 'trajectory:tool-args-match',
-              value: {
-                name: 'orders',
-                mode: 'exact',
-                args: { status: 'Q' },
-                defaults: { cursor: '*' },
-              },
-            },
-            renderedValue: {
-              name: 'orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { cursor: '*' },
-            },
-          };
-
-          return handleTrajectoryToolArgsMatch(params);
+            assertion: { type: 'trajectory:tool-args-match', value },
+            renderedValue: value,
+          } as AssertionParams);
         };
 
-        expect(runWithCursor('abc123').pass).toBe(true);
-        expect(runWithCursor(null).pass).toBe(true);
-        expect(runWithCursor(0).pass).toBe(true);
-        expect(runWithCursor({ page: 3 }).pass).toBe(true);
-      });
+        const stripped = runWithFields('*');
+        expect(stripped.pass).toBe(true);
+        expect(stripped.reason).toContain('Ignored default argument(s): fields');
 
-      it('passes when a wildcard-defaulted key is omitted from the actual call', () => {
-        const traceWithoutCursor: TraceData = {
-          ...mockTraceData,
-          spans: [
-            {
-              spanId: 'span-wildcard-omitted',
-              name: 'tool.call',
-              startTime: 1000,
-              endTime: 1100,
-              attributes: {
-                'tool.name': 'orders',
-                'tool.arguments': '{"status":"Q"}',
-              },
-            },
-          ],
-        };
-        const params: AssertionParams = {
-          ...defaultParams,
-          assertionValueContext: {
-            ...defaultParams.assertionValueContext,
-            trace: traceWithoutCursor,
-          },
-          baseType: 'trajectory:tool-args-match',
-          assertion: {
-            type: 'trajectory:tool-args-match',
-            value: {
-              name: 'orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { cursor: '*' },
-            },
-          },
-          renderedValue: {
-            name: 'orders',
-            mode: 'exact',
-            args: { status: 'Q' },
-            defaults: { cursor: '*' },
-          },
-        };
-
-        const result = handleTrajectoryToolArgsMatch(params);
-        expect(result.pass).toBe(true);
-      });
-
-      it('combines a wildcard default with a value-specific default in the same call', () => {
-        const combinedTrace: TraceData = {
-          ...mockTraceData,
-          spans: [
-            {
-              spanId: 'span-wildcard-combined',
-              name: 'tool.call',
-              startTime: 1000,
-              endTime: 1100,
-              attributes: {
-                'tool.name': 'orders',
-                'tool.arguments': '{"status":"Q","page_size":5,"cursor":"whatever-the-agent-sent"}',
-              },
-            },
-          ],
-        };
-        const params: AssertionParams = {
-          ...defaultParams,
-          assertionValueContext: { ...defaultParams.assertionValueContext, trace: combinedTrace },
-          baseType: 'trajectory:tool-args-match',
-          assertion: {
-            type: 'trajectory:tool-args-match',
-            value: {
-              name: 'orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { page_size: 5, cursor: '*' },
-            },
-          },
-          renderedValue: {
-            name: 'orders',
-            mode: 'exact',
-            args: { status: 'Q' },
-            defaults: { page_size: 5, cursor: '*' },
-          },
-        };
-
-        const result = handleTrajectoryToolArgsMatch(params);
-        expect(result.pass).toBe(true);
-      });
-
-      it('still fails exact mode on a value-specific default when only the wildcard key matches', () => {
-        const mismatchTrace: TraceData = {
-          ...mockTraceData,
-          spans: [
-            {
-              spanId: 'span-wildcard-mismatch',
-              name: 'tool.call',
-              startTime: 1000,
-              endTime: 1100,
-              attributes: {
-                'tool.name': 'orders',
-                'tool.arguments': '{"status":"Q","page_size":10,"cursor":"anything"}',
-              },
-            },
-          ],
-        };
-        const params: AssertionParams = {
-          ...defaultParams,
-          assertionValueContext: { ...defaultParams.assertionValueContext, trace: mismatchTrace },
-          baseType: 'trajectory:tool-args-match',
-          assertion: {
-            type: 'trajectory:tool-args-match',
-            value: {
-              name: 'orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { page_size: 5, cursor: '*' },
-            },
-          },
-          renderedValue: {
-            name: 'orders',
-            mode: 'exact',
-            args: { status: 'Q' },
-            defaults: { page_size: 5, cursor: '*' },
-          },
-        };
-
-        const result = handleTrajectoryToolArgsMatch(params);
-        expect(result.pass).toBe(false);
-      });
-
-      it('surfaces a wildcard-stripped key in the pass reason', () => {
-        const reasonTrace: TraceData = {
-          ...mockTraceData,
-          spans: [
-            {
-              spanId: 'span-wildcard-reason',
-              name: 'tool.call',
-              startTime: 1000,
-              endTime: 1100,
-              attributes: {
-                'tool.name': 'orders',
-                'tool.arguments': '{"status":"Q","cursor":"abc123"}',
-              },
-            },
-          ],
-        };
-        const params: AssertionParams = {
-          ...defaultParams,
-          assertionValueContext: { ...defaultParams.assertionValueContext, trace: reasonTrace },
-          baseType: 'trajectory:tool-args-match',
-          assertion: {
-            type: 'trajectory:tool-args-match',
-            value: {
-              name: 'orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { cursor: '*' },
-            },
-          },
-          renderedValue: {
-            name: 'orders',
-            mode: 'exact',
-            args: { status: 'Q' },
-            defaults: { cursor: '*' },
-          },
-        };
-
-        const result = handleTrajectoryToolArgsMatch(params);
-        expect(result.pass).toBe(true);
-        expect(result.reason).toContain('Ignored default argument(s): cursor');
+        expect(runWithFields('ssn,password').pass).toBe(false);
       });
     });
 
@@ -2545,6 +2330,21 @@ describe('trajectory assertions', () => {
           handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value))
             .pass,
         ).toBe(true);
+      });
+
+      it('drops an ignored key across varying value types', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['cursor'],
+        };
+
+        for (const cursor of ['eyJvZmZzZXQiOjQyfQ==', null, 0, { page: 3 }]) {
+          expect(
+            handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', cursor }, value)).pass,
+          ).toBe(true);
+        }
       });
 
       it('accepts a bare string ignore value', () => {

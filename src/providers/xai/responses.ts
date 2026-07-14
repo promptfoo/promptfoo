@@ -5,11 +5,19 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs } from '../shared';
-import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd, type XAICostConfig } from './chat';
+import {
+  calculateXAICost,
+  GROK_4_MODELS,
+  GROK_45_MODELS,
+  getXAICostInUsd,
+  hasXAICostOverrides,
+  type XAICostConfig,
+} from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -263,7 +271,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Reasoning configuration for Grok 4.3 or multi-agent models */
+  /** Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models */
   reasoning?: {
     effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
@@ -289,9 +297,9 @@ export interface XAIResponsesConfig extends XAICostConfig {
  * and interact with MCP servers.
  *
  * Usage:
+ *   xai:responses:grok-4.5
  *   xai:responses:grok-4.3
- *   xai:responses:grok-4-fast
- *   xai:responses:grok-4
+ *   xai:responses:grok-4.20-0309-reasoning
  */
 export class XAIResponsesProvider implements ApiProvider {
   modelName: string;
@@ -313,18 +321,22 @@ export class XAIResponsesProvider implements ApiProvider {
       modelName: this.modelName,
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        getXAICostInUsd(usage) ??
-        calculateXAICost(
-          modelName,
-          config || {},
-          usage?.input_tokens ?? usage?.prompt_tokens,
-          usage?.output_tokens ?? usage?.completion_tokens,
-          usage?.output_tokens_details?.reasoning_tokens ??
-            usage?.completion_tokens_details?.reasoning_tokens,
-          usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens,
-        ) ??
-        0,
+      costCalculator: (modelName, usage, config) => {
+        const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
+        return (
+          reportedCost ??
+          calculateXAICost(
+            modelName,
+            config || {},
+            usage?.input_tokens ?? usage?.prompt_tokens,
+            usage?.output_tokens ?? usage?.completion_tokens,
+            usage?.output_tokens_details?.reasoning_tokens ??
+              usage?.completion_tokens_details?.reasoning_tokens,
+            usage?.input_tokens_details?.cached_tokens ??
+              usage?.prompt_tokens_details?.cached_tokens,
+          )
+        );
+      },
     });
   }
 
@@ -434,11 +446,27 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.passthrough || {}),
     };
 
-    // Filter unsupported parameters for Grok-4 models
+    if (body.reasoning !== undefined) {
+      body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
+    }
+
+    // Filter unsupported parameters for Grok 4-family models
     if (GROK_4_MODELS.includes(this.modelName)) {
       delete body.presence_penalty;
       delete body.frequency_penalty;
       delete body.stop;
+    }
+
+    const reasoningEffort = body.reasoning?.effort;
+    if (
+      GROK_45_MODELS.has(this.modelName) &&
+      reasoningEffort !== undefined &&
+      !['low', 'medium', 'high'].includes(reasoningEffort)
+    ) {
+      throw new Error(
+        `xAI model ${this.modelName} does not support reasoning.effort ${JSON.stringify(reasoningEffort)}. ` +
+          'Use "low", "medium", or "high", or omit reasoning.effort to use the default "high".',
+      );
     }
 
     return {
@@ -578,9 +606,13 @@ export class XAIResponsesProvider implements ApiProvider {
     }
 
     // Use shared processor for consistent response handling
-    return this.processor.processResponseOutput(data, config, cached, {
+    const result = await this.processor.processResponseOutput(data, config, cached, {
       suppressReasoningOutput: Boolean(body.stream),
     });
+    if (cached) {
+      result.cost = 0;
+    }
+    return result;
   }
 
   private getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -98,7 +98,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": false,
+      "preset": "none",
       "complexity": {
         "noUselessConstructor": "error",
         "noUselessRename": "error",
@@ -184,7 +184,7 @@
         "noReExportAll": "off"
       },
       "a11y": {
-        "recommended": false,
+        "preset": "none",
         "useButtonType": "off"
       },
       "nursery": {
@@ -348,7 +348,7 @@
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
-          "recommended": false,
+          "preset": "none",
           "correctness": {
             "noUnusedImports": "off",
             "noUnusedVariables": "off",
