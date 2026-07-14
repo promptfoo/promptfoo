@@ -31,17 +31,13 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
 /**
  * Mark a metric-only result (and any nested component results a script
  * assertion returned) so downstream assertion pass/fail stats can exclude
- * them via their `assertion.metricOnly` filters.
+ * them via their `assertion.metricOnly` filters. Results with no assertion
+ * object (e.g. a failed grader) still get a marker stub — downstream filters
+ * only read `assertion?.metricOnly` / `assertion?.type`, hence the cast.
  */
 function withMetricOnlyMarkers(result: GradingResult): GradingResult {
   return {
     ...result,
-    // Always stamp the marker, even when the result has no assertion object
-    // (e.g. a model-graded metricOnly assertion whose grader failed) — spreading
-    // undefined yields `{ metricOnly: true }`, which every downstream filter
-    // tolerates (they read `assertion?.metricOnly` / `assertion?.type`). This
-    // function is only called for metricOnly results. The cast covers the
-    // grader-failure case where no `type` is present.
     assertion: { ...result.assertion, metricOnly: true } as GradingResult['assertion'],
     ...(result.componentResults && {
       componentResults: result.componentResults.map((child) => ({

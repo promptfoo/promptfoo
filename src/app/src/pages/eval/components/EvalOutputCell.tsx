@@ -13,6 +13,7 @@ import {
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
+  countedComponentResults,
   type EvaluateTableOutput,
   type GradingResult,
   type ImageOutput,
@@ -234,13 +235,9 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
-  // Metric-only assertions don't participate in pass/fail, so their outcomes
-  // stay out of the aggregate reason lists (they remain visible in the
-  // per-assertion details).
-  const countedResults =
-    output.gradingResult?.componentResults?.filter(
-      (result) => result && !result.assertion?.metricOnly,
-    ) ?? [];
+  // Metric-only outcomes stay out of the aggregate reason lists; they remain
+  // visible in the per-assertion details.
+  const countedResults = countedComponentResults(output.gradingResult?.componentResults);
 
   const failReasons = countedResults
     .filter((result) => !result.pass)
@@ -613,13 +610,10 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   let passCount = 0;
   let failCount = 0;
 
-  // Metric-only assertions don't participate in pass/fail, so they're excluded
-  // from the aggregate pill counts. If every assertion is metric-only, fall
-  // through to the overall grading result below.
-  const componentResults = output.gradingResult?.componentResults?.filter(
-    (result) => !result?.assertion?.metricOnly,
-  );
-  if (componentResults?.length) {
+  // Metric-only assertions are excluded from the aggregate pill counts. If
+  // every assertion is metric-only, fall through to the overall grading result.
+  const componentResults = countedComponentResults(output.gradingResult?.componentResults);
+  if (componentResults.length) {
     componentResults.forEach((result) => {
       if (result?.pass) {
         passCount++;

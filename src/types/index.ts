@@ -592,6 +592,19 @@ export function isGradingResult(result: any): result is GradingResult {
   );
 }
 
+/**
+ * Component results that participate in pass/fail: everything except
+ * metric-only assertions, which only emit named scores. Use this wherever
+ * assertion outcomes are aggregated into pass/fail stats or reasons.
+ */
+export function countedComponentResults(
+  componentResults: (GradingResult | null | undefined)[] | null | undefined,
+): GradingResult[] {
+  return (componentResults ?? []).filter(
+    (result): result is GradingResult => Boolean(result) && !result?.assertion?.metricOnly,
+  );
+}
+
 export const BaseAssertionTypesSchema = z.enum([
   'agent-rubric',
   'answer-relevance',

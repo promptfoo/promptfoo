@@ -8,7 +8,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
-import { ResultFailureReason } from '../types/index';
+import { countedComponentResults, ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
 import {
   filterProviders,
@@ -259,15 +259,12 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           });
         }
 
-        // Update assertion counts. Metric-only assertions don't participate
-        // in pass/fail, so they're excluded from assertion pass/fail stats.
-        if (result.gradingResult?.componentResults) {
-          const countedAssertResults = result.gradingResult.componentResults.filter(
-            (r) => !r.assertion?.metricOnly,
-          );
-          metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
-          metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
-        }
+        // Update assertion counts
+        const countedAssertResults = countedComponentResults(
+          result.gradingResult?.componentResults,
+        );
+        metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
+        metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
 
         // Update token usage
         if (result.response?.tokenUsage) {

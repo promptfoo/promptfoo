@@ -838,16 +838,11 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
+      // Give a metric-only set result a pseudo-assertion for addResult to
+      // stamp `metricOnly` onto, so stored stats filters can exclude it.
+      // 'assert-set' is not an AssertionType member, hence the cast.
       result: metricOnly
-        ? {
-            ...result,
-            // Mark the stored set-level result so assertion pass/fail stats
-            // (evaluator, retry recompute, filtered SQL metrics) exclude it
-            // via their `assertion.metricOnly` filters. 'assert-set' is not a
-            // member of AssertionType, so this needs a cast; consumers only
-            // read the plain JSON shape at runtime.
-            assertion: { type: 'assert-set', metricOnly: true } as unknown as Assertion,
-          }
+        ? { ...result, assertion: { type: 'assert-set' } as unknown as Assertion }
         : result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,

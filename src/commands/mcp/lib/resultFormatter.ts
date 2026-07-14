@@ -1,4 +1,7 @@
-import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+import {
+  countedComponentResults,
+  ResultFailureReason as ResultFailureReasonEnum,
+} from '../../../types/index';
 import { truncateText } from './utils';
 
 import type {
@@ -126,9 +129,7 @@ function formatSingleResult(
   let assertions: FormattedEvalResult['assertions'] = null;
   if (result.gradingResult) {
     const componentResults = result.gradingResult.componentResults || [];
-    // Metric-only assertions don't participate in pass/fail, so they're
-    // excluded from assertion pass/fail stats.
-    const countedResults = componentResults.filter((r) => !r.assertion?.metricOnly);
+    const countedResults = countedComponentResults(componentResults);
     assertions = {
       // Derived from countedResults so the trio reconciles: metric-only
       // assertions are excluded from all three counts, not just passed/failed.

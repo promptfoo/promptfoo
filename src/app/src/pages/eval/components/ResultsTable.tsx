@@ -839,18 +839,14 @@ export function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    // Metric-only assertions don't participate in pass/fail or the score, so
-    // they're excluded when recomputing the row after removing a manual rating.
     const countedResults = componentResults.filter((result) => !result.assertion?.metricOnly);
     if (countedResults.length > 0) {
       finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
       finalScore = averageComponentResultScore(countedResults, finalScore);
     } else if (componentResults.length > 0) {
-      // Every remaining assertion is metric-only. Mirror the server-side
-      // aggregation so clearing the rating doesn't leave the stale manual
-      // override in place: the aggregate score is 0 and, with nothing left to
-      // fail, the test passes unless a numeric test-level threshold demands
-      // otherwise (pass = score >= threshold, same gate as AssertionsResult).
+      // Every remaining assertion is metric-only: mirror the server-side
+      // aggregate (score 0; pass unless a numeric test-level threshold demands
+      // more — same gate as AssertionsResult, honoring threshold 0).
       const threshold = existingOutput.testCase?.threshold;
       finalScore = 0;
       finalPass = typeof threshold === 'number' && !Number.isNaN(threshold) ? threshold <= 0 : true;

@@ -56,6 +56,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  countedComponentResults,
   type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
@@ -3287,11 +3288,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    // Metric-only assertions don't participate in pass/fail, so they're
-    // excluded from assertion pass/fail stats.
-    const countedAssertResults = (row.gradingResult?.componentResults ?? []).filter(
-      (r) => !r.assertion?.metricOnly,
-    );
+    const countedAssertResults = countedComponentResults(row.gradingResult?.componentResults);
     metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
     metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
     metrics.totalLatencyMs += row.latencyMs || 0;
