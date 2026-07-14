@@ -1466,6 +1466,205 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
+    it('preserves preceding assistant messages when reconstructing an indexed refusal', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE CONTEXT"}]}}',
+        '',
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"I cannot help with that."}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE CONTEXT"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({ content: [expect.objectContaining({ text: 'SAFE CONTEXT' })] }),
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
+          ],
+        }),
+      ]);
+    });
+
+    it('preserves every indexed refusal when a stream ends before its terminal response', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"First refusal."}',
+        '',
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"Second refusal."}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'refusal', refusal: 'First refusal.' })],
+        }),
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'refusal', refusal: 'Second refusal.' })],
+        }),
+      ]);
+    });
+
+    it('does not duplicate finalized refusal parts when the completed output item arrives', async () => {
+      const body = [
+        'event: response.content_part.done',
+        'data: {"type":"response.content_part.done","output_index":0,"content_index":0,"part":{"type":"refusal","refusal":"First reason."}}',
+        '',
+        'event: response.content_part.done',
+        'data: {"type":"response.content_part.done","output_index":0,"content_index":1,"part":{"type":"refusal","refusal":"Second reason."}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"First reason."},{"type":"refusal","refusal":"Second reason."}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toHaveLength(1);
+      expect(result.output[0].content).toEqual([
+        expect.objectContaining({ type: 'refusal', refusal: 'First reason.' }),
+        expect.objectContaining({ type: 'refusal', refusal: 'Second reason.' }),
+      ]);
+    });
+
+    it.each([
+      true,
+      false,
+    ])('preserves finalized tool calls when a stream closes early (assistant text: %s)', async (withAssistantText) => {
+      const events = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
+        '',
+        ...(withAssistantText
+          ? [
+              'event: response.output_item.done',
+              'data: {"type":"response.output_item.done","output_index":1,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}}',
+              '',
+            ]
+          : []),
+      ];
+
+      const result = await readResponsesStream(new Response(events.join('\n')), 'test', {
+        debug: vi.fn(),
+      });
+
+      expect(result.output[0]).toEqual(
+        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
+      );
+      if (withAssistantText) {
+        expect(result.output[1]).toEqual(
+          expect.objectContaining({ content: [expect.objectContaining({ text: 'done' })] }),
+        );
+      }
+    });
+
+    it('preserves output-index order when a finalized tool call follows assistant text', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"before tool"}]}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({ content: [expect.objectContaining({ text: 'before tool' })] }),
+        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
+      ]);
+    });
+
+    it('preserves finalized tool calls when an incomplete terminal response reports a safety decision', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
+      ]);
+    });
+
+    it('preserves finalized tool calls when earlier unindexed text cannot be assigned', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","delta":"leading text"}',
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":" answer"}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
+        ]),
+      );
+    });
+
+    it('bounds aggregate finalized tool and refusal items on a truncated stream', async () => {
+      const events = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+      ];
+      for (let index = 0; index < 512; index++) {
+        events.push(
+          'event: response.output_item.done',
+          `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: index, item: { type: 'function_call', name: 'lookup', arguments: '{}', call_id: `call_${index}` } })}`,
+          '',
+        );
+      }
+      for (let index = 512; index < 1_025; index++) {
+        events.push(
+          'event: response.refusal.done',
+          `data: ${JSON.stringify({ type: 'response.refusal.done', output_index: index, content_index: 0, refusal: `Refusal ${index}` })}`,
+          '',
+        );
+      }
+
+      const result = await readResponsesStream(new Response(events.join('\n')), 'test', {
+        debug: vi.fn(),
+      });
+
+      expect(result.output.length).toBeLessThanOrEqual(1_024);
+      expect(result.output[0]).toEqual(expect.objectContaining({ type: 'function_call' }));
+      expect(result.output.at(-1)).toEqual(expect.objectContaining({ type: 'message' }));
+    });
+
     it.each([
       { name: 'object', content: { type: 'output_text', text: 'partial' } },
       { name: 'string', content: 'partial' },

@@ -19,6 +19,11 @@ type ResponsesStreamLogger = {
   debug(message: string, context?: Record<string, unknown>): unknown;
 };
 
+type FinalizedStreamOutputItem = {
+  outputIndex?: number;
+  item: any;
+};
+
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
@@ -55,6 +60,15 @@ function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
 
 function getInvalidOutputTextKey(event: ResponsesStreamEvent): string {
   return `${String(event.output_index ?? 'missing')}:${String(event.content_index ?? 0)}`;
+}
+
+function getValidOutputIndex(event: ResponsesStreamEvent): number | undefined {
+  return typeof event.output_index === 'number' &&
+    Number.isInteger(event.output_index) &&
+    event.output_index >= 0 &&
+    event.output_index <= MAX_STREAM_OUTPUT_INDEX
+    ? event.output_index
+    : undefined;
 }
 
 function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEvent[] {
@@ -137,6 +151,63 @@ function hasTerminalSafetyDecision(response: any): boolean {
               item.content.some((content: any) => content?.type === 'refusal')))),
     )
   );
+}
+
+function mergeFinalizedStreamOutput(
+  output: any[] | undefined,
+  finalizedNonMessageItems: FinalizedStreamOutputItem[],
+  finalizedRefusalItems: FinalizedStreamOutputItem[],
+): any[] {
+  const refusalIndexes = new Set(
+    finalizedRefusalItems
+      .map(({ outputIndex }) => outputIndex)
+      .filter((outputIndex): outputIndex is number => outputIndex !== undefined),
+  );
+  const hasUnindexedRefusal = finalizedRefusalItems.some(
+    ({ outputIndex }) => outputIndex === undefined,
+  );
+  const entries = (Array.isArray(output) ? output : [])
+    .map((item, outputIndex) => ({ item, outputIndex }))
+    .filter(
+      ({ item, outputIndex }) =>
+        item !== undefined &&
+        !(item?.type === 'message' && (hasUnindexedRefusal || refusalIndexes.has(outputIndex))),
+    );
+
+  for (const finalizedItem of finalizedNonMessageItems) {
+    const identity = finalizedItem.item?.id ?? finalizedItem.item?.call_id;
+    const alreadyPresent = entries.some(({ item, outputIndex }) => {
+      if (
+        finalizedItem.outputIndex !== undefined &&
+        outputIndex === finalizedItem.outputIndex &&
+        item?.type === finalizedItem.item?.type
+      ) {
+        return true;
+      }
+      return (
+        typeof identity === 'string' &&
+        item?.type === finalizedItem.item?.type &&
+        (item?.id === identity || item?.call_id === identity)
+      );
+    });
+    if (!alreadyPresent) {
+      entries.push(finalizedItem);
+    }
+  }
+
+  entries.push(...finalizedRefusalItems);
+  const indexedOutput: any[] = [];
+  const appendedOutput: any[] = [];
+  for (const { item, outputIndex } of entries.sort(
+    (left, right) => (left.outputIndex ?? Infinity) - (right.outputIndex ?? Infinity),
+  )) {
+    if (outputIndex !== undefined && indexedOutput[outputIndex] === undefined) {
+      indexedOutput[outputIndex] = item;
+    } else {
+      appendedOutput.push(item);
+    }
+  }
+  return [...indexedOutput, ...appendedOutput];
 }
 
 function recoverIncompleteOutput(
@@ -314,7 +385,8 @@ export async function readResponsesStream(
   const invalidlyIndexedOutputTextByContent = new Map<string, string>();
   const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
-  let finalizedRefusalItem: any;
+  const finalizedNonMessageItems = new Map<string, FinalizedStreamOutputItem>();
+  const finalizedRefusalItems = new Map<string, FinalizedStreamOutputItem>();
 
   const appendOutputText = (text: string): void => {
     if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
@@ -329,7 +401,9 @@ export async function readResponsesStream(
     existing ||
     outputTextByContent.size +
       invalidlyIndexedOutputTextByContent.size +
-      completedUnindexedOutputTexts.length <
+      completedUnindexedOutputTexts.length +
+      finalizedNonMessageItems.size +
+      finalizedRefusalItems.size <
       MAX_STREAM_OUTPUT_KEYS;
 
   const processOutputTextEvent = (event: ResponsesStreamEvent) => {
@@ -515,7 +589,36 @@ export async function readResponsesStream(
       latestResponse = event;
     }
 
-    finalizedRefusalItem = getOutputRefusalItem(event) ?? finalizedRefusalItem;
+    const finalizedRefusalItem = getOutputRefusalItem(event);
+    if (finalizedRefusalItem) {
+      const outputIndex = getValidOutputIndex(event);
+      if (event.type === 'response.output_item.done' && outputIndex !== undefined) {
+        for (const [previousKey, previousItem] of finalizedRefusalItems) {
+          if (previousItem.outputIndex === outputIndex) {
+            finalizedRefusalItems.delete(previousKey);
+          }
+        }
+      }
+      const key = getOutputTextKey(event) ?? getInvalidOutputTextKey(event);
+      if (hasStreamOutputCapacity(finalizedRefusalItems.has(key))) {
+        finalizedRefusalItems.set(key, {
+          outputIndex,
+          item: finalizedRefusalItem,
+        });
+      }
+    }
+    if (
+      event.type === 'response.output_item.done' &&
+      event.item?.type !== 'message' &&
+      event.item
+    ) {
+      const outputIndex = getValidOutputIndex(event);
+      const item = event.item as any;
+      const key = `${String(event.output_index ?? 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
+      if (hasStreamOutputCapacity(finalizedNonMessageItems.has(key))) {
+        finalizedNonMessageItems.set(key, { outputIndex, item });
+      }
+    }
 
     if (event.type === 'response.output_text.delta') {
       processOutputTextEvent(event);
@@ -552,15 +655,29 @@ export async function readResponsesStream(
     reader.releaseLock();
   }
 
+  const finalizedStreamOutput = mergeFinalizedStreamOutput(
+    latestResponse?.output,
+    Array.from(finalizedNonMessageItems.values()),
+    Array.from(finalizedRefusalItems.values()),
+  );
+
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
-    return latestResponse;
+    if (finalizedNonMessageItems.size === 0) {
+      return latestResponse;
+    }
+    const safeOutput = mergeFinalizedStreamOutput(
+      latestResponse.output,
+      Array.from(finalizedNonMessageItems.values()),
+      [],
+    );
+    return { ...latestResponse, output: safeOutput.filter((item) => item !== undefined) };
   }
 
-  if (finalizedRefusalItem) {
-    const retainedOutput = Array.isArray(latestResponse?.output)
-      ? latestResponse.output.filter((item: any) => item?.type !== 'message')
-      : [];
-    return { ...(latestResponse ?? {}), output: [...retainedOutput, finalizedRefusalItem] };
+  if (finalizedRefusalItems.size > 0) {
+    return {
+      ...(latestResponse ?? {}),
+      output: finalizedStreamOutput.filter((item) => item !== undefined),
+    };
   }
 
   if (
@@ -568,13 +685,15 @@ export async function readResponsesStream(
     (outputText ||
       finalizedOutputTextKeys.size > 0 ||
       completedUnindexedOutputTexts.length > 0 ||
-      finalizedInvalidOutputTextKeys.size > 0)
+      finalizedInvalidOutputTextKeys.size > 0 ||
+      finalizedNonMessageItems.size > 0)
   ) {
     if (
       unassignedUnindexedOutputText &&
       (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0) &&
       invalidlyIndexedOutputTextByContent.size === 0 &&
-      finalizedOutputTextKeys.size === 0
+      finalizedOutputTextKeys.size === 0 &&
+      finalizedNonMessageItems.size === 0
     ) {
       return {
         ...latestResponse,
@@ -594,7 +713,7 @@ export async function readResponsesStream(
       ([key, text]) => (finalizedInvalidOutputTextKeys.has(key) ? text : undefined),
     ).filter((text): text is string => text !== undefined);
     const recoveredOutput = recoverIncompleteOutput(
-      latestResponse.output,
+      finalizedStreamOutput,
       outputTextByContent,
       [
         ...completedUnindexedOutputTexts,
@@ -605,8 +724,7 @@ export async function readResponsesStream(
       finalizedOutputTextKeys,
       completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
     );
-    const output =
-      recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
+    const output = (recoveredOutput ?? finalizedStreamOutput).filter((item) => item !== undefined);
     let appendedInvalidOutput = false;
     const terminalTextCounts = new Map<string, number>();
     for (const text of getTerminalOutputTexts(output)) {
@@ -628,7 +746,7 @@ export async function readResponsesStream(
       });
       appendedInvalidOutput = true;
     }
-    if (recoveredOutput || appendedInvalidOutput) {
+    if (recoveredOutput || appendedInvalidOutput || finalizedNonMessageItems.size > 0) {
       return { ...latestResponse, output };
     }
   }
@@ -662,13 +780,18 @@ export async function readResponsesStream(
   }
 
   if (latestResponse) {
-    return latestResponse;
+    return finalizedNonMessageItems.size > 0
+      ? {
+          ...latestResponse,
+          output: finalizedStreamOutput.filter((item) => item !== undefined),
+        }
+      : latestResponse;
   }
 
   if (outputText) {
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
     const recoveredOutput = recoverIncompleteOutput(
-      [],
+      finalizedStreamOutput,
       outputTextByContent,
       [
         ...completedUnindexedOutputTexts,
@@ -677,7 +800,7 @@ export async function readResponsesStream(
       true,
       finalizedOutputTextKeys,
     );
-    const output = recoveredOutput ?? [];
+    const output = (recoveredOutput ?? finalizedStreamOutput).filter((item) => item !== undefined);
     for (const text of invalidlyIndexedOutputTextByContent.values()) {
       output.push({
         type: 'message',
@@ -698,6 +821,10 @@ export async function readResponsesStream(
         },
       ],
     };
+  }
+
+  if (finalizedStreamOutput.length > 0) {
+    return { output: finalizedStreamOutput.filter((item) => item !== undefined) };
   }
 
   throw new Error(`${providerName} streaming response did not include output content`);
