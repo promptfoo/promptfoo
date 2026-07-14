@@ -70,10 +70,9 @@ export class TokenUsageTracker {
       const rawTokenUsage = response.tokenUsage;
       if (rawTokenUsage) {
         const parsedTokenUsage = BaseTokenUsageSchema.safeParse(rawTokenUsage);
-        if (!parsedTokenUsage.success) {
-          return;
+        if (parsedTokenUsage.success) {
+          tokenUsage = parsedTokenUsage.data;
         }
-        tokenUsage = parsedTokenUsage.data;
       }
     } catch {
       return;

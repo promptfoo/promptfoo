@@ -34,6 +34,7 @@ import {
 } from '../services/redteamTestCaseGenerationService';
 import type { Request, Response } from 'express';
 
+import type { ApiProvider } from '../../types';
 import type { TokenUsage } from '../../types/shared';
 
 export const redteamRouter = Router();
@@ -127,7 +128,11 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyTestCases = await strategyFactory.action(
           testCases as TestCaseWithPlugin[],
           injectVar,
-          strategy.config || {},
+          {
+            ...(strategy.config || {}),
+            __wrapGenerationProvider: (provider: ApiProvider) =>
+              trackGenerationTokenUsage(provider, generationTokenUsage),
+          },
           strategy.id,
         );
 

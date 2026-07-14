@@ -148,6 +148,48 @@ export async function readResponsesStream(
   const outputTextByContent = new Map<string, string>();
   let currentOutputTextKey: string | undefined;
   let pendingUnindexedOutputText = '';
+  let invalidlyIndexedOutputText = '';
+  let currentOutputIndexIsInvalid = false;
+
+  const processOutputTextEvent = (event: ResponsesStreamEvent) => {
+    const delta = getOutputTextDelta(event);
+    if (!delta) {
+      return;
+    }
+
+    outputText += delta;
+    const key = getOutputTextKey(event);
+    if (key) {
+      outputTextByContent.set(
+        key,
+        (outputTextByContent.get(key) ?? '') + pendingUnindexedOutputText + delta,
+      );
+      currentOutputTextKey = key;
+      pendingUnindexedOutputText = '';
+      currentOutputIndexIsInvalid = false;
+      return;
+    }
+    if (event.output_index !== undefined || event.content_index !== undefined) {
+      invalidlyIndexedOutputText += pendingUnindexedOutputText + delta;
+      currentOutputTextKey = undefined;
+      pendingUnindexedOutputText = '';
+      currentOutputIndexIsInvalid = true;
+      return;
+    }
+    if (currentOutputIndexIsInvalid) {
+      invalidlyIndexedOutputText += delta;
+      return;
+    }
+    if (currentOutputTextKey) {
+      outputTextByContent.set(
+        currentOutputTextKey,
+        (outputTextByContent.get(currentOutputTextKey) ?? '') + delta,
+      );
+      return;
+    }
+
+    pendingUnindexedOutputText += delta;
+  };
 
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
@@ -170,26 +212,7 @@ export async function readResponsesStream(
     }
 
     if (event.type === 'response.output_text.delta') {
-      const delta = getOutputTextDelta(event);
-      if (delta) {
-        outputText += delta;
-        const key = getOutputTextKey(event);
-        if (key) {
-          outputTextByContent.set(
-            key,
-            (outputTextByContent.get(key) ?? '') + pendingUnindexedOutputText + delta,
-          );
-          currentOutputTextKey = key;
-          pendingUnindexedOutputText = '';
-        } else if (currentOutputTextKey) {
-          outputTextByContent.set(
-            currentOutputTextKey,
-            (outputTextByContent.get(currentOutputTextKey) ?? '') + delta,
-          );
-        } else {
-          pendingUnindexedOutputText += delta;
-        }
-      }
+      processOutputTextEvent(event);
     }
   };
 
@@ -218,6 +241,20 @@ export async function readResponsesStream(
       outputText,
       outputTextByContent,
     );
+    if (invalidlyIndexedOutputText) {
+      return {
+        ...latestResponse,
+        output: [
+          ...(recoveredOutput ??
+            (Array.isArray(latestResponse.output) ? latestResponse.output : [])),
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: invalidlyIndexedOutputText }],
+          },
+        ],
+      };
+    }
     if (recoveredOutput) {
       return { ...latestResponse, output: recoveredOutput };
     }

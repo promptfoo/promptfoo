@@ -16,6 +16,7 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
@@ -487,6 +488,63 @@ describe('Redteam Routes', () => {
           cached: 0,
           numRequests: 2,
         });
+      });
+
+      it('includes provider usage from a generation-time strategy', async () => {
+        const pluginCallApi = vi.fn().mockResolvedValue({
+          output: 'Prompt: generated test prompt',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        });
+        const strategyCallApi = vi.fn().mockResolvedValue({
+          output: 'strategy output',
+          tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+        });
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'plugin-provider',
+          callApi: pluginCallApi,
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate test');
+            return [{ vars: { query: 'test' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyFindSpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: vi.fn().mockImplementation(async (testCases, _injectVar, config) => {
+            const provider = config.__wrapGenerationProvider({
+              id: () => 'strategy-provider',
+              callApi: strategyCallApi,
+            });
+            await provider.callApi('transform test');
+            return testCases;
+          }),
+        } as any);
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'harmful:hate', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+            });
+
+          expect(response.status).toBe(200);
+          expect(pluginCallApi).toHaveBeenCalledTimes(1);
+          expect(strategyCallApi).toHaveBeenCalledTimes(1);
+          expect(response.body.tokenUsage).toEqual({
+            total: 12,
+            prompt: 7,
+            completion: 5,
+            cached: 0,
+            numRequests: 2,
+          });
+        } finally {
+          strategyFindSpy.mockRestore();
+        }
       });
     });
 
