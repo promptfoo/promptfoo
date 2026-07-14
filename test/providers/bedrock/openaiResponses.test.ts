@@ -858,6 +858,100 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('SAFE\nWRONG-ITEM');
     });
 
+    it('does not duplicate oversized-index text already present in the terminal output', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SAFE"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":1000000000,"content_index":0,"delta":"WRONG"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_duplicate_invalid',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE' }],
+                },
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'WRONG' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('SAFE\nWRONG');
+    });
+
+    it('preserves unindexed deltas when an incomplete response has multiple text outputs', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"first remainder"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"second remainder"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_unindexed_multiple',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'first ' }],
+                },
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'second ' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('first \nsecond \nfirst remaindersecond remainder');
+    });
+
     it.each(
       GPT_5_6_MODELS,
     )('preserves interleaved output boundaries in an incomplete response for %s', async (modelId) => {

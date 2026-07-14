@@ -2,6 +2,7 @@ import { createHash, createHmac } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
+import { getEnvOverrides } from '../../envOverrides';
 import logger from '../../logger';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
@@ -24,23 +25,41 @@ import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
  * gateway/proxy secrets) off foreign hosts.
  */
 export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
-  const suppressed: Record<string, null> = {};
-  // The SDK reads the process environment directly. Config-level env
-  // overrides must not mask headers that the SDK will still attach.
-  const customHeadersEnv = process.env.ANTHROPIC_CUSTOM_HEADERS;
-  if (!customHeadersEnv) {
-    return suppressed;
-  }
-  for (const line of customHeadersEnv.split('\n')) {
+  return Object.fromEntries(
+    Object.keys(parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS)).map((name) => [
+      name,
+      null,
+    ]),
+  );
+}
+
+function parseAnthropicCustomHeaders(value: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of value?.split('\n') ?? []) {
     const colon = line.indexOf(':');
     if (colon >= 0) {
       const name = line.substring(0, colon).trim();
       if (name) {
-        suppressed[name] = null;
+        headers[name] = line.substring(colon + 1).trim();
       }
     }
   }
-  return suppressed;
+  return headers;
+}
+
+function getAnthropicCustomHeaderOverrides(
+  env: EnvOverrides | undefined,
+): Record<string, string | null> {
+  const customHeaders =
+    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  if (customHeaders === undefined) {
+    return {};
+  }
+
+  return {
+    ...getAnthropicEnvHeaderSuppressions(),
+    ...parseAnthropicCustomHeaders(customHeaders),
+  };
 }
 
 /**
@@ -210,12 +229,19 @@ export class AnthropicGenericProvider implements ApiProvider {
       }
     }
 
+    const clientDefaultHeaders = {
+      ...getAnthropicCustomHeaderOverrides(this.env),
+      ...defaultHeaders,
+    };
+
     this.anthropic = new Anthropic(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
-        ...(Object.keys(defaultHeaders).length > 0 ? { defaultHeaders } : {}),
+        ...(Object.keys(clientDefaultHeaders).length > 0
+          ? { defaultHeaders: clientDefaultHeaders }
+          : {}),
       }),
     );
     this.id = id ? () => id : this.id;

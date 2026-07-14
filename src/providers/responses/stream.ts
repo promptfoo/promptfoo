@@ -47,6 +47,23 @@ function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
   return `${event.output_index}:${contentIndex}`;
 }
 
+function getTerminalOutputText(output: any[] | undefined): string {
+  if (!Array.isArray(output)) {
+    return '';
+  }
+
+  return output
+    .flatMap((item: any) =>
+      item?.type === 'message' && Array.isArray(item.content)
+        ? item.content
+            .filter((content: any) => content?.type === 'output_text')
+            .map((content: any) => (typeof content.text === 'string' ? content.text : ''))
+        : [],
+    )
+    .filter(Boolean)
+    .join('\n');
+}
+
 function recoverIncompleteOutput(
   output: any[] | undefined,
   outputText: string,
@@ -66,6 +83,20 @@ function recoverIncompleteOutput(
         )
       : [],
   );
+  if (
+    outputTextByContent.size === 0 &&
+    terminalTextLocations.length > 1 &&
+    !getTerminalOutputText(recoveredOutput).includes(outputText)
+  ) {
+    return [
+      ...recoveredOutput,
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: outputText }],
+      },
+    ];
+  }
   const streamedTexts =
     outputTextByContent.size > 0
       ? Array.from(outputTextByContent, ([key, text]) => {
@@ -242,11 +273,15 @@ export async function readResponsesStream(
       outputTextByContent,
     );
     if (invalidlyIndexedOutputText) {
+      const output =
+        recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
+      if (getTerminalOutputText(output).includes(invalidlyIndexedOutputText)) {
+        return { ...latestResponse, output };
+      }
       return {
         ...latestResponse,
         output: [
-          ...(recoveredOutput ??
-            (Array.isArray(latestResponse.output) ? latestResponse.output : [])),
+          ...output,
           {
             type: 'message',
             role: 'assistant',
