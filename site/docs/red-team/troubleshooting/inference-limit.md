@@ -84,7 +84,7 @@ redteam:
   provider: file://./custom-redteam-grader-provider.ts
 
   # OR use a built-in provider for grading
-  # provider: openai:gpt-4  # Use GPT-4 to grade results
+  # provider: openai:gpt-5.6  # Use GPT-5.6 to grade results
 
   # Remote generation (open-source)
   numTests: 10
@@ -99,7 +99,7 @@ redteam:
 Using this configuration, the flow would be:
 
 1. Promptfoo generates red team probes (strategies/plugins)
-2. Target system (openai:gpt-4) responds to each probe
+2. Target system (openai:gpt-5.6) responds to each probe
 3. Your custom `redteam.provider` grades each response
 
 ## Enterprise Solutions
