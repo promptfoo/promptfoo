@@ -29,6 +29,13 @@ type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['
 /** GA region for the OpenAI frontier models on Bedrock; used when none is configured. */
 export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 
+/**
+ * Launch Regions for the GPT-5.6 tiers, verified live against the mantle model catalog
+ * (`GET /v1/models`) on 2026-07-13. AWS expands availability over time without notice —
+ * gpt-5.4/gpt-5.5 later became servable in us-east-1 — so keep this table in sync with the
+ * catalog: a stale entry hard-blocks a Region that actually serves the model. An explicit
+ * `config.apiBaseUrl` bypasses this check.
+ */
 const BEDROCK_GPT_5_6_REGIONS: Record<string, readonly string[]> = {
   'openai.gpt-5.6-sol': ['us-east-1', 'us-east-2'],
   'openai.gpt-5.6-terra': ['us-east-1', 'us-east-2', 'us-west-2'],

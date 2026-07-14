@@ -1041,8 +1041,8 @@ APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatic
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`)
 - **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`)
-- **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-2`)
-- **`openai.gpt-5.4`**: Earlier frontier model (`us-east-2`, `us-west-2`)
+- **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
+- **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
 
 The frontier models are served only through Bedrock's **OpenAI-compatible Responses API**
 on the regional mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) —

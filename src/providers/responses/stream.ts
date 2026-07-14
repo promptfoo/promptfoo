@@ -75,7 +75,11 @@ export async function readResponsesStream(
     }
 
     if (event.type === 'response.output_text.delta') {
-      outputText += event.delta ?? event.output_text?.delta ?? '';
+      if (typeof event.delta === 'string') {
+        outputText += event.delta;
+      } else if (typeof event.output_text?.delta === 'string') {
+        outputText += event.output_text.delta;
+      }
     }
   };
 
