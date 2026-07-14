@@ -10,14 +10,14 @@ import {
 } from './openai/codex-app-server';
 import { providerRegistry } from './providerRegistry';
 
+import type { EnvOverrides } from '../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../types/index';
 import type { CodexAppServerConfig } from './openai/codex-app-server';
-
-type CodexAppServerProviderOptions = NonNullable<
-  ConstructorParameters<typeof OpenAICodexAppServerProvider>[0]
->;
-type CodexAppServerCallContext = Parameters<OpenAICodexAppServerProvider['callApi']>[1];
-type CodexAppServerCallOptions = Parameters<OpenAICodexAppServerProvider['callApi']>[2];
-type CodexAppServerResponse = Awaited<ReturnType<OpenAICodexAppServerProvider['callApi']>>;
 
 const MAX_INLINE_IMAGE_CHARS = 5_000_000;
 
@@ -42,7 +42,7 @@ export interface OpenInterpreterConfig extends Omit<CodexAppServerConfig, 'codex
 interface OpenInterpreterProviderOptions {
   id?: string;
   config?: OpenInterpreterConfig;
-  env?: CodexAppServerProviderOptions['env'];
+  env?: EnvOverrides;
 }
 
 interface ChatMessage {
@@ -278,9 +278,9 @@ function normalizePrompt(
   return { prompt: JSON.stringify(parsed) };
 }
 
-export class OpenInterpreterProvider {
+export class OpenInterpreterProvider implements ApiProvider {
   readonly config: OpenInterpreterConfig;
-  readonly env?: CodexAppServerProviderOptions['env'];
+  readonly env?: EnvOverrides;
 
   private readonly providerId: string;
   private readonly delegate: OpenAICodexAppServerProvider;
@@ -336,9 +336,9 @@ export class OpenInterpreterProvider {
 
   async callApi(
     prompt: string,
-    context?: CodexAppServerCallContext,
-    callOptions?: CodexAppServerCallOptions,
-  ): Promise<CodexAppServerResponse> {
+    context?: CallApiContextParams,
+    callOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // cleanup() removes the temporary INTERPRETER_HOME; recreate it so the
     // provider stays usable when a long-lived process reuses it afterwards.
     if (this.temporaryHome && !fs.existsSync(this.temporaryHome)) {
@@ -373,7 +373,7 @@ export class OpenInterpreterProvider {
         interpreterHome,
         temporaryWorkspace,
       );
-      const mappedContext: CodexAppServerCallContext = {
+      const mappedContext: CallApiContextParams = {
         ...(context ?? { vars: {}, prompt: { raw: prompt, label: 'Open Interpreter' } }),
         prompt: {
           ...(context?.prompt ?? { raw: prompt, label: 'Open Interpreter' }),
