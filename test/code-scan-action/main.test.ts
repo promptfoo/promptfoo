@@ -158,7 +158,10 @@ const originalEnv = { ...process.env };
 // Matches the deterministic fs.mkdtempSync mock; the install passes empty user/global
 // npm config files under this dir to isolate the registry from a poisoned .npmrc.
 const MOCK_NPMRC_DIR = path.join(os.tmpdir(), 'promptfoo-npmrc-test');
-const MOCK_PROMPTFOO_BIN = path.join(MOCK_NPMRC_DIR, 'prefix', 'bin', 'promptfoo');
+const MOCK_PROMPTFOO_BIN =
+  process.platform === 'win32'
+    ? path.join(MOCK_NPMRC_DIR, 'prefix', 'promptfoo.cmd')
+    : path.join(MOCK_NPMRC_DIR, 'prefix', 'bin', 'promptfoo');
 
 function expectedInstallArgs(version: string): string[] {
   return [
