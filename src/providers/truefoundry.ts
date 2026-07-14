@@ -183,7 +183,10 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
     return response;
   }
 
-  const message = getString(error.message) ?? 'Content blocked by provider guardrail';
+  const message =
+    getString(error.message) ??
+    getString(payload.message) ??
+    'Content blocked by provider guardrail';
   if (!isGuardrailError(payload, error, message)) {
     return response;
   }

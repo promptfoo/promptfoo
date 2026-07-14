@@ -586,6 +586,34 @@ describe('doGenerateRedteam', () => {
     });
   });
 
+  it('should preserve reasoning-only generation token usage in generated output metadata', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({ tests: [] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'redteam' } },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: { completionDetails: { reasoning: 25 } },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].metadata).toMatchObject({
+      generationTokenUsage: { completionDetails: { reasoning: 25 } },
+    });
+  });
+
   it('should write to config file when write option is true', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',
@@ -1190,6 +1218,7 @@ describe('doGenerateRedteam', () => {
       entities: ['Test entity'],
       injectVar: 'input',
       failedPlugins: [],
+      generationTokenUsage: { cached: 50, completion: 0, numRequests: 0, prompt: 0, total: 50 },
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -1204,6 +1233,9 @@ describe('doGenerateRedteam', () => {
     const result = await doGenerateRedteam(options);
 
     expect(result).toBeNull();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Observed generation token usage: 50 total'),
+    );
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 

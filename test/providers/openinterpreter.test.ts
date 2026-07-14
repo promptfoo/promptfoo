@@ -435,13 +435,21 @@ describe('OpenInterpreterProvider', () => {
     const resultPromise = provider.callApi(
       JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
       {
-        vars: { workspace: 'workspace' },
-        prompt: { config: { working_dir: '{{workspace}}', skip_git_repo_check: true } },
+        vars: { workspace: 'workspace', sandbox: 'read-only', timeout: 1000 },
+        prompt: {
+          config: {
+            working_dir: '{{workspace}}',
+            sandbox_mode: '{{sandbox}}',
+            turn_timeout_ms: '{{timeout}}',
+            skip_git_repo_check: true,
+          },
+        },
       } as any,
     );
     const { threadStart, turnStart } = await startTurn(server);
 
     expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
     expect(turnStart.params.input).toEqual([
       { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
     ]);

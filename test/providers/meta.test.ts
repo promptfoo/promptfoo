@@ -726,7 +726,7 @@ describe('MetaResponsesProvider request body shaping', () => {
 
   it('rejects unsupported Responses logprobs includes before making a request', async () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
-      config: { include: ['logprobs'] as any },
+      config: { include: ['message.output_text.logprobs'] },
     });
 
     await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(/logprobs/);

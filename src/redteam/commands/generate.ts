@@ -816,6 +816,27 @@ async function doGenerateRedteamInternal(
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
   try {
+    const generationRequestCount = generationTokenUsage.numRequests ?? 0;
+    const hasReportedGenerationTokens =
+      (generationTokenUsage.total ?? 0) > 0 ||
+      (generationTokenUsage.prompt ?? 0) > 0 ||
+      (generationTokenUsage.completion ?? 0) > 0 ||
+      (generationTokenUsage.cached ?? 0) > 0 ||
+      Object.values(generationTokenUsage.completionDetails ?? {}).some(
+        (value) => typeof value === 'number' && value > 0,
+      );
+    const hasGenerationUsage = generationRequestCount > 0 || hasReportedGenerationTokens;
+    if (hasGenerationUsage) {
+      logger.info(
+        hasReportedGenerationTokens
+          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
+              `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
+              `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
+              `${generationRequestCount.toLocaleString()} request(s)`
+          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
+      );
+    }
+
     // Check for failed plugins - warn by default, throw with --strict
     handleFailedPlugins(failedPlugins, options.strict ?? false);
 
@@ -838,24 +859,6 @@ async function doGenerateRedteamInternal(
       sharing: config.sharing,
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
-    const generationRequestCount = generationTokenUsage.numRequests ?? 0;
-    const hasReportedGenerationTokens =
-      (generationTokenUsage.total ?? 0) > 0 ||
-      (generationTokenUsage.prompt ?? 0) > 0 ||
-      (generationTokenUsage.completion ?? 0) > 0 ||
-      (generationTokenUsage.cached ?? 0) > 0;
-    const hasGenerationUsage = generationRequestCount > 0 || hasReportedGenerationTokens;
-    if (hasGenerationUsage) {
-      logger.info(
-        hasReportedGenerationTokens
-          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
-              `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
-              `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
-              `${generationRequestCount.toLocaleString()} request(s)`
-          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
-      );
-    }
-
     let ret: Partial<UnifiedConfig> | undefined;
     if (options.output && options.output.endsWith('.burp')) {
       // Write in Burp Intruder compatible format

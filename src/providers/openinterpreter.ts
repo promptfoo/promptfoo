@@ -37,6 +37,12 @@ const FRAMEWORK_PROMPT_OPTION_KEYS = new Set([
   'runSerially',
   'repeat',
 ]);
+const NUMERIC_PROMPT_OPTION_KEYS = new Set([
+  'thread_pool_size',
+  'request_timeout_ms',
+  'startup_timeout_ms',
+  'turn_timeout_ms',
+]);
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -90,11 +96,21 @@ function parseOpenInterpreterPromptConfig(config: unknown): OpenInterpreterConfi
     return parseOpenInterpreterConfig(config as OpenInterpreterConfig);
   }
 
-  return parseOpenInterpreterConfig(
-    Object.fromEntries(
-      Object.entries(config).filter(([key]) => !FRAMEWORK_PROMPT_OPTION_KEYS.has(key)),
-    ) as OpenInterpreterConfig,
+  const providerConfig = Object.fromEntries(
+    Object.entries(config)
+      .filter(([key]) => !FRAMEWORK_PROMPT_OPTION_KEYS.has(key))
+      .map(([key, value]) => {
+        if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
+          const numericValue = Number(value);
+          if (Number.isFinite(numericValue)) {
+            return [key, numericValue];
+          }
+        }
+        return [key, value];
+      }),
   );
+
+  return parseOpenInterpreterConfig(providerConfig as OpenInterpreterConfig);
 }
 
 function validateThreadPersistence(config: OpenInterpreterConfig): void {
@@ -376,7 +392,7 @@ export class OpenInterpreterProvider implements ApiProvider {
     let temporaryWorkspace: string | undefined;
     try {
       const promptConfig = context?.prompt?.config
-        ? parseOpenInterpreterPromptConfig(context.prompt.config)
+        ? parseOpenInterpreterPromptConfig(renderVarsInObject(context.prompt.config, context?.vars))
         : undefined;
       const effectiveConfig = renderVarsInObject(
         {

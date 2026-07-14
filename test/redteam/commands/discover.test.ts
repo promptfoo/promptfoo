@@ -8,6 +8,7 @@ import {
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
   resolveDiscoveryProviderContext,
+  TargetPurposeDiscoveryTaskResponseSchema,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
@@ -93,6 +94,23 @@ describe('resolveDiscoveryProviderContext', () => {
 });
 
 describe('normalizeTargetPurposeDiscoveryResult', () => {
+  it('preserves reported discovery token usage through response parsing and normalization', () => {
+    const parsed = TargetPurposeDiscoveryTaskResponseSchema.parse({
+      done: true,
+      state: { currentQuestionIndex: 0, answers: [] },
+      purpose: {
+        purpose: 'Book travel',
+        limitations: null,
+        user: null,
+        tools: [],
+        tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
+      },
+    });
+
+    expect(normalizeTargetPurposeDiscoveryResult(parsed.purpose!)).toMatchObject({
+      tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
+    });
+  });
   it('should handle null-like values', () => {
     const result = normalizeTargetPurposeDiscoveryResult({
       purpose: null,

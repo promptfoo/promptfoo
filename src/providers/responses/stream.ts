@@ -102,14 +102,20 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  if (
-    latestResponse &&
-    outputText &&
-    (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0)
-  ) {
+  const hasOutputText =
+    Array.isArray(latestResponse?.output) &&
+    latestResponse.output.some(
+      (item: any) =>
+        item?.type === 'message' &&
+        Array.isArray(item.content) &&
+        item.content.some((content: any) => content?.type === 'output_text' && content.text),
+    );
+
+  if (latestResponse && outputText && !hasOutputText) {
     return {
       ...latestResponse,
       output: [
+        ...(Array.isArray(latestResponse.output) ? latestResponse.output : []),
         {
           type: 'message',
           role: 'assistant',

@@ -723,7 +723,9 @@ Prompt:
 {
   "tool": "lookup_ticket",
   "args": { "id": "TICKET-1" }
-}`;
+}
+
+These prompts cover two common attack paths.`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
@@ -753,7 +755,9 @@ Prompt:
 {
   "tool": "lookup_ticket",
   "args": { "id": "TICKET-1" }
-}`;
+}
+
+These prompts cover two common attack paths.`;
 
       expect(parseGeneratedPrompts(input)).toEqual([
         {

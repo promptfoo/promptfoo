@@ -382,6 +382,58 @@ describe('synthesize', () => {
       }
     });
 
+    it('should count live zero-usage and failed generation calls but not cache hits', async () => {
+      const provider = {
+        id: () => 'request-accounting-provider',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({ output: 'Prompt: first', tokenUsage: { numRequests: 0 } })
+          .mockRejectedValueOnce(
+            Object.assign(new Error('generation failed'), {
+              tokenUsage: { prompt: 2, completion: 3, total: 5 },
+            }),
+          )
+          .mockResolvedValueOnce({
+            output: 'Prompt: cached',
+            cached: true,
+            tokenUsage: { cached: 7, total: 7 },
+          }),
+      } as unknown as ApiProvider;
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('first');
+        await trackedProvider.callApi('failed').catch(() => undefined);
+        await trackedProvider.callApi('cached');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'request-accounting-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'request-accounting-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toMatchObject({
+          cached: 7,
+          completion: 3,
+          numRequests: 2,
+          prompt: 2,
+          total: 12,
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

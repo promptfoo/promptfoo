@@ -177,7 +177,7 @@ jobs:
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
 
-  publish-code-scan-action:
+  build-code-scan-action-release:
     if: >-
       ${{
         always() &&
@@ -298,9 +298,9 @@ jobs:
           }
           JSON
 
-      # Hand the executable payload (dist/ plus the action.yml that selects the
-      # entrypoint) to attest-code-scan-action — see that job for why attestation
-      # is isolated from this one.
+      # Hand the complete mirror payload to the isolated attestation and
+      # publication jobs. The hidden source manifest is required by the mirror
+      # repository's reproducible-build validation.
       - name: Upload release payload for attestation
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -309,6 +309,55 @@ jobs:
           path: |
             ${{ runner.temp }}/code-scan-action-export/dist
             ${{ runner.temp }}/code-scan-action-export/action.yml
+            ${{ runner.temp }}/code-scan-action-export/README.md
+            ${{ runner.temp }}/code-scan-action-export/CHANGELOG.md
+            ${{ runner.temp }}/code-scan-action-export/.release-source.json
+          include-hidden-files: true
+
+  attest-code-scan-action:
+    # Signed build provenance for the executable bytes mirrored into
+    # promptfoo/code-scan-action. Keep OIDC/attestation permissions isolated
+    # from dependency installation and make successful attestation a hard gate
+    # before any mirror branch or PR can be published.
+    needs: [build-code-scan-action-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download release payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: code-scan-action-release-payload
+          path: ${{ runner.temp }}/code-scan-action-attest
+
+      - name: Attest build provenance for mirrored artifacts
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: |
+            ${{ runner.temp }}/code-scan-action-attest/dist/*
+            ${{ runner.temp }}/code-scan-action-attest/action.yml
+
+  publish-code-scan-action:
+    if: ${{ always() && !cancelled() && needs.attest-code-scan-action.result == 'success' }}
+    needs: [release-please, attest-code-scan-action]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      MIRROR_ARTIFACT_FILES: |-
+        action.yml
+        README.md
+        CHANGELOG.md
+    steps:
+      - name: Download attested release payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: code-scan-action-release-payload
+          path: ${{ runner.temp }}/code-scan-action-export
 
       # Mint the foreign-repository write token only after all dependency
       # installation, build, and payload preparation steps have completed.
@@ -388,36 +437,3 @@ jobs:
           else
             gh pr create --repo promptfoo/code-scan-action --base main --head "$branch" --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
           fi
-
-  attest-code-scan-action:
-    # Signed build provenance for the exact bytes mirrored into
-    # promptfoo/code-scan-action — both the dist/ bundle and the action.yml that
-    # selects the entrypoint — so consumers can verify the committed artifacts came
-    # from this workflow without re-running the build:
-    #   gh attestation verify dist/index.js --repo promptfoo/promptfoo
-    #   gh attestation verify action.yml --repo promptfoo/promptfoo
-    # Kept as a separate job so id-token/attestations permissions are confined to
-    # steps that never install packages or execute repository code — a compromised
-    # dependency lifecycle script in the publish job must not be able to mint OIDC
-    # tokens or sign attestations as this repository. Default `needs` gating (run
-    # only when the publish job succeeded) is exactly the behavior wanted here.
-    needs: [publish-code-scan-action]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    steps:
-      - name: Download release payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: code-scan-action-release-payload
-          path: ${{ runner.temp }}/code-scan-action-attest
-
-      - name: Attest build provenance for mirrored artifacts
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
-        with:
-          subject-path: |
-            ${{ runner.temp }}/code-scan-action-attest/dist/*
-            ${{ runner.temp }}/code-scan-action-attest/action.yml

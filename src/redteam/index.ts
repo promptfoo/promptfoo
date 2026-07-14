@@ -11,7 +11,7 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -77,9 +77,22 @@ const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMul
 function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
   const callApi = provider.callApi.bind(provider);
   const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
-    const response = await callApi(...args);
-    accumulateResponseTokenUsage(tokenUsage, response);
-    return response;
+    try {
+      const response = await callApi(...args);
+      accumulateResponseTokenUsage(tokenUsage, response, { countAsRequest: false });
+      if (!response.cached) {
+        tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + 1;
+      }
+      return response;
+    } catch (error) {
+      accumulateResponseTokenUsage(
+        tokenUsage,
+        { tokenUsage: getErrorTokenUsage(error) },
+        { countAsRequest: false },
+      );
+      tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + 1;
+      throw error;
+    }
   };
   trackedCallApi.label = provider.callApi.label;
 

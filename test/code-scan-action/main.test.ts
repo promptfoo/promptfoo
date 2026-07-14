@@ -158,6 +158,7 @@ const originalEnv = { ...process.env };
 // Matches the deterministic fs.mkdtempSync mock; the install passes empty user/global
 // npm config files under this dir to isolate the registry from a poisoned .npmrc.
 const MOCK_NPMRC_DIR = path.join(os.tmpdir(), 'promptfoo-npmrc-test');
+const MOCK_PROMPTFOO_BIN = path.join(MOCK_NPMRC_DIR, 'prefix', 'bin', 'promptfoo');
 
 function expectedInstallArgs(version: string): string[] {
   return [
@@ -166,6 +167,8 @@ function expectedInstallArgs(version: string): string[] {
     `promptfoo@${version}`,
     '--ignore-scripts',
     '--registry=https://registry.npmjs.org/',
+    '--prefix',
+    path.join(MOCK_NPMRC_DIR, 'prefix'),
     '--userconfig',
     path.join(MOCK_NPMRC_DIR, 'user'),
     '--globalconfig',
@@ -243,7 +246,7 @@ function setupMocks() {
       _args: string[] | undefined,
       options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
     ) => {
-      if (command === 'promptfoo' && options?.listeners?.stdout) {
+      if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
         const response = JSON.stringify({
           success: true,
           comments: [],
@@ -287,7 +290,7 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
 
   const call = await vi.waitFor(() => {
     const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+      ([command, args]) => command === MOCK_PROMPTFOO_BIN && Array.isArray(args),
     );
 
     if (!promptfooCall || !Array.isArray(promptfooCall[1])) {
@@ -339,7 +342,7 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
 
   const calls = await vi.waitFor(() => {
     const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+      ([command, args]) => command === MOCK_PROMPTFOO_BIN && Array.isArray(args),
     );
     const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
@@ -717,7 +720,7 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
+          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
                 JSON.stringify({
@@ -754,7 +757,7 @@ describe('code-scan-action main', () => {
             | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
             | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stderr) {
+          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stderr) {
             options.listeners.stderr(Buffer.from('Fork PR scanning not authorized'));
             return 1;
           }
@@ -800,7 +803,7 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
+          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
             options.listeners.stdout(Buffer.from(JSON.stringify(response)));
           }
           return 0;
@@ -868,7 +871,7 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
+          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
                 JSON.stringify({
@@ -1119,7 +1122,7 @@ describe('code-scan-action main', () => {
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
       expect(mocks.exec.exec).not.toHaveBeenCalledWith(
-        'promptfoo',
+        MOCK_PROMPTFOO_BIN,
         expect.anything(),
         expect.anything(),
       );

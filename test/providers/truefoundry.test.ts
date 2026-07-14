@@ -473,7 +473,8 @@ describe('TrueFoundry', () => {
         mockedFetchWithRetries.mockResolvedValueOnce(
           new Response(
             JSON.stringify({
-              error: { message: 'Guardrail violation detected', type: 'guardrail_checks_failed' },
+              error: { type: 'guardrail_checks_failed' },
+              message: 'Guardrail violation detected',
               guardrail_checks: {
                 llm_input_guardrails: [],
                 input_guardrails: [{ name: 'safety/prompt-injection' }],

@@ -103,6 +103,15 @@ function collectPromptAfterEmptyMarker(
       if (!preserveBlankLines) {
         break;
       }
+      const candidate = promptLines.join('\n').trim();
+      if (candidate.startsWith('{') || candidate.startsWith('[')) {
+        try {
+          JSON.parse(candidate);
+          break;
+        } catch {
+          // The blank line is inside an incomplete JSON prompt.
+        }
+      }
       promptLines.push(line);
       continue;
     }

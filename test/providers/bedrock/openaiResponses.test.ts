@@ -660,7 +660,7 @@ describe('bedrock openaiResponses helper', () => {
               id: 'resp_incomplete',
               model: modelId,
               status: 'incomplete',
-              output: [],
+              output: [{ id: 'rs_incomplete', type: 'reasoning', summary: [] }],
               usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
             },
           })}`,

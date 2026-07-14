@@ -200,7 +200,12 @@ function assertSupportedMetaRequest(
   if ('logprobs' in body) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
-  if (Array.isArray(body.include) && body.include.includes('logprobs')) {
+  if (
+    Array.isArray(body.include) &&
+    body.include.some(
+      (include) => include === 'logprobs' || include === 'message.output_text.logprobs',
+    )
+  ) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
   if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
