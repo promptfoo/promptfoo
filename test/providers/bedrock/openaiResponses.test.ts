@@ -1440,6 +1440,30 @@ describe('bedrock openaiResponses helper', () => {
       expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
+    it.each([
+      { name: 'object', content: { type: 'output_text', text: 'partial' } },
+      { name: 'string', content: 'partial' },
+      { name: 'refusal object', content: { type: 'refusal', refusal: 'No.' } },
+      { name: 'null', content: null },
+      { name: 'null entry', content: [null] },
+      { name: 'string entry', content: ['partial'] },
+    ])('ignores malformed output_item.done $name content before a valid terminal response', async ({
+      content,
+    }) => {
+      const body = [
+        'event: response.output_item.done',
+        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'message', content } })}`,
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"valid final answer"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content[0].text).toBe('valid final answer');
+    });
+
     it('preserves interleaved output boundaries when a stream ends before its terminal event', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [

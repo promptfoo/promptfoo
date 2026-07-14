@@ -64,9 +64,13 @@ function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEv
   if (event.type === 'response.content_part.done' && event.part?.type === 'output_text') {
     return [{ ...event, text: event.part.text }];
   }
-  if (event.type === 'response.output_item.done' && event.item?.type === 'message') {
-    return (event.item.content ?? []).flatMap((part, contentIndex) =>
-      part.type === 'output_text'
+  if (
+    event.type === 'response.output_item.done' &&
+    event.item?.type === 'message' &&
+    Array.isArray(event.item.content)
+  ) {
+    return event.item.content.flatMap((part, contentIndex) =>
+      part?.type === 'output_text'
         ? [{ ...event, content_index: contentIndex, text: part.text }]
         : [],
     );
@@ -87,7 +91,9 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
   }
   if (
     event.type === 'response.output_item.done' &&
-    (event.item?.type === 'refusal' || event.item?.content?.some((part) => part.type === 'refusal'))
+    (event.item?.type === 'refusal' ||
+      (Array.isArray(event.item?.content) &&
+        event.item.content.some((part) => part?.type === 'refusal')))
   ) {
     return event.item;
   }
