@@ -15,6 +15,88 @@ type ResponsesStreamLogger = {
   debug(message: string, context?: Record<string, unknown>): unknown;
 };
 
+function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
+  if (typeof event.delta === 'string') {
+    return event.delta;
+  }
+  return typeof event.output_text?.delta === 'string' ? event.output_text.delta : undefined;
+}
+
+function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
+  if (
+    typeof event.output_index !== 'number' ||
+    !Number.isInteger(event.output_index) ||
+    event.output_index < 0
+  ) {
+    return undefined;
+  }
+  const contentIndex =
+    typeof event.content_index === 'number' &&
+    Number.isInteger(event.content_index) &&
+    event.content_index >= 0
+      ? event.content_index
+      : 0;
+  return `${event.output_index}:${contentIndex}`;
+}
+
+function recoverIncompleteOutput(
+  output: any[] | undefined,
+  outputText: string,
+  outputTextByContent: Map<string, string>,
+): any[] | undefined {
+  const recoveredOutput = Array.isArray(output)
+    ? output.map((item: any) =>
+        item?.type === 'message' && Array.isArray(item.content)
+          ? { ...item, content: [...item.content] }
+          : item,
+      )
+    : [];
+  const terminalTextLocations = recoveredOutput.flatMap((item: any, outputIndex: number) =>
+    item?.type === 'message' && Array.isArray(item.content)
+      ? item.content.flatMap((content: any, contentIndex: number) =>
+          content?.type === 'output_text' ? [{ outputIndex, contentIndex }] : [],
+        )
+      : [],
+  );
+  const streamedTexts =
+    outputTextByContent.size > 0
+      ? Array.from(outputTextByContent, ([key, text]) => {
+          const [outputIndex, contentIndex] = key.split(':').map(Number);
+          return { outputIndex, contentIndex, text };
+        })
+      : terminalTextLocations.length === 1
+        ? [{ ...terminalTextLocations[0], text: outputText }]
+        : [];
+
+  let recoveredText = false;
+  for (const { outputIndex, contentIndex, text } of streamedTexts) {
+    let item = recoveredOutput[outputIndex];
+    if (!item) {
+      item = { type: 'message', role: 'assistant', content: [] };
+      recoveredOutput[outputIndex] = item;
+    }
+    if (item.type !== 'message') {
+      continue;
+    }
+    if (!Array.isArray(item.content)) {
+      item.content = [];
+    }
+    while (item.content.length <= contentIndex) {
+      item.content.push({ type: 'output_text', text: '' });
+    }
+    const content = item.content[contentIndex];
+    if (content?.type !== 'output_text') {
+      continue;
+    }
+    if (typeof content.text !== 'string' || text.length > content.text.length) {
+      item.content[contentIndex] = { ...content, text };
+      recoveredText = true;
+    }
+  }
+
+  return recoveredText ? recoveredOutput : undefined;
+}
+
 function parseSseEvent(
   chunk: string,
   providerName: string,
@@ -78,20 +160,11 @@ export async function readResponsesStream(
     }
 
     if (event.type === 'response.output_text.delta') {
-      const delta =
-        typeof event.delta === 'string'
-          ? event.delta
-          : typeof event.output_text?.delta === 'string'
-            ? event.output_text.delta
-            : undefined;
+      const delta = getOutputTextDelta(event);
       if (delta) {
         outputText += delta;
-        if (typeof event.output_index === 'number' && Number.isInteger(event.output_index)) {
-          const contentIndex =
-            typeof event.content_index === 'number' && Number.isInteger(event.content_index)
-              ? event.content_index
-              : 0;
-          const key = `${event.output_index}:${contentIndex}`;
+        const key = getOutputTextKey(event);
+        if (key) {
           outputTextByContent.set(key, (outputTextByContent.get(key) ?? '') + delta);
         }
       }
@@ -117,48 +190,30 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  const terminalOutputTexts = Array.isArray(latestResponse?.output)
-    ? latestResponse.output
-        .filter((item: any) => item?.type === 'message' && Array.isArray(item.content))
-        .flatMap((item: any) => item.content)
-        .filter(
-          (content: any) => content?.type === 'output_text' && typeof content.text === 'string',
-        )
-    : [];
-  const hasOutputText = terminalOutputTexts.some((content: any) => content.text.length > 0);
-
-  if (latestResponse?.status === 'incomplete' && outputText && terminalOutputTexts.length > 0) {
-    let recoveredText = false;
-    const recoveredResponse = {
-      ...latestResponse,
-      output: latestResponse.output.map((item: any, outputIndex: number) =>
-        item?.type === 'message' && Array.isArray(item.content)
-          ? {
-              ...item,
-              content: item.content.map((content: any, contentIndex: number) => {
-                if (content?.type !== 'output_text') {
-                  return content;
-                }
-                const streamedText =
-                  outputTextByContent.get(`${outputIndex}:${contentIndex}`) ??
-                  (terminalOutputTexts.length === 1 ? outputText : undefined);
-                if (
-                  streamedText &&
-                  (typeof content.text !== 'string' || streamedText.length > content.text.length)
-                ) {
-                  recoveredText = true;
-                  return { ...content, text: streamedText };
-                }
-                return content;
-              }),
-            }
-          : item,
-      ),
-    };
-    if (recoveredText) {
-      return recoveredResponse;
+  if (latestResponse?.status === 'incomplete' && outputText) {
+    const recoveredOutput = recoverIncompleteOutput(
+      latestResponse.output,
+      outputText,
+      outputTextByContent,
+    );
+    if (recoveredOutput) {
+      return { ...latestResponse, output: recoveredOutput };
     }
   }
+
+  const hasOutputText =
+    Array.isArray(latestResponse?.output) &&
+    latestResponse.output.some(
+      (item: any) =>
+        item?.type === 'message' &&
+        Array.isArray(item.content) &&
+        item.content.some(
+          (content: any) =>
+            content?.type === 'output_text' &&
+            typeof content.text === 'string' &&
+            content.text.length > 0,
+        ),
+    );
 
   if (latestResponse && outputText && !hasOutputText) {
     return {
