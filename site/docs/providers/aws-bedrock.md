@@ -1604,6 +1604,13 @@ Error: Unable to locate credentials. You can configure credentials by running "a
 2. **Model access**: Enable model access in the AWS Bedrock console
 3. **Region mismatch**: Verify the region in your config matches where you enabled model access
 
+#### "Your subscription to the model is being set up" (HTTP 401)
+
+The first request an account makes to a mantle-served model (OpenAI frontier, Grok,
+`bedrock:mantle:` ids) can trigger an automatic AWS Marketplace subscription. While it
+provisions, the endpoint returns HTTP 401 with this message and promptfoo aborts the run.
+Provisioning typically completes within a minute or two — re-run the eval once it does.
+
 #### SSO-Specific Issues
 
 **"SSO session has expired":**
