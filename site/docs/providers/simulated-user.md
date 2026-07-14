@@ -295,7 +295,7 @@ defaultTest:
           temperature: 0.7
 ```
 
-The custom user provider receives the conversation history as a JSON array of OpenAI-style chat messages with the roles flipped, so the model naturally responds as the user: the target's replies arrive as `user` messages and the simulated user's own previous messages arrive as `assistant` messages. Promptfoo prepends a system message that frames the model as the simulated user, includes your rendered `instructions`, and tells it to return only the next user message — emitting `###STOP###` once the conversation goal is complete (see [Stop Conditions](#stop-conditions)).
+The custom user provider receives the conversation history as a JSON array of OpenAI-style chat messages with the roles flipped, so the model naturally responds as the user: the target's replies arrive as `user` messages and the simulated user's own previous messages arrive as `assistant` messages. Promptfoo prepends a system message that frames the model as the simulated user, includes your rendered `instructions`, and tells it to return only the next user message — emitting `###STOP###` once the conversation goal is complete (see [Stop Conditions](#stop-conditions)). On the first turn, when there is no history yet, Promptfoo sends a short placeholder `user` message asking the model to start the conversation, since some chat APIs (such as Anthropic) reject an empty message list.
 
 Custom user providers behave like ordinary providers: `file://` references resolve relative to the config file, response `transform`s are applied, `delay` is honored between turns (and skipped for cached responses), and a sessionful user provider keeps its own `sessionId` across turns, tracked separately from the target's session.
 

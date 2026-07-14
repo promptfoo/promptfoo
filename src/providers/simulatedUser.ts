@@ -37,6 +37,12 @@ const DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS = dedent`
   {{instructions}}
 `;
 
+// Sent as the sole conversation message on the first turn. Some chat APIs
+// (e.g. Anthropic) hoist the system prompt into a dedicated parameter and
+// reject an empty messages array, so the history must never be empty.
+const CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE =
+  'The conversation has not started yet. Send your first message as the user.';
+
 const SIMULATED_USER_PROVIDER_ID = 'promptfoo:simulated-user';
 const RECURSIVE_USER_PROVIDER_ERROR =
   'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider';
@@ -249,8 +255,12 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
+    const conversationMessages =
+      flippedMessages.length > 0
+        ? flippedMessages
+        : [{ role: 'user', content: CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE }];
     const userPrompt = systemMessage
-      ? [{ role: 'system', content: systemMessage }, ...flippedMessages]
+      ? [{ role: 'system', content: systemMessage }, ...conversationMessages]
       : flippedMessages;
     const userPromptString = JSON.stringify(userPrompt);
     const userContext = (() => {

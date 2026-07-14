@@ -150,7 +150,7 @@ describe('SimulatedUser', () => {
       });
       expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(1);
       const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
-      expect(customUserPrompt).toHaveLength(1);
+      expect(customUserPrompt).toHaveLength(2);
       expect(customUserPrompt[0]).toMatchObject({ role: 'system' });
       expect(customUserPrompt[0].content).toContain(
         'You are simulating the user in a conversation with an assistant.',
@@ -158,8 +158,51 @@ describe('SimulatedUser', () => {
       expect(customUserPrompt[0].content).toContain('produce only the next user message');
       expect(customUserPrompt[0].content).toContain('include ###STOP###');
       expect(customUserPrompt[0].content).toContain('Act as a curious user.');
+      expect(customUserPrompt[1]).toMatchObject({ role: 'user' });
       expect(originalProvider.callApi).not.toHaveBeenCalled();
       expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should send a kickoff user message on the first turn so the history is never empty', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({ output: 'first user message' })
+          .mockResolvedValueOnce({ output: 'second user message ###STOP###' }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi.mockReset().mockResolvedValue({ output: 'agent reply' });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // First turn: [system, kickoff user message] so chat APIs that hoist the
+      // system prompt (e.g. Anthropic) never see an empty messages array.
+      const firstPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(firstPrompt).toHaveLength(2);
+      expect(firstPrompt[1].role).toBe('user');
+      expect(firstPrompt[1].content).toContain('conversation has not started');
+
+      // Later turns: real flipped history replaces the kickoff message.
+      const secondPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[1][0]);
+      expect(secondPrompt.map((m: { role: string }) => m.role)).toEqual([
+        'system',
+        'assistant',
+        'user',
+      ]);
+      expect(JSON.stringify(secondPrompt)).not.toContain('conversation has not started');
     });
 
     it('should include custom provider system instructions even when rendered instructions are empty', async () => {
@@ -186,12 +229,13 @@ describe('SimulatedUser', () => {
       });
 
       const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
-      expect(customUserPrompt).toHaveLength(1);
+      expect(customUserPrompt).toHaveLength(2);
       expect(customUserPrompt[0]).toMatchObject({ role: 'system' });
       expect(customUserPrompt[0].content).toContain(
         'You are simulating the user in a conversation with an assistant.',
       );
       expect(customUserPrompt[0].content).toContain('User simulation instructions:');
+      expect(customUserPrompt[1]).toMatchObject({ role: 'user' });
     });
 
     it('should preserve replacement tokens literally in custom provider instructions', async () => {
