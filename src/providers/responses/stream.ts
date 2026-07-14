@@ -48,6 +48,10 @@ function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
   return `${event.output_index}:${contentIndex}`;
 }
 
+function getInvalidOutputTextKey(event: ResponsesStreamEvent): string {
+  return `${String(event.output_index ?? 'missing')}:${String(event.content_index ?? 0)}`;
+}
+
 function getTerminalOutputTexts(output: any[] | undefined): string[] {
   if (!Array.isArray(output)) {
     return [];
@@ -67,7 +71,7 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 function recoverIncompleteOutput(
   output: any[] | undefined,
   outputTextByContent: Map<string, string>,
-  unindexedOutputText: string,
+  unindexedOutputTexts: string[],
 ): any[] | undefined {
   const recoveredOutput = Array.isArray(output)
     ? output.map((item: any) =>
@@ -90,8 +94,10 @@ function recoverIncompleteOutput(
     const [outputIndex, contentIndex] = key.split(':').map(Number);
     return { outputIndex, contentIndex, text };
   });
-  if (unindexedOutputText && unindexedTextLocations.length === 1) {
-    streamedTexts.push({ ...unindexedTextLocations[0], text: unindexedOutputText });
+  if (unindexedOutputTexts.length === unindexedTextLocations.length) {
+    unindexedOutputTexts.forEach((text, index) => {
+      streamedTexts.push({ ...unindexedTextLocations[index], text });
+    });
   }
 
   let recoveredText = false;
@@ -135,17 +141,19 @@ function recoverIncompleteOutput(
     recoveredText = true;
   }
 
-  if (
-    unindexedOutputText &&
-    unindexedTextLocations.length !== 1 &&
-    getTerminalOutputTexts(recoveredOutput).join('') !== unindexedOutputText
-  ) {
-    recoveredOutput.push({
-      type: 'message',
-      role: 'assistant',
-      content: [{ type: 'output_text', text: unindexedOutputText }],
-    });
-    recoveredText = true;
+  if (unindexedOutputTexts.length !== unindexedTextLocations.length) {
+    for (const text of unindexedOutputTexts) {
+      const terminalTexts = getTerminalOutputTexts(recoveredOutput);
+      if (terminalTexts.includes(text) || terminalTexts.join('') === text) {
+        continue;
+      }
+      recoveredOutput.push({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      });
+      recoveredText = true;
+    }
   }
 
   return recoveredText ? recoveredOutput : undefined;
@@ -195,8 +203,9 @@ export async function readResponsesStream(
   let currentOutputTextKey: string | undefined;
   let pendingUnindexedOutputText = '';
   let unassignedUnindexedOutputText = '';
-  let invalidlyIndexedOutputText = '';
-  let currentOutputIndexIsInvalid = false;
+  const completedUnindexedOutputTexts: string[] = [];
+  const invalidlyIndexedOutputTextByContent = new Map<string, string>();
+  let currentInvalidOutputTextKey: string | undefined;
 
   const processOutputTextEvent = (event: ResponsesStreamEvent) => {
     const delta = getOutputTextDelta(event);
@@ -207,22 +216,42 @@ export async function readResponsesStream(
     outputText += delta;
     const key = getOutputTextKey(event);
     if (key) {
-      unassignedUnindexedOutputText += pendingUnindexedOutputText;
-      outputTextByContent.set(key, (outputTextByContent.get(key) ?? '') + delta);
+      const prependPending =
+        event.output_index === 0 &&
+        (event.content_index ?? 0) === 0 &&
+        !outputTextByContent.has(key);
+      if (!prependPending) {
+        unassignedUnindexedOutputText += pendingUnindexedOutputText;
+      }
+      outputTextByContent.set(
+        key,
+        (outputTextByContent.get(key) ?? '') +
+          (prependPending ? pendingUnindexedOutputText : '') +
+          delta,
+      );
       currentOutputTextKey = key;
       pendingUnindexedOutputText = '';
-      currentOutputIndexIsInvalid = false;
+      currentInvalidOutputTextKey = undefined;
       return;
     }
     if (event.output_index !== undefined || event.content_index !== undefined) {
-      invalidlyIndexedOutputText += pendingUnindexedOutputText + delta;
+      const invalidKey = getInvalidOutputTextKey(event);
+      invalidlyIndexedOutputTextByContent.set(
+        invalidKey,
+        (invalidlyIndexedOutputTextByContent.get(invalidKey) ?? '') +
+          pendingUnindexedOutputText +
+          delta,
+      );
       currentOutputTextKey = undefined;
       pendingUnindexedOutputText = '';
-      currentOutputIndexIsInvalid = true;
+      currentInvalidOutputTextKey = invalidKey;
       return;
     }
-    if (currentOutputIndexIsInvalid) {
-      invalidlyIndexedOutputText += delta;
+    if (currentInvalidOutputTextKey) {
+      invalidlyIndexedOutputTextByContent.set(
+        currentInvalidOutputTextKey,
+        (invalidlyIndexedOutputTextByContent.get(currentInvalidOutputTextKey) ?? '') + delta,
+      );
       return;
     }
     if (currentOutputTextKey) {
@@ -241,30 +270,52 @@ export async function readResponsesStream(
       return;
     }
 
-    outputText ||= event.text;
     const key = getOutputTextKey(event);
     if (key) {
+      const previous = outputTextByContent.get(key) ?? '';
+      outputText += event.text.startsWith(previous)
+        ? event.text.slice(previous.length)
+        : event.text;
       outputTextByContent.set(key, event.text);
-      currentOutputTextKey = key;
-      currentOutputIndexIsInvalid = false;
+      currentOutputTextKey = undefined;
+      currentInvalidOutputTextKey = undefined;
       return;
     }
     if (event.output_index !== undefined || event.content_index !== undefined) {
-      invalidlyIndexedOutputText = event.text;
+      const invalidKey = getInvalidOutputTextKey(event);
+      const previous = invalidlyIndexedOutputTextByContent.get(invalidKey) ?? '';
+      outputText += event.text.startsWith(previous)
+        ? event.text.slice(previous.length)
+        : event.text;
+      invalidlyIndexedOutputTextByContent.set(invalidKey, event.text);
       currentOutputTextKey = undefined;
-      currentOutputIndexIsInvalid = true;
+      currentInvalidOutputTextKey = undefined;
       return;
     }
-    if (currentOutputIndexIsInvalid) {
-      invalidlyIndexedOutputText = event.text;
+    if (currentInvalidOutputTextKey) {
+      const previous = invalidlyIndexedOutputTextByContent.get(currentInvalidOutputTextKey) ?? '';
+      outputText += event.text.startsWith(previous)
+        ? event.text.slice(previous.length)
+        : event.text;
+      invalidlyIndexedOutputTextByContent.set(currentInvalidOutputTextKey, event.text);
+      currentInvalidOutputTextKey = undefined;
       return;
     }
     if (currentOutputTextKey) {
+      const previous = outputTextByContent.get(currentOutputTextKey) ?? '';
+      outputText += event.text.startsWith(previous)
+        ? event.text.slice(previous.length)
+        : event.text;
       outputTextByContent.set(currentOutputTextKey, event.text);
+      currentOutputTextKey = undefined;
       return;
     }
 
-    pendingUnindexedOutputText = event.text;
+    outputText += event.text.startsWith(pendingUnindexedOutputText)
+      ? event.text.slice(pendingUnindexedOutputText.length)
+      : event.text;
+    completedUnindexedOutputTexts.push(event.text);
+    pendingUnindexedOutputText = '';
   };
 
   const processChunk = (chunk: string) => {
@@ -313,32 +364,45 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  if (latestResponse?.status === 'incomplete' && outputText) {
-    const recoveredOutput = recoverIncompleteOutput(
-      latestResponse.output,
-      outputTextByContent,
-      unassignedUnindexedOutputText + pendingUnindexedOutputText,
-    );
-    if (invalidlyIndexedOutputText) {
-      const output =
-        recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
-      if (getTerminalOutputTexts(output).includes(invalidlyIndexedOutputText)) {
-        return { ...latestResponse, output };
-      }
+  if (latestResponse && outputText) {
+    if (
+      unassignedUnindexedOutputText &&
+      (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0) &&
+      invalidlyIndexedOutputTextByContent.size === 0
+    ) {
       return {
         ...latestResponse,
         output: [
-          ...output,
           {
             type: 'message',
             role: 'assistant',
-            content: [{ type: 'output_text', text: invalidlyIndexedOutputText }],
+            content: [{ type: 'output_text', text: outputText }],
           },
         ],
       };
     }
-    if (recoveredOutput) {
-      return { ...latestResponse, output: recoveredOutput };
+
+    const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
+    const recoveredOutput = recoverIncompleteOutput(latestResponse.output, outputTextByContent, [
+      ...completedUnindexedOutputTexts,
+      ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
+    ]);
+    const output =
+      recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
+    let appendedInvalidOutput = false;
+    for (const text of invalidlyIndexedOutputTextByContent.values()) {
+      if (getTerminalOutputTexts(output).includes(text)) {
+        continue;
+      }
+      output.push({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      });
+      appendedInvalidOutput = true;
+    }
+    if (recoveredOutput || appendedInvalidOutput) {
+      return { ...latestResponse, output };
     }
   }
 

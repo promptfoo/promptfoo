@@ -295,11 +295,17 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   protected getCacheIdentityHash(): string {
-    const customHeaders = getAnthropicCustomHeaderOverrides(this.env);
     return hashAnthropicCacheValue({
       apiBaseUrl: this.getApiBaseUrl(),
-      ...(Object.keys(customHeaders).length > 0 ? { customHeaders } : {}),
     });
+  }
+
+  protected hasCustomHeaders(): boolean {
+    const customHeaders =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
+      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+      process.env.ANTHROPIC_CUSTOM_HEADERS;
+    return Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
   }
 
   protected getCacheAuthNamespace(): string {

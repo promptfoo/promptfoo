@@ -620,7 +620,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
 
-    it('should isolate response-cache entries across scoped Anthropic custom headers', async () => {
+    it('should bypass the response cache for scoped Anthropic custom headers', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
         config: { apiKey: 'shared-api-key', apiBaseUrl: 'https://gateway.example' },
         env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: tenant-a-secret' },
@@ -630,8 +630,8 @@ describe('AnthropicMessagesProvider', () => {
         env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: tenant-b-secret' },
       });
       const cache = await getCache();
-      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
-      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
       vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Tenant A response' }],
       } as Anthropic.Messages.Message);
@@ -642,13 +642,8 @@ describe('AnthropicMessagesProvider', () => {
       await providerA.callApi('Shared prompt');
       await providerB.callApi('Shared prompt');
 
-      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
-      expect(cacheKeyA).not.toBe(cacheKeyB);
-      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
-        expect(cacheKey).not.toContain('tenant-a-secret');
-        expect(cacheKey).not.toContain('tenant-b-secret');
-        expect(cacheKey).not.toContain('Shared prompt');
-      }
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
       expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
