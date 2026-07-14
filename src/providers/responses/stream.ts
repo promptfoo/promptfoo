@@ -3,6 +3,8 @@ type ResponsesStreamEvent = {
   response?: any;
   delta?: string;
   output_text?: { delta?: string };
+  output_index?: number;
+  content_index?: number;
   output?: any[];
   code?: string;
   message?: string;
@@ -53,6 +55,7 @@ export async function readResponsesStream(
   let buffer = '';
   let latestResponse: any;
   let outputText = '';
+  const outputTextByContent = new Map<string, string>();
 
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
@@ -75,10 +78,22 @@ export async function readResponsesStream(
     }
 
     if (event.type === 'response.output_text.delta') {
-      if (typeof event.delta === 'string') {
-        outputText += event.delta;
-      } else if (typeof event.output_text?.delta === 'string') {
-        outputText += event.output_text.delta;
+      const delta =
+        typeof event.delta === 'string'
+          ? event.delta
+          : typeof event.output_text?.delta === 'string'
+            ? event.output_text.delta
+            : undefined;
+      if (delta) {
+        outputText += delta;
+        if (typeof event.output_index === 'number' && Number.isInteger(event.output_index)) {
+          const contentIndex =
+            typeof event.content_index === 'number' && Number.isInteger(event.content_index)
+              ? event.content_index
+              : 0;
+          const key = `${event.output_index}:${contentIndex}`;
+          outputTextByContent.set(key, (outputTextByContent.get(key) ?? '') + delta);
+        }
       }
     }
   };
@@ -102,38 +117,47 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  const terminalOutputText = Array.isArray(latestResponse?.output)
+  const terminalOutputTexts = Array.isArray(latestResponse?.output)
     ? latestResponse.output
         .filter((item: any) => item?.type === 'message' && Array.isArray(item.content))
         .flatMap((item: any) => item.content)
-        .find(
-          (content: any) =>
-            content?.type === 'output_text' &&
-            typeof content.text === 'string' &&
-            content.text.length > 0,
+        .filter(
+          (content: any) => content?.type === 'output_text' && typeof content.text === 'string',
         )
-    : undefined;
-  const hasOutputText = Boolean(terminalOutputText);
+    : [];
+  const hasOutputText = terminalOutputTexts.some((content: any) => content.text.length > 0);
 
-  if (
-    latestResponse?.status === 'incomplete' &&
-    outputText &&
-    terminalOutputText &&
-    outputText.length > terminalOutputText.text.length
-  ) {
-    return {
+  if (latestResponse?.status === 'incomplete' && outputText && terminalOutputTexts.length > 0) {
+    let recoveredText = false;
+    const recoveredResponse = {
       ...latestResponse,
-      output: latestResponse.output.map((item: any) =>
+      output: latestResponse.output.map((item: any, outputIndex: number) =>
         item?.type === 'message' && Array.isArray(item.content)
           ? {
               ...item,
-              content: item.content.map((content: any) =>
-                content === terminalOutputText ? { ...content, text: outputText } : content,
-              ),
+              content: item.content.map((content: any, contentIndex: number) => {
+                if (content?.type !== 'output_text') {
+                  return content;
+                }
+                const streamedText =
+                  outputTextByContent.get(`${outputIndex}:${contentIndex}`) ??
+                  (terminalOutputTexts.length === 1 ? outputText : undefined);
+                if (
+                  streamedText &&
+                  (typeof content.text !== 'string' || streamedText.length > content.text.length)
+                ) {
+                  recoveredText = true;
+                  return { ...content, text: streamedText };
+                }
+                return content;
+              }),
             }
           : item,
       ),
     };
+    if (recoveredText) {
+      return recoveredResponse;
+    }
   }
 
   if (latestResponse && outputText && !hasOutputText) {

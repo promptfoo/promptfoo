@@ -728,6 +728,61 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('partial answer');
     });
 
+    it.each(
+      GPT_5_6_MODELS,
+    )('preserves interleaved output boundaries in an incomplete response for %s', async (modelId) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A1"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"B1"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A2"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_interleaved',
+              model: modelId,
+              status: 'incomplete',
+              output: [
+                {
+                  id: 'msg_a',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'A1' }],
+                },
+                {
+                  id: 'msg_b',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'B1' }],
+                },
+              ],
+              usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('A1A2\nB1');
+    });
+
     it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
       // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
       // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
