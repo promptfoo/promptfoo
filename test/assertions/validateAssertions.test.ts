@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AssertValidationError, validateAssertions } from '../../src/assertions/validateAssertions';
+import logger from '../../src/logger';
 
 import type { TestCase } from '../../src/types/index';
 
@@ -207,6 +208,37 @@ describe('validateAssertions', () => {
       ];
 
       expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('warns on the legacy weight: 0 metric-counter pattern and suggests metricOnly', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      try {
+        const legacyCounter: TestCase[] = [
+          {
+            vars: {},
+            assert: [{ type: 'javascript', value: '1', metric: 'tp', weight: 0 }],
+          },
+        ];
+        validateAssertions(legacyCounter);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('metricOnly: true'));
+
+        warnSpy.mockClear();
+        const migrated: TestCase[] = [
+          {
+            vars: {},
+            // weight: 0 left behind by a migration is fine once metricOnly is set,
+            // and weight: 0 without a metric is the documented force-pass usage.
+            assert: [
+              { type: 'javascript', value: '1', metric: 'tp', weight: 0, metricOnly: true },
+              { type: 'javascript', value: '1', weight: 0 },
+            ],
+          },
+        ];
+        validateAssertions(migrated);
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('validates assert-set has assert property', () => {
