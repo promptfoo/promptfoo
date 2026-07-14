@@ -156,7 +156,7 @@ describe('StrategyStats', () => {
     });
 
     it('keeps the strategy cards single-column through tablet widths', () => {
-      const { container } = render(
+      render(
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -165,11 +165,15 @@ describe('StrategyStats', () => {
         />,
       );
 
-      expect(container.querySelector('.grid')).toHaveClass(
+      const attackMethodsGrid = screen
+        .getByRole('region', { name: 'Attack Methods Statistics' })
+        .querySelector('.grid');
+
+      expect(attackMethodsGrid).toHaveClass(
         'grid-cols-1',
         'lg:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]',
       );
-      expect(container.querySelector('.grid')).not.toHaveClass(
+      expect(attackMethodsGrid).not.toHaveClass(
         'sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]',
       );
     });
