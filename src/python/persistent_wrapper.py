@@ -439,7 +439,7 @@ def handle_call(command_line, user_module, default_function_name):
 
         # Signal completion with the response path so provider stdout cannot
         # accidentally satisfy another request's control message.
-        print(f"DONE|{response_file}", flush=True)
+        print(f"\nDONE|{response_file}", flush=True)
 
     except Exception as e:
         print(f"ERROR handling call: {e}", file=sys.stderr, flush=True)
@@ -468,7 +468,7 @@ def handle_call(command_line, user_module, default_function_name):
                 )
 
             # Signal done so Node can read the error response.
-            print(f"DONE|{response_file}", flush=True)
+            print(f"\nDONE|{response_file}", flush=True)
         # No DONE| when response_file is unknown: Node's path match would fail
         # and the call would resolve via timeout anyway; the stderr is the signal.
 
