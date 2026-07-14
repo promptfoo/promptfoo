@@ -854,6 +854,45 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('FIRST\nSECOND');
     });
 
+    it('preserves finalized text when a completed response redacts an earlier streamed draft', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"unsafe draft that must not survive"}',
+          '',
+          'event: response.completed',
+          `data: ${JSON.stringify({
+            type: 'response.completed',
+            response: {
+              id: 'resp_completed_redacted',
+              model: 'openai.gpt-5.5',
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'safe final' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('safe final');
+    });
+
     it('preserves every completed output-text item when the terminal output is empty', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [

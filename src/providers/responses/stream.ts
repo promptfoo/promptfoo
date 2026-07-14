@@ -72,6 +72,7 @@ function recoverIncompleteOutput(
   output: any[] | undefined,
   outputTextByContent: Map<string, string>,
   unindexedOutputTexts: string[],
+  allowTerminalTextReplacement: boolean,
 ): any[] | undefined {
   const recoveredOutput = Array.isArray(output)
     ? output.map((item: any) =>
@@ -123,7 +124,11 @@ function recoverIncompleteOutput(
       unmatchedStreamedTexts.push(text);
       continue;
     }
-    if (typeof content.text !== 'string' || text.length > content.text.length) {
+    if (
+      typeof content.text !== 'string' ||
+      content.text.length === 0 ||
+      (allowTerminalTextReplacement && text.length > content.text.length)
+    ) {
       item.content[contentIndex] = { ...content, text };
       recoveredText = true;
     }
@@ -383,10 +388,15 @@ export async function readResponsesStream(
     }
 
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
-    const recoveredOutput = recoverIncompleteOutput(latestResponse.output, outputTextByContent, [
-      ...completedUnindexedOutputTexts,
-      ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
-    ]);
+    const recoveredOutput = recoverIncompleteOutput(
+      latestResponse.output,
+      outputTextByContent,
+      [
+        ...completedUnindexedOutputTexts,
+        ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
+      ],
+      latestResponse.status === 'incomplete',
+    );
     const output =
       recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
     let appendedInvalidOutput = false;
