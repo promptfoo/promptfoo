@@ -481,6 +481,17 @@ describe('sanitizeObject', () => {
         expect(sanitizeObject({ 'x-auth': 'token123' })).toEqual({ 'x-auth': '[REDACTED]' });
       });
 
+      it('should preserve session ID fields', () => {
+        const sessionIds = {
+          sessionId: 'session-camel',
+          sessionID: 'session-capitalized',
+          session_id: 'session-snake',
+          'session-id': 'session-kebab',
+        };
+
+        expect(sanitizeObject(sessionIds)).toEqual(sessionIds);
+      });
+
       it('should redact cookie', () => {
         expect(sanitizeObject({ cookie: 'session=abc123' })).toEqual({ cookie: '[REDACTED]' });
       });
@@ -1192,6 +1203,12 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).not.toContain('plain-secret');
     });
 
+    it('should preserve session IDs in URL-encoded request bodies', () => {
+      const requestBody = 'sessionID=session-123&session_id=session-456';
+
+      expect(sanitizeObject({ requestBody })).toEqual({ requestBody });
+    });
+
     it('should not collapse multiline key-value diagnostic text into one form field', () => {
       const text = 'token=short-value\nowner=user@example.com\n';
 
@@ -1572,6 +1589,12 @@ describe('sanitizeUrl', () => {
   });
 
   describe('query parameter sanitization', () => {
+    it('should preserve session ID parameters', () => {
+      const url = 'https://example.com/api?sessionID=session-123&session_id=session-456';
+
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
     describe('api key patterns', () => {
       it('should redact api_key parameter', () => {
         const url = 'https://example.com/api?api_key=secret123&data=public';
