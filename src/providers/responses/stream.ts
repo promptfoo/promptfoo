@@ -3,6 +3,7 @@ type ResponsesStreamEvent = {
   response?: any;
   delta?: string;
   text?: string;
+  refusal?: string;
   output_text?: { delta?: string };
   output_index?: number;
   content_index?: number;
@@ -74,6 +75,13 @@ function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEv
 }
 
 function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
+  if (event.type === 'response.refusal.done' && typeof event.refusal === 'string') {
+    return {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'refusal', refusal: event.refusal }],
+    };
+  }
   if (event.type === 'response.content_part.done' && event.part?.type === 'refusal') {
     return { type: 'message', role: 'assistant', content: [event.part] };
   }

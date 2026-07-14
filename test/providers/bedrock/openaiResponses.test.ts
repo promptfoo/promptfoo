@@ -1422,6 +1422,24 @@ describe('bedrock openaiResponses helper', () => {
       expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
+    it('does not recover a streamed draft after a response.refusal.done event', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that."}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
     it('preserves interleaved output boundaries when a stream ends before its terminal event', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
