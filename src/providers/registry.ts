@@ -62,6 +62,7 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMetaProvider } from './meta';
 import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
@@ -207,6 +208,25 @@ export const providerMap: ProviderFactory[] = [
         id: providerPath,
         config: providerOptions.config,
         env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'openinterpreter' || providerPath.startsWith('openinterpreter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenInterpreterProvider } = await import('./openinterpreter');
+      const model = providerPath.split(':').slice(1).join(':');
+
+      return new OpenInterpreterProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: model ? { ...providerOptions.config, model } : providerOptions.config,
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
@@ -768,6 +788,19 @@ export const providerMap: ProviderFactory[] = [
         return new LocalAiEmbeddingProvider(modelName, providerOptions);
       }
       return new LocalAiChatProvider(modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('meta:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMetaProvider(providerPath, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
     },
   },
   {

@@ -26,6 +26,7 @@ import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { loadYaml } from '../../src/util/yamlLoad';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
 
+import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
@@ -258,6 +259,91 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should aggregate token usage and count unmetered generation provider calls', async () => {
+      mockProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first',
+          tokenUsage: { completion: 5, numRequests: 1, prompt: 10, total: 15 },
+        })
+        .mockResolvedValueOnce({
+          output: 'second',
+          tokenUsage: { completion: 3, numRequests: 1, prompt: 7, total: 10 },
+        })
+        .mockResolvedValueOnce({ output: 'third' });
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        await provider.callApi('first prompt');
+        await provider.callApi('second prompt');
+        await provider.callApi('third prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'token-plugin' });
+
+      const result = await synthesize({
+        entities: [],
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'token-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      findSpy.mockRestore();
+      expect(result.generationTokenUsage).toEqual({
+        cached: 0,
+        completion: 8,
+        numRequests: 3,
+        prompt: 17,
+        total: 25,
+      });
+    });
+
+    it('should preserve custom provider receivers while tracking generation usage', async () => {
+      class PrivateFieldProvider implements ApiProvider {
+        #providerId = 'private-generation-provider';
+
+        id() {
+          return this.#providerId;
+        }
+
+        async callApi() {
+          return { output: 'Prompt: generated test case' };
+        }
+      }
+
+      const provider = new PrivateFieldProvider();
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        expect(trackedProvider.id()).toBe('private-generation-provider');
+        await trackedProvider.callApi('generation prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'private-provider-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'private-provider-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage?.numRequests).toBe(1);
+      } finally {
+        findSpy.mockRestore();
+      }
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {

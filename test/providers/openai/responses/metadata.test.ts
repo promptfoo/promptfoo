@@ -5,6 +5,7 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import { mockProcessEnv } from '../../../util/utils';
 
 describe('OpenAiResponsesProvider HTTP metadata', () => {
   it('should include HTTP metadata in response', async () => {
@@ -136,10 +137,11 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
     };
 
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
+      data: `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: mockApiResponse })}\n\ndata: [DONE]\n\n`,
       cached: false,
       status: 200,
       statusText: 'OK',
+      headers: { 'content-type': 'text/event-stream' },
     });
 
     const provider = new OpenAiResponsesProvider('gpt-4o', {
@@ -149,7 +151,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       },
     });
 
-    await provider.callApi('Test prompt');
+    const result = await provider.callApi('Test prompt');
 
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
@@ -157,9 +159,33 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
         body: expect.stringContaining('"stream":true'),
       }),
       expect.any(Number),
-      'json',
-      undefined,
+      'text',
+      true,
       undefined,
     );
+    expect(result.output).toBe('Streaming response');
+  });
+
+  it('should time out a streaming response that stalls after headers', async () => {
+    const restoreEnv = mockProcessEnv({ REQUEST_TIMEOUT_MS: '20' });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      const signal = options?.signal;
+      return new Promise((_resolve, reject) =>
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        }),
+      );
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    try {
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+    } finally {
+      restoreEnv();
+    }
   });
 });
