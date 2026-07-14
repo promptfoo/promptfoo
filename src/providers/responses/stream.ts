@@ -95,7 +95,9 @@ function recoverIncompleteOutput(
   const streamedTexts = Array.from(outputTextByContent, ([key, text]) => {
     const [outputIndex, contentIndex] = key.split(':').map(Number);
     return { outputIndex, contentIndex, text };
-  });
+  }).sort(
+    (left, right) => left.outputIndex - right.outputIndex || left.contentIndex - right.contentIndex,
+  );
   if (unindexedOutputTexts.length === unindexedTextLocations.length) {
     unindexedOutputTexts.forEach((text, index) => {
       streamedTexts.push({ ...unindexedTextLocations[index], text });
@@ -279,12 +281,18 @@ export async function readResponsesStream(
   };
 
   const processOutputTextDoneEvent = (event: ResponsesStreamEvent) => {
-    if (typeof event.text !== 'string' || !event.text) {
+    if (typeof event.text !== 'string') {
       return;
     }
 
     const key = getOutputTextKey(event);
     if (key) {
+      if (pendingUnindexedOutputText) {
+        if (event.output_index !== 0 || (event.content_index ?? 0) !== 0) {
+          unassignedUnindexedOutputText += pendingUnindexedOutputText;
+        }
+        pendingUnindexedOutputText = '';
+      }
       const previous = outputTextByContent.get(key) ?? '';
       outputText += event.text.startsWith(previous)
         ? event.text.slice(previous.length)
@@ -296,6 +304,7 @@ export async function readResponsesStream(
       return;
     }
     if (event.output_index !== undefined || event.content_index !== undefined) {
+      pendingUnindexedOutputText = '';
       const invalidKey = getInvalidOutputTextKey(event);
       const previous = invalidlyIndexedOutputTextByContent.get(invalidKey) ?? '';
       outputText += event.text.startsWith(previous)
@@ -382,7 +391,8 @@ export async function readResponsesStream(
     if (
       unassignedUnindexedOutputText &&
       (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0) &&
-      invalidlyIndexedOutputTextByContent.size === 0
+      invalidlyIndexedOutputTextByContent.size === 0 &&
+      finalizedOutputTextKeys.size === 0
     ) {
       return {
         ...latestResponse,
@@ -410,8 +420,14 @@ export async function readResponsesStream(
     const output =
       recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
     let appendedInvalidOutput = false;
+    const terminalTextCounts = new Map<string, number>();
+    for (const text of getTerminalOutputTexts(output)) {
+      terminalTextCounts.set(text, (terminalTextCounts.get(text) ?? 0) + 1);
+    }
     for (const text of invalidlyIndexedOutputTextByContent.values()) {
-      if (getTerminalOutputTexts(output).includes(text)) {
+      const remainingMatches = terminalTextCounts.get(text) ?? 0;
+      if (remainingMatches > 0) {
+        terminalTextCounts.set(text, remainingMatches - 1);
         continue;
       }
       output.push({
