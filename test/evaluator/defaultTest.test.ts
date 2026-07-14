@@ -3,6 +3,17 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockLoadApiProvider = vi.hoisted(() => vi.fn());
+vi.mock('../../src/providers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers')>();
+  mockLoadApiProvider.mockImplementation(actual.loadApiProvider);
+  return {
+    ...actual,
+    loadApiProvider: mockLoadApiProvider,
+  };
+});
+
 import { clearCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
@@ -143,6 +154,27 @@ describe('evaluator defaultTest merging', () => {
     expect(processedTest?.options?.provider).toBe('openai:gpt-4');
     // But other defaultTest options should still be merged
     expect(processedTest?.options?.transform).toBe('output.toUpperCase()');
+  });
+
+  it('should load an object defaultTest.provider once and share it across test cases', async () => {
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt {{text}}')],
+      providers: [mockApiProvider],
+      defaultTest: {
+        provider: { id: 'echo' },
+      },
+      tests: [{ vars: { text: 'one' } }, { vars: { text: 'two' } }, { vars: { text: 'three' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(3);
+    const echoLoads = mockLoadApiProvider.mock.calls.filter(
+      ([providerId]) => providerId === 'echo',
+    );
+    expect(echoLoads).toHaveLength(1);
   });
 });
 
