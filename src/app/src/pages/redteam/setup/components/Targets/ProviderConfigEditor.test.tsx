@@ -810,6 +810,18 @@ describe('ProviderConfigEditor', () => {
     expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
   });
 
+  it('should render the raw provider editor for Open Interpreter targets', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: {} }}
+        setProvider={vi.fn()}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(screen.getByTestId('custom-config')).toBeInTheDocument();
+  });
+
   it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
     const mockSetProvider = vi.fn();
 

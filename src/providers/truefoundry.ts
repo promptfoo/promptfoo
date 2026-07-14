@@ -140,11 +140,23 @@ function getGuardrailDirection(
 ): Pick<NonNullable<ProviderResponse['guardrails']>, 'flaggedInput' | 'flaggedOutput'> {
   const checks = payload.guardrail_checks;
   if (isJsonRecord(checks)) {
-    const flaggedInput = hasGuardrailCheck(checks.llm_input_guardrails);
-    const flaggedOutput = hasGuardrailCheck(checks.llm_output_guardrails);
+    const flaggedInput =
+      hasGuardrailCheck(checks.llm_input_guardrails) || hasGuardrailCheck(checks.input_guardrails);
+    const flaggedOutput =
+      hasGuardrailCheck(checks.llm_output_guardrails) ||
+      hasGuardrailCheck(checks.output_guardrails);
     if (flaggedInput || flaggedOutput) {
       return { flaggedInput, flaggedOutput };
     }
+  }
+
+  const error = payload.error;
+  const parameter = isJsonRecord(error) ? getString(error.param)?.toLowerCase() : undefined;
+  if (parameter === 'prompt' || parameter === 'input') {
+    return { flaggedInput: true, flaggedOutput: false };
+  }
+  if (parameter === 'response' || parameter === 'output' || parameter === 'completion') {
+    return { flaggedInput: false, flaggedOutput: true };
   }
 
   if (/\b(prompt|input)\b/i.test(message)) {

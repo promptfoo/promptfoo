@@ -404,6 +404,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
+          tokenUsage.numRequests = 0;
         }
         logger.debug('Returning cached Vertex Claude response', {
           model: this.modelName,
@@ -628,6 +629,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
+          tokenUsage.numRequests = 0;
         }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
@@ -944,6 +946,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
+          tokenUsage.numRequests = 0;
         }
         logger.debug('Returning cached Vertex Palm2 response', {
           model: this.modelName,

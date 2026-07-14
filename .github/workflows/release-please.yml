@@ -78,8 +78,8 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
       - run: npm test
 
   publish-npm:
@@ -104,8 +104,8 @@ jobs:
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
       # Empty NODE_AUTH_TOKEN so npm uses OIDC trusted publishing instead of the
       # placeholder token actions/setup-node writes into .npmrc (actions/setup-node#1440).
       - run: npm publish --provenance --access public
@@ -151,8 +151,8 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
       - name: Publish package
         run: npm publish --provenance --access public
         env:
@@ -203,20 +203,9 @@ jobs:
         README.md
         CHANGELOG.md
     steps:
-      # Token is scoped to the foreign repo (code-scan-action) via owner/
-      # repositories. Do NOT add `permission-*` inputs here until the App
-      # installation is confirmed to grant every requested permission — see
-      # the matching note on the release-please job above.
-      - name: Create app token for code-scan-action mirror
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
-        id: mirror-token
-        with:
-          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
-          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
-          owner: promptfoo
-          repositories: code-scan-action
-
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -224,7 +213,7 @@ jobs:
           cache: 'npm'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
 
       # The action's runtime install is pinned to this commit's root package.json
       # version, inlined into dist/ at build time. Refuse to mirror a release whose
@@ -240,7 +229,7 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           for attempt in 1 2 3 4 5; do
-            if npm view "promptfoo@${version}" version; then
+            if npm view "promptfoo@${version}" version --registry=https://registry.npmjs.org/; then
               exit 0
             fi
             if [[ "$attempt" -lt 5 ]]; then
@@ -252,11 +241,11 @@ jobs:
           exit 1
 
       # Install root deps first; code-scan-action imports shared source from ../../src
-      - run: npm ci
+      - run: npm ci --registry=https://registry.npmjs.org/
 
       - name: Install Code Scan Action dependencies
         working-directory: code-scan-action
-        run: npm ci
+        run: npm ci --registry=https://registry.npmjs.org/
 
       - name: Type Check Code Scan Action
         working-directory: code-scan-action
@@ -320,6 +309,17 @@ jobs:
           path: |
             ${{ runner.temp }}/code-scan-action-export/dist
             ${{ runner.temp }}/code-scan-action-export/action.yml
+
+      # Mint the foreign-repository write token only after all dependency
+      # installation, build, and payload preparation steps have completed.
+      - name: Create app token for code-scan-action mirror
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: mirror-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+          owner: promptfoo
+          repositories: code-scan-action
 
       - name: Open mirror release PR
         env:

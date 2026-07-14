@@ -489,7 +489,7 @@ describe('GoogleProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 15,
         total: 15,
-        numRequests: 1,
+        numRequests: 0,
       });
     });
 

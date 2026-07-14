@@ -558,6 +558,34 @@ describe('doGenerateRedteam', () => {
     expect(generatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
   });
 
+  it('should preserve cache-only generation token usage in generated output metadata', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({ prompts: [{ raw: 'Test prompt' }], providers: [], tests: [] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'redteam' } },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: { cached: 50, completion: 0, numRequests: 0, prompt: 0, total: 50 },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].metadata).toMatchObject({
+      generationTokenUsage: { cached: 50, numRequests: 0, total: 50 },
+    });
+  });
+
   it('should write to config file when write option is true', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',

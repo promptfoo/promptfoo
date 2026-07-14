@@ -346,6 +346,42 @@ describe('synthesize', () => {
       }
     });
 
+    it('should track providers with immutable callApi properties', async () => {
+      const provider = {
+        id: () => 'immutable-generation-provider',
+      } as ApiProvider;
+      Object.defineProperty(provider, 'callApi', {
+        configurable: false,
+        writable: false,
+        value: async () => ({ output: 'Prompt: generated test case' }),
+      });
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('generation prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'immutable-provider-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'immutable-provider-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage?.numRequests).toBe(1);
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

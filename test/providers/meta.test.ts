@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { loadClaudeCodeCredential } from '../../src/providers/anthropic/claudeCodeAuth';
 import { getAnthropicEnvHeaderSuppressions } from '../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
@@ -638,6 +639,28 @@ describe('MetaResponsesProvider request body shaping', () => {
     expect(body.max_tokens).toBeUndefined();
   });
 
+  it('maps a passthrough chat completion cap onto max_output_tokens', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { passthrough: { max_completion_tokens: 2048 } },
+    });
+
+    const { body } = await (provider as any).getOpenAiBody('Hello');
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
+  it('preserves an explicit top_p when reasoning is enabled', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { reasoning_effort: 'high', top_p: 0.7 },
+    });
+
+    const { body } = await (provider as any).getOpenAiBody('Hello');
+
+    expect(body.reasoning?.effort).toBe('high');
+    expect(body.top_p).toBe(0.7);
+  });
+
   it('does not leak OPENAI_* env defaults into Responses requests', async () => {
     const restore = mockProcessEnv({
       OPENAI_MAX_COMPLETION_TOKENS: '256',
@@ -699,6 +722,14 @@ describe('MetaResponsesProvider request body shaping', () => {
     await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(
       /streaming is not supported/,
     );
+  });
+
+  it('rejects unsupported Responses logprobs includes before making a request', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { include: ['logprobs'] as any },
+    });
+
+    await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(/logprobs/);
   });
 });
 
@@ -847,6 +878,19 @@ describe('MetaMessagesProvider', () => {
       expect(headers.has('x-proxy-secret')).toBe(false);
       expect(headers.has('x-api-key')).toBe(false);
     } finally {
+      restore();
+    }
+  });
+
+  it('suppresses SDK environment headers even when suite env overrides clear them', () => {
+    const restore = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: hunter2' });
+    const previousConfig = cliState.config;
+    cliState.config = { ...previousConfig, env: { ANTHROPIC_CUSTOM_HEADERS: '' } } as any;
+
+    try {
+      expect(getAnthropicEnvHeaderSuppressions()).toEqual({ 'X-Proxy-Secret': null });
+    } finally {
+      cliState.config = previousConfig;
       restore();
     }
   });

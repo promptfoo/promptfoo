@@ -124,6 +124,26 @@ describe('TokenUsageTracker', () => {
     });
   });
 
+  it('does not create provider usage for an absent response', () => {
+    tracker.trackResponseUsage('test-provider', undefined);
+
+    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
+  });
+
+  it('does not corrupt provider usage when a response token getter throws', () => {
+    const response = {
+      tokenUsage: Object.defineProperty({}, 'total', {
+        enumerable: true,
+        get() {
+          throw new Error('usage getter failed');
+        },
+      }),
+    };
+
+    expect(() => tracker.trackResponseUsage('test-provider', response)).not.toThrow();
+    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
+  });
+
   it('should merge token usage for the same provider', () => {
     const usage1: TokenUsage = {
       total: 100,

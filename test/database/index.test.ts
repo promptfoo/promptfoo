@@ -219,6 +219,17 @@ describe('database', () => {
       expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
     });
 
+    it('should refuse the default user database in a Jest child process', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      vi.stubEnv('NODE_ENV', 'test');
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', '1');
+
+      expect(() => withTestRunnerMarkers({}, () => getDbPath())).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
     it.each(['', '0', 'false'])('should ignore VITEST=%j outside Vitest', (value) => {
       const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
       vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);

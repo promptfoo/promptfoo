@@ -169,9 +169,18 @@ function applyMetaOutputCap(
   value: number | undefined,
 ): void {
   if (field in passthrough) {
+    if (field === 'max_output_tokens') {
+      delete body.max_completion_tokens;
+    }
     return;
   }
-  const outputCap = passthrough.max_tokens ?? value;
+  const outputCap =
+    (field === 'max_output_tokens' ? passthrough.max_completion_tokens : undefined) ??
+    passthrough.max_tokens ??
+    value;
+  if (field === 'max_output_tokens') {
+    delete body.max_completion_tokens;
+  }
   if (outputCap === undefined) {
     delete body[field];
   } else {
@@ -189,6 +198,9 @@ function assertSupportedMetaRequest(
     );
   }
   if ('logprobs' in body) {
+    throw new Error('Muse Spark models do not support logprobs.');
+  }
+  if (Array.isArray(body.include) && body.include.includes('logprobs')) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
   if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
@@ -229,8 +241,13 @@ function applyMetaSamplingHygiene(
     }
   }
   for (const key of samplingKeys) {
-    if (config[key] === undefined && !(key in passthrough)) {
+    if (key in passthrough) {
+      continue;
+    }
+    if (config[key] === undefined) {
       delete body[key];
+    } else {
+      body[key] = config[key];
     }
   }
 }

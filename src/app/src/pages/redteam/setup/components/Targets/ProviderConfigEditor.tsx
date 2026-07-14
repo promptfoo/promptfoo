@@ -349,7 +349,7 @@ function ProviderConfigEditor({
 
   return (
     <div>
-      {providerType === 'custom' && (
+      {(providerType === 'custom' || providerType === 'openinterpreter') && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}

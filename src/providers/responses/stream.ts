@@ -102,6 +102,23 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
+  if (
+    latestResponse &&
+    outputText &&
+    (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0)
+  ) {
+    return {
+      ...latestResponse,
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: outputText }],
+        },
+      ],
+    };
+  }
+
   if (latestResponse) {
     return latestResponse;
   }

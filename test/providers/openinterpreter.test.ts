@@ -421,6 +421,57 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it('renders row workspace variables before validating structured input paths', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-row-workspace-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'image');
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({ config: { basePath: root } });
+
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
+      {
+        vars: { workspace: 'workspace' },
+        prompt: { config: { working_dir: '{{workspace}}', skip_git_repo_check: true } },
+      } as any,
+    );
+    const { threadStart, turnStart } = await startTurn(server);
+
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
+    ]);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('allows framework test options in prompt config while rejecting provider-option typos', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider();
+
+    const resultPromise = provider.callApi('framework options', {
+      vars: {},
+      prompt: {
+        config: { transform: 'output', storeOutputAs: 'saved', runSerially: true },
+      },
+    } as any);
+    await startTurn(server);
+    completeTurn(server, 'ok');
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'ok' });
+    await expect(
+      provider.callApi('bad config', {
+        vars: {},
+        prompt: { config: { approval_policiy: 'never' } },
+      } as any),
+    ).resolves.toMatchObject({ error: expect.stringContaining('approval_policiy') });
+  });
+
   it('forwards only the validated absolute local path when the launch directory contains a different file', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-path-leak-'));

@@ -25,7 +25,9 @@ import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
  */
 export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
   const suppressed: Record<string, null> = {};
-  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
+  // The SDK reads the process environment directly. Config-level env
+  // overrides must not mask headers that the SDK will still attach.
+  const customHeadersEnv = process.env.ANTHROPIC_CUSTOM_HEADERS;
   if (!customHeadersEnv) {
     return suppressed;
   }

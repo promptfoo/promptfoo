@@ -742,6 +742,36 @@ Prompt:
       ]);
     });
 
+    it('should preserve interior blank lines in pretty-printed empty-marker prompts', () => {
+      const input = `Prompt:
+{
+  "tool": "search_docs",
+
+  "args": { "query": "first" }
+}
+Prompt:
+{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`;
+
+      expect(parseGeneratedPrompts(input)).toEqual([
+        {
+          __prompt: `{
+  "tool": "search_docs",
+
+  "args": { "query": "first" }
+}`,
+        },
+        {
+          __prompt: `{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`,
+        },
+      ]);
+    });
+
     it('should not return empty prompts when Prompt marker has no content', () => {
       const input = `Prompt:
 Plan: No prompt was generated`;

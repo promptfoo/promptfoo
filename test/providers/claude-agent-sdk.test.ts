@@ -2347,7 +2347,7 @@ describe('ClaudeCodeSDKProvider', () => {
           const provider = new ClaudeCodeSDKProvider({
             config: {
               ask_user_question: { behavior: 'first_option' },
-              can_use_tool: canUseTool,
+              can_use_tool: canUseTool as any,
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
@@ -3755,6 +3755,27 @@ describe('ClaudeCodeSDKProvider', () => {
 
         // Two real SDK calls — cache must be skipped because the user-supplied
         // callback can change tool decisions in ways the cache key can't model.
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
+      it('should use distinct cache entries for AskUserQuestion behavior', async () => {
+        await clearCache();
+        mockQuery.mockReturnValueOnce(createMockResponse('First option response'));
+
+        const firstOption = new ClaudeCodeSDKProvider({
+          config: { ask_user_question: { behavior: 'first_option' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await firstOption.callApi('Test prompt');
+
+        mockQuery.mockReturnValueOnce(createMockResponse('Text response'));
+        const textResponse = new ClaudeCodeSDKProvider({
+          config: { ask_user_question: { behavior: 'deny' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await textResponse.callApi('Test prompt');
+
+        expect(result.output).toBe('Text response');
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 

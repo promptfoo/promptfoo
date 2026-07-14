@@ -381,7 +381,7 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
   //  - strip every npm_config_*/NPM_CONFIG_* env var, and
   //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
   //    consulted (two distinct paths: npm rejects loading one file as both).
-  // The pinned version therefore resolves from the runner's default (public) registry.
+  // The pinned version therefore resolves only from the public npm registry.
   // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
   // for this one install (the SaaS scan already requires public egress); the scan
   // subprocess keeps workflow-provided npm config because its nested npx (MCP)
@@ -404,6 +404,7 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
       '-g',
       `promptfoo@${promptfooVersion}`,
       '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
       '--userconfig',
       emptyUserConfig,
       '--globalconfig',

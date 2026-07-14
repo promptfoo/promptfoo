@@ -605,7 +605,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 1,
+            numRequests: 0,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,

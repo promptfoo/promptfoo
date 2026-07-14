@@ -4,6 +4,7 @@ import path from 'path';
 
 import { z } from 'zod';
 import cliState from '../cliState';
+import { renderVarsInObject } from '../util/render';
 import {
   CodexAppServerConfigSchema,
   OpenAICodexAppServerProvider,
@@ -20,6 +21,22 @@ import type {
 import type { CodexAppServerConfig } from './openai/codex-app-server';
 
 const MAX_INLINE_IMAGE_CHARS = 5_000_000;
+const FRAMEWORK_PROMPT_OPTION_KEYS = new Set([
+  'prefix',
+  'suffix',
+  'postprocess',
+  'transform',
+  'transformVars',
+  'storeOutputAs',
+  'rubricPrompt',
+  'provider',
+  'factuality',
+  'disableVarExpansion',
+  'disableConversationVar',
+  'disableDefaultAsserts',
+  'runSerially',
+  'repeat',
+]);
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -66,6 +83,18 @@ function parseOpenInterpreterConfig(
   }
 
   return parsed.data as OpenInterpreterConfig;
+}
+
+function parseOpenInterpreterPromptConfig(config: unknown): OpenInterpreterConfig {
+  if (!isRecord(config)) {
+    return parseOpenInterpreterConfig(config as OpenInterpreterConfig);
+  }
+
+  return parseOpenInterpreterConfig(
+    Object.fromEntries(
+      Object.entries(config).filter(([key]) => !FRAMEWORK_PROMPT_OPTION_KEYS.has(key)),
+    ) as OpenInterpreterConfig,
+  );
 }
 
 function validateThreadPersistence(config: OpenInterpreterConfig): void {
@@ -347,14 +376,17 @@ export class OpenInterpreterProvider implements ApiProvider {
     let temporaryWorkspace: string | undefined;
     try {
       const promptConfig = context?.prompt?.config
-        ? parseOpenInterpreterConfig(context.prompt.config as OpenInterpreterConfig)
+        ? parseOpenInterpreterPromptConfig(context.prompt.config)
         : undefined;
-      const effectiveConfig: OpenInterpreterConfig = {
-        ...this.config,
-        ...(promptConfig ?? {}),
-        cli_config: mergeRecords(this.config.cli_config, promptConfig?.cli_config),
-        cli_env: { ...(this.config.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
-      };
+      const effectiveConfig = renderVarsInObject(
+        {
+          ...this.config,
+          ...(promptConfig ?? {}),
+          cli_config: mergeRecords(this.config.cli_config, promptConfig?.cli_config),
+          cli_env: { ...(this.config.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
+        },
+        context?.vars,
+      ) as OpenInterpreterConfig;
       validateThreadPersistence(effectiveConfig);
 
       if (!effectiveConfig.working_dir) {

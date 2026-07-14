@@ -924,10 +924,11 @@ describe('AIStudioChatProvider', () => {
         tokenUsage: {
           cached: 15,
           total: 15,
-          numRequests: 1,
+          numRequests: 0,
         },
         raw: mockResponse.data,
         cached: true,
+        cost: undefined,
         metadata: {},
       });
     });
@@ -2331,7 +2332,7 @@ describe('AIStudioChatProvider', () => {
         expect(response.tokenUsage).toEqual({
           cached: 80,
           total: 80,
-          numRequests: 1,
+          numRequests: 0,
           completionDetails: {
             reasoning: 50,
             acceptedPrediction: 0,
@@ -2598,7 +2599,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.error).toContain('No embedding found');
   });
 
-  it('marks responses as cached and records one logical request', async () => {
+  it('marks responses as cached without recording an upstream request', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       ...(embeddingResponse([0.1, 0.2], 3) as any),
       cached: true,
@@ -2608,7 +2609,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello');
 
     expect(response.cached).toBe(true);
-    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 1 });
+    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 0 });
   });
 
   it('does not support text inference via callApi', async () => {

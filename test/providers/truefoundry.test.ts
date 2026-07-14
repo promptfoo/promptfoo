@@ -469,6 +469,44 @@ describe('TrueFoundry', () => {
         });
       });
 
+      it('should recognize published TrueFoundry guardrail key names', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: { message: 'Guardrail violation detected', type: 'guardrail_checks_failed' },
+              guardrail_checks: {
+                llm_input_guardrails: [],
+                input_guardrails: [{ name: 'safety/prompt-injection' }],
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: true, flaggedOutput: false });
+      });
+
+      it('should prefer the structured Azure prompt parameter over ambiguous error text', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: {
+                message: 'The response was filtered.',
+                code: 'content_filter',
+                param: 'prompt',
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: true, flaggedOutput: false });
+      });
+
       it('should not guess a direction for ambiguous downstream safety blocks', async () => {
         const guardrailResponse = {
           error: {

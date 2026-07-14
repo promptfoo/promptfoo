@@ -125,6 +125,7 @@ export function getDbPath() {
   // identify Jest because the generic jest-worker package sets it for ordinary tasks.
   const isTestProcess =
     process.env.VITEST === 'true' ||
+    (process.env.NODE_ENV === 'test' && process.env.JEST_WORKER_ID !== undefined) ||
     Object.prototype.hasOwnProperty.call(globalThis, '__vitest_worker__') ||
     Object.prototype.hasOwnProperty.call(globalThis, Symbol.for('jest-native-promise'));
   const assertSafeTestPath = () => {

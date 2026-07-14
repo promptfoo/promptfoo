@@ -839,12 +839,13 @@ async function doGenerateRedteamInternal(
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
     const generationRequestCount = generationTokenUsage.numRequests ?? 0;
-    if (generationRequestCount > 0) {
-      const hasReportedGenerationTokens =
-        (generationTokenUsage.total ?? 0) > 0 ||
-        (generationTokenUsage.prompt ?? 0) > 0 ||
-        (generationTokenUsage.completion ?? 0) > 0 ||
-        (generationTokenUsage.cached ?? 0) > 0;
+    const hasReportedGenerationTokens =
+      (generationTokenUsage.total ?? 0) > 0 ||
+      (generationTokenUsage.prompt ?? 0) > 0 ||
+      (generationTokenUsage.completion ?? 0) > 0 ||
+      (generationTokenUsage.cached ?? 0) > 0;
+    const hasGenerationUsage = generationRequestCount > 0 || hasReportedGenerationTokens;
+    if (hasGenerationUsage) {
       logger.info(
         hasReportedGenerationTokens
           ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
@@ -900,7 +901,7 @@ async function doGenerateRedteamInternal(
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
-          ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          ...(hasGenerationUsage && { generationTokenUsage }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -967,7 +968,7 @@ async function doGenerateRedteamInternal(
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
-        ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        ...(hasGenerationUsage && { generationTokenUsage }),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1008,9 +1009,7 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
-          ...((generationTokenUsage.numRequests ?? 0) > 0
-            ? { metadata: { generationTokenUsage } }
-            : {}),
+          ...(hasGenerationUsage ? { metadata: { generationTokenUsage } } : {}),
           tests: redteamTests,
         },
         'redteam.yaml',

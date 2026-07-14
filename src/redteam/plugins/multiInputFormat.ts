@@ -85,7 +85,11 @@ function cleanPrompt(prompt: string): string {
   return cleaned.trim();
 }
 
-function collectPromptAfterEmptyMarker(lines: string[], startIndex: number): string {
+function collectPromptAfterEmptyMarker(
+  lines: string[],
+  startIndex: number,
+  preserveBlankLines = false,
+): string {
   const promptLines: string[] = [];
 
   for (let i = startIndex; i < lines.length; i++) {
@@ -96,7 +100,11 @@ function collectPromptAfterEmptyMarker(lines: string[], startIndex: number): str
       if (promptLines.length === 0) {
         continue;
       }
-      break;
+      if (!preserveBlankLines) {
+        break;
+      }
+      promptLines.push(line);
+      continue;
     }
 
     if (hasPromptBoundaryMarker(trimmedLine)) {
@@ -176,7 +184,7 @@ function parseMultiLinePrompts(
     const prompt = removePrefix(lines[promptIndex].trim(), 'Prompt');
 
     if (prompt.length === 0) {
-      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1);
+      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1, true);
       if (promptAfterEmptyMarker.length > 0) {
         prompts.push(promptAfterEmptyMarker);
       }

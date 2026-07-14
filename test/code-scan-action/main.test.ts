@@ -165,6 +165,7 @@ function expectedInstallArgs(version: string): string[] {
     '-g',
     `promptfoo@${version}`,
     '--ignore-scripts',
+    '--registry=https://registry.npmjs.org/',
     '--userconfig',
     path.join(MOCK_NPMRC_DIR, 'user'),
     '--globalconfig',

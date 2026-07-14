@@ -645,6 +645,43 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBeUndefined();
     });
 
+    it.each(
+      GPT_5_6_MODELS,
+    )('preserves streamed text when a response is incomplete for %s', async (modelId) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete',
+              model: modelId,
+              status: 'incomplete',
+              output: [],
+              usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('partial answer');
+      expect(result.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+    });
+
     it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
       // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
       // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
