@@ -1481,6 +1481,55 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
+      it('should serialize the same explicit thread across Codex instance changes', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const firstThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockReturnValue(firstRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+        const secondThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockResolvedValue(createMockResponse('Second response')),
+          runStreamed: mockRunStreamed,
+        };
+        MockCodex.mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(firstThread),
+            resumeThread: vi.fn().mockReturnValue(firstThread),
+          };
+        }).mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(secondThread),
+            resumeThread: vi.fn().mockReturnValue(secondThread),
+          };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'existing-thread-123' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First', {
+          prompt: { config: { cli_config: { profile: 'first' } } },
+        } as any);
+        await vi.waitFor(() => expect(firstThread.run).toHaveBeenCalledTimes(1));
+
+        const secondCall = provider.callApi('Second', {
+          prompt: { config: { cli_config: { profile: 'second' } } },
+        } as any);
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(secondThread.run).not.toHaveBeenCalled();
+
+        firstRun.resolve(createMockResponse('First response'));
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response' }),
+        );
+        await expect(secondCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Second response' }),
+        );
+        expect(secondThread.run).toHaveBeenCalledTimes(1);
+      });
+
       it('should reuse cached thread when resuming same thread_id', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1500,6 +1549,92 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt 2');
         expect(mockResumeThread).toHaveBeenCalledTimes(1); // Still 1
         expect(mockRun).toHaveBeenCalledTimes(2); // But ran twice
+      });
+
+      it('should not reuse an explicit thread cache entry across authority changes', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+
+        expect(mockResumeThread).toHaveBeenNthCalledWith(1, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'danger-full-access',
+          approvalPolicy: 'never',
+        });
+        expect(mockResumeThread).toHaveBeenNthCalledWith(2, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'read-only',
+          approvalPolicy: 'on-request',
+        });
+      });
+
+      it('should evict stale explicit thread cache entries when options change', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+        await provider.callApi('Broad prompt again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+      });
+
+      it('should keep delimiter-like explicit thread IDs in separate cache families', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'thread:a', persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Nested ID');
+        await provider.callApi('Short ID', {
+          prompt: { config: { thread_id: 'thread' } },
+        } as any);
+        await provider.callApi('Short ID changed', {
+          prompt: { config: { thread_id: 'thread', sandbox_mode: 'read-only' } },
+        } as any);
+        await provider.callApi('Nested ID again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+        expect(mockRun).toHaveBeenCalledTimes(4);
       });
 
       it('should enforce thread pool size limits', async () => {

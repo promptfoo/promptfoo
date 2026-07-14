@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRun = vi.hoisted(() => vi.fn());
@@ -41,6 +43,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     mcpServers: any[];
     toolUseBehavior: unknown;
     resetToolChoice: boolean;
+    eventEmitter = new EventEmitter();
 
     constructor(config: Record<string, any>) {
       this.name = config.name;
@@ -66,6 +69,15 @@ vi.mock('@openai/agents', async (importOriginal) => {
         ...config,
       });
     }
+
+    on(type: string, listener: (...args: any[]) => void) {
+      this.eventEmitter.on(type, listener);
+      return this;
+    }
+
+    emit(type: string, ...args: any[]) {
+      return this.eventEmitter.emit(type, ...args);
+    }
   }
 
   return {
@@ -86,7 +98,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
       agent,
       agentName: agent.name,
       getHandoffAsFunctionTool: vi.fn(),
-      onInvokeHandoff: vi.fn(),
+      onInvokeHandoff: vi.fn(async () => agent),
       toolDescription: config?.toolDescriptionOverride,
       isEnabled: vi.fn(async () => true),
     })),
@@ -420,6 +432,489 @@ describe('OpenAiAgentsProvider', () => {
     const toolResult = await agent.tools[0].invoke({}, '{}');
 
     expect(toolResult).toEqual({ status: 'mocked' });
+  });
+
+  it('neutralizes function tool policy callbacks and guardrails in mock mode', async () => {
+    const isEnabled = vi.fn(async () => false);
+    const needsApproval = vi.fn(async () => true);
+    const inputGuardrail = vi.fn(async () => ({ outputInfo: 'input callback ran' }));
+    const outputGuardrail = vi.fn(async () => ({ outputInfo: 'output callback ran' }));
+    const timeoutErrorFunction = vi.fn(async () => 'timeout callback ran');
+    const callbackTool = vi.mocked(tool)({
+      name: 'callback_tool',
+      description: 'Exercise function tool callbacks',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real' }),
+    });
+    Object.assign(callbackTool, {
+      isEnabled,
+      needsApproval,
+      inputGuardrails: [{ name: 'input-callback', run: inputGuardrail }],
+      outputGuardrails: [{ name: 'output-callback', run: outputGuardrail }],
+      timeoutMs: 1,
+      timeoutBehavior: 'error_as_result',
+      timeoutErrorFunction,
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({
+          name: 'Callback Agent',
+          instructions: 'Exercise the tool.',
+          tools: [callbackTool],
+        }),
+        executeTools: 'mock',
+      },
+    });
+
+    await provider.callApi('Exercise the tool');
+
+    const wrappedTool = mockRun.mock.calls[0][0].tools[0];
+    await expect(wrappedTool.isEnabled({}, {})).resolves.toBe(true);
+    await expect(wrappedTool.needsApproval({}, {}, 'call-id')).resolves.toBe(false);
+    await expect(wrappedTool.invoke({}, '{}')).resolves.toEqual({
+      mocked: true,
+      tool: 'callback_tool',
+    });
+    expect(wrappedTool.inputGuardrails).toEqual([]);
+    expect(wrappedTool.outputGuardrails).toEqual([]);
+    expect(wrappedTool.timeoutMs).toBeUndefined();
+    expect(wrappedTool.timeoutBehavior).toBeUndefined();
+    expect(wrappedTool.timeoutErrorFunction).toBeUndefined();
+    expect(isEnabled).not.toHaveBeenCalled();
+    expect(needsApproval).not.toHaveBeenCalled();
+    expect(inputGuardrail).not.toHaveBeenCalled();
+    expect(outputGuardrail).not.toHaveBeenCalled();
+    expect(timeoutErrorFunction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'toString',
+    'constructor',
+    '__proto__',
+  ])('does not read inherited tool mock values for %s', async (toolName) => {
+    const prototypeNamedTool = vi.mocked(tool)({
+      name: toolName,
+      description: 'Exercise a prototype-shaped tool name.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real' }),
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({
+          name: 'Boundary Agent',
+          instructions: 'Exercise boundary tools.',
+          tools: [prototypeNamedTool],
+        }),
+        executeTools: 'mock',
+      },
+    });
+
+    await provider.callApi('Exercise the tool');
+    const wrappedTool = mockRun.mock.calls[0][0].tools[0];
+
+    await expect(wrappedTool.invoke({}, '{}')).resolves.toEqual({ mocked: true, tool: toolName });
+  });
+
+  it('preserves an explicit null tool mock value', async () => {
+    const nullableTool = vi.mocked(tool)({
+      name: 'nullable_result',
+      description: 'Return a nullable result.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real' }),
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({
+          name: 'Nullable Agent',
+          instructions: 'Exercise the tool.',
+          tools: [nullableTool],
+        }),
+        executeTools: 'mock',
+        toolMocks: { nullable_result: null },
+      },
+    });
+
+    await provider.callApi('Exercise the tool');
+
+    await expect(mockRun.mock.calls[0][0].tools[0].invoke({}, '{}')).resolves.toBeNull();
+  });
+
+  it.each([
+    'false',
+    'mocked',
+    null,
+    0,
+    {},
+  ])('rejects malformed executeTools value %# before loading or running an agent', async (executeTools) => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({ name: 'Unsafe Agent', instructions: 'Run real tools.' }),
+        executeTools: executeTools as any,
+      },
+    });
+
+    await expect(provider.callApi('Run a tool')).rejects.toThrow(/executeTools must be/);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('recursively mocks handoff agent tools when executeTools is mock', async () => {
+    const childTool = vi.mocked(tool)({
+      name: 'lookup_child_order',
+      description: 'Look up a child order',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real-child' }),
+    });
+    const childAgent = new Agent({
+      name: 'Child Agent',
+      instructions: 'Help the child user.',
+      tools: [childTool],
+    });
+    const baseAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Help the user.',
+      handoffs: [childAgent],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: baseAgent,
+        executeTools: 'mock',
+        toolMocks: {
+          lookup_child_order: { status: 'mocked-child' },
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    const agent = mockRun.mock.calls[0][0];
+    const childToolResult = await agent.handoffs[0].tools[0].invoke({}, '{}');
+
+    expect(childToolResult).toEqual({ status: 'mocked-child' });
+  });
+
+  it('reuses wrapped handoff agents for shared references in mock mode', async () => {
+    const childTool = vi.mocked(tool)({
+      name: 'lookup_child_order',
+      description: 'Look up a child order',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real-child' }),
+    });
+    const childAgent = new Agent({
+      name: 'Child Agent',
+      instructions: 'Handle child requests.',
+      tools: [childTool],
+    });
+    const rootAgent = new Agent({
+      name: 'Root Agent',
+      instructions: 'Handle requests.',
+      handoffs: [childAgent, childAgent],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: rootAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    const agent = mockRun.mock.calls[0][0];
+    expect(agent.handoffs[0]).toBe(agent.handoffs[1]);
+    expect(agent.handoffs[0]).not.toBe(childAgent);
+    await expect(agent.handoffs[1].tools[0].invoke({}, '{}')).resolves.toEqual({
+      mocked: true,
+      tool: 'lookup_child_order',
+    });
+  });
+
+  it('keeps self-referential handoffs on the wrapped agent in mock mode', async () => {
+    const selfTool = vi.mocked(tool)({
+      name: 'lookup_self_order',
+      description: 'Look up a self order',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real-self' }),
+    });
+    const selfAgent = new Agent({
+      name: 'Self Agent',
+      instructions: 'Handle requests.',
+      tools: [selfTool],
+      handoffs: [],
+    });
+    selfAgent.handoffs = [selfAgent];
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: selfAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    const agent = mockRun.mock.calls[0][0];
+    expect(agent.handoffs[0]).not.toBe(selfAgent);
+    expect(agent.handoffs[0].handoffs[0]).toBe(agent.handoffs[0]);
+    await expect(agent.handoffs[0].tools[0].invoke({}, '{}')).resolves.toEqual({
+      mocked: true,
+      tool: 'lookup_self_order',
+    });
+  });
+
+  it('rejects explicit SDK handoffs before their callbacks can run in mock mode', async () => {
+    const childAgent = new Agent({ name: 'Child Agent', instructions: 'Handle child requests.' });
+    const childHandoff = vi.mocked(handoff)(childAgent);
+    const onInvokeHandoff = vi.fn(async () => childAgent);
+    childHandoff.onInvokeHandoff = onInvokeHandoff;
+    const rootAgent = new Agent({
+      name: 'Root Agent',
+      instructions: 'Handle requests.',
+      handoffs: [childHandoff],
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: { agent: rootAgent, executeTools: 'mock' },
+    });
+
+    await expect(provider.callApi('Where is my order?')).rejects.toThrow(
+      /does not support explicit Handoff objects/,
+    );
+    expect(onInvokeHandoff).not.toHaveBeenCalled();
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects MCP servers in mock mode', async () => {
+    const baseAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Help the user.',
+      mcpServers: [{ name: 'live-server' } as any],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: baseAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).rejects.toThrow(/does not support MCP/);
+  });
+
+  it('rejects non-function tools in mock mode', async () => {
+    const baseAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Help the user.',
+      tools: [{ type: 'hosted', name: 'hosted_search' } as any],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: baseAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).rejects.toThrow(
+      /only supports function tools/,
+    );
+  });
+
+  it('rejects reusable prompt templates in mock mode', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({
+          name: 'Prompt Agent',
+          instructions: 'Use a reusable prompt.',
+          prompt: { id: 'pmpt_with_hosted_tools' } as any,
+        }),
+        executeTools: 'mock',
+      },
+    });
+
+    await expect(provider.callApi('Use the template')).rejects.toThrow(
+      /does not support reusable prompt templates/,
+    );
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    'mock',
+  ] as const)('rejects root SandboxAgent capabilities when executeTools is %s', async (executeTools) => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          type: 'sandbox',
+          name: 'Sandbox Agent',
+          instructions: 'Use sandbox capabilities.',
+          capabilities: [],
+        },
+        executeTools,
+      },
+    });
+
+    await expect(provider.callApi('Run a command')).rejects.toThrow(/SandboxAgent/);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects SandboxAgent capabilities reached through a handoff', async () => {
+    const sandboxAgent = new SandboxAgent({
+      name: 'Sandbox Child',
+      instructions: 'Use sandbox capabilities.',
+      capabilities: [],
+    });
+    const rootAgent = new Agent({
+      name: 'Root Agent',
+      instructions: 'Delegate sandbox work.',
+      handoffs: [sandboxAgent],
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: { agent: rootAgent, executeTools: 'mock' },
+    });
+
+    await expect(provider.callApi('Delegate this')).rejects.toThrow(/SandboxAgent/);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects providerData tools from provider model settings in mock mode', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
+        executeTools: 'mock',
+        modelSettings: {
+          providerData: { tools: [{ type: 'web_search' }] },
+        },
+      },
+    });
+
+    await expect(provider.callApi('Search the web')).rejects.toThrow(/providerData tool overrides/);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { prompt: { id: 'pmpt_root' } },
+    { extraBody: { prompt: { id: 'pmpt_extra' } } },
+  ])('rejects providerData prompt overrides in mock mode %#', async (providerData) => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
+        executeTools: 'mock',
+        modelSettings: { providerData },
+      },
+    });
+
+    await expect(provider.callApi('Use a template')).rejects.toThrow(
+      /providerData prompt overrides/,
+    );
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'extraBody',
+    'extra_body',
+  ] as const)('rejects providerData %s tools from run options in mock mode', async (extraBodyKey) => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
+        executeTools: 'mock',
+        runOptions: {
+          modelSettings: {
+            providerData: {
+              [extraBodyKey]: { tools: [{ type: 'code_interpreter' }] },
+            },
+          },
+        } as any,
+      },
+    });
+
+    await expect(provider.callApi('Run code')).rejects.toThrow(/providerData tool overrides/);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects providerData tools from agent model settings in mock mode', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({
+          name: 'Support Agent',
+          instructions: 'Help the user.',
+          modelSettings: {
+            providerData: { extraBody: { tools: [{ type: 'mcp' }] } },
+          },
+        }),
+        executeTools: 'mock',
+      },
+    });
+
+    await expect(provider.callApi('Use MCP')).rejects.toThrow(/providerData tool overrides/);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('allows unrelated and inherited providerData in mock mode', async () => {
+    const providerData = Object.assign(Object.create({ tools: [{ type: 'web_search' }] }), {
+      metadata: { purpose: 'test' },
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
+        executeTools: 'mock',
+        modelSettings: { providerData },
+      },
+    });
+
+    await expect(provider.callApi('Answer safely')).resolves.toEqual(
+      expect.objectContaining({ output: 'Agent answer' }),
+    );
+    expect(mockRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves handoff agent lifecycle listeners in mock mode', async () => {
+    const listener = vi.fn();
+    const childAgent = new Agent({ name: 'Child Agent', instructions: 'Handle child work.' });
+    childAgent.on('agent_start', listener);
+    const rootAgent = new Agent({
+      name: 'Root Agent',
+      instructions: 'Delegate work.',
+      handoffs: [childAgent],
+    });
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: { agent: rootAgent, executeTools: 'mock' },
+    });
+
+    await provider.callApi('Delegate this');
+    const wrappedChild = mockRun.mock.calls[0][0].handoffs[0];
+    wrappedChild.emit('agent_start', {}, wrappedChild, []);
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('preserves explicit zero-valued token usage fields', async () => {
