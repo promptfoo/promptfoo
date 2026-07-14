@@ -898,6 +898,7 @@ describe('OpenAI assertions', () => {
       // malformed tool_calls entry. The guard is meant to reject these with a clear reason,
       // not crash on `toolsOutput[0].function.name` when `.function` is missing/null.
       const malformedOutputs = [
+        null,
         [{ type: 'custom', custom: { name: 'exec', input: '{}' } }],
         [{ id: 'call_1', type: 'function', function: null }],
         ['not-an-object'],
