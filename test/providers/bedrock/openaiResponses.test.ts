@@ -1610,6 +1610,48 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
+    it.each([
+      undefined,
+      'content_filter',
+    ])('prefers finalized tool arguments over an incomplete terminal snapshot (reason: %s)', async (reason) => {
+      const terminalResponse = {
+        status: 'incomplete',
+        ...(reason ? { incomplete_details: { reason } } : {}),
+        output: [{ type: 'function_call', name: 'lookup', arguments: '{"q":', call_id: 'call_1' }],
+      };
+      const body = [
+        'event: response.output_item.done',
+        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: '{"q":"complete"}', call_id: 'call_1' } })}`,
+        '',
+        'event: response.incomplete',
+        `data: ${JSON.stringify({ type: 'response.incomplete', response: terminalResponse })}`,
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0]).toEqual(
+        expect.objectContaining({ type: 'function_call', arguments: '{"q":"complete"}' }),
+      );
+    });
+
+    it('keeps completed terminal tool output authoritative over an earlier finalized item', async () => {
+      const body = [
+        'event: response.output_item.done',
+        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: '{"q":"draft"}', call_id: 'call_1' } })}`,
+        '',
+        'event: response.completed',
+        `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [{ type: 'function_call', name: 'lookup', arguments: '{"q":"authoritative"}', call_id: 'call_1' }] } })}`,
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0]).toEqual(
+        expect.objectContaining({ type: 'function_call', arguments: '{"q":"authoritative"}' }),
+      );
+    });
+
     it('preserves finalized tool calls when earlier unindexed text cannot be assigned', async () => {
       const body = [
         'event: response.created',

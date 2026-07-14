@@ -157,6 +157,7 @@ function mergeFinalizedStreamOutput(
   output: any[] | undefined,
   finalizedNonMessageItems: FinalizedStreamOutputItem[],
   finalizedRefusalItems: FinalizedStreamOutputItem[],
+  preferFinalizedNonMessageItems: boolean,
 ): any[] {
   const refusalIndexes = new Set(
     finalizedRefusalItems
@@ -176,7 +177,7 @@ function mergeFinalizedStreamOutput(
 
   for (const finalizedItem of finalizedNonMessageItems) {
     const identity = finalizedItem.item?.id ?? finalizedItem.item?.call_id;
-    const alreadyPresent = entries.some(({ item, outputIndex }) => {
+    const existingIndex = entries.findIndex(({ item, outputIndex }) => {
       if (
         finalizedItem.outputIndex !== undefined &&
         outputIndex === finalizedItem.outputIndex &&
@@ -190,8 +191,10 @@ function mergeFinalizedStreamOutput(
         (item?.id === identity || item?.call_id === identity)
       );
     });
-    if (!alreadyPresent) {
+    if (existingIndex < 0) {
       entries.push(finalizedItem);
+    } else if (preferFinalizedNonMessageItems) {
+      entries[existingIndex] = { ...entries[existingIndex], item: finalizedItem.item };
     }
   }
 
@@ -659,6 +662,7 @@ export async function readResponsesStream(
     latestResponse?.output,
     Array.from(finalizedNonMessageItems.values()),
     Array.from(finalizedRefusalItems.values()),
+    latestResponse?.status !== 'completed',
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
@@ -669,6 +673,7 @@ export async function readResponsesStream(
       latestResponse.output,
       Array.from(finalizedNonMessageItems.values()),
       [],
+      latestResponse.status !== 'completed',
     );
     return { ...latestResponse, output: safeOutput.filter((item) => item !== undefined) };
   }
