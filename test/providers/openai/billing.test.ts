@@ -138,6 +138,45 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
+  it.each([
+    ['gpt-5.6', 5, 30],
+    ['gpt-5.6-sol', 5, 30],
+    ['gpt-5.6-terra', 2.5, 15],
+    ['gpt-5.6-luna', 1, 6],
+  ])('prices %s image input tokens at the text input rate', (model, inputRate, outputRate) => {
+    expect(
+      calculateOpenAIUsageCost(
+        model,
+        {},
+        {
+          input_tokens: 1_000,
+          output_tokens: 100,
+          input_tokens_details: { image_tokens: 200, cache_write_tokens: 0 },
+        },
+      ),
+    ).toBeCloseTo((1_000 * inputRate + 100 * outputRate) / 1e6, 10);
+  });
+
+  it('prices cached GPT-5.6 image input tokens at the cached text input rate', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5.6',
+        {},
+        {
+          input_tokens: 1_000,
+          output_tokens: 100,
+          input_tokens_details: {
+            text_tokens: 800,
+            image_tokens: 200,
+            cached_tokens: 200,
+            cached_tokens_details: { image_tokens: 200 },
+            cache_write_tokens: 0,
+          },
+        },
+      ),
+    ).toBeCloseTo((800 * 5 + 200 * 0.5 + 100 * 30) / 1e6, 10);
+  });
+
   it('prices GPT-5.6 explicit cache writes at 1.25x input', () => {
     expect(
       calculateOpenAIUsageCost(

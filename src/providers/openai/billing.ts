@@ -843,6 +843,13 @@ export function calculateOpenAIUsageCost(
     usage.textOutputTokens = 0;
   }
 
+  if (!rates.image) {
+    usage.textInputTokens += usage.imageInputTokens;
+    usage.cachedTextInputTokens += usage.cachedImageInputTokens;
+    usage.imageInputTokens = 0;
+    usage.cachedImageInputTokens = 0;
+  }
+
   const cachedInput = splitCachedInputTokens(usage);
   const textCost = calculateTextCost(rates.text, usage, cachedInput.textInputTokens, config);
   const audioCost = calculateModalCost(
