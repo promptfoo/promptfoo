@@ -357,6 +357,29 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
         configDescription: 'Generation parameters',
       };
 
+    // Open Interpreter coding-agent target
+    case 'openinterpreter':
+      return {
+        title: 'Open Interpreter Target',
+        icon: <Terminal className="size-5 text-primary" />,
+        targetIdLabel: 'Target ID',
+        targetIdPlaceholder: 'openinterpreter',
+        helpText: <>Run coding-agent evaluations against an Open Interpreter app-server.</>,
+        docUrl: 'https://www.promptfoo.dev/docs/providers/openinterpreter/',
+        examples: {
+          title: 'Open Interpreter Target Example',
+          items: [{ code: 'openinterpreter', description: 'Open Interpreter app-server target' }],
+        },
+        configExample: {
+          interpreter_path: 'interpreter',
+          working_dir: './workspace',
+          skip_git_repo_check: true,
+          sandbox_mode: 'read-only',
+          turn_timeout_ms: 60000,
+        },
+        configDescription: 'Open Interpreter executable, workspace, sandbox, and timeout options',
+      };
+
     // Default fallback for custom and other providers
     default:
       return {

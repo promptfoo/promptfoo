@@ -822,6 +822,46 @@ describe('ProviderConfigEditor', () => {
     expect(screen.getByTestId('custom-config')).toBeInTheDocument();
   });
 
+  it('should reject an empty Open Interpreter target ID', () => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: '', config: {} }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        validateAll={true}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(setError).toHaveBeenCalledWith('Provider ID is required');
+    expect(onValidate).toHaveBeenCalledWith(false);
+  });
+
+  it('should reject an invalid Open Interpreter target ID', () => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:chat:gpt-4o', config: {} }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        validateAll={true}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(setError).toHaveBeenCalledWith(
+      'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
+    );
+    expect(onValidate).toHaveBeenCalledWith(false);
+  });
+
   it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
     const mockSetProvider = vi.fn();
 

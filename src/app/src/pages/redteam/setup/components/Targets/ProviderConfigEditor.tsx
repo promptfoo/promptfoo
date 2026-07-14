@@ -263,11 +263,23 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
+      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
+        providerType || '',
+      )
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      }
+      if (
+        providerType === 'openinterpreter' &&
+        provider.id?.trim() &&
+        provider.id !== 'openinterpreter' &&
+        !provider.id.startsWith('openinterpreter:')
+      ) {
+        errors.push(
+          'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
+        );
       }
       if (providerType === 'a2a') {
         if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {

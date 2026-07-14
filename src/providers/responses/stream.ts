@@ -102,14 +102,39 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  const hasOutputText =
-    Array.isArray(latestResponse?.output) &&
-    latestResponse.output.some(
-      (item: any) =>
-        item?.type === 'message' &&
-        Array.isArray(item.content) &&
-        item.content.some((content: any) => content?.type === 'output_text' && content.text),
-    );
+  const terminalOutputText = Array.isArray(latestResponse?.output)
+    ? latestResponse.output
+        .filter((item: any) => item?.type === 'message' && Array.isArray(item.content))
+        .flatMap((item: any) => item.content)
+        .find(
+          (content: any) =>
+            content?.type === 'output_text' &&
+            typeof content.text === 'string' &&
+            content.text.length > 0,
+        )
+    : undefined;
+  const hasOutputText = Boolean(terminalOutputText);
+
+  if (
+    latestResponse?.status === 'incomplete' &&
+    outputText &&
+    terminalOutputText &&
+    outputText.length > terminalOutputText.text.length
+  ) {
+    return {
+      ...latestResponse,
+      output: latestResponse.output.map((item: any) =>
+        item?.type === 'message' && Array.isArray(item.content)
+          ? {
+              ...item,
+              content: item.content.map((content: any) =>
+                content === terminalOutputText ? { ...content, text: outputText } : content,
+              ),
+            }
+          : item,
+      ),
+    };
+  }
 
   if (latestResponse && outputText && !hasOutputText) {
     return {

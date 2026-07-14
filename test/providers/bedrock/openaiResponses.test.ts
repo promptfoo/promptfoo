@@ -682,6 +682,52 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
     });
 
+    it.each(
+      GPT_5_6_MODELS,
+    )('preserves all deltas when an incomplete response contains partial text for %s', async (modelId) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"partial "}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"answer"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_partial',
+              model: modelId,
+              status: 'incomplete',
+              output: [
+                {
+                  id: 'msg_incomplete',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'partial ' }],
+                },
+              ],
+              usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('partial answer');
+    });
+
     it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
       // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
       // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
