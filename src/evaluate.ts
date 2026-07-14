@@ -1,3 +1,4 @@
+import { validateAssertions } from './assertions/validateAssertions';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -225,12 +226,17 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
+  const tests = await readTests(testSuiteConfig.tests);
+  // Enforce the same assertion contract as file-based config loading;
+  // library callers otherwise bypass validateAssertions entirely.
+  validateAssertions(tests, typeof defaultTest === 'object' ? defaultTest : undefined);
+
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
+    tests,
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
