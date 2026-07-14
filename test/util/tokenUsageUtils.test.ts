@@ -402,6 +402,23 @@ describe('tokenUsageUtils', () => {
 
       expect(target.numRequests).toBe(0);
     });
+
+    it('clamps nested assertion numRequests at zero when an under-credited aggregate is debited', () => {
+      // Imported V4 rows accept response.tokenUsage as unknown, so a row can
+      // carry a nested assertions.numRequests that the aggregate never
+      // credited; the debit must not push the bucket negative.
+      const target: TokenUsage = {
+        total: 10,
+        numRequests: 1,
+        assertions: { total: 5, numRequests: 0 },
+      };
+
+      subtractResponseTokenUsage(target, {
+        tokenUsage: { total: 4, assertions: { total: 2, numRequests: 1 } },
+      });
+
+      expect(target.assertions).toEqual({ total: 3, numRequests: 0 });
+    });
   });
 
   describe('accumulateGenerationTokenUsage', () => {

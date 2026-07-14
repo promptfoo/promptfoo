@@ -1076,6 +1076,44 @@ describe('database eval deletion', () => {
       expect(await EvalResult.findById(target.id)).toBeNull();
     });
 
+    it.each([
+      ['a string', 'imported-grading-result'],
+      ['an array', [{ pass: false }]],
+    ])('ignores non-object grading results (%s) when debiting assertion counts', async (_label, malformedGradingResult) => {
+      // Imported/saved V4 rows accept result records as unknown, so
+      // gradingResult can be a truthy non-object. It must not be read as a
+      // componentless failed assertion, which would debit assertFailCount
+      // owned by surviving rows.
+      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const reloaded = await Eval.findById(eval_.id);
+      if (!reloaded) {
+        throw new Error('expected eval to be findable');
+      }
+      reloaded.prompts = [
+        {
+          ...reloaded.prompts[0],
+          metrics: {
+            ...reloaded.prompts[0].metrics!,
+            assertPassCount: 0,
+            assertFailCount: 1,
+          },
+        },
+      ];
+      await reloaded.save();
+      await dbUpdateResult(target.id, { gradingResult: malformedGradingResult as any });
+      await dbUpdateResult(survivor.id, {
+        gradingResult: { pass: false, score: 0, reason: 'manual fail' } as any,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = await Eval.findById(eval_.id);
+      const metrics = after?.prompts[0]?.metrics;
+      expect(metrics?.assertPassCount).toBe(0);
+      expect(metrics?.assertFailCount).toBe(1);
+    });
+
     it('ignores non-numeric named scores when debiting imported rows', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
       const [target] = await EvalResult.findManyByEvalId(eval_.id);

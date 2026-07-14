@@ -258,9 +258,12 @@ export function subtractTokenUsage(
       );
     }
     if (target.assertions.numRequests !== undefined) {
-      target.assertions.numRequests = subtractNumbers(
-        target.assertions.numRequests,
-        update.assertions.numRequests,
+      // Same rationale as the top-level bucket: request counts are never
+      // negative, and imported V4 usage can carry an under-credited nested
+      // `assertions.numRequests`, so clamp the debit at zero.
+      target.assertions.numRequests = Math.max(
+        0,
+        subtractNumbers(target.assertions.numRequests, update.assertions.numRequests),
       );
     }
 

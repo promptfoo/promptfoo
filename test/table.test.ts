@@ -113,6 +113,48 @@ describe('table', () => {
       ]);
     });
 
+    it('pads rows with missing prompt cells so columns stay aligned with headers', () => {
+      // Deleting a single result can leave a row's outputs shorter than the
+      // prompt headers (last cell removed) or sparse (middle cell removed).
+      const twoPromptTable: EvaluateTable = createEvaluateTable({
+        head: {
+          vars: ['var1'],
+          prompts: [
+            createCompletedPrompt('prompt a', { provider: 'p1', label: 'a' }),
+            createCompletedPrompt('prompt b', { provider: 'p2', label: 'b' }),
+          ],
+        },
+        body: [
+          // Last prompt cell deleted: outputs.length < head.prompts.length
+          createEvaluateTableRow({
+            vars: ['short'],
+            outputs: [createEvaluateTableOutput({ text: 'only first' })],
+            testIdx: 0,
+          }),
+          // First prompt cell deleted: sparse hole at index 0
+          createEvaluateTableRow({
+            vars: ['sparse'],
+            outputs: (() => {
+              const outputs = [];
+              outputs[1] = createEvaluateTableOutput({ text: 'only second' });
+              return outputs;
+            })(),
+            testIdx: 1,
+          }),
+        ],
+      });
+
+      generateTable(twoPromptTable);
+
+      const table = mockTableInstances[0];
+      expect(table.push).toHaveBeenCalledWith(['short', chalk.green('[PASS] ') + 'only first', '']);
+      expect(table.push).toHaveBeenCalledWith([
+        'sparse',
+        '',
+        chalk.green('[PASS] ') + 'only second',
+      ]);
+    });
+
     it('should respect maxRows parameter', () => {
       generateTable(mockEvaluateTable, 250, 1);
 

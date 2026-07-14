@@ -504,7 +504,11 @@ function getAssertionCounts(result: Pick<typeof evalResultsTable.$inferSelect, '
   fail: number;
 } | null {
   const gradingResult = result.gradingResult;
-  if (!gradingResult) {
+  // Imported/saved V4 rows accept result records as `unknown`, so
+  // `gradingResult` can be a non-object value (string, array, ...). Treat
+  // anything that isn't a plain object as carrying no assertion counts
+  // rather than misreading it as a componentless failed assertion.
+  if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return null;
   }
   const componentResults = gradingResult.componentResults;
