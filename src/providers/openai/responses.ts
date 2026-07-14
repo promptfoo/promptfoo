@@ -13,6 +13,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
@@ -336,6 +337,22 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
+    const responsesTools = Array.isArray(loadedTools)
+      ? loadedTools.map((tool) => {
+          if (tool?.type !== 'function' || !tool.function) {
+            return tool;
+          }
+          const { function: functionDefinition, ...rest } = tool;
+          return { ...rest, ...functionDefinition };
+        })
+      : loadedTools;
+    const toolChoice =
+      config.tool_choice &&
+      typeof config.tool_choice === 'object' &&
+      config.tool_choice.type === 'function' &&
+      config.tool_choice.function?.name
+        ? { type: 'function', name: config.tool_choice.function.name }
+        : config.tool_choice;
 
     const body = {
       model: this.modelName,
@@ -348,8 +365,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(loadedTools ? { tools: loadedTools } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(responsesTools ? { tools: responsesTools } : {}),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.include === undefined ? {} : { include: config.include }),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
@@ -394,7 +411,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
       },
     };
@@ -525,29 +542,66 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIResponsesResponse>(
-        `${this.getApiUrl()}/responses`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
-          },
-          body: JSON.stringify(body),
+      const url = `${this.getApiUrl()}/responses`;
+      const request = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+          ...this.getOpenAiRequestHeaders(config.headers),
         },
-        timeout,
-        'json',
-        this.shouldBustCache(context),
-        this.config.maxRetries,
-      ));
+        body: JSON.stringify(body),
+      };
+
+      if (body.stream) {
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+        try {
+          const response = await fetchWithCache<string>(
+            url,
+            { ...request, signal: controller.signal },
+            timeout,
+            'text',
+            true,
+            this.config.maxRetries,
+          );
+          status = response.status;
+          statusText = response.statusText;
+          responseHeaders = response.headers;
+          if (status >= 200 && status < 300) {
+            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
+          } else {
+            try {
+              data = JSON.parse(response.data);
+            } catch {
+              data = response.data as OpenAIResponsesResponse;
+            }
+          }
+        } catch (err) {
+          if (controller.signal.aborted) {
+            throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
+      } else {
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          deleteFromCache,
+          headers: responseHeaders,
+        } = await fetchWithCache<OpenAIResponsesResponse>(
+          url,
+          request,
+          timeout,
+          'json',
+          this.shouldBustCache(context),
+          this.config.maxRetries,
+        ));
+      }
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
@@ -611,7 +665,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // Use shared processor for consistent behavior with Azure
-    const result = await this.processor.processResponseOutput(data, config, cached);
+    const result = await this.processor.processResponseOutput(data, config, cached, {
+      suppressReasoningOutput: Boolean(body.stream),
+    });
     const billedResult = this.applyBilling(result, data, config, cached);
 
     // Merge HTTP metadata with any existing metadata from the processor

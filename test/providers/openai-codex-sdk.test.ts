@@ -227,6 +227,9 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({
         config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
       });
+      for (const model of ['openai.gpt-5.6-sol', 'openai.gpt-5.6-terra', 'openai.gpt-5.6-luna']) {
+        new OpenAICodexSDKProvider({ config: { model, model_provider: 'amazon-bedrock' } });
+      }
       // Same when the provider is supplied through raw cli_config.
       new OpenAICodexSDKProvider({
         config: { model: 'openai.gpt-5.4', cli_config: { model_provider: 'amazon-bedrock' } },

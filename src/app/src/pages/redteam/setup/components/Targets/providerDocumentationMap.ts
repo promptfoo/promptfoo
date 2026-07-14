@@ -25,6 +25,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Agent Frameworks
   'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  openinterpreter: `${BASE_DOCS_URL}/openinterpreter`,
   'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
   'bedrock-agent': `${BASE_DOCS_URL}/bedrock-agents`,
   langchain: `${BASE_DOCS_URL}/python`,

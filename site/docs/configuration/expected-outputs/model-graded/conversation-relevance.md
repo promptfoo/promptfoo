@@ -174,7 +174,7 @@ Or set it globally:
 ```yaml
 defaultTest:
   options:
-    provider: anthropic:claude-3-7-sonnet-latest
+    provider: anthropic:claude-sonnet-4-6
 ```
 
 ## See also

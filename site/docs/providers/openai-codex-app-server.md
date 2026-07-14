@@ -77,8 +77,9 @@ Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's fro
 providers:
   - id: openai:codex-app-server
     config:
-      model: openai.gpt-5.5 # Bedrock model id (note the openai. prefix)
+      model: openai.gpt-5.6-sol # Bedrock model id (note the openai. prefix)
       model_provider: amazon-bedrock
+      model_reasoning_effort: max
       sandbox_mode: read-only
       approval_policy: never
       cli_env:
@@ -87,7 +88,7 @@ providers:
         AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
 ```
 
-The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model ids, request model access in a supported Region (`us-east-2` for GPT-5.5), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
+The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (Sol: `us-east-1`/`us-east-2`; Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
 
 ## Basic Usage
 

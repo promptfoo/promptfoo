@@ -196,7 +196,7 @@ export function addOtherEncodings(
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/${encodingName}`,
+        metric: assertion.metric ? `${assertion.metric}/${encodingName}` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,
