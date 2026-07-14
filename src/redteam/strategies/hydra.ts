@@ -44,7 +44,7 @@ export function createAdaptiveMultiTurnStrategy(
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/${metricSuffix}`,
+          metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
         })),
         metadata: {
           ...testCase.metadata,
