@@ -330,6 +330,7 @@ export async function readResponsesStream(
         ? event.text.slice(previous.length)
         : event.text;
       outputTextByContent.set(currentOutputTextKey, event.text);
+      finalizedOutputTextKeys.add(currentOutputTextKey);
       currentOutputTextKey = undefined;
       return;
     }
@@ -387,7 +388,7 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  if (latestResponse && outputText) {
+  if (latestResponse && (outputText || finalizedOutputTextKeys.size > 0)) {
     if (
       unassignedUnindexedOutputText &&
       (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0) &&
