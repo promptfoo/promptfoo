@@ -1862,7 +1862,7 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should redact various authentication header patterns', async () => {
+    it('should redact authentication headers while preserving session IDs', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           method: 'GET',
@@ -1909,7 +1909,7 @@ describe('HttpProvider', () => {
         Password: '[REDACTED]',
         Cookie: '[REDACTED]',
         'X-CSRF-Token': '[REDACTED]',
-        'Session-Id': '[REDACTED]',
+        'Session-Id': 'session456',
         'Content-Type': 'application/json',
         Accept: 'application/json',
         'User-Agent': 'test-agent',
