@@ -398,6 +398,43 @@ describe('EvalOutputCell', () => {
     expect(screen.queryByText('Counter scored 0')).toBeNull();
   });
 
+  it('falls back to the aggregate reason when a thresholded all-metricOnly row fails', () => {
+    const props: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        pass: false,
+        score: 0,
+        gradingResult: {
+          ...defaultProps.output.gradingResult,
+          pass: false,
+          score: 0,
+          reason: 'Aggregate score 0.00 < 0.5 threshold',
+          componentResults: [
+            {
+              assertion: {
+                metric: 'tp',
+                type: 'javascript' as AssertionType,
+                value: '0',
+                metricOnly: true,
+              },
+              pass: false,
+              reason: 'Counter scored 0',
+              score: 0,
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // The threshold failure is explained via the aggregate reason, not the
+    // metric-only counter's own outcome.
+    expect(screen.getByText('Aggregate score 0.00 < 0.5 threshold')).toBeInTheDocument();
+    expect(screen.queryByText('Counter scored 0')).toBeNull();
+  });
+
   it('combines assertion contexts in comment dialog', async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);

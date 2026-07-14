@@ -256,6 +256,19 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
     };
   }
 
+  // A failing row can have no counted failing assertions (e.g. an
+  // all-metricOnly test failing a test-level threshold); fall back to the
+  // aggregate grading reason so the failure is still explained.
+  if (
+    !output.pass &&
+    failReasons.length === 0 &&
+    countedResults.length === 0 &&
+    (output.gradingResult?.componentResults?.length ?? 0) > 0 &&
+    output.gradingResult?.reason
+  ) {
+    return { failReasons: [output.gradingResult.reason], passReasons };
+  }
+
   return { failReasons, passReasons };
 }
 
