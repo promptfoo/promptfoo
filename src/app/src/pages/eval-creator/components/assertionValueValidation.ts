@@ -92,12 +92,6 @@ export const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-icontains-all',
 ]);
 
-export const COMMA_SEPARATED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  ...ARRAY_VALUE_ASSERTION_TYPES,
-  'moderation',
-  'not-moderation',
-]);
-
 export const THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'cost',
   'latency',
@@ -152,23 +146,6 @@ export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
 export const TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
   'not-trajectory:goal-success',
-]);
-
-export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  'is-sql',
-  'contains-sql',
-  'not-is-sql',
-  'not-contains-sql',
-  'trace-span-count',
-  'trace-span-duration',
-  'not-trace-span-count',
-  'not-trace-span-duration',
-  'trajectory:tool-args-match',
-  'trajectory:tool-sequence',
-  'trajectory:step-count',
-  'not-trajectory:tool-args-match',
-  'not-trajectory:tool-sequence',
-  'not-trajectory:step-count',
 ]);
 
 const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([

@@ -2586,6 +2586,27 @@ describe('evaluator', () => {
   });
 
   describe('combineFilterConditions', () => {
+    /**
+     * Renders a combined SQL fragment to text so tests can assert on the operators used.
+     * combineFilterConditions nests fragments as it reduces, so this must recurse —
+     * a flat map over queryChunks would hide operators inside nested fragments.
+     */
+    const toSqlText = (chunk: unknown): string => {
+      if (typeof chunk === 'string') {
+        return chunk;
+      }
+      const chunks = (chunk as { queryChunks?: unknown[] })?.queryChunks;
+      if (Array.isArray(chunks)) {
+        return chunks.map(toSqlText).join(' ');
+      }
+      // drizzle's StringChunk stores its literal text as a string[].
+      const value = (chunk as { value?: unknown })?.value;
+      if (Array.isArray(value)) {
+        return value.filter((part) => typeof part === 'string').join(' ');
+      }
+      return typeof value === 'string' ? value : '';
+    };
+
     it('should return null for empty array', () => {
       const result = combineFilterConditions([]);
       expect(result).toBeNull();
@@ -2604,9 +2625,9 @@ describe('evaluator', () => {
         { condition: cond1, logicOperator: 'AND' },
         { condition: cond2, logicOperator: 'AND' },
       ]);
-      expect(result).not.toBeNull();
-      // Verify the result contains both conditions
       expect(result!.queryChunks.length).toBeGreaterThan(1);
+      expect(toSqlText(result)).toContain('AND');
+      expect(toSqlText(result)).not.toContain('OR');
     });
 
     it('should combine two conditions with OR', () => {
@@ -2616,7 +2637,8 @@ describe('evaluator', () => {
         { condition: cond1, logicOperator: 'AND' },
         { condition: cond2, logicOperator: 'OR' },
       ]);
-      expect(result).not.toBeNull();
+      expect(toSqlText(result)).toContain('OR');
+      expect(toSqlText(result)).not.toContain('AND');
     });
 
     it('should handle mixed AND/OR operators', () => {
@@ -2631,17 +2653,43 @@ describe('evaluator', () => {
         { condition: cond3, logicOperator: 'OR' },
         { condition: cond4, logicOperator: 'AND' },
       ]);
-      expect(result).not.toBeNull();
+      const sqlText = toSqlText(result);
+      expect(sqlText).toContain('OR');
+      expect(sqlText).toContain('AND');
     });
 
-    it('should use AND as default for unrecognized operators', () => {
-      const cond1 = sql`field1 = ${1}`;
-      const cond2 = sql`field2 = ${2}`;
+    // The UI's ResultsFilter type is 'and' | 'or', so the server always receives
+    // lowercase operators; an exact-match against 'OR' silently combined with AND.
+    it.each([
+      'or',
+      'Or',
+      'OR',
+    ])('should combine with OR for logicOperator %j', (logicOperator: string) => {
       const result = combineFilterConditions([
-        { condition: cond1, logicOperator: 'UNKNOWN' },
-        { condition: cond2, logicOperator: 'INVALID' },
+        { condition: sql`field1 = ${1}`, logicOperator },
+        { condition: sql`field2 = ${2}`, logicOperator },
       ]);
-      expect(result).not.toBeNull();
+      const sqlText = toSqlText(result);
+      expect(sqlText).toContain('OR');
+      expect(sqlText).not.toContain('AND');
+    });
+
+    // Filters are unvalidated JSON from the query string, so a non-string operator
+    // must fall back to AND rather than throwing (which would 500 the table route).
+    it.each([
+      ['unrecognized string', 'UNKNOWN'],
+      ['lowercase and', 'and'],
+      ['number', 1 as unknown as string],
+      ['object', {} as unknown as string],
+      ['undefined', undefined as unknown as string],
+    ])('should fall back to AND for a %s operator', (_label: string, logicOperator: string) => {
+      const result = combineFilterConditions([
+        { condition: sql`field1 = ${1}`, logicOperator },
+        { condition: sql`field2 = ${2}`, logicOperator },
+      ]);
+      const sqlText = toSqlText(result);
+      expect(sqlText).toContain('AND');
+      expect(sqlText).not.toContain('OR');
     });
   });
 
