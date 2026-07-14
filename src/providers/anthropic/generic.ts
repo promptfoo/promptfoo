@@ -24,12 +24,14 @@ import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
  * third-party endpoints use this to keep Anthropic-scoped headers (often
  * gateway/proxy secrets) off foreign hosts.
  */
-export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
+export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
+  const scopedHeaders =
+    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
   return Object.fromEntries(
-    Object.keys(parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS)).map((name) => [
-      name,
-      null,
-    ]),
+    Object.keys({
+      ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
+      ...parseAnthropicCustomHeaders(scopedHeaders),
+    }).map((name) => [name, null]),
   );
 }
 
@@ -57,7 +59,7 @@ function getAnthropicCustomHeaderOverrides(
   }
 
   return {
-    ...getAnthropicEnvHeaderSuppressions(),
+    ...getAnthropicEnvHeaderSuppressions(env),
     ...parseAnthropicCustomHeaders(customHeaders),
   };
 }

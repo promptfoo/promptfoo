@@ -24,7 +24,13 @@ export function trackGenerationTokenUsage(
         { tokenUsage: responseTokenUsage },
         { countAsRequest: false },
       );
-      if (!response.cached) {
+      let cached = false;
+      try {
+        cached = Boolean(response.cached);
+      } catch {
+        cached = false;
+      }
+      if (!cached) {
         const reportedRequests = responseTokenUsage?.numRequests ?? 0;
         tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + Math.max(1, reportedRequests);
       }

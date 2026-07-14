@@ -19,6 +19,7 @@ import {
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
+import { trackGenerationTokenUsage } from '../../src/redteam/providers/generationTokenUsage';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -474,6 +475,25 @@ describe('synthesize', () => {
       } finally {
         findSpy.mockRestore();
       }
+    });
+
+    it('should preserve a successful generation response when its cached getter throws', async () => {
+      const response = Object.defineProperty({ output: 'Prompt: generated prompt' }, 'cached', {
+        enumerable: true,
+        get() {
+          throw new Error('cached getter failed');
+        },
+      });
+      const provider = {
+        id: () => 'malformed-cache-provider',
+        callApi: vi.fn().mockResolvedValue(response),
+      } as unknown as ApiProvider;
+      const usage = {};
+
+      await expect(trackGenerationTokenUsage(provider, usage).callApi('generate')).resolves.toBe(
+        response,
+      );
+      expect(usage).toMatchObject({ numRequests: 1 });
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {

@@ -47,9 +47,9 @@ function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
   return `${event.output_index}:${contentIndex}`;
 }
 
-function getTerminalOutputText(output: any[] | undefined): string {
+function getTerminalOutputTexts(output: any[] | undefined): string[] {
   if (!Array.isArray(output)) {
-    return '';
+    return [];
   }
 
   return output
@@ -60,14 +60,13 @@ function getTerminalOutputText(output: any[] | undefined): string {
             .map((content: any) => (typeof content.text === 'string' ? content.text : ''))
         : [],
     )
-    .filter(Boolean)
-    .join('\n');
+    .filter(Boolean);
 }
 
 function recoverIncompleteOutput(
   output: any[] | undefined,
-  outputText: string,
   outputTextByContent: Map<string, string>,
+  unindexedOutputText: string,
 ): any[] | undefined {
   const recoveredOutput = Array.isArray(output)
     ? output.map((item: any) =>
@@ -83,29 +82,16 @@ function recoverIncompleteOutput(
         )
       : [],
   );
-  if (
-    outputTextByContent.size === 0 &&
-    terminalTextLocations.length > 1 &&
-    !getTerminalOutputText(recoveredOutput).includes(outputText)
-  ) {
-    return [
-      ...recoveredOutput,
-      {
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: outputText }],
-      },
-    ];
+  const unindexedTextLocations = terminalTextLocations.filter(
+    ({ outputIndex, contentIndex }) => !outputTextByContent.has(`${outputIndex}:${contentIndex}`),
+  );
+  const streamedTexts = Array.from(outputTextByContent, ([key, text]) => {
+    const [outputIndex, contentIndex] = key.split(':').map(Number);
+    return { outputIndex, contentIndex, text };
+  });
+  if (unindexedOutputText && unindexedTextLocations.length === 1) {
+    streamedTexts.push({ ...unindexedTextLocations[0], text: unindexedOutputText });
   }
-  const streamedTexts =
-    outputTextByContent.size > 0
-      ? Array.from(outputTextByContent, ([key, text]) => {
-          const [outputIndex, contentIndex] = key.split(':').map(Number);
-          return { outputIndex, contentIndex, text };
-        })
-      : terminalTextLocations.length === 1
-        ? [{ ...terminalTextLocations[0], text: outputText }]
-        : [];
 
   let recoveredText = false;
   for (const { outputIndex, contentIndex, text } of streamedTexts) {
@@ -131,6 +117,19 @@ function recoverIncompleteOutput(
       item.content[contentIndex] = { ...content, text };
       recoveredText = true;
     }
+  }
+
+  if (
+    unindexedOutputText &&
+    unindexedTextLocations.length !== 1 &&
+    getTerminalOutputTexts(recoveredOutput).join('') !== unindexedOutputText
+  ) {
+    recoveredOutput.push({
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: unindexedOutputText }],
+    });
+    recoveredText = true;
   }
 
   return recoveredText ? recoveredOutput : undefined;
@@ -179,6 +178,7 @@ export async function readResponsesStream(
   const outputTextByContent = new Map<string, string>();
   let currentOutputTextKey: string | undefined;
   let pendingUnindexedOutputText = '';
+  let unassignedUnindexedOutputText = '';
   let invalidlyIndexedOutputText = '';
   let currentOutputIndexIsInvalid = false;
 
@@ -191,10 +191,8 @@ export async function readResponsesStream(
     outputText += delta;
     const key = getOutputTextKey(event);
     if (key) {
-      outputTextByContent.set(
-        key,
-        (outputTextByContent.get(key) ?? '') + pendingUnindexedOutputText + delta,
-      );
+      unassignedUnindexedOutputText += pendingUnindexedOutputText;
+      outputTextByContent.set(key, (outputTextByContent.get(key) ?? '') + delta);
       currentOutputTextKey = key;
       pendingUnindexedOutputText = '';
       currentOutputIndexIsInvalid = false;
@@ -269,13 +267,13 @@ export async function readResponsesStream(
   if (latestResponse?.status === 'incomplete' && outputText) {
     const recoveredOutput = recoverIncompleteOutput(
       latestResponse.output,
-      outputText,
       outputTextByContent,
+      unassignedUnindexedOutputText + pendingUnindexedOutputText,
     );
     if (invalidlyIndexedOutputText) {
       const output =
         recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
-      if (getTerminalOutputText(output).includes(invalidlyIndexedOutputText)) {
+      if (getTerminalOutputTexts(output).includes(invalidlyIndexedOutputText)) {
         return { ...latestResponse, output };
       }
       return {
