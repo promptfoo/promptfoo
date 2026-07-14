@@ -144,7 +144,7 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
   return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
     .update(apiHost)
     .update('\0')
-    .update(serialized ?? String(body))
+    .update(serialized)
     .digest('hex')}`;
 }
 
