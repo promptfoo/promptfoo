@@ -557,7 +557,10 @@ export async function readResponsesStream(
   }
 
   if (finalizedRefusalItem) {
-    return { ...(latestResponse ?? {}), output: [finalizedRefusalItem] };
+    const retainedOutput = Array.isArray(latestResponse?.output)
+      ? latestResponse.output.filter((item: any) => item?.type !== 'message')
+      : [];
+    return { ...(latestResponse ?? {}), output: [...retainedOutput, finalizedRefusalItem] };
   }
 
   if (

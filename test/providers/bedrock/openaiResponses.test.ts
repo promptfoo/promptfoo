@@ -1440,6 +1440,32 @@ describe('bedrock openaiResponses helper', () => {
       expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
+    it('preserves preceding function calls when reconstructing a finalized refusal', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
+        '',
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"I cannot help with that."}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
+        expect.objectContaining({
+          type: 'message',
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
+          ],
+        }),
+      ]);
+    });
+
     it.each([
       { name: 'object', content: { type: 'output_text', text: 'partial' } },
       { name: 'string', content: 'partial' },
