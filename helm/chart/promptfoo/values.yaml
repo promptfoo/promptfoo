@@ -41,7 +41,20 @@ service:
   type: ClusterIP
   port: 3000
 
-domainName: 'promptfoo.example.com'
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+  hosts:
+    - host: promptfoo.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: promptfoo-certificate-tls
+      hosts:
+        - promptfoo.example.com
 
 resources:
   limits:
