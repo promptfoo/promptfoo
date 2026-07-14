@@ -1507,6 +1507,39 @@ describe('Anthropic utilities', () => {
       expect(requiredBetaFeatures).toEqual([]);
     });
 
+    it('should pass through web_fetch_20260318 with the latest SDK options', () => {
+      const webFetchTool: Anthropic.Messages.WebFetchTool20260318 = {
+        type: 'web_fetch_20260318',
+        name: 'web_fetch',
+        allowed_callers: ['code_execution_20260521'],
+        allowed_domains: ['docs.example.com'],
+        max_uses: 2,
+        response_inclusion: 'excluded',
+        use_cache: false,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toEqual([webFetchTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should pass through web_search_20260318 with the latest SDK options', () => {
+      const webSearchTool: Anthropic.Messages.WebSearchTool20260318 = {
+        type: 'web_search_20260318',
+        name: 'web_search',
+        allowed_callers: ['code_execution_20260521'],
+        blocked_domains: ['ads.example.com'],
+        max_uses: 3,
+        response_inclusion: 'excluded',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webSearchTool]);
+
+      expect(processedTools).toEqual([webSearchTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
     it('should add structured-outputs beta for strict server tools', () => {
       const webSearchTool: WebSearchToolConfig = {
         type: 'web_search_20250305',

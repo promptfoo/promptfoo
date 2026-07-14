@@ -13,6 +13,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
@@ -85,7 +86,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
-    // GPT-5.6 limited-preview models
+    // GPT-5.6 models
+    'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
@@ -175,6 +177,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config,
       this.getBillingUsage(data, config),
       {
+        apiUrl: this.getApiUrl(),
         cachedResponse: cached,
         serviceTier,
       },
@@ -334,6 +337,22 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
+    const responsesTools = Array.isArray(loadedTools)
+      ? loadedTools.map((tool) => {
+          if (tool?.type !== 'function' || !tool.function) {
+            return tool;
+          }
+          const { function: functionDefinition, ...rest } = tool;
+          return { ...rest, ...functionDefinition };
+        })
+      : loadedTools;
+    const toolChoice =
+      config.tool_choice &&
+      typeof config.tool_choice === 'object' &&
+      config.tool_choice.type === 'function' &&
+      config.tool_choice.function?.name
+        ? { type: 'function', name: config.tool_choice.function.name }
+        : config.tool_choice;
 
     const body = {
       model: this.modelName,
@@ -346,8 +365,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(loadedTools ? { tools: loadedTools } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(responsesTools ? { tools: responsesTools } : {}),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.include === undefined ? {} : { include: config.include }),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
@@ -365,6 +384,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.prompt_cache_key === undefined
         ? {}
         : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options === undefined
+        ? {}
+        : { prompt_cache_options: config.prompt_cache_options }),
       ...(config.prompt_cache_retention === undefined
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
@@ -389,10 +411,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
       },
     };
+  }
+
+  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // through the Responses wire format override this so traces attribute to the
+  // actual provider system.
+  protected getGenAISystem(): string {
+    return 'openai';
   }
 
   async callApi(
@@ -416,7 +445,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const asNumber = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
     const spanContext = buildChatSpanContext({
-      system: 'openai',
+      system: this.getGenAISystem(),
       model: this.modelName,
       providerId: this.id(),
       prompt,
@@ -513,29 +542,66 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIResponsesResponse>(
-        `${this.getApiUrl()}/responses`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
-          },
-          body: JSON.stringify(body),
+      const url = `${this.getApiUrl()}/responses`;
+      const request = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+          ...this.getOpenAiRequestHeaders(config.headers),
         },
-        timeout,
-        'json',
-        this.shouldBustCache(context),
-        this.config.maxRetries,
-      ));
+        body: JSON.stringify(body),
+      };
+
+      if (body.stream) {
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+        try {
+          const response = await fetchWithCache<string>(
+            url,
+            { ...request, signal: controller.signal },
+            timeout,
+            'text',
+            true,
+            this.config.maxRetries,
+          );
+          status = response.status;
+          statusText = response.statusText;
+          responseHeaders = response.headers;
+          if (status >= 200 && status < 300) {
+            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
+          } else {
+            try {
+              data = JSON.parse(response.data);
+            } catch {
+              data = response.data as OpenAIResponsesResponse;
+            }
+          }
+        } catch (err) {
+          if (controller.signal.aborted) {
+            throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
+      } else {
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          deleteFromCache,
+          headers: responseHeaders,
+        } = await fetchWithCache<OpenAIResponsesResponse>(
+          url,
+          request,
+          timeout,
+          'json',
+          this.shouldBustCache(context),
+          this.config.maxRetries,
+        ));
+      }
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
@@ -599,7 +665,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // Use shared processor for consistent behavior with Azure
-    const result = await this.processor.processResponseOutput(data, config, cached);
+    const result = await this.processor.processResponseOutput(data, config, cached, {
+      suppressReasoningOutput: Boolean(body.stream),
+    });
     const billedResult = this.applyBilling(result, data, config, cached);
 
     // Merge HTTP metadata with any existing metadata from the processor

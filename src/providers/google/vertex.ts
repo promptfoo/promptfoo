@@ -1293,6 +1293,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
+// Gemini 3.1 Pro preview is available through Vertex AI's global endpoint.
 const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
 const DEFAULT_VERTEX_REGION = 'global';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';

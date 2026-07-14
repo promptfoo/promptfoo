@@ -18,7 +18,7 @@ export function getMonthStartTimestamp(): number {
  * in the current month.
  *
  * A "probe" is a single request to the user's target application.
- * For multi-turn strategies (crescendo, GOAT, hydra), each turn counts as one probe.
+ * For multi-turn strategies (crescendo, GOAT, hydra, goblin), each turn counts as one probe.
  * The probe count is tracked via `response.tokenUsage.numRequests` on each eval result.
  * Falls back to 1 per result row if numRequests is not present.
  */

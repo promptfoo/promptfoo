@@ -62,6 +62,7 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMetaProvider } from './meta';
 import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
@@ -121,6 +122,14 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     ? configuredModel
     : undefined;
 }
+
+// These tier IDs auto-routed to Responses during the GPT-5.6 preview. Preserve existing bare
+// provider configs while allowing every tier through an explicit openai:chat: prefix.
+const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+]);
 
 export const providerMap: ProviderFactory[] = [
   {
@@ -199,6 +208,25 @@ export const providerMap: ProviderFactory[] = [
         id: providerPath,
         config: providerOptions.config,
         env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'openinterpreter' || providerPath.startsWith('openinterpreter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenInterpreterProvider } = await import('./openinterpreter');
+      const model = providerPath.split(':').slice(1).join(':');
+
+      return new OpenInterpreterProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: model ? { ...providerOptions.config, model } : providerOptions.config,
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
@@ -763,6 +791,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('meta:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMetaProvider(providerPath, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('minimax:'),
     create: async (
       providerPath: string,
@@ -953,6 +994,9 @@ export const providerMap: ProviderFactory[] = [
           modelName || configuredModel || 'gpt-4o-transcribe-diarize',
           providerOptions,
         );
+      }
+      if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
+        return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);

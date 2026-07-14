@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost } from './shared';
+import { calculateCost, clampCachedTokens } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -69,19 +69,20 @@ export function calculateDeepSeekCost(
     return calculateCost(modelName, config, promptTokens, completionTokens, DEEPSEEK_CHAT_MODELS);
   }
 
-  const uncachedPromptTokens = cachedTokens ? promptTokens - cachedTokens : promptTokens;
+  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
+  const uncachedPromptTokens = promptTokens - billableCachedTokens;
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
   const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
-  const cacheReadCostTotal = cachedTokens ? cacheReadCost * cachedTokens : 0;
+  const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
   const outputCostTotal = outputCost * completionTokens;
 
   logger.debug(
     `DeepSeek cost calculation for ${modelName}: ` +
       `promptTokens=${promptTokens}, completionTokens=${completionTokens}, ` +
-      `cachedTokens=${cachedTokens || 0}, ` +
+      `cachedTokens=${billableCachedTokens}, ` +
       `inputCost=${inputCostTotal}, cacheReadCost=${cacheReadCostTotal}, outputCost=${outputCostTotal}`,
   );
 

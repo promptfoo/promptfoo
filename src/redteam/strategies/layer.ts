@@ -178,6 +178,7 @@ function getMetricSuffix(stepId: string): string {
   const suffixMap: Record<string, string> = {
     // Multi-turn conversational strategies
     hydra: 'Hydra',
+    goblin: 'Goblin',
     crescendo: 'Crescendo',
     goat: 'GOAT',
     custom: 'Custom',

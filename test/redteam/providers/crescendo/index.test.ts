@@ -85,6 +85,11 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 
 beforeEach(() => {
   vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+  mockApplyRuntimeTransforms.mockReset().mockImplementation(async ({ prompt }) => ({
+    transformedPrompt: prompt,
+    audio: undefined,
+    image: undefined,
+  }));
 });
 
 describe('MemorySystem', () => {
