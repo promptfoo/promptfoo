@@ -1855,6 +1855,40 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('executes finalized function-call argument events instead of stale incomplete arguments', async () => {
+      const body = [
+        'event: response.function_call_arguments.done',
+        'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\\"path\\":\\"final\\"}"}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\\"path\\":\\"draft\\"}"}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output[0]).toEqual(
+        expect.objectContaining({
+          type: 'function_call',
+          id: 'fc_1',
+          call_id: 'call_1',
+          arguments: '{"path":"final"}',
+        }),
+      );
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ arguments: '{"path":"final"}' }),
+        undefined,
+      );
+    });
+
     it('keeps completed terminal tool output authoritative over an earlier finalized item', async () => {
       const body = [
         'event: response.output_item.done',
@@ -1957,7 +1991,10 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output.at(-1)).toEqual(expect.objectContaining({ type: 'message' }));
     });
 
-    it('does not execute tool calls when a refusal arrives after the finalized-output key limit', async () => {
+    it.each([
+      'done',
+      'delta',
+    ])('preserves a refusal %s after the finalized-output key limit without executing tool calls', async (refusalEvent) => {
       const events = [
         'event: response.created',
         'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
@@ -1971,8 +2008,8 @@ describe('bedrock openaiResponses helper', () => {
         );
       }
       events.push(
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":1024,"content_index":0,"refusal":"I cannot help with that"}',
+        `event: response.refusal.${refusalEvent}`,
+        `data: ${JSON.stringify({ type: `response.refusal.${refusalEvent}`, output_index: 1_024, content_index: 0, [refusalEvent === 'done' ? 'refusal' : 'delta']: 'I cannot help with that' })}`,
         '',
       );
 
@@ -1987,9 +2024,16 @@ describe('bedrock openaiResponses helper', () => {
         costCalculator: vi.fn(),
       });
 
-      await processor.processResponseOutput(result, {}, false);
+      const processed = await processor.processResponseOutput(result, {}, false);
 
-      expect(result.output).toEqual([]);
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
+          ],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
       expect(processCalls).not.toHaveBeenCalled();
     });
 

@@ -4,6 +4,9 @@ type ResponsesStreamEvent = {
   delta?: string;
   text?: string;
   refusal?: string;
+  arguments?: string;
+  item_id?: string;
+  name?: string;
   output_text?: { delta?: string };
   output_index?: number;
   content_index?: number;
@@ -231,7 +234,10 @@ function mergeFinalizedStreamOutput(
     if (existingIndex < 0 && preferFinalizedNonMessageItems) {
       entries.push(finalizedItem);
     } else if (preferFinalizedNonMessageItems) {
-      entries[existingIndex] = { ...entries[existingIndex], item: finalizedItem.item };
+      entries[existingIndex] = {
+        ...entries[existingIndex],
+        item: { ...entries[existingIndex].item, ...finalizedItem.item },
+      };
     }
   }
 
@@ -457,7 +463,7 @@ export async function readResponsesStream(
     outputIndex: number | undefined,
     item: any,
   ): void => {
-    if (!hasStreamOutputCapacity(target.has(key))) {
+    if (!hasStreamOutputCapacity(target.has(key), target !== finalizedRefusalItems)) {
       return;
     }
 
@@ -474,14 +480,14 @@ export async function readResponsesStream(
     target.set(key, { outputIndex, item, serializedLength });
   };
 
-  const hasStreamOutputCapacity = (existing: boolean): boolean =>
+  const hasStreamOutputCapacity = (existing: boolean, reserveForRefusal = true): boolean =>
     existing ||
     outputTextByContent.size +
       invalidlyIndexedOutputTextByContent.size +
       completedUnindexedOutputTexts.length +
       finalizedNonMessageItems.size +
       finalizedRefusalItems.size <
-      MAX_STREAM_OUTPUT_KEYS;
+      MAX_STREAM_OUTPUT_KEYS - (reserveForRefusal ? 1 : 0);
 
   const processOutputTextEvent = (event: ResponsesStreamEvent) => {
     const delta = getOutputTextDelta(event);
@@ -705,6 +711,20 @@ export async function readResponsesStream(
       const outputIndex = getValidOutputIndex(event);
       const item = event.item as any;
       const key = `${String(event.output_index ?? 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
+      setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
+    }
+    if (
+      event.type === 'response.function_call_arguments.done' &&
+      typeof event.arguments === 'string'
+    ) {
+      const outputIndex = getValidOutputIndex(event);
+      const item = {
+        type: 'function_call',
+        id: event.item_id,
+        name: event.name,
+        arguments: event.arguments,
+      };
+      const key = `${String(event.output_index ?? 'missing')}:function_call:${event.item_id ?? ''}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
 
