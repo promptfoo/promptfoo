@@ -333,6 +333,67 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
+  it('should throw error for a percentile above 100', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: 150 } },
+      renderedValue: { max: 1000, percentile: 150 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    // Regression: an out-of-range percentile indexed past the sorted durations
+    // array and returned `undefined`, which compared false against `max` and
+    // silently PASSED with an "undefinedms" reason. It must be rejected instead.
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be a number between 0 and 100',
+    );
+  });
+
+  it('should throw error for a negative percentile', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: -5 } },
+      renderedValue: { max: 1000, percentile: -5 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be a number between 0 and 100',
+    );
+  });
+
+  it('should accept the boundary percentile of 100', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: 100 } },
+      renderedValue: { max: 1000, percentile: 100 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'single-span',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],
+        },
+      },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: '100th percentile duration (750ms) is within threshold 1000ms',
+      assertion: params.assertion,
+    });
+  });
+
   it('should handle edge case with single span for percentile', () => {
     const params: AssertionParams = {
       ...defaultParams,
