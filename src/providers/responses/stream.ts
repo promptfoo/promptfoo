@@ -526,23 +526,30 @@ export async function readResponsesStream(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split(/\r?\n\r?\n/);
+      buffer = chunks.pop() || '';
+      for (const chunk of chunks) {
+        processChunk(chunk);
+      }
     }
 
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split(/\r?\n\r?\n/);
-    buffer = chunks.pop() || '';
-    for (const chunk of chunks) {
-      processChunk(chunk);
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      processChunk(buffer);
     }
-  }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    processChunk(buffer);
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {

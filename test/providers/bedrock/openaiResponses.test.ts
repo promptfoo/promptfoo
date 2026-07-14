@@ -2011,6 +2011,29 @@ describe('bedrock openaiResponses helper', () => {
       ).rejects.toThrow(/streaming response exceeded.*output/i);
     });
 
+    it('cancels the response stream when the aggregate output limit is exceeded', async () => {
+      const encoder = new TextEncoder();
+      const delta = 'x'.repeat(1_024 * 1_024);
+      let cancelled = false;
+      const stream = new ReadableStream({
+        pull(controller) {
+          controller.enqueue(
+            encoder.encode(
+              `event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, content_index: 0, delta })}\n\n`,
+            ),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+      expect(cancelled).toBe(true);
+    });
+
     it('keeps an oversized indexed delta separate from the preceding output', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
