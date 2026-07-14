@@ -157,6 +157,25 @@ function hasTerminalSafetyDecision(response: any): boolean {
   );
 }
 
+function filterExecutableToolCalls(output: any[] | undefined): any[] {
+  if (!Array.isArray(output)) {
+    return [];
+  }
+
+  return output
+    .filter((item: any) => item !== undefined && item?.type !== 'function_call')
+    .map((item: any) =>
+      item?.type === 'message' && Array.isArray(item.content)
+        ? {
+            ...item,
+            content: item.content.filter(
+              (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
+            ),
+          }
+        : item,
+    );
+}
+
 function mergeFinalizedStreamOutput(
   output: any[] | undefined,
   finalizedNonMessageItems: FinalizedStreamOutputItem[],
@@ -394,6 +413,7 @@ export async function readResponsesStream(
   let currentInvalidOutputTextKey: string | undefined;
   const finalizedNonMessageItems = new Map<string, RetainedStreamOutputItem>();
   const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
+  let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
 
   const appendOutputText = (text: string): void => {
@@ -622,6 +642,7 @@ export async function readResponsesStream(
 
     const finalizedRefusalItem = getOutputRefusalItem(event);
     if (finalizedRefusalItem) {
+      sawFinalizedRefusal = true;
       const outputIndex = getValidOutputIndex(event);
       if (event.type === 'response.output_item.done' && outputIndex !== undefined) {
         for (const [previousKey, previousItem] of finalizedRefusalItems) {
@@ -688,28 +709,13 @@ export async function readResponsesStream(
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
-    const safeOutput = Array.isArray(latestResponse.output)
-      ? latestResponse.output
-          .filter((item: any) => item?.type !== 'function_call')
-          .map((item: any) =>
-            item?.type === 'message' && Array.isArray(item.content)
-              ? {
-                  ...item,
-                  content: item.content.filter(
-                    (content: any) =>
-                      content?.type !== 'tool_use' && content?.type !== 'function_call',
-                  ),
-                }
-              : item,
-          )
-      : [];
-    return { ...latestResponse, output: safeOutput };
+    return { ...latestResponse, output: filterExecutableToolCalls(latestResponse.output) };
   }
 
-  if (finalizedRefusalItems.size > 0) {
+  if (sawFinalizedRefusal) {
     return {
       ...(latestResponse ?? {}),
-      output: finalizedStreamOutput.filter((item) => item !== undefined),
+      output: filterExecutableToolCalls(finalizedStreamOutput),
     };
   }
 

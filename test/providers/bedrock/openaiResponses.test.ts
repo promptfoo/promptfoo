@@ -1441,7 +1441,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
-    it('preserves preceding function calls when reconstructing a finalized refusal', async () => {
+    it('drops preceding function calls when reconstructing a finalized refusal', async () => {
       const body = [
         'event: response.output_item.done',
         'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
@@ -1457,7 +1457,6 @@ describe('bedrock openaiResponses helper', () => {
       const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
 
       expect(result.output).toEqual([
-        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
         expect.objectContaining({
           type: 'message',
           content: [
@@ -1663,6 +1662,40 @@ describe('bedrock openaiResponses helper', () => {
       expect(processCalls).not.toHaveBeenCalled();
     });
 
+    it('does not execute finalized tool calls when a streamed refusal terminates early', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
+        '',
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"I cannot help with that"}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
+          ],
+        }),
+      ]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
     it('prefers finalized tool arguments over an incomplete terminal snapshot', async () => {
       const terminalResponse = {
         status: 'incomplete',
@@ -1752,8 +1785,44 @@ describe('bedrock openaiResponses helper', () => {
       });
 
       expect(result.output.length).toBeLessThanOrEqual(1_024);
-      expect(result.output[0]).toEqual(expect.objectContaining({ type: 'function_call' }));
+      expect(result.output.every((item: any) => item.type === 'message')).toBe(true);
       expect(result.output.at(-1)).toEqual(expect.objectContaining({ type: 'message' }));
+    });
+
+    it('does not execute tool calls when a refusal arrives after the finalized-output key limit', async () => {
+      const events = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+      ];
+      for (let outputIndex = 0; outputIndex < 1_024; outputIndex++) {
+        events.push(
+          'event: response.output_item.done',
+          `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: outputIndex, item: { type: 'function_call', name: 'dangerous_action', arguments: '{}', call_id: `call_${outputIndex}` } })}`,
+          '',
+        );
+      }
+      events.push(
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":1024,"content_index":0,"refusal":"I cannot help with that"}',
+        '',
+      );
+
+      const result = await readResponsesStream(new Response(events.join('\n')), 'test', {
+        debug: vi.fn(),
+      });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
     });
 
     it.each([
