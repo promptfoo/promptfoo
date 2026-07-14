@@ -113,7 +113,7 @@ async function generateCitations(
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/Citation`,
+          metric: assertion.metric ? `${assertion.metric}/Citation` : assertion.metric,
         })),
         metadata: {
           ...testCase.metadata,

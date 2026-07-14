@@ -15,9 +15,27 @@ describe('BlogPostGrid', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Latest Posts' })).toBeInTheDocument();
   });
 
-  it('separates the older posts heading from the page number', () => {
+  it('separates the heading from the page number on paginated pages', () => {
+    render(<BlogPostGrid posts={[]} title="Archive • Page 2" isPaginated />);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Archive 2' })).toHaveAttribute(
+      'data-is-paginated',
+      'true',
+    );
+  });
+
+  it('renders the paginated heading without a page number when the separator is missing', () => {
+    render(<BlogPostGrid posts={[]} title="Older Posts" isPaginated />);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Older Posts' })).toBeInTheDocument();
+  });
+
+  it('leaves the title unparsed when the page is not paginated', () => {
     render(<BlogPostGrid posts={[]} title="Older Posts • Page 2" />);
 
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Older Posts 2');
+    expect(screen.getByRole('heading', { level: 2, name: 'Older Posts • Page 2' })).toHaveAttribute(
+      'data-is-paginated',
+      'false',
+    );
   });
 });
