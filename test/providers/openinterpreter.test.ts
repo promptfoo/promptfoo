@@ -497,6 +497,67 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it('renders a nested base-provider approval template for each row', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        server_request_policy: { command_execution: '{{decision}}' },
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('templated approval', {
+      vars: { decision: 'accept' },
+      prompt: { raw: 'templated approval', label: 'approval template' },
+    } as any);
+    await startTurn(server);
+    server.send({
+      id: 81,
+      method: 'item/commandExecution/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'cmd_1' },
+    });
+
+    await expect(
+      waitForMessage(server, (message) => message.id === 81 && message.result),
+    ).resolves.toMatchObject({ result: { decision: 'accept' } });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('coerces a nested prompt-level boolean template before approval validation', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({ config: { skip_git_repo_check: true } });
+
+    const resultPromise = provider.callApi('templated permissions', {
+      vars: { strict: false },
+      prompt: {
+        raw: 'templated permissions',
+        label: 'permissions template',
+        config: {
+          server_request_policy: { permissions: { strict_auto_review: '{{strict}}' } },
+        },
+      },
+    } as any);
+    await startTurn(server);
+    server.send({
+      id: 82,
+      method: 'item/permissions/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'permission_1' },
+    });
+
+    await expect(
+      waitForMessage(server, (message) => message.id === 82 && message.result),
+    ).resolves.toMatchObject({
+      result: { permissions: {}, scope: 'turn', strictAutoReview: false },
+    });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it.each([
     ['interpreter_home', { interpreter_home: '{{home}}' }],
     ['cli_env.INTERPRETER_HOME', { cli_env: { INTERPRETER_HOME: '{{home}}' } }],

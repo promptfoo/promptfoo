@@ -72,6 +72,20 @@ const TYPED_PROMPT_OPTION_KEYS = new Set([
   ...BOOLEAN_PROMPT_OPTION_KEYS,
   ...ENUM_PROMPT_OPTION_KEYS,
 ]);
+const NESTED_TYPED_PROMPT_OPTION_KEYS = new Set([
+  'approval_policy',
+  'collaboration_mode',
+  'server_request_policy',
+]);
+const NESTED_BOOLEAN_PROMPT_OPTION_KEYS = new Set([
+  'sandbox_approval',
+  'rules',
+  'skill_approval',
+  'request_permissions',
+  'mcp_elicitations',
+  'strict_auto_review',
+  'success',
+]);
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -106,6 +120,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function containsTemplate(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.includes('{{') && value.includes('}}');
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsTemplate);
+  }
+  return isRecord(value) && Object.values(value).some(containsTemplate);
+}
+
+function coerceRenderedPromptOption(key: string, value: unknown, nestedTyped = false): unknown {
+  if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+  if (
+    (BOOLEAN_PROMPT_OPTION_KEYS.has(key) ||
+      (nestedTyped && NESTED_BOOLEAN_PROMPT_OPTION_KEYS.has(key))) &&
+    (value === 'true' || value === 'false')
+  ) {
+    return value === 'true';
+  }
+  if (Array.isArray(value) && nestedTyped) {
+    return value.map((entry) => coerceRenderedPromptOption(key, entry, true));
+  }
+  if (isRecord(value) && nestedTyped) {
+    return Object.fromEntries(
+      Object.entries(value).map(([nestedKey, nestedValue]) => [
+        nestedKey,
+        coerceRenderedPromptOption(nestedKey, nestedValue, true),
+      ]),
+    );
+  }
+  return value;
+}
+
 function parseOpenInterpreterConfig(
   config: OpenInterpreterConfig | undefined,
 ): OpenInterpreterConfig {
@@ -135,18 +187,10 @@ function parseOpenInterpreterPromptConfig(
     ),
   );
   const providerConfig = Object.fromEntries(
-    Object.entries(renderVarsInObject(renderableConfig, vars)).map(([key, value]) => {
-      if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
-        const numericValue = Number(value);
-        if (Number.isFinite(numericValue)) {
-          return [key, numericValue];
-        }
-      }
-      if (BOOLEAN_PROMPT_OPTION_KEYS.has(key) && (value === 'true' || value === 'false')) {
-        return [key, value === 'true'];
-      }
-      return [key, value];
-    }),
+    Object.entries(renderVarsInObject(renderableConfig, vars)).map(([key, value]) => [
+      key,
+      coerceRenderedPromptOption(key, value, NESTED_TYPED_PROMPT_OPTION_KEYS.has(key)),
+    ]),
   );
 
   return parseOpenInterpreterConfig(providerConfig as OpenInterpreterConfig);
@@ -163,10 +207,8 @@ function parseInitialOpenInterpreterConfig(
     Object.entries(config).filter(
       ([key, value]) =>
         !(
-          TYPED_PROMPT_OPTION_KEYS.has(key) &&
-          typeof value === 'string' &&
-          value.includes('{{') &&
-          value.includes('}}')
+          (TYPED_PROMPT_OPTION_KEYS.has(key) || NESTED_TYPED_PROMPT_OPTION_KEYS.has(key)) &&
+          containsTemplate(value)
         ),
     ),
   );
