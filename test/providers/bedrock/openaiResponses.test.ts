@@ -1466,6 +1466,76 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
+    it('preserves a finalized refusal when an incomplete terminal safety response has empty output', async () => {
+      const body = [
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that."}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls: vi.fn() } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
+          ],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+    });
+
+    it('preserves a finalized message with a top-level refusal field when a stream terminates early', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","refusal":"I cannot help with that."}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls: vi.fn() } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({ type: 'message', refusal: 'I cannot help with that.' }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+    });
+
+    it('keeps a completed terminal answer authoritative over an earlier finalized refusal', async () => {
+      const body = [
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"draft refusal"}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"safe final answer"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'safe final answer' })],
+        }),
+      ]);
+    });
+
     it('preserves preceding assistant messages when reconstructing an indexed refusal', async () => {
       const body = [
         'event: response.output_item.done',

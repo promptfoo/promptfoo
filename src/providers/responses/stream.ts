@@ -8,7 +8,11 @@ type ResponsesStreamEvent = {
   output_index?: number;
   content_index?: number;
   part?: { type?: string; text?: string; refusal?: string };
-  item?: { type?: string; content?: Array<{ type?: string; text?: string; refusal?: string }> };
+  item?: {
+    type?: string;
+    refusal?: string;
+    content?: Array<{ type?: string; text?: string; refusal?: string }>;
+  };
   output?: any[];
   code?: string;
   message?: string;
@@ -110,6 +114,9 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
   if (
     event.type === 'response.output_item.done' &&
     (event.item?.type === 'refusal' ||
+      (event.item?.type === 'message' &&
+        typeof event.item.refusal === 'string' &&
+        event.item.refusal.length > 0) ||
       (Array.isArray(event.item?.content) &&
         event.item.content.some((part) => part?.type === 'refusal')))
   ) {
@@ -718,21 +725,22 @@ export async function readResponsesStream(
     reader.releaseLock();
   }
 
+  const useFinalizedItems = latestResponse?.status !== 'completed';
   const finalizedStreamOutput = mergeFinalizedStreamOutput(
     latestResponse?.output,
     Array.from(finalizedNonMessageItems.values()),
-    Array.from(finalizedRefusalItems.values()),
-    latestResponse?.status !== 'completed',
+    useFinalizedItems ? Array.from(finalizedRefusalItems.values()) : [],
+    useFinalizedItems,
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     return boundedResponse({
       ...latestResponse,
-      output: filterExecutableToolCalls(latestResponse.output),
+      output: filterExecutableToolCalls(finalizedStreamOutput),
     });
   }
 
-  if (sawFinalizedRefusal) {
+  if (sawFinalizedRefusal && useFinalizedItems) {
     return boundedResponse({
       ...(latestResponse ?? {}),
       output: filterExecutableToolCalls(finalizedStreamOutput),
