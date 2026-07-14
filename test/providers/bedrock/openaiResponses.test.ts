@@ -1766,6 +1766,74 @@ describe('bedrock openaiResponses helper', () => {
       expect(processCalls).not.toHaveBeenCalled();
     });
 
+    it('does not execute finalized tool calls when a streamed refusal delta terminates early', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
+        '',
+        'event: response.refusal.delta',
+        'data: {"type":"response.refusal.delta","output_index":1,"content_index":0,"delta":"I cannot "}',
+        '',
+        'event: response.refusal.delta',
+        'data: {"type":"response.refusal.delta","output_index":1,"content_index":0,"delta":"help with that"}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
+          ],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it('does not execute completed tool calls after a finalized streamed refusal', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"I cannot help with that"}]}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
+          ],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
     it('prefers finalized tool arguments over an incomplete terminal snapshot', async () => {
       const terminalResponse = {
         status: 'incomplete',
@@ -2586,6 +2654,40 @@ describe('bedrock openaiResponses helper', () => {
       await expect(
         readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
       ).rejects.toThrow(/streaming response exceeded.*(?:output|event)/i);
+      expect(cancelled).toBe(true);
+    });
+
+    it('cancels a terminated oversized ignored SSE event before parsing it', async () => {
+      const encoder = new TextEncoder();
+      const junk = 'x'.repeat(17 * 1_024 * 1_024);
+      let pulls = 0;
+      let cancelled = false;
+      const stream = new ReadableStream({
+        pull(controller) {
+          pulls++;
+          if (pulls === 1) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: 'ignored.event', ignored: junk })}\n\n`,
+              ),
+            );
+            return;
+          }
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
       expect(cancelled).toBe(true);
     });
 

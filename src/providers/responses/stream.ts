@@ -101,6 +101,13 @@ function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEv
 }
 
 function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
+  if (event.type === 'response.refusal.delta' && typeof event.delta === 'string') {
+    return {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'refusal', refusal: event.delta }],
+    };
+  }
   if (event.type === 'response.refusal.done' && typeof event.refusal === 'string') {
     return {
       type: 'message',
@@ -659,7 +666,7 @@ export async function readResponsesStream(
       latestResponse = boundedResponse(event);
     }
 
-    const finalizedRefusalItem = getOutputRefusalItem(event);
+    let finalizedRefusalItem = getOutputRefusalItem(event);
     if (finalizedRefusalItem) {
       sawFinalizedRefusal = true;
       const outputIndex = getValidOutputIndex(event);
@@ -672,6 +679,22 @@ export async function readResponsesStream(
         }
       }
       const key = getOutputTextKey(event) ?? getInvalidOutputTextKey(event);
+      if (event.type === 'response.refusal.delta') {
+        const previousRefusal = finalizedRefusalItems
+          .get(key)
+          ?.item?.content?.find((part: any) => part?.type === 'refusal')?.refusal;
+        if (typeof previousRefusal === 'string') {
+          finalizedRefusalItem = {
+            ...finalizedRefusalItem,
+            content: [
+              {
+                type: 'refusal',
+                refusal: `${previousRefusal}${finalizedRefusalItem.content[0].refusal}`,
+              },
+            ],
+          };
+        }
+      }
       setFinalizedOutputItem(finalizedRefusalItems, key, outputIndex, finalizedRefusalItem);
     }
     if (
@@ -710,6 +733,11 @@ export async function readResponsesStream(
         );
       }
       for (const chunk of chunks) {
+        if (chunk.length > MAX_STREAM_OUTPUT_CHARS) {
+          throw new Error(
+            `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (event data)`,
+          );
+        }
         processChunk(chunk);
       }
     }
@@ -740,10 +768,18 @@ export async function readResponsesStream(
     });
   }
 
-  if (sawFinalizedRefusal && useFinalizedItems) {
+  if (sawFinalizedRefusal) {
+    const safeOutput = filterExecutableToolCalls(
+      useFinalizedItems ? finalizedStreamOutput : latestResponse?.output,
+    );
     return boundedResponse({
       ...(latestResponse ?? {}),
-      output: filterExecutableToolCalls(finalizedStreamOutput),
+      output:
+        safeOutput.length > 0
+          ? safeOutput
+          : filterExecutableToolCalls(
+              Array.from(finalizedRefusalItems.values(), ({ item }) => item),
+            ),
     });
   }
 
