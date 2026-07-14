@@ -1734,6 +1734,36 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('does not restore a finalized tool call omitted by an authoritative completed response', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Action was not approved."}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          type: 'message',
+          content: [expect.objectContaining({ text: 'Action was not approved.' })],
+        }),
+      ]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
     it('preserves finalized tool calls when earlier unindexed text cannot be assigned', async () => {
       const body = [
         'event: response.created',
@@ -2422,6 +2452,71 @@ describe('bedrock openaiResponses helper', () => {
       await expect(
         readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
       ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
+    it('bounds output in a completed terminal response snapshot', async () => {
+      const text = 'x'.repeat(17 * 1_024 * 1_024);
+      const body = [
+        'event: response.completed',
+        `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] } })}`,
+        '',
+        '',
+      ].join('\n');
+
+      await expect(
+        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
+    it('bounds reconstructed output across finalized items and an incomplete terminal snapshot', async () => {
+      const argumentsText = 'x'.repeat(8 * 1_024 * 1_024);
+      const text = 'y'.repeat(9 * 1_024 * 1_024);
+      const body = [
+        'event: response.output_item.done',
+        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: 'call_1' } })}`,
+        '',
+        'event: response.incomplete',
+        `data: ${JSON.stringify({
+          type: 'response.incomplete',
+          response: {
+            status: 'incomplete',
+            output: [
+              { type: 'function_call', name: 'lookup', arguments: '{}', call_id: 'call_1' },
+              { type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] },
+            ],
+          },
+        })}`,
+        '',
+        '',
+      ].join('\n');
+
+      await expect(
+        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
+    it('cancels an unterminated SSE event once the buffered-event limit is exceeded', async () => {
+      const encoder = new TextEncoder();
+      const chunk = `: ${'x'.repeat(1_024 * 1_024)}\n`;
+      let cancelled = false;
+      let pulls = 0;
+      const stream = new ReadableStream({
+        pull(controller) {
+          pulls++;
+          controller.enqueue(encoder.encode(chunk));
+          if (pulls === 18) {
+            controller.close();
+          }
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*(?:output|event)/i);
+      expect(cancelled).toBe(true);
     });
 
     it('cancels the response stream when finalized tool-call arguments exceed the output limit', async () => {

@@ -214,7 +214,7 @@ function mergeFinalizedStreamOutput(
         (item?.id === identity || item?.call_id === identity)
       );
     });
-    if (existingIndex < 0) {
+    if (existingIndex < 0 && preferFinalizedNonMessageItems) {
       entries.push(finalizedItem);
     } else if (preferFinalizedNonMessageItems) {
       entries[existingIndex] = { ...entries[existingIndex], item: finalizedItem.item };
@@ -423,6 +423,18 @@ export async function readResponsesStream(
       );
     }
     outputText += text;
+  };
+
+  const boundedResponse = (value: any): any => {
+    if (
+      Array.isArray(value?.output) &&
+      JSON.stringify(value.output).length > MAX_STREAM_OUTPUT_CHARS
+    ) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
+      );
+    }
+    return value;
   };
 
   const setFinalizedOutputItem = (
@@ -635,9 +647,9 @@ export async function readResponsesStream(
     }
 
     if (event.response && typeof event.response === 'object') {
-      latestResponse = event.response;
+      latestResponse = boundedResponse(event.response);
     } else if (Array.isArray(event.output)) {
-      latestResponse = event;
+      latestResponse = boundedResponse(event);
     }
 
     const finalizedRefusalItem = getOutputRefusalItem(event);
@@ -685,6 +697,11 @@ export async function readResponsesStream(
       buffer += decoder.decode(value, { stream: true });
       const chunks = buffer.split(/\r?\n\r?\n/);
       buffer = chunks.pop() || '';
+      if (buffer.length > MAX_STREAM_OUTPUT_CHARS) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (buffered event data)`,
+        );
+      }
       for (const chunk of chunks) {
         processChunk(chunk);
       }
@@ -709,14 +726,17 @@ export async function readResponsesStream(
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
-    return { ...latestResponse, output: filterExecutableToolCalls(latestResponse.output) };
+    return boundedResponse({
+      ...latestResponse,
+      output: filterExecutableToolCalls(latestResponse.output),
+    });
   }
 
   if (sawFinalizedRefusal) {
-    return {
+    return boundedResponse({
       ...(latestResponse ?? {}),
       output: filterExecutableToolCalls(finalizedStreamOutput),
-    };
+    });
   }
 
   if (
@@ -734,7 +754,7 @@ export async function readResponsesStream(
       finalizedOutputTextKeys.size === 0 &&
       finalizedNonMessageItems.size === 0
     ) {
-      return {
+      return boundedResponse({
         ...latestResponse,
         output: [
           {
@@ -743,7 +763,7 @@ export async function readResponsesStream(
             content: [{ type: 'output_text', text: outputText }],
           },
         ],
-      };
+      });
     }
 
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
@@ -786,7 +806,7 @@ export async function readResponsesStream(
       appendedInvalidOutput = true;
     }
     if (recoveredOutput || appendedInvalidOutput || finalizedNonMessageItems.size > 0) {
-      return { ...latestResponse, output };
+      return boundedResponse({ ...latestResponse, output });
     }
   }
 
@@ -805,7 +825,7 @@ export async function readResponsesStream(
     );
 
   if (latestResponse && outputText && !hasOutputText) {
-    return {
+    return boundedResponse({
       ...latestResponse,
       output: [
         ...(Array.isArray(latestResponse.output) ? latestResponse.output : []),
@@ -815,16 +835,18 @@ export async function readResponsesStream(
           content: [{ type: 'output_text', text: outputText }],
         },
       ],
-    };
+    });
   }
 
   if (latestResponse) {
-    return finalizedNonMessageItems.size > 0
-      ? {
-          ...latestResponse,
-          output: finalizedStreamOutput.filter((item) => item !== undefined),
-        }
-      : latestResponse;
+    return boundedResponse(
+      finalizedNonMessageItems.size > 0
+        ? {
+            ...latestResponse,
+            output: finalizedStreamOutput.filter((item) => item !== undefined),
+          }
+        : latestResponse,
+    );
   }
 
   if (outputText) {
@@ -848,10 +870,10 @@ export async function readResponsesStream(
       });
     }
     if (output.length > 0) {
-      return { output };
+      return boundedResponse({ output });
     }
 
-    return {
+    return boundedResponse({
       output: [
         {
           type: 'message',
@@ -859,11 +881,13 @@ export async function readResponsesStream(
           content: [{ type: 'output_text', text: outputText }],
         },
       ],
-    };
+    });
   }
 
   if (finalizedStreamOutput.length > 0) {
-    return { output: finalizedStreamOutput.filter((item) => item !== undefined) };
+    return boundedResponse({
+      output: finalizedStreamOutput.filter((item) => item !== undefined),
+    });
   }
 
   throw new Error(`${providerName} streaming response did not include output content`);
