@@ -75,7 +75,7 @@ You can also configure a custom `redteam.provider` that would allow you to use P
 ```yaml
 # The provider being tested (target system)
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     # This is what you're evaluating for safety
 
 # Red team configuration

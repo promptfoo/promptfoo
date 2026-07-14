@@ -82,7 +82,7 @@ Define tools in OpenAI format:
 
 ```yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     config:
       tools:
         - type: function
@@ -181,7 +181,7 @@ Tool choice controls _when_ and _how_ the model uses the tools you've defined. B
 
 ```yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     config:
       tools:
         - type: function
@@ -269,7 +269,7 @@ Tools can be loaded from external files:
 
 ```yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     config:
       tools: file://tools/my-tools.json
 ```
