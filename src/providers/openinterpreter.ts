@@ -43,6 +43,20 @@ const NUMERIC_PROMPT_OPTION_KEYS = new Set([
   'startup_timeout_ms',
   'turn_timeout_ms',
 ]);
+const BOOLEAN_PROMPT_OPTION_KEYS = new Set([
+  'skip_git_repo_check',
+  'network_access_enabled',
+  'persist_threads',
+  'ephemeral',
+  'persist_extended_history',
+  'experimental_raw_events',
+  'experimental_api',
+  'include_raw_events',
+  'inherit_process_env',
+  'reuse_server',
+  'deep_tracing',
+  'harness_guidance',
+]);
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -91,23 +105,30 @@ function parseOpenInterpreterConfig(
   return parsed.data as OpenInterpreterConfig;
 }
 
-function parseOpenInterpreterPromptConfig(config: unknown): OpenInterpreterConfig {
+function parseOpenInterpreterPromptConfig(
+  config: unknown,
+  vars?: CallApiContextParams['vars'],
+): OpenInterpreterConfig {
   if (!isRecord(config)) {
     return parseOpenInterpreterConfig(config as OpenInterpreterConfig);
   }
 
+  const renderableConfig = Object.fromEntries(
+    Object.entries(config).filter(([key]) => !FRAMEWORK_PROMPT_OPTION_KEYS.has(key)),
+  );
   const providerConfig = Object.fromEntries(
-    Object.entries(config)
-      .filter(([key]) => !FRAMEWORK_PROMPT_OPTION_KEYS.has(key))
-      .map(([key, value]) => {
-        if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
-          const numericValue = Number(value);
-          if (Number.isFinite(numericValue)) {
-            return [key, numericValue];
-          }
+    Object.entries(renderVarsInObject(renderableConfig, vars)).map(([key, value]) => {
+      if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
+        const numericValue = Number(value);
+        if (Number.isFinite(numericValue)) {
+          return [key, numericValue];
         }
-        return [key, value];
-      }),
+      }
+      if (BOOLEAN_PROMPT_OPTION_KEYS.has(key) && (value === 'true' || value === 'false')) {
+        return [key, value === 'true'];
+      }
+      return [key, value];
+    }),
   );
 
   return parseOpenInterpreterConfig(providerConfig as OpenInterpreterConfig);
@@ -392,7 +413,7 @@ export class OpenInterpreterProvider implements ApiProvider {
     let temporaryWorkspace: string | undefined;
     try {
       const promptConfig = context?.prompt?.config
-        ? parseOpenInterpreterPromptConfig(renderVarsInObject(context.prompt.config, context?.vars))
+        ? parseOpenInterpreterPromptConfig(context.prompt.config, context?.vars)
         : undefined;
       const effectiveConfig = renderVarsInObject(
         {

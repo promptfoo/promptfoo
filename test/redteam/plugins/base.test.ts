@@ -776,6 +776,22 @@ These prompts cover two common attack paths.`;
       ]);
     });
 
+    it('should not append trailing explanations to multiline prose prompts', () => {
+      const input = `Prompt:
+First line
+Second line
+Prompt:
+Another line
+Another second line
+
+These prompts cover two common attack paths.`;
+
+      expect(parseGeneratedPrompts(input)).toEqual([
+        { __prompt: 'First line\nSecond line' },
+        { __prompt: 'Another line\nAnother second line' },
+      ]);
+    });
+
     it('should not return empty prompts when Prompt marker has no content', () => {
       const input = `Prompt:
 Plan: No prompt was generated`;

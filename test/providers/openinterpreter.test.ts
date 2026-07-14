@@ -435,13 +435,13 @@ describe('OpenInterpreterProvider', () => {
     const resultPromise = provider.callApi(
       JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
       {
-        vars: { workspace: 'workspace', sandbox: 'read-only', timeout: 1000 },
+        vars: { workspace: 'workspace', sandbox: 'read-only', timeout: 1000, skipGitCheck: true },
         prompt: {
           config: {
             working_dir: '{{workspace}}',
             sandbox_mode: '{{sandbox}}',
             turn_timeout_ms: '{{timeout}}',
-            skip_git_repo_check: true,
+            skip_git_repo_check: '{{skipGitCheck}}',
           },
         },
       } as any,
@@ -461,17 +461,28 @@ describe('OpenInterpreterProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenInterpreterProvider();
+    const attachedProvider = {
+      id: vi.fn(() => 'attached-target'),
+      callApi: vi.fn(),
+    };
 
     const resultPromise = provider.callApi('framework options', {
       vars: {},
       prompt: {
-        config: { transform: 'output', storeOutputAs: 'saved', runSerially: true },
+        config: {
+          transform: 'output',
+          storeOutputAs: 'saved',
+          runSerially: true,
+          provider: attachedProvider,
+        },
       },
     } as any);
     await startTurn(server);
     completeTurn(server, 'ok');
 
     await expect(resultPromise).resolves.toMatchObject({ output: 'ok' });
+    expect(attachedProvider.id).not.toHaveBeenCalled();
+    expect(attachedProvider.callApi).not.toHaveBeenCalled();
     await expect(
       provider.callApi('bad config', {
         vars: {},
