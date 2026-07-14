@@ -3420,6 +3420,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // so they must not appear in the InvokeModel model map.
     expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-sol']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-terra']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-luna']).toBeUndefined();
   });
 
   describe('getHandlerForModel OpenAI routing', () => {
@@ -3443,6 +3446,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       // a direct/forced InvokeModel resolution should explain that rather than silently try.
       expect(() => getHandlerForModel('openai.gpt-5.5')).toThrow(/Responses API/);
       expect(() => getHandlerForModel('openai.gpt-5.4')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-sol')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-terra')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-luna')).toThrow(/Responses API/);
     });
 
     it('should suggest the bare frontier id when a region/geo-prefixed frontier id is forced down InvokeModel', () => {
