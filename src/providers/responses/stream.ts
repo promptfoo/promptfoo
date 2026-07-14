@@ -166,7 +166,7 @@ function mergeFinalizedStreamOutput(
   const hasUnindexedRefusal = finalizedRefusalItems.some(
     ({ outputIndex }) => outputIndex === undefined,
   );
-  const entries = (Array.isArray(output) ? output : [])
+  const entries: FinalizedStreamOutputItem[] = (Array.isArray(output) ? output : [])
     .map((item, outputIndex) => ({ item, outputIndex }))
     .filter(
       ({ item, outputIndex }) =>
