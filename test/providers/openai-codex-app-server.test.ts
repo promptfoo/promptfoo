@@ -4729,14 +4729,18 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(rawJson).toContain('[REDACTED]');
   });
 
-  it('redacts lowercase bearer credentials from app-server stderr failures', async () => {
+  it.each([
+    'Authorization: bearer short-secret-token',
+    '{"Authorization":"bearer short-secret-token"}',
+    "{'authorization':'basic short-secret-token'}",
+  ])('redacts authorization credentials from app-server stderr failures: %s', async (stderr) => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenAICodexAppServerProvider();
 
     const resultPromise = provider.callApi('Crash during startup');
     await waitForMessage(server, (message) => message.method === 'initialize');
-    server.stderr.write('Authorization: bearer short-secret-token\n');
+    server.stderr.write(`${stderr}\n`);
     server.proc.exitCode = 1;
     server.proc.emit('exit', 1, null);
 

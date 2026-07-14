@@ -949,6 +949,29 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
+      { name: 'without content', message: { type: 'message', role: 'assistant', refusal: 'No.' } },
+      {
+        name: 'with empty content',
+        message: { type: 'message', role: 'assistant', content: [], refusal: 'No.' },
+      },
+    ])('does not recover a streamed draft into a top-level terminal refusal $name', async ({
+      message,
+    }) => {
+      const body = [
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        'event: response.completed',
+        `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [message] } })}`,
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
+    it.each([
       {
         name: 'failed content-filter error',
         event: 'response.failed',
@@ -1134,6 +1157,54 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('');
     });
 
+    it.each([
+      { name: 'non-empty', text: 'safe final' },
+      { name: 'empty', text: '' },
+    ])('ignores a late indexed delta after $name output text is finalized', async ({ text }) => {
+      const body = [
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        'event: response.output_text.done',
+        `data: ${JSON.stringify({ type: 'response.output_text.done', output_index: 0, content_index: 0, text })}`,
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"LATE UNSAFE TEXT"}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(result.output)).not.toContain('LATE UNSAFE TEXT');
+      expect(result.output[0].content[0].text).toBe(text);
+    });
+
+    it.each([
+      false,
+      true,
+    ])('honors empty finalized unindexed text when a terminal snapshot exists: %s', async (withTerminalSnapshot) => {
+      const body = [
+        ...(withTerminalSnapshot
+          ? [
+              'event: response.created',
+              'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+              '',
+            ]
+          : []),
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","text":""}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
     it('treats an unindexed completion after indexed text as finalized', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -1218,6 +1289,21 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('');
+    });
+
+    it('prefers the complete streamed delta over a partial in-progress snapshot', async () => {
+      const body = [
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"complete text"}',
+        '',
+        'event: response.in_progress',
+        'data: {"type":"response.in_progress","response":{"status":"in_progress","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"complete"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content[0].text).toBe('complete text');
     });
 
     it('preserves interleaved output boundaries when a stream ends before its terminal event', async () => {
@@ -1750,6 +1836,21 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.error).toBeUndefined();
       expect(contentCount).toBeLessThanOrEqual(1_024);
+    });
+
+    it('bounds aggregate streamed output even when all deltas reuse one key', async () => {
+      const delta = 'x'.repeat(1_024 * 1_024);
+      const body = Array.from({ length: 17 }, () => [
+        'event: response.output_text.delta',
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, content_index: 0, delta })}`,
+        '',
+      ])
+        .flat()
+        .join('\n');
+
+      await expect(
+        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
     });
 
     it('keeps an oversized indexed delta separate from the preceding output', async () => {

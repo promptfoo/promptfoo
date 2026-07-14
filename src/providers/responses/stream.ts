@@ -19,6 +19,7 @@ type ResponsesStreamLogger = {
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
+const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -85,8 +86,9 @@ function hasTerminalSafetyDecision(response: any): boolean {
       (item: any) =>
         item?.type === 'refusal' ||
         (item?.type === 'message' &&
-          Array.isArray(item.content) &&
-          item.content.some((content: any) => content?.type === 'refusal')),
+          ((typeof item.refusal === 'string' && item.refusal.length > 0) ||
+            (Array.isArray(item.content) &&
+              item.content.some((content: any) => content?.type === 'refusal')))),
     )
   );
 }
@@ -200,7 +202,7 @@ function recoverIncompleteOutput(
         terminalTextCounts.set(text, remainingMatches - 1);
         continue;
       }
-      if (joinedTerminalText === text) {
+      if (joinedTerminalText && joinedTerminalText === text) {
         joinedTerminalText = '';
         continue;
       }
@@ -266,6 +268,15 @@ export async function readResponsesStream(
   const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
 
+  const appendOutputText = (text: string): void => {
+    if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
+      );
+    }
+    outputText += text;
+  };
+
   const hasStreamOutputCapacity = (existing: boolean): boolean =>
     existing ||
     outputTextByContent.size +
@@ -279,8 +290,19 @@ export async function readResponsesStream(
       return;
     }
 
-    outputText += delta;
     const key = getOutputTextKey(event);
+    const invalidKey =
+      !key && (event.output_index !== undefined || event.content_index !== undefined)
+        ? getInvalidOutputTextKey(event)
+        : undefined;
+    if (
+      (key && finalizedOutputTextKeys.has(key)) ||
+      (invalidKey && finalizedInvalidOutputTextKeys.has(invalidKey))
+    ) {
+      return;
+    }
+
+    appendOutputText(delta);
     if (key) {
       if (!hasStreamOutputCapacity(outputTextByContent.has(key))) {
         currentOutputTextKey = undefined;
@@ -363,9 +385,9 @@ export async function readResponsesStream(
         pendingUnindexedOutputText = '';
       }
       const previous = outputTextByContent.get(key) ?? '';
-      outputText += event.text.startsWith(previous)
-        ? event.text.slice(previous.length)
-        : event.text;
+      appendOutputText(
+        event.text.startsWith(previous) ? event.text.slice(previous.length) : event.text,
+      );
       outputTextByContent.set(key, event.text);
       finalizedOutputTextKeys.add(key);
       currentOutputTextKey = undefined;
@@ -381,9 +403,9 @@ export async function readResponsesStream(
         return;
       }
       const previous = invalidlyIndexedOutputTextByContent.get(invalidKey) ?? '';
-      outputText += event.text.startsWith(previous)
-        ? event.text.slice(previous.length)
-        : event.text;
+      appendOutputText(
+        event.text.startsWith(previous) ? event.text.slice(previous.length) : event.text,
+      );
       invalidlyIndexedOutputTextByContent.set(invalidKey, event.text);
       finalizedInvalidOutputTextKeys.add(invalidKey);
       currentOutputTextKey = undefined;
@@ -392,9 +414,9 @@ export async function readResponsesStream(
     }
     if (currentInvalidOutputTextKey) {
       const previous = invalidlyIndexedOutputTextByContent.get(currentInvalidOutputTextKey) ?? '';
-      outputText += event.text.startsWith(previous)
-        ? event.text.slice(previous.length)
-        : event.text;
+      appendOutputText(
+        event.text.startsWith(previous) ? event.text.slice(previous.length) : event.text,
+      );
       invalidlyIndexedOutputTextByContent.set(currentInvalidOutputTextKey, event.text);
       finalizedInvalidOutputTextKeys.add(currentInvalidOutputTextKey);
       currentInvalidOutputTextKey = undefined;
@@ -402,9 +424,9 @@ export async function readResponsesStream(
     }
     if (currentOutputTextKey) {
       const previous = outputTextByContent.get(currentOutputTextKey) ?? '';
-      outputText += event.text.startsWith(previous)
-        ? event.text.slice(previous.length)
-        : event.text;
+      appendOutputText(
+        event.text.startsWith(previous) ? event.text.slice(previous.length) : event.text,
+      );
       outputTextByContent.set(currentOutputTextKey, event.text);
       finalizedOutputTextKeys.add(currentOutputTextKey);
       currentOutputTextKey = undefined;
@@ -416,9 +438,11 @@ export async function readResponsesStream(
       return;
     }
 
-    outputText += event.text.startsWith(pendingUnindexedOutputText)
-      ? event.text.slice(pendingUnindexedOutputText.length)
-      : event.text;
+    appendOutputText(
+      event.text.startsWith(pendingUnindexedOutputText)
+        ? event.text.slice(pendingUnindexedOutputText.length)
+        : event.text,
+    );
     completedUnindexedOutputTexts.push(event.text);
     pendingUnindexedOutputText = '';
   };
@@ -511,7 +535,7 @@ export async function readResponsesStream(
         ...finalizedInvalidOutputTexts,
         ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
       ],
-      latestResponse.status === 'incomplete',
+      latestResponse.status === 'incomplete' || latestResponse.status === 'in_progress',
       finalizedOutputTextKeys,
       completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
     );

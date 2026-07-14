@@ -77,14 +77,14 @@ function redactAppServerText(value: string): string {
       REDACTED,
     )
     .replace(
-      /\b(authorization|auth)\s*([=:])(\s*)(["']?)(?:bearer|basic)\s+[^\s"'`]+(\4)/gi,
-      (_match, key, separator, spacing, quote) =>
-        `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+      /\b(authorization|auth)(["']?)\s*([=:])(\s*)(["']?)(?:bearer|basic)\s+[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
     )
     .replace(
-      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
-      (_match, key, separator, spacing, quote) =>
-        `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+      /\b(api[_-]?key|token|password|secret|authorization|auth)(["']?)\s*([=:])(\s*)(["']?)[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
     );
 }
 

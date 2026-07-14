@@ -75,7 +75,7 @@ export class TokenUsageTracker {
         }
       }
     } catch {
-      return;
+      tokenUsage = undefined;
     }
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     const updated = { ...current };

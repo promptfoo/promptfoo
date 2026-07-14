@@ -141,7 +141,12 @@ describe('TokenUsageTracker', () => {
     };
 
     expect(() => tracker.trackResponseUsage('test-provider', response)).not.toThrow();
-    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 1,
+    });
   });
 
   it('counts a response with malformed token usage as an unmetered request', () => {
