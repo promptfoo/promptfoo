@@ -7,11 +7,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 const mockLoadApiProvider = vi.hoisted(() => vi.fn());
 vi.mock('../../src/providers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/providers')>();
-  mockLoadApiProvider.mockImplementation(actual.loadApiProvider);
   return {
     ...actual,
     loadApiProvider: mockLoadApiProvider,
   };
+});
+
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers')>('../../src/providers');
+  mockLoadApiProvider.mockReset();
+  mockLoadApiProvider.mockImplementation(actual.loadApiProvider);
 });
 
 import { clearCache } from '../../src/cache';
