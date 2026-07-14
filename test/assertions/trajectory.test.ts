@@ -2242,6 +2242,47 @@ describe('trajectory assertions', () => {
           'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
         );
       });
+
+      it('strips a literal "*" default only when the observed value is exactly "*"', () => {
+        // A default of "*" is an ordinary value compared with deep equality — it must not
+        // act as an any-value wildcard (#9842); use `ignore` to drop a key unconditionally.
+        const runWithFields = (fields: string) => {
+          const trace: TraceData = {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'literal-star-default',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: {
+                  'tool.name': 'search_orders',
+                  'tool.arguments': JSON.stringify({ status: 'Q', fields }),
+                },
+              },
+            ],
+          };
+          const value = {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { fields: '*' },
+          };
+          return handleTrajectoryToolArgsMatch({
+            ...defaultParams,
+            assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+            baseType: 'trajectory:tool-args-match',
+            assertion: { type: 'trajectory:tool-args-match', value },
+            renderedValue: value,
+          } as AssertionParams);
+        };
+
+        const stripped = runWithFields('*');
+        expect(stripped.pass).toBe(true);
+        expect(stripped.reason).toContain('Ignored default argument(s): fields');
+
+        expect(runWithFields('ssn,password').pass).toBe(false);
+      });
     });
 
     describe('ignore', () => {
