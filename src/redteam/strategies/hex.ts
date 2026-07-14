@@ -7,13 +7,12 @@ export function addHexEncoding(testCases: TestCase[], injectVar: string): TestCa
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Hex`,
+        metric: assertion.metric ? `${assertion.metric}/Hex` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,
-        [injectVar]: originalText
-          .split('')
-          .map((char) => char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
+        [injectVar]: Array.from(Buffer.from(originalText, 'utf8'))
+          .map((byte) => byte.toString(16).toUpperCase().padStart(2, '0'))
           .join(' '),
       },
       metadata: {

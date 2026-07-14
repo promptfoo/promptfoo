@@ -484,16 +484,6 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOpti
 export type NovaReelTaskType = 'TEXT_VIDEO' | 'MULTI_SHOT_AUTOMATED' | 'MULTI_SHOT_MANUAL';
 
 /**
- * Nova Reel video dimension (only 1280x720 supported)
- */
-export type NovaReelDimension = '1280x720';
-
-/**
- * Nova Reel video FPS (only 24 supported)
- */
-export type NovaReelFPS = 24;
-
-/**
  * Image source for Nova Reel image-to-video
  */
 export interface NovaReelImageSource {
@@ -509,16 +499,6 @@ export interface NovaReelImageSource {
 export interface NovaReelShot {
   text: string;
   image?: NovaReelImageSource;
-}
-
-/**
- * Video generation configuration
- */
-export interface NovaReelVideoGenerationConfig {
-  durationSeconds: number; // 6 for single shot, 12-120 (multiples of 6) for multi-shot
-  fps: NovaReelFPS;
-  dimension: NovaReelDimension;
-  seed?: number; // 0-2,147,483,646
 }
 
 /**
@@ -563,25 +543,6 @@ export interface NovaReelInvocationResponse {
     };
   };
   failureMessage?: string;
-}
-
-/**
- * Video generation status from S3
- */
-export interface NovaReelGenerationStatus {
-  schemaVersion: string;
-  shots: Array<{
-    status: 'SUCCESS' | 'FAILURE';
-    location?: string;
-    failureType?: string;
-    failureMessage?: string;
-  }>;
-  fullVideo: {
-    status: 'SUCCESS' | 'FAILURE';
-    location?: string;
-    failureType?: string;
-    failureMessage?: string;
-  };
 }
 
 // =============================================================================

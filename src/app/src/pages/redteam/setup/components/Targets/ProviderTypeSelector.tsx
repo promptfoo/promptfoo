@@ -102,6 +102,12 @@ const allProviderOptions = [
     recommended: true,
   },
   {
+    value: 'openinterpreter',
+    label: 'Open Interpreter',
+    description: 'Local coding agent with sandbox and approval controls',
+    tag: 'agents',
+  },
+  {
     value: 'openai-agents-sdk',
     label: 'OpenAI Agents SDK',
     description: "OpenAI's official agent framework",
@@ -959,6 +965,15 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'claude-agent-sdk',
+      );
+    } else if (value === 'openinterpreter') {
+      setProvider(
+        {
+          id: 'openinterpreter',
+          config: {},
+          label: currentLabel,
+        },
+        'openinterpreter',
       );
     } else if (value === 'fireworks') {
       setProvider(

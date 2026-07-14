@@ -348,6 +348,39 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should prefer the resolved context over vars.context in the grader prompt', async () => {
+    const rawContext = 'RAW_CONTEXT_ALPHA';
+    const transformedContext = 'TRANSFORMED_CONTEXT_BETA';
+
+    const mockCallApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        output: 'Statement 1',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Final verdict for each statement in order: Yes.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await matchesContextFaithfulness(
+      'Query text',
+      'Output text',
+      transformedContext,
+      0.5,
+      undefined,
+      { context: rawContext },
+    );
+
+    const graderPrompt = String(mockCallApi.mock.calls[1][0]);
+    expect(graderPrompt).toContain(transformedContext);
+    expect(graderPrompt).not.toContain(rawContext);
+  });
+
   describe('Array Context Support', () => {
     it('should handle array of context chunks', async () => {
       const query = 'What is the capital of France?';

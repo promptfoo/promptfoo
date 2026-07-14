@@ -237,7 +237,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ? {
             cached: data.usageMetadata?.totalTokenCount,
             total: data.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
@@ -440,7 +440,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -595,7 +595,7 @@ export class AIStudioEmbeddingProvider
     return {
       embedding: values,
       tokenUsage: cached
-        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 1 }
         : { total: promptTokens ?? 0, numRequests: 1 },
       cached,
       cost:

@@ -6,7 +6,7 @@
  *
  * Two categories:
  *
- * 1. **Multi-turn conversation** (hydra, crescendo, goat, custom):
+ * 1. **Multi-turn conversation** (hydra, goblin, crescendo, goat, custom):
  *    - Target sees all previous messages (conversation context)
  *    - Uses hybrid format: text history + audio/image current turn
  *
@@ -34,6 +34,7 @@ import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 export const ATTACK_PROVIDER_IDS = [
   // Multi-turn conversation (hybrid format with history)
   'hydra', // jailbreak:hydra
+  'goblin', // jailbreak:goblin
   'crescendo',
   'goat',
   'custom',
@@ -52,7 +53,7 @@ export type AttackProviderId = (typeof ATTACK_PROVIDER_IDS)[number];
  * Handles various ID formats:
  * - Short: 'hydra', 'crescendo', 'goat', 'custom', 'meta', 'tree'
  * - Full: 'promptfoo:redteam:hydra', 'promptfoo:redteam:iterative:meta'
- * - Prefixed: 'jailbreak:hydra', 'jailbreak:meta', 'jailbreak:tree'
+ * - Prefixed: 'jailbreak:hydra', 'jailbreak:goblin', 'jailbreak:meta', 'jailbreak:tree'
  *
  * @param id - The strategy ID to check
  * @returns true if this is an attack provider supporting per-turn transforms
@@ -67,6 +68,7 @@ export function isAttackProvider(id: string): boolean {
   } else if (baseId.startsWith('jailbreak:')) {
     const jailbreakType = baseId.replace('jailbreak:', '');
     // jailbreak:hydra -> hydra
+    // jailbreak:goblin -> goblin
     // jailbreak:meta -> iterative:meta
     // jailbreak:tree -> iterative:tree
     if (jailbreakType === 'meta') {
@@ -89,7 +91,7 @@ export function isAttackProvider(id: string): boolean {
 /**
  * Get the full provider ID for an attack provider.
  *
- * @param id - The strategy ID (e.g., 'hydra', 'jailbreak', 'jailbreak:hydra', 'jailbreak:meta')
+ * @param id - The strategy ID (e.g., 'hydra', 'goblin', 'jailbreak', 'jailbreak:hydra', 'jailbreak:meta')
  * @returns The full provider ID (e.g., 'promptfoo:redteam:hydra', 'promptfoo:redteam:iterative')
  */
 export function getAttackProviderFullId(id: string): string {
@@ -108,6 +110,7 @@ export function getAttackProviderFullId(id: string): string {
     // jailbreak:meta -> promptfoo:redteam:iterative:meta
     // jailbreak:tree -> promptfoo:redteam:iterative:tree
     // jailbreak:hydra -> promptfoo:redteam:hydra
+    // jailbreak:goblin -> promptfoo:redteam:goblin
     if (jailbreakType === 'meta') {
       return 'promptfoo:redteam:iterative:meta';
     } else if (jailbreakType === 'tree') {
