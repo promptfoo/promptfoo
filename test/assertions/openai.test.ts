@@ -902,6 +902,11 @@ describe('OpenAI assertions', () => {
         [{ id: 'call_1', type: 'function', function: null }],
         ['not-an-object'],
         [{}],
+        // A malformed entry after a valid one must also fail cleanly.
+        [
+          { type: 'function', function: { name: 'ok', arguments: '{}' } },
+          { id: 'call_2', type: 'function', function: null },
+        ],
       ];
 
       for (const toolsOutput of malformedOutputs) {
