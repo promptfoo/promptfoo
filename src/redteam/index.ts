@@ -81,16 +81,19 @@ function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage
       const response = await callApi(...args);
       accumulateResponseTokenUsage(tokenUsage, response, { countAsRequest: false });
       if (!response.cached) {
-        tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + 1;
+        const reportedRequests = response.tokenUsage?.numRequests ?? 0;
+        tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + Math.max(1, reportedRequests);
       }
       return response;
     } catch (error) {
+      const errorTokenUsage = getErrorTokenUsage(error);
       accumulateResponseTokenUsage(
         tokenUsage,
-        { tokenUsage: getErrorTokenUsage(error) },
+        { tokenUsage: errorTokenUsage },
         { countAsRequest: false },
       );
-      tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + 1;
+      tokenUsage.numRequests =
+        (tokenUsage.numRequests ?? 0) + Math.max(1, errorTokenUsage?.numRequests ?? 0);
       throw error;
     }
   };

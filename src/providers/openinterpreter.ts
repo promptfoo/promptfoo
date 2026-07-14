@@ -415,15 +415,15 @@ export class OpenInterpreterProvider implements ApiProvider {
       const promptConfig = context?.prompt?.config
         ? parseOpenInterpreterPromptConfig(context.prompt.config, context?.vars)
         : undefined;
-      const effectiveConfig = renderVarsInObject(
-        {
-          ...this.config,
-          ...(promptConfig ?? {}),
-          cli_config: mergeRecords(this.config.cli_config, promptConfig?.cli_config),
-          cli_env: { ...(this.config.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
-        },
-        context?.vars,
-      ) as OpenInterpreterConfig;
+      const renderableBaseConfig = { ...this.config };
+      delete renderableBaseConfig.provider;
+      const renderedBaseConfig = renderVarsInObject(renderableBaseConfig, context?.vars);
+      const effectiveConfig = {
+        ...renderedBaseConfig,
+        ...(promptConfig ?? {}),
+        cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
+        cli_env: { ...(renderedBaseConfig.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
+      } as OpenInterpreterConfig;
       validateThreadPersistence(effectiveConfig);
 
       if (!effectiveConfig.working_dir) {
@@ -444,6 +444,9 @@ export class OpenInterpreterProvider implements ApiProvider {
       );
       const mappedContext: CallApiContextParams = {
         ...(context ?? { vars: {}, prompt: { raw: prompt, label: 'Open Interpreter' } }),
+        // The config above is already rendered and validated. Prevent the delegate
+        // from evaluating literal template syntax returned by a row variable.
+        vars: undefined as unknown as CallApiContextParams['vars'],
         prompt: {
           ...(context?.prompt ?? { raw: prompt, label: 'Open Interpreter' }),
           config: mappedConfig,

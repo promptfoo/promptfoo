@@ -265,7 +265,7 @@ describe('synthesize', () => {
       mockProvider.callApi
         .mockResolvedValueOnce({
           output: 'first',
-          tokenUsage: { completion: 5, numRequests: 1, prompt: 10, total: 15 },
+          tokenUsage: { completion: 5, numRequests: 2, prompt: 10, total: 15 },
         })
         .mockResolvedValueOnce({
           output: 'second',
@@ -298,7 +298,7 @@ describe('synthesize', () => {
       expect(result.generationTokenUsage).toEqual({
         cached: 0,
         completion: 8,
-        numRequests: 3,
+        numRequests: 4,
         prompt: 17,
         total: 25,
       });
@@ -390,7 +390,7 @@ describe('synthesize', () => {
           .mockResolvedValueOnce({ output: 'Prompt: first', tokenUsage: { numRequests: 0 } })
           .mockRejectedValueOnce(
             Object.assign(new Error('generation failed'), {
-              tokenUsage: { prompt: 2, completion: 3, total: 5 },
+              tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 2 },
             }),
           )
           .mockResolvedValueOnce({
@@ -425,7 +425,7 @@ describe('synthesize', () => {
         expect(result.generationTokenUsage).toMatchObject({
           cached: 7,
           completion: 3,
-          numRequests: 2,
+          numRequests: 3,
           prompt: 2,
           total: 12,
         });

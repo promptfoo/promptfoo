@@ -435,13 +435,21 @@ describe('OpenInterpreterProvider', () => {
     const resultPromise = provider.callApi(
       JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
       {
-        vars: { workspace: 'workspace', sandbox: 'read-only', timeout: 1000, skipGitCheck: true },
+        vars: {
+          workspace: 'workspace',
+          sandbox: 'read-only',
+          timeout: 1000,
+          skipGitCheck: true,
+          instruction: 'keep the literal {{secret}} placeholder',
+          secret: 'must-not-expand',
+        },
         prompt: {
           config: {
             working_dir: '{{workspace}}',
             sandbox_mode: '{{sandbox}}',
             turn_timeout_ms: '{{timeout}}',
             skip_git_repo_check: '{{skipGitCheck}}',
+            base_instructions: '{{instruction}}',
           },
         },
       } as any,
@@ -449,6 +457,7 @@ describe('OpenInterpreterProvider', () => {
     const { threadStart, turnStart } = await startTurn(server);
 
     expect(threadStart.params.cwd).toBe(workspace);
+    expect(threadStart.params.baseInstructions).toBe('keep the literal {{secret}} placeholder');
     expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
     expect(turnStart.params.input).toEqual([
       { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
@@ -460,11 +469,13 @@ describe('OpenInterpreterProvider', () => {
   it('allows framework test options in prompt config while rejecting provider-option typos', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenInterpreterProvider();
     const attachedProvider = {
       id: vi.fn(() => 'attached-target'),
       callApi: vi.fn(),
     };
+    const provider = new OpenInterpreterProvider({
+      config: { provider: attachedProvider },
+    } as any);
 
     const resultPromise = provider.callApi('framework options', {
       vars: {},
