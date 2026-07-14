@@ -2,6 +2,7 @@ type ResponsesStreamEvent = {
   type?: string;
   response?: any;
   delta?: string;
+  text?: string;
   output_text?: { delta?: string };
   output_index?: number;
   content_index?: number;
@@ -235,6 +236,37 @@ export async function readResponsesStream(
     pendingUnindexedOutputText += delta;
   };
 
+  const processOutputTextDoneEvent = (event: ResponsesStreamEvent) => {
+    if (typeof event.text !== 'string' || !event.text) {
+      return;
+    }
+
+    outputText ||= event.text;
+    const key = getOutputTextKey(event);
+    if (key) {
+      outputTextByContent.set(key, event.text);
+      currentOutputTextKey = key;
+      currentOutputIndexIsInvalid = false;
+      return;
+    }
+    if (event.output_index !== undefined || event.content_index !== undefined) {
+      invalidlyIndexedOutputText = event.text;
+      currentOutputTextKey = undefined;
+      currentOutputIndexIsInvalid = true;
+      return;
+    }
+    if (currentOutputIndexIsInvalid) {
+      invalidlyIndexedOutputText = event.text;
+      return;
+    }
+    if (currentOutputTextKey) {
+      outputTextByContent.set(currentOutputTextKey, event.text);
+      return;
+    }
+
+    pendingUnindexedOutputText = event.text;
+  };
+
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
     if (!event) {
@@ -257,6 +289,8 @@ export async function readResponsesStream(
 
     if (event.type === 'response.output_text.delta') {
       processOutputTextEvent(event);
+    } else if (event.type === 'response.output_text.done') {
+      processOutputTextDoneEvent(event);
     }
   };
 

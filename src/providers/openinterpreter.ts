@@ -57,6 +57,21 @@ const BOOLEAN_PROMPT_OPTION_KEYS = new Set([
   'deep_tracing',
   'harness_guidance',
 ]);
+const ENUM_PROMPT_OPTION_KEYS = new Set([
+  'service_tier',
+  'sandbox_mode',
+  'approval_policy',
+  'approvals_reviewer',
+  'model_reasoning_effort',
+  'reasoning_summary',
+  'personality',
+  'thread_cleanup',
+]);
+const TYPED_PROMPT_OPTION_KEYS = new Set([
+  ...NUMERIC_PROMPT_OPTION_KEYS,
+  ...BOOLEAN_PROMPT_OPTION_KEYS,
+  ...ENUM_PROMPT_OPTION_KEYS,
+]);
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -108,13 +123,16 @@ function parseOpenInterpreterConfig(
 function parseOpenInterpreterPromptConfig(
   config: unknown,
   vars?: CallApiContextParams['vars'],
+  stripFrameworkOptions = true,
 ): OpenInterpreterConfig {
   if (!isRecord(config)) {
     return parseOpenInterpreterConfig(config as OpenInterpreterConfig);
   }
 
   const renderableConfig = Object.fromEntries(
-    Object.entries(config).filter(([key]) => !FRAMEWORK_PROMPT_OPTION_KEYS.has(key)),
+    Object.entries(config).filter(
+      ([key]) => !stripFrameworkOptions || !FRAMEWORK_PROMPT_OPTION_KEYS.has(key),
+    ),
   );
   const providerConfig = Object.fromEntries(
     Object.entries(renderVarsInObject(renderableConfig, vars)).map(([key, value]) => {
@@ -132,6 +150,27 @@ function parseOpenInterpreterPromptConfig(
   );
 
   return parseOpenInterpreterConfig(providerConfig as OpenInterpreterConfig);
+}
+
+function parseInitialOpenInterpreterConfig(
+  config: OpenInterpreterConfig | undefined,
+): OpenInterpreterConfig {
+  if (!isRecord(config)) {
+    return parseOpenInterpreterConfig(config);
+  }
+
+  const initialConfig = Object.fromEntries(
+    Object.entries(config).filter(
+      ([key, value]) =>
+        !(
+          TYPED_PROMPT_OPTION_KEYS.has(key) &&
+          typeof value === 'string' &&
+          value.includes('{{') &&
+          value.includes('}}')
+        ),
+    ),
+  );
+  return parseOpenInterpreterConfig(initialConfig as OpenInterpreterConfig);
 }
 
 function validateThreadPersistence(config: OpenInterpreterConfig): void {
@@ -354,12 +393,13 @@ export class OpenInterpreterProvider implements ApiProvider {
   private readonly interpreterHome: string;
 
   constructor(options: OpenInterpreterProviderOptions = {}) {
-    this.config = parseOpenInterpreterConfig(options.config);
-    validateThreadPersistence(this.config);
+    const initialConfig = parseInitialOpenInterpreterConfig(options.config);
+    this.config = { ...initialConfig, ...(options.config ?? {}) };
+    validateThreadPersistence(initialConfig);
     this.env = options.env;
     this.providerId = options.id ?? 'openinterpreter';
 
-    const configuredHome = resolveInterpreterHome(this.config);
+    const configuredHome = resolveInterpreterHome(initialConfig);
     if (configuredHome) {
       this.interpreterHome = configuredHome;
     } else {
@@ -372,7 +412,7 @@ export class OpenInterpreterProvider implements ApiProvider {
     try {
       this.delegate = new OpenAICodexAppServerProvider({
         id: this.providerId,
-        config: toCodexAppServerConfig(this.config, this.interpreterHome),
+        config: toCodexAppServerConfig(initialConfig, this.interpreterHome),
         env: this.env,
       });
     } catch (error) {
@@ -417,7 +457,11 @@ export class OpenInterpreterProvider implements ApiProvider {
         : undefined;
       const renderableBaseConfig = { ...this.config };
       delete renderableBaseConfig.provider;
-      const renderedBaseConfig = renderVarsInObject(renderableBaseConfig, context?.vars);
+      const renderedBaseConfig = parseOpenInterpreterPromptConfig(
+        renderableBaseConfig,
+        context?.vars,
+        false,
+      );
       const effectiveConfig = {
         ...renderedBaseConfig,
         ...(promptConfig ?? {}),

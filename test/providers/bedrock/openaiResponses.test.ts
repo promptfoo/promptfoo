@@ -773,6 +773,45 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('partial answer');
     });
 
+    it('recovers completed output text when an incomplete response contains truncated terminal text', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.done',
+          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"full answer"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_text_done',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'partial' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('full answer');
+    });
+
     it.each([
       { field: 'content_index', value: 1_000_000_000 },
       { field: 'output_index', value: 100_000_000 },

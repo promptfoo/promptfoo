@@ -466,6 +466,37 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it('renders and validates typed base-provider templates for each row', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-base-template-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        basePath: root,
+        working_dir: '{{workspace}}',
+        sandbox_mode: '{{sandbox}}',
+        turn_timeout_ms: '{{timeout}}',
+        network_access_enabled: '{{network}}',
+        skip_git_repo_check: true,
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('templated base config', {
+      vars: { workspace: 'workspace', sandbox: 'read-only', timeout: 1000, network: false },
+      prompt: { raw: 'templated base config', label: 'base template' },
+    } as any);
+    const { threadStart, turnStart } = await startTurn(server);
+
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it('allows framework test options in prompt config while rejecting provider-option typos', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
