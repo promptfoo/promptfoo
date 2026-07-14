@@ -146,7 +146,10 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator?.toUpperCase() === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    // Filters arrive as unvalidated JSON from the query string, and the UI sends
+    // lowercase 'or'/'and'. Anything that isn't a recognized OR falls back to AND.
+    const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
+    return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
