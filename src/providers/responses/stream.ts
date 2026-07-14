@@ -24,6 +24,10 @@ type FinalizedStreamOutputItem = {
   item: any;
 };
 
+type RetainedStreamOutputItem = FinalizedStreamOutputItem & {
+  serializedLength: number;
+};
+
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
@@ -388,16 +392,40 @@ export async function readResponsesStream(
   const invalidlyIndexedOutputTextByContent = new Map<string, string>();
   const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
-  const finalizedNonMessageItems = new Map<string, FinalizedStreamOutputItem>();
-  const finalizedRefusalItems = new Map<string, FinalizedStreamOutputItem>();
+  const finalizedNonMessageItems = new Map<string, RetainedStreamOutputItem>();
+  const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
+  let finalizedOutputChars = 0;
 
   const appendOutputText = (text: string): void => {
-    if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
+    if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length - finalizedOutputChars) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
       );
     }
     outputText += text;
+  };
+
+  const setFinalizedOutputItem = (
+    target: Map<string, RetainedStreamOutputItem>,
+    key: string,
+    outputIndex: number | undefined,
+    item: any,
+  ): void => {
+    if (!hasStreamOutputCapacity(target.has(key))) {
+      return;
+    }
+
+    const serializedLength = JSON.stringify(item).length;
+    const previousLength = target.get(key)?.serializedLength ?? 0;
+    const growth = serializedLength - previousLength;
+    if (growth > MAX_STREAM_OUTPUT_CHARS - outputText.length - finalizedOutputChars) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
+      );
+    }
+
+    finalizedOutputChars += growth;
+    target.set(key, { outputIndex, item, serializedLength });
   };
 
   const hasStreamOutputCapacity = (existing: boolean): boolean =>
@@ -598,17 +626,13 @@ export async function readResponsesStream(
       if (event.type === 'response.output_item.done' && outputIndex !== undefined) {
         for (const [previousKey, previousItem] of finalizedRefusalItems) {
           if (previousItem.outputIndex === outputIndex) {
+            finalizedOutputChars -= previousItem.serializedLength;
             finalizedRefusalItems.delete(previousKey);
           }
         }
       }
       const key = getOutputTextKey(event) ?? getInvalidOutputTextKey(event);
-      if (hasStreamOutputCapacity(finalizedRefusalItems.has(key))) {
-        finalizedRefusalItems.set(key, {
-          outputIndex,
-          item: finalizedRefusalItem,
-        });
-      }
+      setFinalizedOutputItem(finalizedRefusalItems, key, outputIndex, finalizedRefusalItem);
     }
     if (
       event.type === 'response.output_item.done' &&
@@ -618,9 +642,7 @@ export async function readResponsesStream(
       const outputIndex = getValidOutputIndex(event);
       const item = event.item as any;
       const key = `${String(event.output_index ?? 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
-      if (hasStreamOutputCapacity(finalizedNonMessageItems.has(key))) {
-        finalizedNonMessageItems.set(key, { outputIndex, item });
-      }
+      setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
 
     if (event.type === 'response.output_text.delta') {
@@ -666,16 +688,22 @@ export async function readResponsesStream(
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
-    if (finalizedNonMessageItems.size === 0) {
-      return latestResponse;
-    }
-    const safeOutput = mergeFinalizedStreamOutput(
-      latestResponse.output,
-      Array.from(finalizedNonMessageItems.values()),
-      [],
-      latestResponse.status !== 'completed',
-    );
-    return { ...latestResponse, output: safeOutput.filter((item) => item !== undefined) };
+    const safeOutput = Array.isArray(latestResponse.output)
+      ? latestResponse.output
+          .filter((item: any) => item?.type !== 'function_call')
+          .map((item: any) =>
+            item?.type === 'message' && Array.isArray(item.content)
+              ? {
+                  ...item,
+                  content: item.content.filter(
+                    (content: any) =>
+                      content?.type !== 'tool_use' && content?.type !== 'function_call',
+                  ),
+                }
+              : item,
+          )
+      : [];
+    return { ...latestResponse, output: safeOutput };
   }
 
   if (finalizedRefusalItems.size > 0) {

@@ -13,6 +13,7 @@ import {
 } from '../../../src/providers/bedrock/openaiResponses';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { ResponsesProcessor } from '../../../src/providers/responses/processor';
 import { readResponsesStream } from '../../../src/providers/responses/stream';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -1593,7 +1594,7 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
-    it('preserves finalized tool calls when an incomplete terminal response reports a safety decision', async () => {
+    it('does not execute finalized tool calls after an incomplete terminal safety decision', async () => {
       const body = [
         'event: response.output_item.done',
         'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
@@ -1604,19 +1605,67 @@ describe('bedrock openaiResponses helper', () => {
       ].join('\n');
 
       const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
 
-      expect(result.output).toEqual([
-        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
-      ]);
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
     });
 
-    it.each([
-      undefined,
-      'content_filter',
-    ])('prefers finalized tool arguments over an incomplete terminal snapshot (reason: %s)', async (reason) => {
+    it('does not execute tool calls included in an incomplete terminal safety snapshot', async () => {
+      const body = [
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"function_call","name":"lookup","arguments":"{\\"q\\":\\"unsafe\\"}","call_id":"call_1"}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it('does not execute tool calls nested in an incomplete terminal safety message', async () => {
+      const body = [
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","role":"assistant","content":[{"type":"tool_use","name":"lookup","arguments":"{\\"q\\":\\"unsafe\\"}"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([expect.objectContaining({ content: [] })]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it('prefers finalized tool arguments over an incomplete terminal snapshot', async () => {
       const terminalResponse = {
         status: 'incomplete',
-        ...(reason ? { incomplete_details: { reason } } : {}),
         output: [{ type: 'function_call', name: 'lookup', arguments: '{"q":', call_id: 'call_1' }],
       };
       const body = [
@@ -2276,6 +2325,57 @@ describe('bedrock openaiResponses helper', () => {
       await expect(
         readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
       ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
+    it('bounds finalized tool-call arguments on a truncated stream', async () => {
+      const argumentsText = 'x'.repeat(17 * 1_024 * 1_024);
+      const body = [
+        'event: response.output_item.done',
+        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: 'call_1' } })}`,
+        '',
+      ].join('\n');
+
+      await expect(
+        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
+    it('bounds finalized tool-call arguments across multiple output items', async () => {
+      const argumentsText = 'x'.repeat(2 * 1_024 * 1_024);
+      const body = Array.from({ length: 9 }, (_, outputIndex) => [
+        'event: response.output_item.done',
+        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: outputIndex, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: `call_${outputIndex}` } })}`,
+        '',
+      ])
+        .flat()
+        .join('\n');
+
+      await expect(
+        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
+    it('cancels the response stream when finalized tool-call arguments exceed the output limit', async () => {
+      const encoder = new TextEncoder();
+      const argumentsText = 'x'.repeat(17 * 1_024 * 1_024);
+      let cancelled = false;
+      const stream = new ReadableStream({
+        pull(controller) {
+          controller.enqueue(
+            encoder.encode(
+              `event: response.output_item.done\ndata: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: 'call_1' } })}\n\n`,
+            ),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+      expect(cancelled).toBe(true);
     });
 
     it('cancels the response stream when the aggregate output limit is exceeded', async () => {
