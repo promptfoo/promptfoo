@@ -309,7 +309,7 @@ providers:
         Content-Type: application/json
       transformToolsFormat: openai # Tools already in OpenAI format, pass through
       body:
-        model: gpt-4
+        model: gpt-5.6
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
         tool_choice: '{{ tool_choice }}'
