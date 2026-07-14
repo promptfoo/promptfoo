@@ -497,6 +497,29 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it('renders Nunjucks statement templates in typed base-provider options', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        sandbox_mode: '{% if writable %}workspace-write{% else %}read-only{% endif %}',
+        network_access_enabled: '{% if network %}true{% else %}false{% endif %}',
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('conditional config', {
+      vars: { writable: false, network: false },
+      prompt: { raw: 'conditional config', label: 'conditional template' },
+    } as any);
+    const { turnStart } = await startTurn(server);
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it('renders a nested base-provider approval template for each row', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const server = createMockAppServer();
@@ -1266,13 +1289,16 @@ describe('OpenInterpreterProvider', () => {
 
   it('removes an allocated temporary home if delegate construction fails', () => {
     const prefix = 'promptfoo-openinterpreter-home-';
-    const before = fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(prefix));
+    const mkdtemp = vi.spyOn(fs, 'mkdtempSync');
     vi.spyOn(providerRegistry, 'register').mockImplementationOnce(() => {
       throw new Error('registration failed');
     });
 
     expect(() => new OpenInterpreterProvider()).toThrow('registration failed');
-    expect(fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(prefix))).toEqual(before);
+    expect(mkdtemp).toHaveBeenCalledTimes(1);
+    const allocatedHome = mkdtemp.mock.results[0]?.value as string;
+    expect(allocatedHome.startsWith(path.join(os.tmpdir(), prefix))).toBe(true);
+    expect(fs.existsSync(allocatedHome)).toBe(false);
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 

@@ -18,6 +18,7 @@ type ResponsesStreamLogger = {
 
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
+const MAX_INVALID_STREAM_OUTPUTS = 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -68,12 +69,29 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
     .filter(Boolean);
 }
 
+function hasTerminalSafetyDecision(response: any): boolean {
+  if (response?.incomplete_details?.reason === 'content_filter') {
+    return true;
+  }
+  return (
+    Array.isArray(response?.output) &&
+    response.output.some(
+      (item: any) =>
+        item?.type === 'refusal' ||
+        (item?.type === 'message' &&
+          Array.isArray(item.content) &&
+          item.content.some((content: any) => content?.type === 'refusal')),
+    )
+  );
+}
+
 function recoverIncompleteOutput(
   output: any[] | undefined,
   outputTextByContent: Map<string, string>,
   unindexedOutputTexts: string[],
   allowTerminalTextReplacement: boolean,
   finalizedOutputTextKeys: ReadonlySet<string>,
+  finalizedUnindexedOutputTextCount = 0,
 ): any[] | undefined {
   const recoveredOutput = Array.isArray(output)
     ? output.map((item: any) =>
@@ -94,20 +112,29 @@ function recoverIncompleteOutput(
   );
   const streamedTexts = Array.from(outputTextByContent, ([key, text]) => {
     const [outputIndex, contentIndex] = key.split(':').map(Number);
-    return { outputIndex, contentIndex, text };
+    return {
+      outputIndex,
+      contentIndex,
+      text,
+      finalized: finalizedOutputTextKeys.has(key),
+    };
   }).sort(
     (left, right) => left.outputIndex - right.outputIndex || left.contentIndex - right.contentIndex,
   );
   if (unindexedOutputTexts.length === unindexedTextLocations.length) {
     unindexedOutputTexts.forEach((text, index) => {
-      streamedTexts.push({ ...unindexedTextLocations[index], text });
+      streamedTexts.push({
+        ...unindexedTextLocations[index],
+        text,
+        finalized: index < finalizedUnindexedOutputTextCount,
+      });
     });
   }
 
   let recoveredText = false;
   const unmatchedStreamedTexts: string[] = [];
   const appendedOutputItems = new Map<number, any>();
-  for (const { outputIndex, contentIndex, text } of streamedTexts) {
+  for (const { outputIndex, contentIndex, text, finalized } of streamedTexts) {
     let item = recoveredOutput[outputIndex] ?? appendedOutputItems.get(outputIndex);
     if (!item) {
       item = { type: 'message', role: 'assistant', content: [] };
@@ -137,9 +164,7 @@ function recoverIncompleteOutput(
       typeof content.text !== 'string' ||
       content.text.length === 0 ||
       (allowTerminalTextReplacement &&
-        (finalizedOutputTextKeys.has(`${outputIndex}:${contentIndex}`)
-          ? text !== content.text
-          : text.length > content.text.length))
+        (finalized ? text !== content.text : text.length > content.text.length))
     ) {
       item.content[contentIndex] = { ...content, text };
       recoveredText = true;
@@ -156,9 +181,20 @@ function recoverIncompleteOutput(
   }
 
   if (unindexedOutputTexts.length !== unindexedTextLocations.length) {
+    const terminalTexts = getTerminalOutputTexts(recoveredOutput);
+    const terminalTextCounts = new Map<string, number>();
+    for (const text of terminalTexts) {
+      terminalTextCounts.set(text, (terminalTextCounts.get(text) ?? 0) + 1);
+    }
+    let joinedTerminalText = terminalTexts.join('');
     for (const text of unindexedOutputTexts) {
-      const terminalTexts = getTerminalOutputTexts(recoveredOutput);
-      if (terminalTexts.includes(text) || terminalTexts.join('') === text) {
+      const remainingMatches = terminalTextCounts.get(text) ?? 0;
+      if (remainingMatches > 0) {
+        terminalTextCounts.set(text, remainingMatches - 1);
+        continue;
+      }
+      if (joinedTerminalText === text) {
+        joinedTerminalText = '';
         continue;
       }
       recoveredOutput.push({
@@ -220,6 +256,7 @@ export async function readResponsesStream(
   const completedUnindexedOutputTexts: string[] = [];
   const finalizedOutputTextKeys = new Set<string>();
   const invalidlyIndexedOutputTextByContent = new Map<string, string>();
+  const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
 
   const processOutputTextEvent = (event: ResponsesStreamEvent) => {
@@ -251,6 +288,15 @@ export async function readResponsesStream(
     }
     if (event.output_index !== undefined || event.content_index !== undefined) {
       const invalidKey = getInvalidOutputTextKey(event);
+      if (
+        !invalidlyIndexedOutputTextByContent.has(invalidKey) &&
+        invalidlyIndexedOutputTextByContent.size >= MAX_INVALID_STREAM_OUTPUTS
+      ) {
+        currentOutputTextKey = undefined;
+        currentInvalidOutputTextKey = undefined;
+        pendingUnindexedOutputText = '';
+        return;
+      }
       invalidlyIndexedOutputTextByContent.set(
         invalidKey,
         (invalidlyIndexedOutputTextByContent.get(invalidKey) ?? '') +
@@ -306,11 +352,20 @@ export async function readResponsesStream(
     if (event.output_index !== undefined || event.content_index !== undefined) {
       pendingUnindexedOutputText = '';
       const invalidKey = getInvalidOutputTextKey(event);
+      if (
+        !invalidlyIndexedOutputTextByContent.has(invalidKey) &&
+        invalidlyIndexedOutputTextByContent.size >= MAX_INVALID_STREAM_OUTPUTS
+      ) {
+        currentOutputTextKey = undefined;
+        currentInvalidOutputTextKey = undefined;
+        return;
+      }
       const previous = invalidlyIndexedOutputTextByContent.get(invalidKey) ?? '';
       outputText += event.text.startsWith(previous)
         ? event.text.slice(previous.length)
         : event.text;
       invalidlyIndexedOutputTextByContent.set(invalidKey, event.text);
+      finalizedInvalidOutputTextKeys.add(invalidKey);
       currentOutputTextKey = undefined;
       currentInvalidOutputTextKey = undefined;
       return;
@@ -321,6 +376,7 @@ export async function readResponsesStream(
         ? event.text.slice(previous.length)
         : event.text;
       invalidlyIndexedOutputTextByContent.set(currentInvalidOutputTextKey, event.text);
+      finalizedInvalidOutputTextKeys.add(currentInvalidOutputTextKey);
       currentInvalidOutputTextKey = undefined;
       return;
     }
@@ -388,7 +444,17 @@ export async function readResponsesStream(
     processChunk(buffer);
   }
 
-  if (latestResponse && (outputText || finalizedOutputTextKeys.size > 0)) {
+  if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
+    return latestResponse;
+  }
+
+  if (
+    latestResponse &&
+    (outputText ||
+      finalizedOutputTextKeys.size > 0 ||
+      completedUnindexedOutputTexts.length > 0 ||
+      finalizedInvalidOutputTextKeys.size > 0)
+  ) {
     if (
       unassignedUnindexedOutputText &&
       (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0) &&
@@ -408,15 +474,21 @@ export async function readResponsesStream(
     }
 
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
+    const finalizedInvalidOutputTexts = Array.from(
+      invalidlyIndexedOutputTextByContent,
+      ([key, text]) => (finalizedInvalidOutputTextKeys.has(key) ? text : undefined),
+    ).filter((text): text is string => text !== undefined);
     const recoveredOutput = recoverIncompleteOutput(
       latestResponse.output,
       outputTextByContent,
       [
         ...completedUnindexedOutputTexts,
+        ...finalizedInvalidOutputTexts,
         ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
       ],
       latestResponse.status === 'incomplete',
       finalizedOutputTextKeys,
+      completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
     );
     const output =
       recoveredOutput ?? (Array.isArray(latestResponse.output) ? latestResponse.output : []);
@@ -425,7 +497,10 @@ export async function readResponsesStream(
     for (const text of getTerminalOutputTexts(output)) {
       terminalTextCounts.set(text, (terminalTextCounts.get(text) ?? 0) + 1);
     }
-    for (const text of invalidlyIndexedOutputTextByContent.values()) {
+    for (const [key, text] of invalidlyIndexedOutputTextByContent) {
+      if (finalizedInvalidOutputTextKeys.has(key)) {
+        continue;
+      }
       const remainingMatches = terminalTextCounts.get(text) ?? 0;
       if (remainingMatches > 0) {
         terminalTextCounts.set(text, remainingMatches - 1);

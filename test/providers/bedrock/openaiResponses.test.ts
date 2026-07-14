@@ -893,6 +893,60 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('safe final');
     });
 
+    it('does not restore filtered streamed text from an incomplete terminal response', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+          '',
+          'event: response.output_text.done',
+          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"SECRET OR UNSAFE DRAFT"}',
+          '',
+          'event: response.incomplete',
+          'data: {"type":"response.incomplete","response":{"id":"resp_filtered","model":"openai.gpt-5.5","status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"[filtered]"}]}]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('[filtered]');
+    });
+
+    it('does not append a streamed draft to a completed terminal refusal', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_refused","model":"openai.gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"I cannot help with that."}]}]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(result.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
     it('uses finalized output text when a stream ends before its terminal response event', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -1075,6 +1129,39 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('safe final');
+    });
+
+    it.each([
+      { name: 'unindexed', index: {} },
+      { name: 'malformed-index', index: { output_index: 1_000_000_000, content_index: 0 } },
+    ])('honors finalized $name stream text over an incomplete terminal draft', async ({
+      index,
+    }) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          `data: ${JSON.stringify({ type: 'response.output_text.delta', ...index, delta: 'SECRET OR UNSAFE DRAFT' })}`,
+          '',
+          'event: response.output_text.done',
+          `data: ${JSON.stringify({ type: 'response.output_text.done', ...index, text: 'SAFE' })}`,
+          '',
+          'event: response.incomplete',
+          'data: {"type":"response.incomplete","response":{"id":"resp_unindexed_final","model":"openai.gpt-5.5","status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECRET OR UNSAFE TERMINAL DRAFT"}]}]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('SAFE');
     });
 
     it('honors an empty finalized event without a preceding delta', async () => {
@@ -1538,6 +1625,34 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('safe fallback');
+    });
+
+    it('bounds the number of distinct malformed streamed output indices', async () => {
+      const malformedEvents = Array.from({ length: 1_100 }, (_, index) => [
+        'event: response.output_text.delta',
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 1_000_000_000 + index, content_index: 0, delta: `item-${index}` })}`,
+        '',
+      ]).flat();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          ...malformedEvents,
+          'event: response.incomplete',
+          'data: {"type":"response.incomplete","response":{"id":"resp_many_invalid","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect((result.raw as any).output.length).toBeLessThanOrEqual(1_024);
     });
 
     it('keeps an oversized indexed delta separate from the preceding output', async () => {

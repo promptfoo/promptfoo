@@ -122,7 +122,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function containsTemplate(value: unknown): boolean {
   if (typeof value === 'string') {
-    return value.includes('{{') && value.includes('}}');
+    return (
+      (value.includes('{{') && value.includes('}}')) ||
+      (value.includes('{%') && value.includes('%}'))
+    );
   }
   if (Array.isArray(value)) {
     return value.some(containsTemplate);
