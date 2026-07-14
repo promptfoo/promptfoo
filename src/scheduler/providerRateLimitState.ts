@@ -137,6 +137,8 @@ export class ProviderRateLimitState extends EventEmitter {
        * reset them.
        */
       maxRetriesOverride?: number;
+      /** Return the provider's final rate-limited result after recording it. */
+      returnRateLimitedResultWhenExhausted?: boolean;
     },
   ): Promise<T> {
     this.totalRequests++;
@@ -204,8 +206,11 @@ export class ProviderRateLimitState extends EventEmitter {
           }
 
           // Rate limited and no more retries - count as FAILED, throw sentinel error
-          // Using sentinel error to prevent catch block from double-releasing/double-counting
           this.failedRequests++;
+          if (options.returnRateLimitedResultWhenExhausted) {
+            return result;
+          }
+          // Using sentinel error to prevent catch block from double-releasing/double-counting
           throw new RateLimitExhaustedError(
             `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
           );

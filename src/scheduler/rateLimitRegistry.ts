@@ -51,7 +51,8 @@ export class RateLimitRegistry extends EventEmitter {
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
     },
   ): Promise<T> {
-    const providerMaxRetries = getProviderMaxRetries(provider);
+    const providerManagesRetries = provider.managesRetries === true;
+    const providerMaxRetries = providerManagesRetries ? 0 : getProviderMaxRetries(provider);
 
     // Even when the scheduler is disabled, propagate the retry context so
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
@@ -78,6 +79,7 @@ export class RateLimitRegistry extends EventEmitter {
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
         maxRetriesOverride: providerMaxRetries,
+        returnRateLimitedResultWhenExhausted: providerManagesRetries,
       });
 
     try {

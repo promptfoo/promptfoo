@@ -209,6 +209,7 @@ describe('TrueFoundry', () => {
               Authorization: 'Bearer test-key',
             },
             body: JSON.stringify(expectedBody),
+            signal: expect.any(AbortSignal),
           },
           300000,
           undefined,

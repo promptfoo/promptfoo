@@ -603,15 +603,38 @@ async function fetchAndReadBody(
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
   const maxBodyRetries = isIdempotent ? 2 : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
+    // fetchWithTimeout clears its timer once response headers arrive. Attach a
+    // controller before dispatch, then start its timer only after the transport
+    // retry loop completes. This bounds body consumption without changing the
+    // transport's existing per-attempt retry timeout semantics.
+    const bodyTimeoutController = new AbortController();
+    const bodySignal = options.signal ?? bodyTimeoutController.signal;
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
-    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
+    const resp = await fetchWithRetries(
+      url,
+      { ...options, signal: bodySignal },
+      timeout,
+      maxRetries,
+    );
     const fetchLatencyMs = Date.now() - fetchStart;
+    const bodyTimeout = options.signal
+      ? undefined
+      : setTimeout(
+          () =>
+            bodyTimeoutController.abort(
+              new DOMException(`Request timed out after ${timeout} ms`, 'TimeoutError'),
+            ),
+          Math.max(0, timeout - fetchLatencyMs),
+        );
 
     try {
       const respText = await resp.text();
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
+      if (bodyTimeoutController.signal.aborted) {
+        throw bodyTimeoutController.signal.reason;
+      }
       if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
         const backoffMs = Math.pow(2, bodyAttempt) * 1000;
         logger.debug('[Cache] Body stream failed with transient error, retrying', {
@@ -641,6 +664,10 @@ async function fetchAndReadBody(
       ) as Error & { cause?: unknown };
       wrappedError.cause = err;
       throw wrappedError;
+    } finally {
+      if (bodyTimeout) {
+        clearTimeout(bodyTimeout);
+      }
     }
   }
   // Unreachable: loop always returns or throws, but TypeScript needs this

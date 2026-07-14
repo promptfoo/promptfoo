@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -6,6 +6,24 @@ import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import {
+  addGeminiUsage,
+  createGeminiRetrySignal,
+  createGeminiUsageTotals,
+  getGeminiErrorHeaders,
+  getGeminiErrorMessage,
+  getGeminiErrorStatus,
+  getGeminiErrorStatusText,
+  getGeminiMaxRetries,
+  getGeminiResponseUsage,
+  getGeminiRetryAfterMs,
+  isGeminiHardQuotaError,
+  isGeminiRetryableError,
+  isGeminiRetryableHttpResponse,
+  isGeminiRetryableResponseData,
+  throwIfGeminiAborted,
+  waitBeforeGeminiRetry,
+} from './retry';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -27,6 +45,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -52,6 +71,10 @@ function shouldBustCache(context?: CallApiContextParams): boolean {
  * authentication management, and resource cleanup.
  */
 export class AIStudioChatProvider extends GoogleGenericProvider {
+  get managesRetries(): boolean {
+    return usesGenerateContentApi(this.modelName);
+  }
+
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
@@ -165,7 +188,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Google AI Studio API.
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
     if (this.initializationPromise != null) {
       await this.initializationPromise;
@@ -179,7 +206,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     if (usesGenerateContentApi(this.modelName)) {
-      return this.callGemini(prompt, context);
+      return this.callGemini(prompt, context, options);
     }
 
     // Legacy PaLM API path
@@ -292,7 +319,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Gemini API specifically.
    */
-  async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callGemini(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -355,30 +387,191 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    let data;
+    let data: GeminiResponseData | undefined;
     let cached = false;
-    try {
-      const endpoint = this.getApiEndpoint('generateContent');
-      const headers = await this.getAuthHeaders();
-      const authDiscriminator = createAuthCacheDiscriminator(headers);
-      ({ data, cached } = (await fetchWithCache(
-        endpoint,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-          ...(authDiscriminator && { _authHash: authDiscriminator }),
-        } as RequestInit,
-        getRequestTimeoutMs(),
-        'json',
-        shouldBustCache(context),
-      )) as {
-        data: GeminiResponseData;
-        cached: boolean;
-      });
-    } catch (err) {
+    const maxRetries = getGeminiMaxRetries(config, logger);
+    const requestTimeoutMs = getRequestTimeoutMs();
+    const retryDeadline = Date.now() + requestTimeoutMs;
+    const retrySignal = createGeminiRetrySignal(options?.abortSignal, requestTimeoutMs);
+    const usageTotals = createGeminiUsageTotals();
+    let numRequests = 0;
+    let knownCost = 0;
+    let hasKnownCost = false;
+    const retryAccounting = () =>
+      numRequests > 1 || usageTotals.totalTokenCount > 0
+        ? {
+            tokenUsage: {
+              prompt: usageTotals.promptTokenCount,
+              completion: usageTotals.candidatesTokenCount,
+              total: usageTotals.totalTokenCount,
+              numRequests,
+            },
+            ...(hasKnownCost && { cost: knownCost }),
+          }
+        : {};
+    const timeoutResponse = (reason: unknown): ProviderResponse => ({
+      error: `API call error: ${String(reason)}`,
+      ...retryAccounting(),
+    });
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        throwIfGeminiAborted(retrySignal);
+        if (Date.now() >= retryDeadline) {
+          throw new DOMException('The operation timed out', 'TimeoutError');
+        }
+        const endpoint = this.getApiEndpoint('generateContent');
+        const headers = await this.getAuthHeaders();
+        const authDiscriminator = createAuthCacheDiscriminator(headers);
+        throwIfGeminiAborted(retrySignal);
+        if (Date.now() >= retryDeadline) {
+          throw new DOMException('The operation timed out', 'TimeoutError');
+        }
+        numRequests++;
+        const result = (await fetchWithCache<GeminiResponseData>(
+          endpoint,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            ...(options?.abortSignal && { signal: retrySignal }),
+            ...(authDiscriminator && { _authHash: authDiscriminator }),
+          } as RequestInit,
+          Math.max(1, retryDeadline - Date.now()),
+          'json',
+          shouldBustCache(context),
+          0,
+        )) as FetchWithCacheResult<GeminiResponseData>;
+
+        if (result.cached) {
+          numRequests--;
+        } else {
+          const usage = getGeminiResponseUsage(result.data);
+          addGeminiUsage(usageTotals, usage);
+          if (
+            usage &&
+            (usage.promptTokenCount !== undefined ||
+              usage.candidatesTokenCount !== undefined ||
+              usage.thoughtsTokenCount !== undefined)
+          ) {
+            const attemptCost = calculateGoogleCost(
+              this.modelName,
+              config,
+              usage.promptTokenCount ?? 0,
+              (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
+            );
+            if (attemptCost !== undefined) {
+              knownCost += attemptCost;
+              hasKnownCost = true;
+            }
+          }
+        }
+
+        if (isGeminiRetryableHttpResponse(result.status, result.data) && attempt < maxRetries) {
+          await waitBeforeGeminiRetry(
+            config,
+            attempt,
+            maxRetries,
+            getGeminiRetryAfterMs(result, result.data),
+            retrySignal,
+            logger,
+          );
+          continue;
+        }
+
+        if (result.status >= 400) {
+          await result.deleteFromCache?.();
+          const headers = getGeminiErrorHeaders(result);
+          const detail = getGeminiErrorMessage(result.data);
+          return {
+            error: `API call error: ${result.status} ${result.statusText || 'Unknown Error'}${detail ? `: ${detail}` : ''}`,
+            ...retryAccounting(),
+            metadata: {
+              http: {
+                status: result.status,
+                statusText: result.statusText || 'Unknown Error',
+                ...(headers && { headers }),
+              },
+              ...(result.status === 429 && {
+                rateLimitKind: isGeminiRetryableHttpResponse(result.status, result.data)
+                  ? 'rate_limit'
+                  : 'quota',
+              }),
+            },
+          };
+        }
+
+        if (isGeminiRetryableResponseData(result.data)) {
+          await result.deleteFromCache?.();
+          if (attempt < maxRetries) {
+            await waitBeforeGeminiRetry(
+              config,
+              attempt,
+              maxRetries,
+              undefined,
+              retrySignal,
+              logger,
+            );
+            continue;
+          }
+        }
+
+        data = result.data;
+        cached = result.cached;
+        break;
+      } catch (err) {
+        if (options?.abortSignal?.aborted) {
+          throwIfGeminiAborted(options.abortSignal);
+        }
+        if (retrySignal.aborted || Date.now() >= retryDeadline) {
+          return timeoutResponse(
+            retrySignal.reason ?? new DOMException('The operation timed out', 'TimeoutError'),
+          );
+        }
+        if (attempt < maxRetries && isGeminiRetryableError(err)) {
+          try {
+            await waitBeforeGeminiRetry(
+              config,
+              attempt,
+              maxRetries,
+              getGeminiRetryAfterMs(err),
+              retrySignal,
+              logger,
+            );
+          } catch (waitError) {
+            if (options?.abortSignal?.aborted) {
+              throwIfGeminiAborted(options.abortSignal);
+            }
+            return timeoutResponse(waitError);
+          }
+          continue;
+        }
+
+        const status = getGeminiErrorStatus(err);
+        const headers = getGeminiErrorHeaders(err);
+        return {
+          error: `API call error: ${String(err)}`,
+          ...retryAccounting(),
+          ...(status !== undefined && {
+            metadata: {
+              http: {
+                status,
+                statusText: getGeminiErrorStatusText(err),
+                ...(headers && { headers }),
+              },
+              ...(status === 429 && {
+                rateLimitKind: isGeminiHardQuotaError(err) ? 'quota' : 'rate_limit',
+              }),
+            },
+          }),
+        };
+      }
+    }
+
+    if (!data) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: 'API call error: Gemini API did not return a response',
+        ...retryAccounting(),
       };
     }
 
@@ -387,6 +580,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     if (!lastData) {
       return {
         error: `No response data found in response: ${JSON.stringify(data)}`,
+        ...retryAccounting(),
       };
     }
     let output: ReturnType<typeof formatCandidateContents> | undefined;
@@ -412,6 +606,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     } catch (err) {
       return {
         error: `${String(err)}`,
+        ...retryAccounting(),
       };
     }
     const finalCandidate = candidate;
@@ -450,13 +645,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: lastData.usageMetadata?.promptTokenCount,
-            completion: lastData.usageMetadata?.candidatesTokenCount,
-            total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 1,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+            prompt: usageTotals.promptTokenCount,
+            completion: usageTotals.candidatesTokenCount,
+            total: usageTotals.totalTokenCount,
+            numRequests,
+            ...(usageTotals.hasThoughtsTokenCount && {
               completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
+                reasoning: usageTotals.thoughtsTokenCount,
                 acceptedPrediction: 0,
                 rejectedPrediction: 0,
               },
@@ -465,19 +660,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
-      const completionForCost =
-        lastData.usageMetadata?.candidatesTokenCount == null
-          ? undefined
-          : lastData.usageMetadata.candidatesTokenCount +
-            (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            lastData.usageMetadata?.promptTokenCount,
-            completionForCost,
-          );
+      const cost = cached || !hasKnownCost ? undefined : knownCost;
 
       return {
         output,
@@ -491,6 +674,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        ...retryAccounting(),
       };
     }
   }
@@ -513,6 +697,10 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
+  override get managesRetries(): boolean {
+    return false;
+  }
+
   id(): string {
     if (this.customId) {
       return this.customId();

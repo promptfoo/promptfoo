@@ -27,12 +27,31 @@ import {
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  addGeminiUsage,
+  createGeminiRetrySignal,
+  createGeminiUsageTotals,
+  getGeminiErrorHeaders,
+  getGeminiErrorMessage,
+  getGeminiErrorStatus,
+  getGeminiErrorStatusText,
+  getGeminiMaxRetries,
+  getGeminiResponseUsage,
+  getGeminiRetryAfterMs,
+  isGeminiHardQuotaError,
+  isGeminiRetryableError,
+  isGeminiRetryableHttpResponse,
+  isGeminiRetryableResponseData,
+  throwIfGeminiAborted,
+  waitBeforeGeminiRetry,
+} from './retry';
+import {
   calculateGoogleCost,
   collectGroundingMetadata,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
@@ -47,6 +66,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -155,6 +175,10 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
  * authentication management, and resource cleanup.
  */
 export class VertexChatProvider extends GoogleGenericProvider {
+  get managesRetries(): boolean {
+    return this.modelName.includes('gemini');
+  }
+
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
     // Force vertex mode for Vertex AI provider
     super(modelName, {
@@ -248,7 +272,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return client;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Determine the system based on model name
     const system = this.modelName.includes('claude')
       ? 'vertex:anthropic'
@@ -286,17 +314,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
-      return this.callGeminiApi(prompt, context);
+      return this.callGeminiApi(prompt, context, options);
     } else if (this.modelName.includes('llama')) {
       return this.callLlamaApi(prompt, context);
     }
@@ -529,7 +562,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
-  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
@@ -628,80 +666,243 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
+          if (tokenUsage.numRequests !== undefined) {
+            tokenUsage.numRequests = 0;
+          }
         }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
           cacheKey,
         });
         response = { ...parsedCachedResponse, cached: true };
+        delete response.cost;
       }
     }
     if (response === undefined) {
       let data;
-      try {
-        // Default to non-streaming (generateContent) since:
-        // 1. Model Armor floor settings only work with non-streaming endpoint
-        // 2. Promptfoo collects full responses for evaluation anyway
-        // Set streaming: true to use streamGenerateContent if needed
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+      const maxRetries = getGeminiMaxRetries(config, logger);
+      const requestTimeoutMs = getRequestTimeoutMs();
+      const retryDeadline = Date.now() + requestTimeoutMs;
+      const retrySignal = createGeminiRetrySignal(options?.abortSignal, requestTimeoutMs);
+      const usageTotals = createGeminiUsageTotals();
+      let numRequests = 0;
+      let knownCost = 0;
+      let hasKnownCost = false;
+      const retryAccounting = () =>
+        numRequests > 1 || usageTotals.totalTokenCount > 0
+          ? {
+              tokenUsage: {
+                prompt: usageTotals.promptTokenCount,
+                completion: usageTotals.candidatesTokenCount,
+                total: usageTotals.totalTokenCount,
+                ...(numRequests > 1 && { numRequests }),
+              },
+              ...(hasKnownCost && { cost: knownCost }),
+            }
+          : {};
+      const timeoutResponse = (reason: unknown): ProviderResponse => ({
+        error: `API call error: ${String(reason)}`,
+        ...retryAccounting(),
+      });
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          throwIfGeminiAborted(retrySignal);
+          if (Date.now() >= retryDeadline) {
+            throw new DOMException('The operation timed out', 'TimeoutError');
+          }
+          // Default to non-streaming (generateContent) since:
+          // 1. Model Armor floor settings only work with non-streaming endpoint
+          // 2. Promptfoo collects full responses for evaluation anyway
+          // Set streaming: true to use streamGenerateContent if needed
+          const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
 
-        // Check if we should use express mode (API key without OAuth)
-        if (this.isExpressMode()) {
-          // Express mode: use simplified endpoint with API key in header
-          const url = `https://${apiHost}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+          // Check if we should use express mode (API key without OAuth)
+          if (this.isExpressMode()) {
+            // Express mode: use simplified endpoint with API key in header
+            const url = `https://${apiHost}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-          const res = await fetchWithProxy(url, {
-            method: 'POST',
-            headers: await this.getAuthHeaders(),
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(getRequestTimeoutMs()),
-          });
+            const headers = await this.getAuthHeaders();
+            throwIfGeminiAborted(retrySignal);
+            if (Date.now() >= retryDeadline) {
+              throw new DOMException('The operation timed out', 'TimeoutError');
+            }
+            numRequests++;
+            const res = await fetchWithProxy(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(body),
+              signal: retrySignal,
+              disableTransientRetries: true,
+            });
 
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => null);
-            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-            return {
-              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-            };
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => null);
+              logger.debug('[Google] Gemini Vertex express request failed', {
+                status: res.status,
+                statusText: res.statusText,
+              });
+              if (isGeminiRetryableHttpResponse(res.status, errorData) && attempt < maxRetries) {
+                await waitBeforeGeminiRetry(
+                  config,
+                  attempt,
+                  maxRetries,
+                  getGeminiRetryAfterMs(res, errorData),
+                  retrySignal,
+                  logger,
+                );
+                continue;
+              }
+              const headers = getGeminiErrorHeaders(res) ?? {};
+              const detail = getGeminiErrorMessage(errorData);
+              return {
+                error: `API call error: ${res.status} ${res.statusText}${detail ? `: ${detail}` : ''}`,
+                ...retryAccounting(),
+                metadata: {
+                  http: { status: res.status, statusText: res.statusText, headers },
+                  ...(res.status === 429 && {
+                    rateLimitKind: isGeminiRetryableHttpResponse(res.status, errorData)
+                      ? 'rate_limit'
+                      : 'quota',
+                  }),
+                },
+              };
+            }
+
+            data = (await res.json()) as GeminiApiResponse;
+          } else {
+            // Standard mode: use OAuth and full endpoint
+            const client = await this.getClientWithCredentials();
+            throwIfGeminiAborted(retrySignal);
+            if (Date.now() >= retryDeadline) {
+              throw new DOMException('The operation timed out', 'TimeoutError');
+            }
+            const projectId = await this.getProjectId();
+            const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+              this.modelName
+            }:${endpoint}`;
+            throwIfGeminiAborted(retrySignal);
+            if (Date.now() >= retryDeadline) {
+              throw new DOMException('The operation timed out', 'TimeoutError');
+            }
+            numRequests++;
+            const res = await client.request({
+              url,
+              method: 'POST',
+              data: body,
+              timeout: Math.max(1, retryDeadline - Date.now()),
+              signal: retrySignal,
+              retry: false,
+              retryConfig: { retry: 0 },
+            });
+            data = res.data as GeminiApiResponse;
           }
 
-          data = (await res.json()) as GeminiApiResponse;
-        } else {
-          // Standard mode: use OAuth and full endpoint
-          const client = await this.getClientWithCredentials();
-          const projectId = await this.getProjectId();
-          const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-            this.modelName
-          }:${endpoint}`;
-          const res = await client.request({
-            url,
-            method: 'POST',
-            data: body,
-            timeout: getRequestTimeoutMs(),
-          });
-          data = res.data as GeminiApiResponse;
-        }
-      } catch (err) {
-        const geminiError = err as GaxiosError;
-        if (
-          geminiError.response &&
-          geminiError.response.data &&
-          geminiError.response.data[0] &&
-          geminiError.response.data[0].error
-        ) {
-          const errorDetails = geminiError.response.data[0].error;
-          const code = errorDetails.code;
-          const message = errorDetails.message;
-          const status = errorDetails.status;
-          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          const usage = getGeminiResponseUsage(data);
+          addGeminiUsage(usageTotals, usage);
+          if (
+            usage &&
+            (usage.promptTokenCount !== undefined ||
+              usage.candidatesTokenCount !== undefined ||
+              usage.thoughtsTokenCount !== undefined)
+          ) {
+            const attemptCost = calculateGoogleCost(
+              this.modelName,
+              config,
+              usage.promptTokenCount ?? 0,
+              (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
+              true,
+            );
+            if (attemptCost !== undefined) {
+              knownCost += attemptCost;
+              hasKnownCost = true;
+            }
+          }
+
+          if (isGeminiRetryableResponseData(data)) {
+            if (attempt < maxRetries) {
+              await waitBeforeGeminiRetry(
+                config,
+                attempt,
+                maxRetries,
+                undefined,
+                retrySignal,
+                logger,
+              );
+              continue;
+            }
+          }
+
+          break;
+        } catch (err) {
+          if (options?.abortSignal?.aborted) {
+            throwIfGeminiAborted(options.abortSignal);
+          }
+          if (retrySignal.aborted || Date.now() >= retryDeadline) {
+            return timeoutResponse(
+              retrySignal.reason ?? new DOMException('The operation timed out', 'TimeoutError'),
+            );
+          }
+          if (attempt < maxRetries && isGeminiRetryableError(err)) {
+            try {
+              await waitBeforeGeminiRetry(
+                config,
+                attempt,
+                maxRetries,
+                getGeminiRetryAfterMs(err),
+                retrySignal,
+                logger,
+              );
+            } catch (waitError) {
+              if (options?.abortSignal?.aborted) {
+                throwIfGeminiAborted(options.abortSignal);
+              }
+              return timeoutResponse(waitError);
+            }
+            continue;
+          }
+
+          const status = getGeminiErrorStatus(err);
+          const headers = getGeminiErrorHeaders(err);
+          const errorMetadata =
+            status === undefined
+              ? {}
+              : {
+                  metadata: {
+                    http: {
+                      status,
+                      statusText: getGeminiErrorStatusText(err),
+                      ...(headers && { headers }),
+                    },
+                    ...(status === 429 && {
+                      rateLimitKind: isGeminiHardQuotaError(err) ? 'quota' : 'rate_limit',
+                    }),
+                  },
+                };
+          const geminiError = err as GaxiosError;
+          if (
+            geminiError.response &&
+            geminiError.response.data &&
+            geminiError.response.data[0] &&
+            geminiError.response.data[0].error
+          ) {
+            const errorDetails = geminiError.response.data[0].error;
+            const code = errorDetails.code;
+            const message = errorDetails.message;
+            const status = errorDetails.status;
+            logger.error('[Google] Gemini Vertex request failed', { code, status });
+            return {
+              error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+              ...retryAccounting(),
+              ...errorMetadata,
+            };
+          }
+          logger.debug('[Google] Gemini Vertex request failed', { status });
           return {
-            error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+            error: `API call error: ${String(err)}`,
+            ...retryAccounting(),
+            ...errorMetadata,
           };
         }
-        logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
-        return {
-          error: `API call error: ${String(err)}`,
-        };
       }
 
       try {
@@ -713,6 +914,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (error) {
           return {
             error: `Error ${error.code}: ${error.message}`,
+            ...retryAccounting(),
           };
         }
         const dataWithResponse = normalizedData as GeminiResponseData[];
@@ -727,9 +929,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
               `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
 
             const tokenUsage = {
-              total: datum.usageMetadata?.totalTokenCount || 0,
-              prompt: datum.usageMetadata?.promptTokenCount || 0,
-              completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              total: usageTotals.totalTokenCount,
+              prompt: usageTotals.promptTokenCount,
+              completion: usageTotals.candidatesTokenCount,
+              ...(numRequests > 1 && { numRequests }),
             };
 
             // Build guardrails response with Model Armor details
@@ -747,6 +950,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             return {
               output: blockReasonMessage,
               tokenUsage,
+              ...(hasKnownCost && { cost: knownCost }),
               guardrails,
               metadata: {
                 modelArmor: isModelArmor
@@ -761,6 +965,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
             };
           }
 
+          if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+            continue;
+          }
+
           const candidate = getCandidate(datum);
           const safetyFinishReasons = [
             'SAFETY',
@@ -773,9 +981,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
             const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
             const tokenUsage = {
-              total: datum.usageMetadata?.totalTokenCount || 0,
-              prompt: datum.usageMetadata?.promptTokenCount || 0,
-              completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              total: usageTotals.totalTokenCount,
+              prompt: usageTotals.promptTokenCount,
+              completion: usageTotals.candidatesTokenCount,
+              ...(numRequests > 1 && { numRequests }),
             };
             // Build guardrails response for safety blocks
             const guardrails: GuardrailResponse = {
@@ -786,9 +995,19 @@ export class VertexChatProvider extends GoogleGenericProvider {
             };
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
-              return { output: finishReason, tokenUsage, guardrails };
+              return {
+                output: finishReason,
+                tokenUsage,
+                guardrails,
+                ...(hasKnownCost && { cost: knownCost }),
+              };
             }
-            return { error: finishReason, guardrails };
+            return {
+              error: finishReason,
+              tokenUsage,
+              guardrails,
+              ...(hasKnownCost && { cost: knownCost }),
+            };
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
             // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
@@ -806,25 +1025,27 @@ export class VertexChatProvider extends GoogleGenericProvider {
             // e.g. MALFORMED_FUNCTION_CALL
             return {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
+              ...retryAccounting(),
             };
           } else if (candidate.content?.parts) {
             output = mergeParts(output, formatCandidateContents(candidate));
           } else {
             return {
               error: `No output found in response: ${JSON.stringify(data)}`,
+              ...retryAccounting(),
             };
           }
         }
 
-        const lastData = dataWithResponse[dataWithResponse.length - 1];
-        const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
-        const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
-        const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
+        const promptTokenCount = usageTotals.promptTokenCount;
+        const completionTokenCount = usageTotals.candidatesTokenCount;
+        const thoughtsTokenCount = usageTotals.thoughtsTokenCount;
         const tokenUsage = {
-          total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: promptTokenCount || 0,
-          completion: completionTokenCount || 0,
-          ...(thoughtsTokenCount !== undefined && {
+          total: usageTotals.totalTokenCount,
+          prompt: promptTokenCount,
+          completion: completionTokenCount,
+          ...(numRequests > 1 && { numRequests }),
+          ...(usageTotals.hasThoughtsTokenCount && {
             completionDetails: {
               reasoning: thoughtsTokenCount,
               acceptedPrediction: 0,
@@ -832,18 +1053,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             },
           }),
         };
-        // Include thinking tokens in output cost - Google bills them as output tokens
-        const completionForCost =
-          completionTokenCount == null
-            ? undefined
-            : completionTokenCount + (thoughtsTokenCount ?? 0);
-        const cost = calculateGoogleCost(
-          this.modelName,
-          config,
-          promptTokenCount,
-          completionForCost,
-          true,
-        );
+        const cost = hasKnownCost ? knownCost : undefined;
 
         response = {
           cached: false,
@@ -864,6 +1074,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       } catch (err) {
         return {
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
+          ...retryAccounting(),
         };
       }
     }

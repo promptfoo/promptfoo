@@ -318,6 +318,22 @@ export interface CompletionOptions {
   mcp?: MCPConfig;
 
   /**
+   * Maximum number of retries for transient Gemini failures (408, 429,
+   * 500, 502, 503, 504, network errors, and empty candidate/output responses).
+   * Set to 0 to disable retries.
+   * @default 3
+   */
+  maxRetries?: number;
+
+  /**
+   * Base delay in milliseconds for exponential backoff between retries.
+   * Locally computed delays use jitter and are capped at 60 seconds;
+   * server-provided Retry-After delays are honored without shortening.
+   * @default 1000
+   */
+  baseRetryDelay?: number;
+
+  /**
    * Controls role mapping when converting from OpenAI format to Gemini format.
    * If true, uses 'assistant' role (for older Gemini versions).
    * If false (default), maps 'assistant' to 'model' (for newer Gemini versions).
