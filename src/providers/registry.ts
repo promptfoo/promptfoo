@@ -1480,17 +1480,9 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
-      return new SimulatedUser({
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          // Thread the load context's basePath so relative file:// userProvider
-          // references resolve against the config file's directory.
-          ...(context.basePath && { basePath: context.basePath }),
-        },
-      });
+      return new SimulatedUser(providerOptions);
     },
   },
   {

@@ -448,6 +448,64 @@ describe('SimulatedUser', () => {
       expect(timeUtils.sleep).toHaveBeenCalledWith(250);
     });
 
+    it('should skip the custom user provider delay for cached responses', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          cached: true,
+        }),
+        delay: 250,
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should apply the custom user provider delay to error responses like the evaluator does', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          error: 'user provider failed',
+        }),
+        delay: 250,
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      const result = await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('user provider failed');
+      // Rate-limit pacing still applies when the provider errors (e.g. 429s),
+      // matching the evaluator's applyProviderDelayIfNeeded semantics.
+      expect(timeUtils.sleep).toHaveBeenCalledWith(250);
+    });
+
     it('should pass call options to target providers', async () => {
       const abortController = new AbortController();
 

@@ -56,7 +56,7 @@ type AgentProviderOptions = ProviderOptions & {
     userProvider?: string | ProviderOptions;
     /**
      * Base path for resolving relative file:// userProvider references.
-     * Injected by the provider registry from the load context; not user-facing.
+     * Injected into config by loadApiProvider from the load context; not user-facing.
      */
     basePath?: string;
     instructions?: string;
@@ -231,14 +231,12 @@ export class SimulatedUser implements ApiProvider {
     {
       context,
       callApiOptions,
-      includeSystemInstructions,
-      instructions,
+      systemMessage,
       sessionId,
     }: {
       context: CallApiContextParams | undefined;
       callApiOptions: CallApiOptionsParams | undefined;
-      includeSystemInstructions: boolean;
-      instructions: string;
+      systemMessage: string | undefined;
       sessionId: string | undefined;
     },
   ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string; sessionId?: string }> {
@@ -250,20 +248,22 @@ export class SimulatedUser implements ApiProvider {
         content: message.content,
       };
     });
-    const { sessionId: _sessionId, ...varsWithoutSessionId } = context?.vars ?? {};
 
-    const renderedInstructions = includeSystemInstructions
-      ? DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace('{{instructions}}', () => instructions)
-      : undefined;
-    const userPrompt = includeSystemInstructions
-      ? [{ role: 'system', content: renderedInstructions }, ...flippedMessages]
+    const userPrompt = systemMessage
+      ? [{ role: 'system', content: systemMessage }, ...flippedMessages]
       : flippedMessages;
     const userPromptString = JSON.stringify(userPrompt);
     const userContext = (() => {
       if (!context) {
         return undefined;
       }
-      const { originalProvider: _originalProvider, prompt: _prompt, ...userContextBase } = context;
+      const {
+        originalProvider: _originalProvider,
+        prompt: _prompt,
+        vars,
+        ...userContextBase
+      } = context;
+      const { sessionId: _sessionId, ...varsWithoutSessionId } = vars ?? {};
       return {
         ...userContextBase,
         prompt: {
@@ -279,7 +279,9 @@ export class SimulatedUser implements ApiProvider {
 
     const response = await userProvider.callApi(userPromptString, userContext, callApiOptions);
 
-    if (userProvider.delay) {
+    // Nested calls bypass the evaluator's delay handling; mirror it here,
+    // including skipping the sleep for cached responses.
+    if (userProvider.delay && !response.cached) {
       logger.debug(`[SimulatedUser] Sleeping for ${userProvider.delay}ms`);
       await sleep(userProvider.delay);
     }
@@ -312,7 +314,7 @@ export class SimulatedUser implements ApiProvider {
 
   private async createUserProvider(
     instructions: string,
-  ): Promise<{ provider: ApiProvider; includeSystemInstructions: boolean }> {
+  ): Promise<{ provider: ApiProvider; systemMessage?: string }> {
     if (!this.userProvider) {
       // The hosted provider bakes the per-test rendered instructions into its
       // request body, so it must be constructed fresh for every call.
@@ -321,12 +323,11 @@ export class SimulatedUser implements ApiProvider {
           { instructions, redteamGenerationContext: this.redteamGenerationContext },
           this.taskId,
         ),
-        includeSystemInstructions: false,
       };
     }
 
     // Custom providers are configuration-fixed for this instance's lifetime, so
-    // load once and reuse across test rows to avoid re-allocating providers that
+    // load once and reuse across calls to avoid re-allocating providers that
     // hold resources (e.g. Python workers).
     this.customUserProviderPromise ??= this.loadCustomUserProvider().catch((err) => {
       // Don't memoize transient load failures; retry on the next call.
@@ -335,7 +336,13 @@ export class SimulatedUser implements ApiProvider {
     });
     return {
       provider: await this.customUserProviderPromise,
-      includeSystemInstructions: true,
+      // Unlike the hosted provider, custom providers receive the simulated-user
+      // framing as a system message. The function replacement keeps `$`
+      // sequences in the instructions literal.
+      systemMessage: DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace(
+        '{{instructions}}',
+        () => instructions,
+      ),
     };
   }
 
@@ -404,7 +411,7 @@ export class SimulatedUser implements ApiProvider {
       context.vars.sessionId = response.sessionId;
     }
 
-    if (targetProvider.delay) {
+    if (targetProvider.delay && !response.cached) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
     }
@@ -425,8 +432,7 @@ export class SimulatedUser implements ApiProvider {
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
-    const { provider: userProvider, includeSystemInstructions } =
-      await this.createUserProvider(instructions);
+    const { provider: userProvider, systemMessage } = await this.createUserProvider(instructions);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 
@@ -454,8 +460,8 @@ export class SimulatedUser implements ApiProvider {
     const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
-    let userProviderSessionId =
-      typeof context.vars.sessionId === 'string' ? context.vars.sessionId : undefined;
+    const seededSessionId = context.vars?.sessionId;
+    let userProviderSessionId = typeof seededSessionId === 'string' ? seededSessionId : undefined;
 
     // If initial messages end with user message, agent needs to respond first to avoid consecutive user messages
     const lastInitialRole = messages.length > 0 ? messages[messages.length - 1].role : null;
@@ -490,8 +496,7 @@ export class SimulatedUser implements ApiProvider {
       const userResult = await this.sendMessageToUser(messages, userProvider, {
         context,
         callApiOptions,
-        includeSystemInstructions,
-        instructions,
+        systemMessage,
         sessionId: userProviderSessionId,
       });
 
