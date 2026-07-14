@@ -18,7 +18,7 @@ type ResponsesStreamLogger = {
 
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
-const MAX_INVALID_STREAM_OUTPUTS = 1024;
+const MAX_STREAM_OUTPUT_KEYS = 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -259,6 +259,13 @@ export async function readResponsesStream(
   const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
 
+  const hasStreamOutputCapacity = (existing: boolean): boolean =>
+    existing ||
+    outputTextByContent.size +
+      invalidlyIndexedOutputTextByContent.size +
+      completedUnindexedOutputTexts.length <
+      MAX_STREAM_OUTPUT_KEYS;
+
   const processOutputTextEvent = (event: ResponsesStreamEvent) => {
     const delta = getOutputTextDelta(event);
     if (!delta) {
@@ -268,6 +275,12 @@ export async function readResponsesStream(
     outputText += delta;
     const key = getOutputTextKey(event);
     if (key) {
+      if (!hasStreamOutputCapacity(outputTextByContent.has(key))) {
+        currentOutputTextKey = undefined;
+        currentInvalidOutputTextKey = undefined;
+        pendingUnindexedOutputText = '';
+        return;
+      }
       const prependPending =
         event.output_index === 0 &&
         (event.content_index ?? 0) === 0 &&
@@ -288,10 +301,7 @@ export async function readResponsesStream(
     }
     if (event.output_index !== undefined || event.content_index !== undefined) {
       const invalidKey = getInvalidOutputTextKey(event);
-      if (
-        !invalidlyIndexedOutputTextByContent.has(invalidKey) &&
-        invalidlyIndexedOutputTextByContent.size >= MAX_INVALID_STREAM_OUTPUTS
-      ) {
+      if (!hasStreamOutputCapacity(invalidlyIndexedOutputTextByContent.has(invalidKey))) {
         currentOutputTextKey = undefined;
         currentInvalidOutputTextKey = undefined;
         pendingUnindexedOutputText = '';
@@ -333,6 +343,12 @@ export async function readResponsesStream(
 
     const key = getOutputTextKey(event);
     if (key) {
+      if (!hasStreamOutputCapacity(outputTextByContent.has(key))) {
+        currentOutputTextKey = undefined;
+        currentInvalidOutputTextKey = undefined;
+        pendingUnindexedOutputText = '';
+        return;
+      }
       if (pendingUnindexedOutputText) {
         if (event.output_index !== 0 || (event.content_index ?? 0) !== 0) {
           unassignedUnindexedOutputText += pendingUnindexedOutputText;
@@ -352,10 +368,7 @@ export async function readResponsesStream(
     if (event.output_index !== undefined || event.content_index !== undefined) {
       pendingUnindexedOutputText = '';
       const invalidKey = getInvalidOutputTextKey(event);
-      if (
-        !invalidlyIndexedOutputTextByContent.has(invalidKey) &&
-        invalidlyIndexedOutputTextByContent.size >= MAX_INVALID_STREAM_OUTPUTS
-      ) {
+      if (!hasStreamOutputCapacity(invalidlyIndexedOutputTextByContent.has(invalidKey))) {
         currentOutputTextKey = undefined;
         currentInvalidOutputTextKey = undefined;
         return;
@@ -388,6 +401,11 @@ export async function readResponsesStream(
       outputTextByContent.set(currentOutputTextKey, event.text);
       finalizedOutputTextKeys.add(currentOutputTextKey);
       currentOutputTextKey = undefined;
+      return;
+    }
+
+    if (!hasStreamOutputCapacity(false)) {
+      pendingUnindexedOutputText = '';
       return;
     }
 

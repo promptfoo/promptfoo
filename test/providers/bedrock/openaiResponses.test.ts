@@ -1655,6 +1655,39 @@ describe('bedrock openaiResponses helper', () => {
       expect((result.raw as any).output.length).toBeLessThanOrEqual(1_024);
     });
 
+    it('bounds the aggregate number of distinct valid streamed content keys', async () => {
+      const indexedEvents = Array.from({ length: 1_100 }, (_, index) => [
+        'event: response.output_text.delta',
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: Math.floor(index / 40), content_index: index % 40, delta: 'x' })}`,
+        '',
+      ]).flat();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          ...indexedEvents,
+          'event: response.incomplete',
+          'data: {"type":"response.incomplete","response":{"id":"resp_many_valid","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+      const contentCount = (result.raw as any).output.reduce(
+        (count: number, item: any) =>
+          count + (Array.isArray(item.content) ? item.content.length : 0),
+        0,
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(contentCount).toBeLessThanOrEqual(1_024);
+    });
+
     it('keeps an oversized indexed delta separate from the preceding output', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [

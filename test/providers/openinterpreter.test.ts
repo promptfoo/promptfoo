@@ -421,6 +421,37 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it.each([
+    ['interpreter_home', { interpreter_home: '{% if useA %}home-a{% else %}home-b{% endif %}' }],
+    [
+      'cli_env.INTERPRETER_HOME',
+      { cli_env: { INTERPRETER_HOME: '{% if useA %}home-a{% else %}home-b{% endif %}' } },
+    ],
+  ])('renders a statement-templated %s before validating the home directory', async (_name, config) => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-home-statement-'));
+    temporaryRoots.push(root);
+    const home = path.join(root, 'home-a');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: { ...config, basePath: root, working_dir: workspace, skip_git_repo_check: true },
+    } as any);
+
+    const resultPromise = provider.callApi('templated home', {
+      vars: { useA: true },
+      prompt: { raw: 'templated home', label: 'home statement template' },
+    } as any);
+    await startTurn(server);
+
+    expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it('renders row workspace variables before validating structured input paths', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-row-workspace-'));

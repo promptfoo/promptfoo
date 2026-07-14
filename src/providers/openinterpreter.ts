@@ -215,19 +215,10 @@ function parseInitialOpenInterpreterConfig(
         ),
     ),
   );
-  if (
-    typeof initialConfig.interpreter_home === 'string' &&
-    initialConfig.interpreter_home.includes('{{') &&
-    initialConfig.interpreter_home.includes('}}')
-  ) {
+  if (containsTemplate(initialConfig.interpreter_home)) {
     delete initialConfig.interpreter_home;
   }
-  if (
-    isRecord(initialConfig.cli_env) &&
-    typeof initialConfig.cli_env.INTERPRETER_HOME === 'string' &&
-    initialConfig.cli_env.INTERPRETER_HOME.includes('{{') &&
-    initialConfig.cli_env.INTERPRETER_HOME.includes('}}')
-  ) {
+  if (isRecord(initialConfig.cli_env) && containsTemplate(initialConfig.cli_env.INTERPRETER_HOME)) {
     const cliEnv = { ...initialConfig.cli_env };
     delete cliEnv.INTERPRETER_HOME;
     initialConfig.cli_env = cliEnv;
