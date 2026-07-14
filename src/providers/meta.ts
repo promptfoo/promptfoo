@@ -607,6 +607,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     return (this.config as MetaMessagesConfig).apiBaseUrl || META_MESSAGES_API_BASE_URL;
   }
 
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
+
   protected override getGenAISystem(): string {
     return 'meta';
   }

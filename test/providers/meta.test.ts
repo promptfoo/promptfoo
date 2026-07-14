@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../src/cache';
+import { clearCache, enableCache, fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { loadClaudeCodeCredential } from '../../src/providers/anthropic/claudeCodeAuth';
 import { getAnthropicEnvHeaderSuppressions } from '../../src/providers/anthropic/generic';
@@ -734,6 +734,36 @@ describe('MetaResponsesProvider request body shaping', () => {
 });
 
 describe('MetaMessagesProvider', () => {
+  it('keeps response caching enabled when suppressed Anthropic custom headers are configured', async () => {
+    const restore = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: do-not-forward' });
+    enableCache();
+    const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+      config: { apiKey: 'LLM|1|cache-key', stream: false },
+    }) as MetaMessagesProvider;
+    const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      id: 'msg-cache',
+      type: 'message',
+      role: 'assistant',
+      model: 'muse-spark-1.1',
+      content: [{ type: 'text', text: 'cached response' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 2, output_tokens: 1 },
+    } as any);
+
+    try {
+      const first = await provider.callApi('Cache this prompt');
+      const second = await provider.callApi('Cache this prompt');
+
+      expect(first.cached).not.toBe(true);
+      expect(second.cached).toBe(true);
+      expect(create).toHaveBeenCalledTimes(1);
+    } finally {
+      await clearCache();
+      restore();
+    }
+  });
+
   it('points the Anthropic SDK client at the bare Meta host with bearer auth', () => {
     const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|messages-key' });
     try {

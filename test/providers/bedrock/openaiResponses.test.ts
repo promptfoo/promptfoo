@@ -893,6 +893,128 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('safe final');
     });
 
+    it('uses finalized output text when a stream ends before its terminal response event', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"unsafe draft"}',
+          '',
+          'event: response.output_text.done',
+          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"safe final"}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('safe final');
+    });
+
+    it('preserves interleaved output boundaries when a stream ends before its terminal event', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"B"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"C"}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('AC\nB');
+    });
+
+    it('replaces an incomplete terminal placeholder with finalized output text', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"Hi"}',
+          '',
+          'event: response.output_text.done',
+          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Hi"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_placeholder',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: '[truncated]' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Hi');
+    });
+
+    it('keeps sparse but bounded streamed indices out of the returned output array', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":1024,"content_index":0,"delta":"hello"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_sparse","model":"openai.gpt-5.5","status":"completed","output":[]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('hello');
+      expect((result.raw as any).output).toHaveLength(1);
+      expect((result.raw as any).output[0]?.type).toBe('message');
+    });
+
     it('preserves every completed output-text item when the terminal output is empty', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -1067,6 +1189,45 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('FIRST\nSECOND');
+    });
+
+    it('preserves repeated text from distinct streamed indices that collide with non-message items', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"OK"}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"OK"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_repeated_collision',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [
+                { type: 'reasoning', summary: [] },
+                { type: 'reasoning', summary: [] },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('OK\nOK');
     });
 
     it.each([
