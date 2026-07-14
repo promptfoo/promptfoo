@@ -213,6 +213,25 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
+      providerPath === 'openinterpreter' || providerPath.startsWith('openinterpreter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenInterpreterProvider } = await import('./openinterpreter');
+      const model = providerPath.split(':').slice(1).join(':');
+
+      return new OpenInterpreterProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: model ? { ...providerOptions.config, model } : providerOptions.config,
+        env: { ...context.env, ...providerOptions.env },
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
       providerPath.startsWith('openclaw:') || providerPath === 'openclaw',
     create: async (
       providerPath: string,

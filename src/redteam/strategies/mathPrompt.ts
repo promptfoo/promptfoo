@@ -199,7 +199,7 @@ export async function addMathPrompt(
         ...testCase,
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/MathPrompt`,
+          metric: assertion.metric ? `${assertion.metric}/MathPrompt` : assertion.metric,
         })),
         vars: {
           ...testCase.vars,
