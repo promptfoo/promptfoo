@@ -420,6 +420,11 @@ describe('json utilities', () => {
         expect(convertSlashCommentsToHash(input)).toBe(expected);
       });
 
+      it('should keep slashes inside a single-quoted string with an escaped quote', () => {
+        const input = String.raw`path: 'C:\' // still inside the string'`;
+        expect(convertSlashCommentsToHash(input)).toBe(input);
+      });
+
       it('should handle multiple sequential comment markers', () => {
         const input = 'text //// double comment';
         const expected = 'text ## double comment';
