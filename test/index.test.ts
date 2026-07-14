@@ -104,6 +104,7 @@ describe('index.ts exports', () => {
     'assertions',
     'buildInputPromptDescription',
     'cache',
+    'countedComponentResults',
     'evaluate',
     'generateTable',
     'getInputDescription',
