@@ -76,17 +76,18 @@ export async function matchesSearchRubric(
 
   // Load the web search rubric prompt
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_WEB_SEARCH_PROMPT);
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+  const templateVars = {
+    ...(vars || {}),
     output: tryParse(llmOutput),
     rubric,
-    ...(vars || {}),
-  });
+  };
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const resp = await callProviderWithContext(
     searchProvider,
     prompt,
     'search-rubric',
-    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    templateVars,
     providerCallContext,
   );
 

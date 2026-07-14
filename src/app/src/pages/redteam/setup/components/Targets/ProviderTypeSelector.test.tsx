@@ -308,6 +308,28 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Go integration')).toBeVisible();
   });
 
+  it('selects the first-class Open Interpreter provider', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Coding target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    const card = screen.getByText('Open Interpreter').closest('[role="button"]');
+    expect(card).toBeInTheDocument();
+    await user.click(card!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openinterpreter', label: 'Coding target', config: {} },
+      'openinterpreter',
+    );
+  });
+
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {

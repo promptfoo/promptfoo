@@ -117,8 +117,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | Assertion Type                                                                                                     | Returns true if...                                                 |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                             |
-| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains substring                                          |
-| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains substring, case insensitive                        |
+| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains a string or number as text                         |
+| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains a string or number as text, case insensitive       |
 | [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                               |
 | [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                          |
 | [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                       |
