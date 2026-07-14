@@ -434,6 +434,48 @@ describe('synthesize', () => {
       }
     });
 
+    it('should ignore malformed generation usage without dropping a live request', async () => {
+      const malformedUsage = Object.defineProperty({}, 'total', {
+        enumerable: true,
+        get() {
+          throw new Error('usage getter failed');
+        },
+      });
+      const provider = {
+        id: () => 'malformed-usage-provider',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({ output: 'Prompt: first', tokenUsage: { total: '7' } })
+          .mockResolvedValueOnce({ output: 'Prompt: second', tokenUsage: malformedUsage }),
+      } as unknown as ApiProvider;
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('first');
+        await trackedProvider.callApi('second');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'malformed-usage-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'malformed-usage-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toMatchObject({ numRequests: 2, total: 0 });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

@@ -15,6 +15,9 @@ type ResponsesStreamLogger = {
   debug(message: string, context?: Record<string, unknown>): unknown;
 };
 
+const MAX_STREAM_OUTPUT_INDEX = 1024;
+const MAX_STREAM_CONTENT_INDEX = 1024;
+
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
     return event.delta;
@@ -26,16 +29,21 @@ function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
   if (
     typeof event.output_index !== 'number' ||
     !Number.isInteger(event.output_index) ||
-    event.output_index < 0
+    event.output_index < 0 ||
+    event.output_index > MAX_STREAM_OUTPUT_INDEX
   ) {
     return undefined;
   }
-  const contentIndex =
-    typeof event.content_index === 'number' &&
-    Number.isInteger(event.content_index) &&
-    event.content_index >= 0
-      ? event.content_index
-      : 0;
+  if (
+    event.content_index !== undefined &&
+    (typeof event.content_index !== 'number' ||
+      !Number.isInteger(event.content_index) ||
+      event.content_index < 0 ||
+      event.content_index > MAX_STREAM_CONTENT_INDEX)
+  ) {
+    return undefined;
+  }
+  const contentIndex = event.content_index ?? 0;
   return `${event.output_index}:${contentIndex}`;
 }
 
@@ -138,6 +146,8 @@ export async function readResponsesStream(
   let latestResponse: any;
   let outputText = '';
   const outputTextByContent = new Map<string, string>();
+  let currentOutputTextKey: string | undefined;
+  let pendingUnindexedOutputText = '';
 
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
@@ -165,7 +175,19 @@ export async function readResponsesStream(
         outputText += delta;
         const key = getOutputTextKey(event);
         if (key) {
-          outputTextByContent.set(key, (outputTextByContent.get(key) ?? '') + delta);
+          outputTextByContent.set(
+            key,
+            (outputTextByContent.get(key) ?? '') + pendingUnindexedOutputText + delta,
+          );
+          currentOutputTextKey = key;
+          pendingUnindexedOutputText = '';
+        } else if (currentOutputTextKey) {
+          outputTextByContent.set(
+            currentOutputTextKey,
+            (outputTextByContent.get(currentOutputTextKey) ?? '') + delta,
+          );
+        } else {
+          pendingUnindexedOutputText += delta;
         }
       }
     }

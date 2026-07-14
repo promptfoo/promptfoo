@@ -11,7 +11,6 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage, getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -41,6 +40,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { trackGenerationTokenUsage } from './providers/generationTokenUsage';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -73,50 +73,6 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-
-function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
-  const callApi = provider.callApi.bind(provider);
-  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
-    try {
-      const response = await callApi(...args);
-      accumulateResponseTokenUsage(tokenUsage, response, { countAsRequest: false });
-      if (!response.cached) {
-        const reportedRequests = response.tokenUsage?.numRequests ?? 0;
-        tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + Math.max(1, reportedRequests);
-      }
-      return response;
-    } catch (error) {
-      const errorTokenUsage = getErrorTokenUsage(error);
-      accumulateResponseTokenUsage(
-        tokenUsage,
-        { tokenUsage: errorTokenUsage },
-        { countAsRequest: false },
-      );
-      tokenUsage.numRequests =
-        (tokenUsage.numRequests ?? 0) + Math.max(1, errorTokenUsage?.numRequests ?? 0);
-      throw error;
-    }
-  };
-  trackedCallApi.label = provider.callApi.label;
-
-  const trackedProvider = Object.create(provider) as ApiProvider;
-  Object.defineProperty(trackedProvider, 'callApi', {
-    configurable: true,
-    value: trackedCallApi,
-    writable: true,
-  });
-
-  return new Proxy(trackedProvider, {
-    get(_target, property) {
-      if (property === 'callApi') {
-        return trackedCallApi;
-      }
-
-      const value = Reflect.get(provider, property, provider);
-      return typeof value === 'function' ? value.bind(provider) : value;
-    },
-  });
-}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,

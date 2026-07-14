@@ -18,6 +18,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redtea
 import { doRedteamRun } from '../../../src/redteam/shared';
 import {
   extractGeneratedPrompt,
+  generateMultiTurnPrompt,
   getPluginConfigurationError,
 } from '../../../src/server/services/redteamTestCaseGenerationService';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
@@ -26,6 +27,7 @@ const mockedPlugins = vi.mocked(Plugins);
 const mockedRedteamProviderManager = vi.mocked(redteamProviderManager);
 const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError);
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
+const mockedGenerateMultiTurnPrompt = vi.mocked(generateMultiTurnPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
@@ -404,6 +406,88 @@ describe('Redteam Routes', () => {
 
     afterEach(() => {
       vi.resetAllMocks();
+    });
+
+    describe('generation token usage', () => {
+      it.each([1, 3])('returns plugin generation usage for count %s', async (count) => {
+        const callApi = vi.fn().mockResolvedValue({
+          output: 'Prompt: generated test prompt',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        });
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi,
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate tests');
+            return Array.from({ length: count }, () => ({ vars: { query: 'test' } }));
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+            count,
+          });
+
+        expect(response.status).toBe(200);
+        expect(callApi).toHaveBeenCalledTimes(1);
+        expect(response.body.tokenUsage).toEqual({
+          total: 3,
+          prompt: 2,
+          completion: 1,
+          cached: 0,
+          numRequests: 1,
+        });
+      });
+
+      it('returns combined plugin and multi-turn generation usage', async () => {
+        const callApi = vi.fn().mockResolvedValue({
+          output: 'Prompt: generated test prompt',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        });
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi,
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate test');
+            return [{ vars: { query: 'test' }, metadata: { goal: 'test goal' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        mockedGenerateMultiTurnPrompt.mockResolvedValue({
+          prompt: 'next prompt',
+          metadata: { mischievousUser: { tokenUsage: { total: 7 } } },
+          tokenUsage: { total: 7, prompt: 4, completion: 3 },
+        } as any);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body.prompt).toBe('next prompt');
+        expect(response.body.tokenUsage).toEqual({
+          total: 10,
+          prompt: 6,
+          completion: 4,
+          cached: 0,
+          numRequests: 2,
+        });
+      });
     });
 
     describe('validation', () => {

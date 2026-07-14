@@ -730,6 +730,93 @@ describe('bedrock openaiResponses helper', () => {
 
     it.each(
       GPT_5_6_MODELS,
+    )('preserves mixed indexed and unindexed deltas in an incomplete response for %s', async (modelId) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"partial "}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"answer"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_mixed_indices',
+              model: modelId,
+              status: 'incomplete',
+              output: [
+                {
+                  id: 'msg_incomplete_mixed_indices',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'partial ' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('partial answer');
+    });
+
+    it.each([
+      { field: 'content_index', value: 1_000_000_000 },
+      { field: 'output_index', value: 100_000_000 },
+    ])('safely handles an oversized streamed $field', async ({ field, value }) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          `data: ${JSON.stringify({
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            [field]: value,
+            delta: 'safe fallback',
+          })}`,
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_oversized_index',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [{ id: 'reason', type: 'reasoning', summary: [] }],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('safe fallback');
+    });
+
+    it.each(
+      GPT_5_6_MODELS,
     )('preserves interleaved output boundaries in an incomplete response for %s', async (modelId) => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
