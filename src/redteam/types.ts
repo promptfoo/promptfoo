@@ -160,6 +160,9 @@ export const PluginConfigSchema = z.object({
   inputs: InputsSchema.optional(),
   maxCharsPerMessage: z.number().int().positive().optional(),
 
+  // Include safe/benign prompts along with unsafe prompts (for testing over-blocking)
+  includeSafe: z.boolean().optional(),
+
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });

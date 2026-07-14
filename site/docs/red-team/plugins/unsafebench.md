@@ -1,12 +1,13 @@
 ---
 title: UnsafeBench
-description: Evaluate multimodal AI safety using UnsafeBench's curated unsafe images across violence, hate, and explicit content categories
+sidebar_position: 58
+description: Evaluate multimodal AI safety with UnsafeBench images, safe controls, category filters, and over-blocking checks for harmful visual content and responses
 keywords: [red team, multi-modal, image, safety, content moderation, unsafe content]
 ---
 
 # UnsafeBench Plugin
 
-The UnsafeBench plugin tests multi-modal models with potentially unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
+The UnsafeBench plugin tests multi-modal models with safe and unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
 
 - Detect inappropriate content
 - Refuse to engage with harmful material
@@ -30,9 +31,7 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
-    - unsafebench # Use all categories
-    # OR with specific categories:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories:
           - Violence
@@ -45,21 +44,21 @@ Unlike text-based plugins, the UnsafeBench plugin should not be used with any re
 
 ## Available Categories
 
-The UnsafeBench dataset contains 3,271 unsafe images across the following categories:
+The UnsafeBench dataset contains 10,146 images: 6,098 safe and 4,048 unsafe, across the following categories:
 
-| Category                   | Number of Images |
-| -------------------------- | ---------------- |
-| Sexual                     | 533              |
-| Shocking                   | 480              |
-| Political                  | 396              |
-| Illegal activity           | 360              |
-| Violence                   | 327              |
-| Spam                       | 264              |
-| Deception                  | 231              |
-| Public and personal health | 224              |
-| Harassment                 | 169              |
-| Self-harm                  | 156              |
-| Hate                       | 131              |
+| Category                   |
+| -------------------------- |
+| Sexual                     |
+| Shocking                   |
+| Political                  |
+| Illegal activity           |
+| Violence                   |
+| Spam                       |
+| Deception                  |
+| Public and personal health |
+| Harassment                 |
+| Self-harm                  |
+| Hate                       |
 
 ## Configuration
 
@@ -68,13 +67,37 @@ The UnsafeBench plugin supports the following configuration options:
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories: # Optional: specific categories to test
           - Violence
           - Sexual
         longest_edge: 8000 # Optional: max dimension in pixels (default: 8000)
+        includeSafe: false # Optional: include safe images to test for over-blocking (default: false)
 ```
+
+### Testing for Over-Blocking
+
+By default, UnsafeBench tests only unsafe images to ensure your model appropriately refuses harmful content. You can also test for over-blocking (false positives) by including safe images:
+
+```yaml
+redteam:
+  plugins:
+    - id: unsafebench
+      config:
+        includeSafe: true
+        categories:
+          - Violence
+```
+
+When `includeSafe: true` is set:
+
+- Test cases use a balanced mix of safe and unsafe images
+- When `categories` are selected, each category receives its own balanced mix
+- If a category cannot supply both labels, available images are used and a warning is logged
+- Safe images use inverted grading logic: they SHOULD be described appropriately (not refused)
+- This helps identify if your guardrails are too strict and block legitimate image requests
+- Metadata includes `isSafe` and `label` fields for filtering and analysis
 
 ### Image Processing
 
@@ -129,7 +152,7 @@ providers:
 
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories:
           - Violence
@@ -139,14 +162,14 @@ redteam:
 
 ## How it Works
 
-1. The plugin connects to the Hugging Face Datasets API to fetch images labeled as "unsafe"
+1. The plugin connects to the Hugging Face Datasets API to fetch unsafe images by default, or safe and unsafe images when safe controls are enabled
 2. It filters for specific categories if configured
 3. Images are automatically processed to ensure compatibility:
    - Non-JPEG images are converted to JPEG format
    - Large images are resized to fit within the `longest_edge` limit
    - Processing only occurs when format conversion or resizing is needed
 4. It uses the base64-encoded image data as input for your model
-5. It evaluates whether responses appropriately handle the unsafe content
+5. It evaluates whether responses appropriately handle each image, including refusal for unsafe content and normal assistance for safe controls
 
 ## Grading Criteria
 

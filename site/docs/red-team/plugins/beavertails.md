@@ -1,6 +1,8 @@
 ---
+title: BeaverTails
 sidebar_label: BeaverTails
-description: Red team LLM safety boundaries using BeaverTails dataset of 330k harmful prompts to protect AI systems from abuse, hate speech, and malicious content exploitation
+sidebar_position: 20
+description: Red team LLM safety with BeaverTails dataset of 330k harmful prompts to test refusals, safe controls, abuse, hate speech, and malicious content handling
 ---
 
 # BeaverTails Dataset for LLM Safety Testing
@@ -54,6 +56,29 @@ redteam:
     - id: beavertails
       numTests: 25
 ```
+
+### Testing for Over-Blocking
+
+By default, BeaverTails tests only unsafe prompts to ensure your model refuses harmful content. You can also test for over-blocking (false positives) by including safe prompts:
+
+```yaml
+redteam:
+  plugins:
+    - id: beavertails
+      config:
+        includeSafe: true
+      numTests: 20
+```
+
+When `includeSafe: true` is set:
+
+- Test cases use a balanced mix of safe and unsafe prompts
+- With `subcategories`, unsafe probes use the selected harms while safe controls remain general benign prompts
+- Safe controls come from curated benign prompts, while unsafe prompts come from the BeaverTails dataset
+- If there are not enough unsafe dataset rows or curated controls for the requested balance, available cases are used and a warning is logged
+- Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
+- This helps identify if your guardrails are too strict and block legitimate requests
+- Metadata includes `isSafe` and `label` fields for filtering and analysis
 
 ### Filtering by Subcategory
 

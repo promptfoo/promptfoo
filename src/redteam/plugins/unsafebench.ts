@@ -2,6 +2,12 @@ import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
+import {
+  buildSafeControlAssertionConfig,
+  buildSafeImageControlRubric,
+} from '../shared/safeControls';
+import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
@@ -35,6 +41,23 @@ interface UnsafeBenchInput {
 interface UnsafeBenchPluginConfig extends PluginConfig {
   categories?: UnsafeBenchCategory[];
   longest_edge?: number; // Maximum size for longest edge in pixels (default: 8000)
+}
+
+function selectBalancedUnsafeBenchRecords(
+  records: UnsafeBenchInput[],
+  limit: number,
+  context = 'requested records',
+): UnsafeBenchInput[] {
+  const safeRecords = records.filter((record) => record.safety_label.toLowerCase() === 'safe');
+  const unsafeRecords = records.filter((record) => record.safety_label.toLowerCase() === 'unsafe');
+
+  if (safeRecords.length < Math.floor(limit / 2) || unsafeRecords.length < Math.ceil(limit / 2)) {
+    logger.warn(
+      `[unsafebench] Unable to form the requested balanced mix of ${limit} images for ${context}. Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe images`,
+    );
+  }
+
+  return sampleBalancedSafetyRecords(safeRecords, unsafeRecords, limit);
 }
 
 /**
@@ -185,6 +208,7 @@ async function fetchImageAsBase64(
 class UnsafeBenchDatasetManager {
   private static instance: UnsafeBenchDatasetManager | null = null;
   private datasetCache: UnsafeBenchInput[] | null = null;
+  private cacheIncludeSafe: boolean | null = null; // Track cache mode
 
   private constructor() {}
 
@@ -210,6 +234,8 @@ class UnsafeBenchDatasetManager {
     if (!this.datasetCache || this.datasetCache.length === 0) {
       throw new Error('Failed to load UnsafeBench dataset.');
     }
+
+    const includeSafe = config?.includeSafe ?? false;
 
     // Find all available categories for logging
     const availableCategories = Array.from(new Set(this.datasetCache.map((r) => r.category)));
@@ -266,12 +292,13 @@ class UnsafeBenchDatasetManager {
         const normalizedCategory = category.toLowerCase();
         const categoryRecords = recordsByCategory[normalizedCategory] || [];
 
-        // Shuffle and take up to perCategory records
-        const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
-        result.push(...shuffled.slice(0, perCategory));
+        const selectedRecords = includeSafe
+          ? selectBalancedUnsafeBenchRecords(categoryRecords, perCategory, `category ${category}`)
+          : sampleArray(categoryRecords, perCategory);
+        result.push(...selectedRecords);
 
         logger.debug(
-          `[unsafebench] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
+          `[unsafebench] Selected ${selectedRecords.length}${includeSafe ? ' balanced' : ''} records for category ${category}`,
         );
       }
 
@@ -279,8 +306,14 @@ class UnsafeBenchDatasetManager {
       return result.slice(0, limit);
     }
 
-    // If no categories specified, just shuffle and return the requested number
-    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+    if (includeSafe) {
+      const selectedRecords = selectBalancedUnsafeBenchRecords(filteredRecords, limit);
+      logger.debug(`[unsafebench] Selected ${selectedRecords.length} balanced safe/unsafe records`);
+      return selectedRecords;
+    }
+
+    // If no categories specified, just sample and return the requested number
+    const shuffledRecords = sampleArray(filteredRecords, limit);
     logger.debug(`[unsafebench] Selected ${shuffledRecords.length} random unsafe records`);
 
     return shuffledRecords;
@@ -290,14 +323,28 @@ class UnsafeBenchDatasetManager {
    * Ensure the dataset is loaded into cache
    */
   private async ensureDatasetLoaded(config?: UnsafeBenchPluginConfig): Promise<void> {
-    if (this.datasetCache !== null) {
+    const includeSafe = config?.includeSafe ?? false;
+
+    // Check if cache exists and was loaded with the same includeSafe mode
+    if (this.datasetCache !== null && this.cacheIncludeSafe === includeSafe) {
       logger.debug(`[unsafebench] Using cached dataset with ${this.datasetCache.length} records`);
       return;
     }
 
+    // Cache mode changed - need to reload
+    if (this.datasetCache !== null && this.cacheIncludeSafe !== includeSafe) {
+      logger.debug(
+        `[unsafebench] Cache mode changed from includeSafe=${this.cacheIncludeSafe} to ${includeSafe}, reloading`,
+      );
+      this.datasetCache = null;
+    }
+
     // Fetch a large dataset - aim to get the entire dataset if reasonable
-    const fetchLimit = 1000; // This should be enough to get most/all of the dataset
-    logger.debug(`[unsafebench] Fetching ${fetchLimit} records from UnsafeBench dataset`);
+    // When includeSafe is true, we need to fetch more to ensure good balance
+    const fetchLimit = includeSafe ? 2000 : 1000;
+    logger.debug(
+      `[unsafebench] Fetching ${fetchLimit} records from UnsafeBench dataset${includeSafe ? ' (includeSafe mode)' : ''}`,
+    );
 
     try {
       const records = await fetchHuggingFaceDataset(DATASET_PATH, fetchLimit);
@@ -310,11 +357,20 @@ class UnsafeBenchDatasetManager {
 
       logger.debug(`[unsafebench] Fetched ${records.length} total records`);
 
-      // Filter for unsafe images only
-      const unsafeRecords = records
+      // Filter for unsafe images (or both if includeSafe is true)
+      const filteredRecords = records
         .filter((record) => {
           const safetyLabel = record.vars?.safety_label;
-          return typeof safetyLabel === 'string' && safetyLabel.toLowerCase() === 'unsafe';
+          if (typeof safetyLabel !== 'string') {
+            return false;
+          }
+
+          const label = safetyLabel.toLowerCase();
+          // Include safe labels if configured, otherwise only unsafe
+          if (includeSafe) {
+            return label === 'safe' || label === 'unsafe';
+          }
+          return label === 'unsafe';
         })
         .map((record) => {
           // Validate that image exists and handle both string and object formats
@@ -367,13 +423,13 @@ class UnsafeBenchDatasetManager {
         );
 
       logger.debug(
-        `[unsafebench] Found ${unsafeRecords.length} unsafe records from UnsafeBench dataset`,
+        `[unsafebench] Found ${filteredRecords.length} records from UnsafeBench dataset`,
       );
 
       // Add a step to process any records that need image fetching
       // We'll use Promise.all to handle all image fetch operations in parallel
       const processedRecordsPromise = Promise.all(
-        unsafeRecords.map(async (result) => {
+        filteredRecords.map(async (result) => {
           // If the result is already a UnsafeBenchInput, return it directly
           if (!('imageUrl' in result)) {
             return result;
@@ -402,9 +458,12 @@ class UnsafeBenchDatasetManager {
 
       logger.debug(`[unsafebench] Processed ${processedRecords.length} images to base64 format`);
 
-      // Store in cache
+      // Store in cache with mode tracking
       this.datasetCache = processedRecords;
-      logger.debug(`[unsafebench] Cached ${processedRecords.length} processed unsafe records`);
+      this.cacheIncludeSafe = includeSafe;
+      logger.debug(
+        `[unsafebench] Cached ${processedRecords.length} processed records${includeSafe ? ' (safe and unsafe)' : ' (unsafe only)'}`,
+      );
     } catch (error) {
       logger.error(
         `[unsafebench] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
@@ -459,7 +518,24 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
   }
 
   // Required by the abstract base class
-  protected getAssertions(category: string): Assertion[] {
+  protected getAssertions(category: string, context?: { isSafe?: boolean }): Assertion[] {
+    const isSafe = context?.isSafe ?? false;
+
+    if (isSafe) {
+      // Inverted logic for safe images: they SHOULD be answered appropriately
+      return [
+        {
+          type: 'llm-rubric',
+          metric: 'UnsafeBench',
+          value: buildSafeImageControlRubric('UnsafeBench', category),
+          config: buildSafeControlAssertionConfig(this.pluginConfig, {
+            purpose: this.purpose,
+          }),
+        },
+      ];
+    }
+
+    // Original logic for unsafe images: they SHOULD be refused
     return [
       {
         type: PLUGIN_ID,
@@ -490,16 +566,19 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       }
 
       // Map records to test cases
-      return records.map(
-        (record): TestCase => ({
+      return records.map((record): TestCase => {
+        const isSafe = record.safety_label.toLowerCase() === 'safe';
+        return {
           vars: { [this.injectVar]: record.image },
-          assert: this.getAssertions(record.category),
+          assert: this.getAssertions(record.category, { isSafe }),
           metadata: {
             unsafebenchCategory: record.category,
             category: record.category,
+            isSafe,
+            label: isSafe ? 'safe' : 'unsafe',
           },
-        }),
-      );
+        };
+      });
     } catch (error) {
       logger.error(
         `[unsafebench] Error generating tests: ${error instanceof Error ? error.message : String(error)}`,
