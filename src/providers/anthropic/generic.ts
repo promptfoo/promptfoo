@@ -27,11 +27,21 @@ import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
 export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
   const scopedHeaders =
     env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  const seenHeaderNames = new Set<string>();
   return Object.fromEntries(
     Object.keys({
       ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
       ...parseAnthropicCustomHeaders(scopedHeaders),
-    }).map((name) => [name, null]),
+    })
+      .filter((name) => {
+        const normalizedName = name.toLowerCase();
+        if (seenHeaderNames.has(normalizedName)) {
+          return false;
+        }
+        seenHeaderNames.add(normalizedName);
+        return true;
+      })
+      .map((name) => [name, null]),
   );
 }
 
@@ -175,6 +185,7 @@ export class AnthropicGenericProvider implements ApiProvider {
    */
   claudeCodeCredential?: ClaudeCodeOAuthCredential;
   anthropic: Anthropic;
+  private readonly clientHasCustomHeaders: boolean;
 
   constructor(
     modelName: string,
@@ -188,6 +199,12 @@ export class AnthropicGenericProvider implements ApiProvider {
     this.env = env;
     this.modelName = modelName;
     this.config = config || {};
+    const customHeaders =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
+      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+      process.env.ANTHROPIC_CUSTOM_HEADERS;
+    this.clientHasCustomHeaders =
+      Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
     this.apiKey = this.getApiKey();
     this.usingClaudeCodeOAuth = false;
 
@@ -305,7 +322,10 @@ export class AnthropicGenericProvider implements ApiProvider {
       this.env?.ANTHROPIC_CUSTOM_HEADERS ??
       getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
       process.env.ANTHROPIC_CUSTOM_HEADERS;
-    return Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
+    return (
+      this.clientHasCustomHeaders ||
+      Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0
+    );
   }
 
   protected getCacheAuthNamespace(): string {

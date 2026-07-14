@@ -180,6 +180,31 @@ describe('AnthropicCompletionProvider', () => {
       expect(providerB.anthropic.completions.create).toHaveBeenCalledTimes(1);
     });
 
+    it('should keep bypassing the response cache after captured ambient custom headers are cleared', async () => {
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: captured-secret' });
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'shared-api-key' },
+      });
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: undefined });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Tenant output',
+      });
+
+      await provider.callApi('Shared prompt');
+      await provider.callApi('Shared prompt');
+
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(2);
+    });
+
     it('should keep auth cache namespace stable across module reloads', async () => {
       async function getNamespaceFromFreshModule() {
         vi.resetModules();

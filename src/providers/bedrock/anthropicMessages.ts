@@ -34,11 +34,20 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
     return {
       ...options,
       defaultHeaders: {
-        ...options.defaultHeaders,
-        ...getAnthropicEnvHeaderSuppressions(this.env),
+        ...safeDefaultHeaders,
+        ...suppressedEnvHeaders,
         ...(this.apiKey ? { 'x-api-key': this.apiKey } : {}),
       },
     };

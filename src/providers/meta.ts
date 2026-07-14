@@ -584,12 +584,20 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // the SDK to drop the header.
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
     const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
     return {
       ...options,
       apiKey: null,
       authToken: this.apiKey ?? null,
       defaultHeaders: {
-        ...options.defaultHeaders,
+        ...safeDefaultHeaders,
         ...suppressedEnvHeaders,
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
       },

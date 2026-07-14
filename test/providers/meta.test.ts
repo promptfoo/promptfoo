@@ -912,6 +912,27 @@ describe('MetaMessagesProvider', () => {
     }
   });
 
+  it('preserves Meta bearer auth when ambient and scoped Anthropic headers differ only by casing', async () => {
+    const restore = mockProcessEnv({
+      ANTHROPIC_CUSTOM_HEADERS: 'Authorization: Bearer ambient-secret',
+      MODEL_API_KEY: 'LLM|1|messages-key',
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'authorization: Bearer scoped-secret' },
+      }) as MetaMessagesProvider;
+      const { req } = await (provider.anthropic as any).buildRequest({
+        method: 'post',
+        path: '/v1/messages',
+        body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
+      });
+
+      expect(req.headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
+    } finally {
+      restore();
+    }
+  });
+
   it('suppresses SDK environment headers even when suite env overrides clear them', () => {
     const restore = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: hunter2' });
     const previousConfig = cliState.config;

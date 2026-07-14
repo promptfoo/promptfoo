@@ -648,6 +648,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
 
+    it('should keep bypassing the response cache after captured ambient custom headers are cleared', async () => {
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: captured-secret' });
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'shared-api-key', apiBaseUrl: 'https://gateway.example' },
+      });
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: undefined });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Shared prompt');
+      await provider.callApi('Shared prompt');
+
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(2);
+    });
+
     it('should preserve duplicate-case request headers in cache keys', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
         config: {
