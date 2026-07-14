@@ -13,6 +13,7 @@ import {
 } from '../../../src/providers/bedrock/openaiResponses';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { readResponsesStream } from '../../../src/providers/responses/stream';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -947,6 +948,36 @@ describe('bedrock openaiResponses helper', () => {
       expect(JSON.stringify(result.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
+    it.each([
+      {
+        name: 'failed content-filter error',
+        event: 'response.failed',
+        response: {
+          status: 'failed',
+          error: { code: 'content_filter', message: 'blocked' },
+          output: [],
+        },
+      },
+      {
+        name: 'incomplete safety reason',
+        event: 'response.incomplete',
+        response: { status: 'incomplete', incomplete_details: { reason: 'safety' }, output: [] },
+      },
+    ])('does not recover a streamed draft after a $name', async ({ event, response }) => {
+      const body = [
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        `event: ${event}`,
+        `data: ${JSON.stringify({ type: event, response })}`,
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
     it('uses finalized output text when a stream ends before its terminal response event', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
@@ -1666,6 +1697,39 @@ describe('bedrock openaiResponses helper', () => {
           ...indexedEvents,
           'event: response.incomplete',
           'data: {"type":"response.incomplete","response":{"id":"resp_many_valid","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+      const contentCount = (result.raw as any).output.reduce(
+        (count: number, item: any) =>
+          count + (Array.isArray(item.content) ? item.content.length : 0),
+        0,
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(contentCount).toBeLessThanOrEqual(1_024);
+    });
+
+    it('does not expand sparse streamed content indices into placeholder objects', async () => {
+      const sparseEvents = Array.from({ length: 1_024 }, (_, index) => [
+        'event: response.output_text.delta',
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: index, content_index: 1_024, delta: 'x' })}`,
+        '',
+      ]).flat();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          ...sparseEvents,
+          'event: response.incomplete',
+          'data: {"type":"response.incomplete","response":{"id":"resp_sparse_content","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
           '',
         ].join('\n'),
         cached: false,

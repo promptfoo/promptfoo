@@ -70,7 +70,13 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 }
 
 function hasTerminalSafetyDecision(response: any): boolean {
-  if (response?.incomplete_details?.reason === 'content_filter') {
+  if (
+    [response?.incomplete_details?.reason, response?.error?.code].some(
+      (reason) =>
+        typeof reason === 'string' &&
+        /(?:content[_-]?filter|content[_-]?policy|safety|guardrail)/i.test(reason),
+    )
+  ) {
     return true;
   }
   return (
@@ -152,10 +158,11 @@ function recoverIncompleteOutput(
     if (!Array.isArray(item.content)) {
       item.content = [];
     }
-    while (item.content.length <= contentIndex) {
+    const targetContentIndex = Math.min(contentIndex, item.content.length);
+    if (item.content.length === targetContentIndex) {
       item.content.push({ type: 'output_text', text: '' });
     }
-    const content = item.content[contentIndex];
+    const content = item.content[targetContentIndex];
     if (content?.type !== 'output_text') {
       unmatchedStreamedTexts.push(text);
       continue;
@@ -166,7 +173,7 @@ function recoverIncompleteOutput(
       (allowTerminalTextReplacement &&
         (finalized ? text !== content.text : text.length > content.text.length))
     ) {
-      item.content[contentIndex] = { ...content, text };
+      item.content[targetContentIndex] = { ...content, text };
       recoveredText = true;
     }
   }
