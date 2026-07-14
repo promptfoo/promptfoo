@@ -5,6 +5,7 @@ import path from 'path';
 import { PassThrough } from 'stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { loadApiProvider } from '../../src/providers/index';
 import { OpenInterpreterProvider } from '../../src/providers/openinterpreter';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -506,6 +507,35 @@ describe('OpenInterpreterProvider', () => {
     expect(mocks.spawn.mock.calls[1][0]).toBe('oi');
     completeTurn(pathServer, 'path');
     await expect(pathPromise).resolves.toMatchObject({ output: 'path' });
+  });
+
+  it('falls back to cliState.basePath for relative interpreter paths, like the delegate', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-clistate-'));
+    temporaryRoots.push(root);
+    const home = path.join(root, 'oi-home');
+    fs.mkdirSync(home);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(server.proc);
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = root;
+    try {
+      const provider = new OpenInterpreterProvider({
+        config: {
+          interpreter_path: './bin/oi',
+          interpreter_home: './oi-home',
+        },
+      });
+      const promise = provider.callApi('cliState fallback');
+      await startTurn(server);
+      expect(mocks.spawn.mock.calls[0][0]).toBe(path.join(root, 'bin', 'oi'));
+      expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+      completeTurn(server, 'ok');
+      await expect(promise).resolves.toMatchObject({ output: 'ok' });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('uses a config-relative INTERPRETER_HOME from cli_env and ignores a missing optional root', async () => {

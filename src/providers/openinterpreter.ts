@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import { z } from 'zod';
+import cliState from '../cliState';
 import {
   CodexAppServerConfigSchema,
   OpenAICodexAppServerProvider,
@@ -81,7 +82,9 @@ function validateThreadPersistence(config: OpenInterpreterConfig): void {
 }
 
 function getBasePath(config: OpenInterpreterConfig): string {
-  return config.basePath || process.cwd();
+  // Match the delegate's resolution chain (see resolveAgenticWorkingDir) so path
+  // validation and the agent's actual working directory use the same root.
+  return config.basePath || cliState.basePath || process.cwd();
 }
 
 function resolveInterpreterPath(config: OpenInterpreterConfig): string {
@@ -336,6 +339,11 @@ export class OpenInterpreterProvider {
     context?: CodexAppServerCallContext,
     callOptions?: CodexAppServerCallOptions,
   ): Promise<CodexAppServerResponse> {
+    // cleanup() removes the temporary INTERPRETER_HOME; recreate it so the
+    // provider stays usable when a long-lived process reuses it afterwards.
+    if (this.temporaryHome && !fs.existsSync(this.temporaryHome)) {
+      fs.mkdirSync(this.temporaryHome, { recursive: true });
+    }
     let temporaryWorkspace: string | undefined;
     try {
       const promptConfig = context?.prompt?.config
@@ -374,7 +382,11 @@ export class OpenInterpreterProvider {
       };
       const response = await this.delegate.callApi(normalized.prompt, mappedContext, callOptions);
       if (response.error) {
-        if (/\bspawn\b[\s\S]*\bENOENT\b/i.test(response.error)) {
+        const interpreterPath = mappedConfig.codex_path_override ?? '';
+        if (
+          /\bspawn\b[\s\S]*\bENOENT\b/i.test(response.error) &&
+          (!interpreterPath || response.error.includes(interpreterPath))
+        ) {
           return {
             ...response,
             error:
@@ -391,11 +403,13 @@ export class OpenInterpreterProvider {
         };
       }
 
-      const codexMetadata = response.metadata?.codexAppServer;
+      // Move the delegate's trajectory metadata under openInterpreter instead of
+      // duplicating it: persisting both keys doubles stored result size per row.
+      const { codexAppServer: codexMetadata, ...restMetadata } = response.metadata ?? {};
       return {
         ...response,
         metadata: {
-          ...(response.metadata ?? {}),
+          ...restMetadata,
           openInterpreter: {
             ...(isRecord(codexMetadata) ? codexMetadata : {}),
             harness: effectiveConfig.harness,
