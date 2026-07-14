@@ -13,6 +13,10 @@ type ResponsesStreamEvent = {
   part?: { type?: string; text?: string; refusal?: string };
   item?: {
     type?: string;
+    id?: string;
+    call_id?: string;
+    name?: string;
+    arguments?: string;
     refusal?: string;
     content?: Array<{ type?: string; text?: string; refusal?: string }>;
   };
@@ -39,6 +43,7 @@ const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
+const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -130,7 +135,13 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       (Array.isArray(event.item?.content) &&
         event.item.content.some((part) => part?.type === 'refusal')))
   ) {
-    return event.item;
+    return event.item?.type === 'refusal'
+      ? {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'refusal', refusal: event.item.refusal }],
+        }
+      : event.item;
   }
   return undefined;
 }
@@ -182,15 +193,50 @@ function filterExecutableToolCalls(output: any[] | undefined): any[] {
   return output
     .filter((item: any) => item !== undefined && item?.type !== 'function_call')
     .map((item: any) =>
-      item?.type === 'message' && Array.isArray(item.content)
+      item?.type === 'refusal'
         ? {
-            ...item,
-            content: item.content.filter(
-              (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
-            ),
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'refusal', refusal: item.refusal }],
           }
-        : item,
+        : item?.type === 'message' && Array.isArray(item.content)
+          ? {
+              ...item,
+              content: item.content.filter(
+                (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
+              ),
+            }
+          : item,
     );
+}
+
+function hasExecutableToolCalls(output: any[] | undefined): boolean {
+  return (
+    Array.isArray(output) &&
+    output.some(
+      (item: any) =>
+        item?.type === 'function_call' ||
+        (item?.type === 'message' &&
+          Array.isArray(item.content) &&
+          item.content.some(
+            (content: any) => content?.type === 'tool_use' || content?.type === 'function_call',
+          )),
+    )
+  );
+}
+
+function hasRefusalOutput(output: any[] | undefined): boolean {
+  return (
+    Array.isArray(output) &&
+    output.some(
+      (item: any) =>
+        item?.type === 'refusal' ||
+        (item?.type === 'message' &&
+          ((typeof item.refusal === 'string' && item.refusal.length > 0) ||
+            (Array.isArray(item.content) &&
+              item.content.some((content: any) => content?.type === 'refusal')))),
+    )
+  );
 }
 
 function mergeFinalizedStreamOutput(
@@ -433,6 +479,7 @@ export async function readResponsesStream(
   let currentInvalidOutputTextKey: string | undefined;
   const finalizedNonMessageItems = new Map<string, RetainedStreamOutputItem>();
   const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
+  const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
 
@@ -706,6 +753,7 @@ export async function readResponsesStream(
     if (
       event.type === 'response.output_item.done' &&
       event.item?.type !== 'message' &&
+      event.item?.type !== 'refusal' &&
       event.item
     ) {
       const outputIndex = getValidOutputIndex(event);
@@ -713,18 +761,34 @@ export async function readResponsesStream(
       const key = `${String(event.output_index ?? 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
+    if (event.type === 'response.output_item.added' && event.item?.type === 'function_call') {
+      const metadata = {
+        type: 'function_call',
+        id: event.item.id,
+        call_id: event.item.call_id,
+        name: event.item.name,
+      };
+      const key = `${String(event.output_index ?? 'missing')}:function_call:${event.item.id ?? event.item.call_id ?? ''}`;
+      if (
+        JSON.stringify(metadata).length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
+        (addedFunctionItems.has(key) || addedFunctionItems.size < MAX_STREAM_OUTPUT_KEYS)
+      ) {
+        addedFunctionItems.set(key, metadata);
+      }
+    }
     if (
       event.type === 'response.function_call_arguments.done' &&
       typeof event.arguments === 'string'
     ) {
       const outputIndex = getValidOutputIndex(event);
+      const key = `${String(event.output_index ?? 'missing')}:function_call:${event.item_id ?? ''}`;
       const item = {
+        ...addedFunctionItems.get(key),
         type: 'function_call',
-        id: event.item_id,
-        name: event.name,
+        ...(event.item_id ? { id: event.item_id } : {}),
+        ...(event.name ? { name: event.name } : {}),
         arguments: event.arguments,
       };
-      const key = `${String(event.output_index ?? 'missing')}:function_call:${event.item_id ?? ''}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
 
@@ -782,24 +846,47 @@ export async function readResponsesStream(
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
+    const safeOutput = filterExecutableToolCalls(finalizedStreamOutput);
+    const hasMeaningfulSafeOutput = safeOutput.some(
+      (item: any) =>
+        item?.type !== 'message' ||
+        (Array.isArray(item.content) && item.content.length > 0) ||
+        (typeof item.refusal === 'string' && item.refusal.length > 0),
+    );
+    if (!hasRefusalOutput(safeOutput) && !hasMeaningfulSafeOutput) {
+      const reason = [
+        latestResponse.incomplete_details?.reason,
+        latestResponse.error?.code,
+        latestResponse.error?.message,
+      ].find((value) => typeof value === 'string' && value.length > 0);
+      safeOutput.push({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'refusal', refusal: `Response blocked${reason ? `: ${reason}` : '.'}` }],
+      });
+    }
     return boundedResponse({
       ...latestResponse,
-      output: filterExecutableToolCalls(finalizedStreamOutput),
+      output: safeOutput,
     });
   }
 
   if (sawFinalizedRefusal) {
+    const terminalHadExecutableCalls = hasExecutableToolCalls(latestResponse?.output);
     const safeOutput = filterExecutableToolCalls(
       useFinalizedItems ? finalizedStreamOutput : latestResponse?.output,
     );
     return boundedResponse({
       ...(latestResponse ?? {}),
       output:
-        safeOutput.length > 0
+        useFinalizedItems || !terminalHadExecutableCalls
           ? safeOutput
-          : filterExecutableToolCalls(
-              Array.from(finalizedRefusalItems.values(), ({ item }) => item),
-            ),
+          : [
+              ...safeOutput,
+              ...filterExecutableToolCalls(
+                Array.from(finalizedRefusalItems.values(), ({ item }) => item),
+              ),
+            ],
     });
   }
 

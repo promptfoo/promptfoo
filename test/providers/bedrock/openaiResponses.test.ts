@@ -1682,9 +1682,14 @@ describe('bedrock openaiResponses helper', () => {
         costCalculator: vi.fn(),
       });
 
-      await processor.processResponseOutput(result, {}, false);
+      const processed = await processor.processResponseOutput(result, {}, false);
 
-      expect(result.output).toEqual([]);
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'refusal' })],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
       expect(processCalls).not.toHaveBeenCalled();
     });
 
@@ -1704,9 +1709,14 @@ describe('bedrock openaiResponses helper', () => {
         costCalculator: vi.fn(),
       });
 
-      await processor.processResponseOutput(result, {}, false);
+      const processed = await processor.processResponseOutput(result, {}, false);
 
-      expect(result.output).toEqual([]);
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'refusal' })],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
       expect(processCalls).not.toHaveBeenCalled();
     });
 
@@ -1726,9 +1736,13 @@ describe('bedrock openaiResponses helper', () => {
         costCalculator: vi.fn(),
       });
 
-      await processor.processResponseOutput(result, {}, false);
+      const processed = await processor.processResponseOutput(result, {}, false);
 
-      expect(result.output).toEqual([expect.objectContaining({ content: [] })]);
+      expect(result.output).toEqual([
+        expect.objectContaining({ content: [] }),
+        expect.objectContaining({ content: [expect.objectContaining({ type: 'refusal' })] }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
       expect(processCalls).not.toHaveBeenCalled();
     });
 
@@ -1834,6 +1848,75 @@ describe('bedrock openaiResponses helper', () => {
       expect(processCalls).not.toHaveBeenCalled();
     });
 
+    it('preserves finalized refusal evidence when a completed response has safe text and a tool call', async () => {
+      const body = [
+        'event: response.refusal.done',
+        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that"}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Some context."}]},{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'Some context.' })],
+        }),
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
+          ],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'truncated',
+      'completed',
+    ])('normalizes a standalone refusal item from a %s Responses stream', async (streamState) => {
+      const body =
+        streamState === 'truncated'
+          ? [
+              'event: response.output_item.done',
+              'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"refusal","refusal":"Blocked by policy"}}',
+              '',
+            ].join('\n')
+          : [
+              'event: response.completed',
+              'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"refusal","refusal":"Blocked by policy"}]}}',
+              '',
+            ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls: vi.fn() } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          type: 'message',
+          content: [expect.objectContaining({ type: 'refusal', refusal: 'Blocked by policy' })],
+        }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+    });
+
     it('prefers finalized tool arguments over an incomplete terminal snapshot', async () => {
       const terminalResponse = {
         status: 'incomplete',
@@ -1887,6 +1970,32 @@ describe('bedrock openaiResponses helper', () => {
         expect.objectContaining({ arguments: '{"path":"final"}' }),
         undefined,
       );
+    });
+
+    it('preserves an added function-call call_id when finalized arguments arrive before truncation', async () => {
+      const body = [
+        'event: response.output_item.added',
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}',
+        '',
+        'event: response.function_call_arguments.done',
+        'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\\"path\\":\\"final\\"}"}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          type: 'function_call',
+          id: 'fc_1',
+          call_id: 'call_1',
+          name: 'lookup',
+          arguments: '{"path":"final"}',
+        }),
+      ]);
     });
 
     it('keeps completed terminal tool output authoritative over an earlier finalized item', async () => {
