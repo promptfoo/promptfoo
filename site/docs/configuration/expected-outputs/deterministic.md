@@ -798,7 +798,7 @@ With the configuration above:
 | `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
 | `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
 
-`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped. A `defaults` entry always requires the observed value to equal the declared default — even a default of `"*"` is matched literally. To tolerate an argument regardless of its value, such as a pagination cursor or other agent-generated token, list it under [`ignore`](#trajectory-tool-args-match-ignore) instead.
 
 :::note
 
@@ -808,7 +808,7 @@ Stripping runs before matching in both modes, but `partial` mode already ignores
 
 #### Ignoring arguments {#trajectory-tool-args-match-ignore}
 
-Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a volatile `request_id` or `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
+Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a pagination `cursor`, a volatile `request_id`, or an `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
 
 ```yaml
 tests:
