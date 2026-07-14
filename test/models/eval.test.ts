@@ -2495,6 +2495,22 @@ describe('evaluator', () => {
       ]);
       expect(result).not.toBeNull();
     });
+
+    it('should combine with OR when logicOperator is lowercase "or" (the shape the UI actually sends)', () => {
+      const cond1 = sql`field1 = ${1}`;
+      const cond2 = sql`field2 = ${2}`;
+      const result = combineFilterConditions([
+        { condition: cond1, logicOperator: 'or' },
+        { condition: cond2, logicOperator: 'or' },
+      ]);
+      const sqlText = result!.queryChunks
+        .map((chunk: unknown) =>
+          typeof chunk === 'string' ? chunk : ((chunk as { value?: unknown }).value ?? ''),
+        )
+        .join(' ');
+      expect(sqlText).toContain('OR');
+      expect(sqlText).not.toContain('AND');
+    });
   });
 
   describe('getTablePage sessionId header detection', () => {
