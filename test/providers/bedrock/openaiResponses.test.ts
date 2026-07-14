@@ -948,6 +948,22 @@ describe('bedrock openaiResponses helper', () => {
       expect(JSON.stringify(result.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
+    it('does not repopulate intentionally empty completed terminal text from a streamed draft', async () => {
+      const body = [
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":""}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content[0].text).toBe('');
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
     it.each([
       { name: 'without content', message: { type: 'message', role: 'assistant', refusal: 'No.' } },
       {
@@ -985,6 +1001,15 @@ describe('bedrock openaiResponses helper', () => {
         name: 'incomplete safety reason',
         event: 'response.incomplete',
         response: { status: 'incomplete', incomplete_details: { reason: 'safety' }, output: [] },
+      },
+      {
+        name: 'failed safety message',
+        event: 'response.failed',
+        response: {
+          status: 'failed',
+          error: { code: 'server_error', message: 'blocked by safety system' },
+          output: [],
+        },
       },
     ])('does not recover a streamed draft after a $name', async ({ event, response }) => {
       const body = [
@@ -1304,6 +1329,97 @@ describe('bedrock openaiResponses helper', () => {
       const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
 
       expect(result.output[0].content[0].text).toBe('complete text');
+    });
+
+    it.each([
+      {
+        name: 'content_part.done',
+        initial: { status: 'in_progress', output: [] },
+        final: {
+          type: 'response.content_part.done',
+          output_index: 0,
+          content_index: 0,
+          part: { type: 'output_text', text: 'safe final' },
+        },
+      },
+      {
+        name: 'output_item.done',
+        initial: {
+          status: 'in_progress',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'S' }],
+            },
+          ],
+        },
+        final: {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'safe final' }],
+          },
+        },
+      },
+    ])('honors finalized $name text when a stream ends early', async ({ initial, final }) => {
+      const body = [
+        'event: response.in_progress',
+        `data: ${JSON.stringify({ type: 'response.in_progress', response: initial })}`,
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        `event: ${final.type}`,
+        `data: ${JSON.stringify(final)}`,
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content[0].text).toBe('safe final');
+    });
+
+    it.each([
+      {
+        name: 'content_part.done',
+        final: {
+          type: 'response.content_part.done',
+          output_index: 0,
+          content_index: 0,
+          part: { type: 'refusal', refusal: 'No.' },
+        },
+      },
+      {
+        name: 'output_item.done',
+        final: {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'refusal', refusal: 'No.' }],
+          },
+        },
+      },
+    ])('does not recover a streamed draft after a finalized $name refusal', async ({ final }) => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+        '',
+        `event: ${final.type}`,
+        `data: ${JSON.stringify(final)}`,
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
     });
 
     it('preserves interleaved output boundaries when a stream ends before its terminal event', async () => {

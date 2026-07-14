@@ -6,6 +6,8 @@ type ResponsesStreamEvent = {
   output_text?: { delta?: string };
   output_index?: number;
   content_index?: number;
+  part?: { type?: string; text?: string; refusal?: string };
+  item?: { type?: string; content?: Array<{ type?: string; text?: string; refusal?: string }> };
   output?: any[];
   code?: string;
   message?: string;
@@ -54,6 +56,36 @@ function getInvalidOutputTextKey(event: ResponsesStreamEvent): string {
   return `${String(event.output_index ?? 'missing')}:${String(event.content_index ?? 0)}`;
 }
 
+function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEvent[] {
+  if (event.type === 'response.output_text.done') {
+    return [event];
+  }
+  if (event.type === 'response.content_part.done' && event.part?.type === 'output_text') {
+    return [{ ...event, text: event.part.text }];
+  }
+  if (event.type === 'response.output_item.done' && event.item?.type === 'message') {
+    return (event.item.content ?? []).flatMap((part, contentIndex) =>
+      part.type === 'output_text'
+        ? [{ ...event, content_index: contentIndex, text: part.text }]
+        : [],
+    );
+  }
+  return [];
+}
+
+function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
+  if (event.type === 'response.content_part.done' && event.part?.type === 'refusal') {
+    return { type: 'message', role: 'assistant', content: [event.part] };
+  }
+  if (
+    event.type === 'response.output_item.done' &&
+    (event.item?.type === 'refusal' || event.item?.content?.some((part) => part.type === 'refusal'))
+  ) {
+    return event.item;
+  }
+  return undefined;
+}
+
 function getTerminalOutputTexts(output: any[] | undefined): string[] {
   if (!Array.isArray(output)) {
     return [];
@@ -72,7 +104,7 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 
 function hasTerminalSafetyDecision(response: any): boolean {
   if (
-    [response?.incomplete_details?.reason, response?.error?.code].some(
+    [response?.incomplete_details?.reason, response?.error?.code, response?.error?.message].some(
       (reason) =>
         typeof reason === 'string' &&
         /(?:content[_-]?filter|content[_-]?policy|safety|guardrail)/i.test(reason),
@@ -161,7 +193,8 @@ function recoverIncompleteOutput(
       item.content = [];
     }
     const targetContentIndex = Math.min(contentIndex, item.content.length);
-    if (item.content.length === targetContentIndex) {
+    const createdContent = item.content.length === targetContentIndex;
+    if (createdContent) {
       item.content.push({ type: 'output_text', text: '' });
     }
     const content = item.content[targetContentIndex];
@@ -171,7 +204,7 @@ function recoverIncompleteOutput(
     }
     if (
       typeof content.text !== 'string' ||
-      content.text.length === 0 ||
+      (content.text.length === 0 && (createdContent || allowTerminalTextReplacement)) ||
       (allowTerminalTextReplacement &&
         (finalized ? text !== content.text : text.length > content.text.length))
     ) {
@@ -267,6 +300,7 @@ export async function readResponsesStream(
   const invalidlyIndexedOutputTextByContent = new Map<string, string>();
   const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
+  let finalizedRefusalItem: any;
 
   const appendOutputText = (text: string): void => {
     if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
@@ -467,10 +501,14 @@ export async function readResponsesStream(
       latestResponse = event;
     }
 
+    finalizedRefusalItem = getOutputRefusalItem(event) ?? finalizedRefusalItem;
+
     if (event.type === 'response.output_text.delta') {
       processOutputTextEvent(event);
-    } else if (event.type === 'response.output_text.done') {
-      processOutputTextDoneEvent(event);
+    } else {
+      for (const outputTextDoneEvent of getOutputTextDoneEvents(event)) {
+        processOutputTextDoneEvent(outputTextDoneEvent);
+      }
     }
   };
 
@@ -495,6 +533,10 @@ export async function readResponsesStream(
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     return latestResponse;
+  }
+
+  if (finalizedRefusalItem) {
+    return { ...(latestResponse ?? {}), output: [finalizedRefusalItem] };
   }
 
   if (
@@ -577,7 +619,7 @@ export async function readResponsesStream(
           (content: any) =>
             content?.type === 'output_text' &&
             typeof content.text === 'string' &&
-            content.text.length > 0,
+            (content.text.length > 0 || latestResponse.status === 'completed'),
         ),
     );
 
