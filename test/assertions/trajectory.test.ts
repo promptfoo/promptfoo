@@ -2332,6 +2332,21 @@ describe('trajectory assertions', () => {
         ).toBe(true);
       });
 
+      it('drops an ignored key across varying value types', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['cursor'],
+        };
+
+        for (const cursor of ['eyJvZmZzZXQiOjQyfQ==', null, 0, { page: 3 }]) {
+          expect(
+            handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', cursor }, value)).pass,
+          ).toBe(true);
+        }
+      });
+
       it('accepts a bare string ignore value', () => {
         const result = handleTrajectoryToolArgsMatch(
           makeIgnoreParams(

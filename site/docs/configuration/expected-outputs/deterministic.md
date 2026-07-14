@@ -837,6 +837,32 @@ With the configuration above:
 
 An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
 
+Combine `defaults` with `ignore` when a tool mixes arguments that should be pinned to a known default with arguments the agent chooses freely:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
+          ignore:
+            - cursor
+```
+
+| Observed tool arguments                  | Outcome | Reason                                                       |
+| ---------------------------------------- | ------- | ------------------------------------------------------------ |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                     |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both values equal their declared defaults                    |
+| `{ status: 'Q', cursor: 'abc123' }`      | pass    | `cursor` is ignored regardless of value                      |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1)            |
+| `{ status: 'Q', delete_database: true }` | fail    | hallucinated extra is not in `args`, `defaults`, or `ignore` |
+
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
 ### trajectory:tool-sequence {#trajectorytool-sequence}
