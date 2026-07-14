@@ -858,6 +858,46 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('SAFE\nWRONG-ITEM');
     });
 
+    it('preserves an indexed delta that collides with a non-message terminal item', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"LOST"}',
+          '',
+          'event: response.incomplete',
+          `data: ${JSON.stringify({
+            type: 'response.incomplete',
+            response: {
+              id: 'resp_incomplete_non_message_collision',
+              model: 'openai.gpt-5.5',
+              status: 'incomplete',
+              output: [
+                { id: 'reason', type: 'reasoning', summary: [] },
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'KEPT' }],
+                },
+              ],
+            },
+          })}`,
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('KEPT\nLOST');
+    });
+
     it('does not duplicate oversized-index text already present in the terminal output', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [

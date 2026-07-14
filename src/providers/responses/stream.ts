@@ -94,6 +94,7 @@ function recoverIncompleteOutput(
   }
 
   let recoveredText = false;
+  const unmatchedStreamedTexts: string[] = [];
   for (const { outputIndex, contentIndex, text } of streamedTexts) {
     let item = recoveredOutput[outputIndex];
     if (!item) {
@@ -101,6 +102,7 @@ function recoverIncompleteOutput(
       recoveredOutput[outputIndex] = item;
     }
     if (item.type !== 'message') {
+      unmatchedStreamedTexts.push(text);
       continue;
     }
     if (!Array.isArray(item.content)) {
@@ -111,12 +113,25 @@ function recoverIncompleteOutput(
     }
     const content = item.content[contentIndex];
     if (content?.type !== 'output_text') {
+      unmatchedStreamedTexts.push(text);
       continue;
     }
     if (typeof content.text !== 'string' || text.length > content.text.length) {
       item.content[contentIndex] = { ...content, text };
       recoveredText = true;
     }
+  }
+
+  for (const text of unmatchedStreamedTexts) {
+    if (getTerminalOutputTexts(recoveredOutput).includes(text)) {
+      continue;
+    }
+    recoveredOutput.push({
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text }],
+    });
+    recoveredText = true;
   }
 
   if (
