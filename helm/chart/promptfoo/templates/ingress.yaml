@@ -2,11 +2,13 @@
 {{- $fullName := include "promptfoo.fullname" . -}}
 {{- $svcPort := .Values.service.port -}}
 {{- $hosts := .Values.ingress.hosts -}}
+{{- $className := .Values.ingress.className -}}
 {{- $annotations := .Values.ingress.annotations -}}
 {{- $tls := .Values.ingress.tls -}}
 {{- if not $hosts -}}
 {{/* Back-compat: reproduce the legacy hard-coded Ingress from the deprecated domainName */}}
 {{- $hosts = list (dict "host" .Values.domainName "paths" (list (dict "path" "/" "pathType" "Prefix"))) -}}
+{{- if not $className }}{{- $className = "traefik" -}}{{- end -}}
 {{- if not $annotations }}{{- $annotations = dict "cert-manager.io/cluster-issuer" "letsencrypt-cloudflare" -}}{{- end -}}
 {{- if not $tls }}{{- $tls = list (dict "secretName" (printf "%s-certificate-tls" .Release.Name) "hosts" (list .Values.domainName)) -}}{{- end -}}
 {{- end -}}
@@ -21,7 +23,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- with .Values.ingress.className }}
+  {{- with $className }}
   ingressClassName: {{ . }}
   {{- end }}
   {{- with $tls }}

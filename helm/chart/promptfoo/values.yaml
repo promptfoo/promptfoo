@@ -48,7 +48,7 @@ domainName: 'promptfoo.example.com'
 
 ingress:
   enabled: true
-  className: traefik
+  className: ""
   annotations: {}
   hosts: []
   tls: []
