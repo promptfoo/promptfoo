@@ -6,6 +6,18 @@ import type { TokenUsage } from '../../types/shared';
 
 const trackedGenerationErrors = new WeakMap<object, WeakSet<TokenUsage>>();
 
+export const GENERATION_TOKEN_USAGE_TRACKED = Symbol.for(
+  'promptfoo.redteam.generationTokenUsageTracked',
+);
+
+export function isGenerationTokenUsageTracked(provider: ApiProvider): boolean {
+  return Boolean(
+    (provider as ApiProvider & { [GENERATION_TOKEN_USAGE_TRACKED]?: boolean })[
+      GENERATION_TOKEN_USAGE_TRACKED
+    ],
+  );
+}
+
 export function trackGenerationResponseTokenUsage(
   tokenUsage: TokenUsage,
   response: { tokenUsage?: unknown; cached?: boolean },
@@ -84,9 +96,17 @@ export function trackGenerationTokenUsage(
     value: trackedCallApi,
     writable: true,
   });
+  Object.defineProperty(trackedProvider, GENERATION_TOKEN_USAGE_TRACKED, {
+    configurable: true,
+    enumerable: true,
+    value: true,
+  });
 
   return new Proxy(trackedProvider, {
     get(_target, property) {
+      if (property === GENERATION_TOKEN_USAGE_TRACKED) {
+        return true;
+      }
       if (property === 'callApi') {
         return trackedCallApi;
       }

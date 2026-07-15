@@ -95,6 +95,7 @@ type PluginClass<T extends PluginConfig> = new (
   injectVar: string,
   config: T,
   targetId?: string,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ) => RedteamPluginBase;
 
 const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
@@ -458,6 +459,7 @@ function createPluginFactory<T extends PluginConfig>(
           injectVar,
           configWithDefaults as T,
           targetId,
+          trackTokenUsage,
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);

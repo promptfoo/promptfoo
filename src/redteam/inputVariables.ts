@@ -12,7 +12,7 @@ import {
   normalizeInputDefinition,
 } from '../types/shared';
 
-import type { ApiProvider } from '../types/index';
+import type { ApiProvider, PluginActionParams } from '../types/index';
 
 const SVG_WIDTH = 1200;
 const SVG_LINE_HEIGHT = 32;
@@ -30,6 +30,7 @@ export type InputMaterializationContext = {
   pluginId?: string;
   provider?: ApiProvider;
   purpose?: string;
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'];
 };
 
 export type MaterializedInputMetadata = {
@@ -725,9 +726,14 @@ export async function materializeInputValueWithMetadata(
 
   let output: unknown;
   try {
-    ({ output } = await context.provider.callApi(
+    const response = await context.provider.callApi(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
-    ));
+    );
+    context.trackTokenUsage?.({
+      tokenUsage: response.tokenUsage,
+      cached: Boolean(response.cached),
+    });
+    output = response.output;
   } catch (error) {
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,

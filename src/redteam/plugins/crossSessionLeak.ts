@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
+import { isGenerationTokenUsageTracked } from '../providers/generationTokenUsage';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -108,7 +109,14 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       jsonOnly: true,
     });
 
-    const { output, error } = await provider.callApi(finalTemplate);
+    const response = await provider.callApi(finalTemplate);
+    if (!isGenerationTokenUsageTracked(provider)) {
+      this.trackTokenUsage?.({
+        tokenUsage: response.tokenUsage,
+        cached: Boolean(response.cached),
+      });
+    }
+    const { output, error } = response;
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
       return [];
