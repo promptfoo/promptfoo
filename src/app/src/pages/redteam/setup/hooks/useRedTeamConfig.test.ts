@@ -18,7 +18,7 @@ describe('useRedTeamConfig', () => {
     expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
   });
 
-  it('clears a target configuration error only when the provider type changes', () => {
+  it('preserves a target configuration error when the provider type changes', () => {
     useRedTeamConfig.setState({ providerType: 'openinterpreter' });
     useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
 
@@ -26,7 +26,7 @@ describe('useRedTeamConfig', () => {
     expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
 
     useRedTeamConfig.getState().setProviderType('openai');
-    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
   });
 
   describe('updatePlugins', () => {

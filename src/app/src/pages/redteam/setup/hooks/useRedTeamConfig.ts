@@ -338,11 +338,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             },
           };
         }),
-      setProviderType: (providerType) =>
-        set((state) => ({
-          providerType,
-          targetConfigError: state.providerType === providerType ? state.targetConfigError : null,
-        })),
+      setProviderType: (providerType) => set({ providerType }),
       setTargetConfigError: (targetConfigError) => set({ targetConfigError }),
     }),
     {
