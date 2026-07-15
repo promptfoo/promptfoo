@@ -174,6 +174,85 @@ describe('Responses stream regressions', () => {
   });
 
   it.each([
+    {
+      name: 'content-filter-service error',
+      error: { code: 'content_filter_error', message: 'The contents are not filtered' },
+    },
+    {
+      name: 'rejected rate limit',
+      error: {
+        code: 'rate_limit_exceeded',
+        message: 'Request was rejected because the organization exceeded its rate limit',
+      },
+    },
+    {
+      name: 'disallowed request parameter',
+      error: {
+        code: 'invalid_request_error',
+        message: 'The request contains a disallowed parameter: temperature',
+      },
+    },
+    {
+      name: 'blocked upstream restart',
+      error: { code: 'server_error', message: 'Request blocked while upstream was restarting' },
+    },
+  ])('does not classify a $name as a refusal', async ({ error }) => {
+    const response = createSseResponse([
+      { type: 'response.failed', response: { status: 'failed', error, output: [] } },
+    ]);
+
+    const parsed = await readResponsesStream(response, 'test', { debug: vi.fn() });
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.error).toEqual(expect.objectContaining(error));
+    expect(JSON.stringify(parsed.output)).not.toContain('refusal');
+    expect(processed.isRefusal).not.toBe(true);
+    expect(processed.error).toContain(error.code);
+  });
+
+  it('removes finalized non-message drafts from content-filtered raw output', async () => {
+    const response = createSseResponse([
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          id: 'rs_1',
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'SECRET REASONING DRAFT' }],
+        },
+      },
+      {
+        type: 'response.output_item.done',
+        output_index: 1,
+        item: {
+          id: 'ci_1',
+          type: 'code_interpreter_call',
+          status: 'completed',
+          code: 'print("SECRET CODE DRAFT")',
+          outputs: [],
+        },
+      },
+      {
+        type: 'response.incomplete',
+        response: {
+          status: 'incomplete',
+          incomplete_details: { reason: 'content_filter' },
+          output: [],
+        },
+      },
+    ]);
+
+    const parsed = await readResponsesStream(response, 'test', { debug: vi.fn() });
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false, {
+      suppressReasoningOutput: true,
+    });
+
+    expect(JSON.stringify(parsed.output)).not.toContain('SECRET');
+    expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    expect(processed).toEqual(expect.objectContaining({ isRefusal: true }));
+  });
+
+  it.each([
     { name: 'with empty content', content: [] },
     {
       name: 'with draft content',
@@ -411,5 +490,128 @@ describe('Responses stream regressions', () => {
     ]);
     expect(processed.metadata?.annotations).toEqual(annotations);
     expect(processed.raw?.annotations).toEqual(annotations);
+  });
+
+  it('preserves citation annotations finalized by content-part events', async () => {
+    const annotations = [
+      {
+        type: 'url_citation',
+        url: 'https://example.test',
+        title: 'Example',
+        start_index: 0,
+        end_index: 4,
+      },
+    ];
+    const response = createSseResponse([
+      { type: 'response.created', response: { id: 'r_1', status: 'in_progress', output: [] } },
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { id: 'm_1', type: 'message', role: 'assistant', content: [] },
+      },
+      {
+        type: 'response.content_part.added',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        part: { type: 'output_text', text: '', annotations: [] },
+      },
+      {
+        type: 'response.output_text.delta',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        delta: 'cite',
+      },
+      {
+        type: 'response.output_text.annotation.added',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        annotation_index: 0,
+        annotation: annotations[0],
+      },
+      {
+        type: 'response.output_text.done',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        text: 'cite',
+      },
+      {
+        type: 'response.content_part.done',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        part: { type: 'output_text', text: 'cite', annotations },
+      },
+    ]);
+
+    const parsed = await readResponsesStream(response, 'test', { debug: vi.fn() });
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        content: [expect.objectContaining({ type: 'output_text', text: 'cite', annotations })],
+      }),
+    ]);
+    expect(processed.metadata?.annotations).toEqual(annotations);
+    expect(processed.raw?.annotations).toEqual(annotations);
+  });
+
+  it('keeps a cited later content part aligned with preceding finalized text', async () => {
+    const annotations = [
+      {
+        type: 'url_citation',
+        url: 'https://example.test',
+        title: 'Example',
+        start_index: 0,
+        end_index: 4,
+      },
+    ];
+    const response = createSseResponse([
+      { type: 'response.created', response: { id: 'r_1', status: 'in_progress', output: [] } },
+      {
+        type: 'response.output_text.done',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        text: 'intro ',
+      },
+      {
+        type: 'response.output_text.done',
+        output_index: 0,
+        content_index: 1,
+        item_id: 'm_1',
+        text: 'cite',
+      },
+      {
+        type: 'response.content_part.done',
+        output_index: 0,
+        content_index: 1,
+        item_id: 'm_1',
+        part: { type: 'output_text', text: 'cite', annotations },
+      },
+    ]);
+
+    const parsed = await readResponsesStream(response, 'test', { debug: vi.fn() });
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        content: [
+          expect.objectContaining({ type: 'output_text', text: 'intro ' }),
+          expect.objectContaining({ type: 'output_text', text: 'cite', annotations }),
+        ],
+      }),
+    ]);
+    expect(processed).toEqual(
+      expect.objectContaining({
+        output: 'intro cite',
+        metadata: expect.objectContaining({ annotations }),
+      }),
+    );
   });
 });

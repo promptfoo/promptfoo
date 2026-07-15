@@ -182,18 +182,24 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 }
 
 function hasTerminalSafetyDecision(response: any): boolean {
+  const errorCode = response?.error?.code;
   if (
-    [response?.incomplete_details?.reason, response?.error?.code].some(
+    errorCode !== 'content_filter_error' &&
+    [response?.incomplete_details?.reason, errorCode].some(
       (reason) =>
         typeof reason === 'string' &&
-        /(?:content[_-]?filter|content[_-]?policy|safety|guardrail)/i.test(reason),
+        /^(?:content[_-]?filter|content[_-]?policy|safety|guardrail)(?:[_-](?:violation|blocked))?$/i.test(
+          reason,
+        ),
     )
   ) {
     return true;
   }
   if (
+    errorCode !== 'content_filter_error' &&
     typeof response?.error?.message === 'string' &&
-    /\b(?:blocked|refused|rejected|filtered|disallowed)\b/i.test(response.error.message)
+    /\b(?:blocked|refused|rejected|filtered|disallowed)\b/i.test(response.error.message) &&
+    /(?:content[_ -]?(?:filter|policy)|safety|guardrail)/i.test(response.error.message)
   ) {
     return true;
   }
@@ -216,7 +222,12 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
   }
 
   return output
-    .filter((item: any) => item !== undefined && item?.type !== 'function_call')
+    .filter(
+      (item: any) =>
+        item !== undefined &&
+        item?.type !== 'function_call' &&
+        (!stripText || item?.type === 'message' || item?.type === 'refusal'),
+    )
     .map((item: any) =>
       item?.type === 'refusal'
         ? {
@@ -890,6 +901,35 @@ export async function readResponsesStream(
         }
       }
       const key = `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
+      setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
+    }
+    if (
+      event.type === 'response.content_part.done' &&
+      event.part?.type === 'output_text' &&
+      Object.keys(event.part).some((key) => key !== 'type' && key !== 'text')
+    ) {
+      const outputIndex = getValidOutputIndex(event);
+      const key = `${compactStreamIndex(event.output_index, 'missing')}:message:${event.item_id ?? ''}`;
+      const existingItem = finalizedNonMessageItems.get(key)?.item;
+      const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
+      const contentIndex =
+        typeof event.content_index === 'number' &&
+        Number.isInteger(event.content_index) &&
+        event.content_index >= 0 &&
+        event.content_index <= MAX_STREAM_CONTENT_INDEX
+          ? event.content_index
+          : content.length;
+      while (content.length <= contentIndex) {
+        content.push({ type: 'output_text', text: '' });
+      }
+      content[contentIndex] = event.part;
+      const item = {
+        ...existingItem,
+        type: 'message',
+        role: 'assistant',
+        ...(event.item_id ? { id: event.item_id } : {}),
+        content,
+      };
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
     if (event.type === 'response.output_item.added' && event.item?.type === 'function_call') {
