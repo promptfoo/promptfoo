@@ -146,7 +146,7 @@ export default function Review({
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
-  const { config, updateConfig } = useRedTeamConfig();
+  const { config, updateConfig, targetConfigError } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -335,6 +335,11 @@ export default function Review({
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
+    if (targetConfigError) {
+      showToast(targetConfigError, 'error');
+      return;
+    }
+
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -351,6 +356,11 @@ export default function Review({
   };
 
   const handleOpenYamlDialog = () => {
+    if (targetConfigError) {
+      showToast(targetConfigError, 'error');
+      return;
+    }
+
     setIsYamlDialogOpen(true);
   };
 
@@ -421,12 +431,20 @@ export default function Review({
   }, [config.strategies]);
 
   const isRunNowDisabled = useMemo(() => {
-    return isRunning || ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus);
-  }, [isRunning, apiHealthStatus]);
+    return (
+      isRunning ||
+      Boolean(targetConfigError) ||
+      ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus)
+    );
+  }, [isRunning, apiHealthStatus, targetConfigError]);
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
     if (isRunning) {
       return undefined;
+    }
+
+    if (targetConfigError) {
+      return targetConfigError;
     }
 
     switch (apiHealthStatus) {
@@ -439,7 +457,7 @@ export default function Review({
       default:
         return undefined;
     }
-  }, [isRunning, apiHealthStatus]);
+  }, [isRunning, apiHealthStatus, targetConfigError]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -519,6 +537,11 @@ export default function Review({
   );
 
   const handleRunWithSettings = async () => {
+    if (targetConfigError) {
+      showToast(targetConfigError, 'error');
+      return;
+    }
+
     // Check email verification first
     const emailResult = await checkEmailStatus();
 
@@ -1172,11 +1195,20 @@ export default function Review({
             </p>
             <Code>promptfoo redteam run</Code>
             <div className="mt-4 flex gap-3">
-              <Button onClick={handleSaveYaml} className="gap-2">
+              <Button
+                onClick={handleSaveYaml}
+                disabled={Boolean(targetConfigError)}
+                className="gap-2"
+              >
                 <Save className="size-4" />
                 Save YAML
               </Button>
-              <Button variant="outline" onClick={handleOpenYamlDialog} className="gap-2">
+              <Button
+                variant="outline"
+                onClick={handleOpenYamlDialog}
+                disabled={Boolean(targetConfigError)}
+                className="gap-2"
+              >
                 <Eye className="size-4" />
                 View YAML
               </Button>

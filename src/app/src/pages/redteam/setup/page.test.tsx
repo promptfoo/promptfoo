@@ -129,6 +129,27 @@ describe('RedTeamSetupPage', () => {
 
       expect(screen.getByRole('heading', { name: 'Save Configuration' })).toBeInTheDocument();
     });
+
+    it('disables Save while a target configuration has an invalid JSON edit', async () => {
+      const user = userEvent.setup();
+      act(() => {
+        useRedTeamConfig.setState({ targetConfigError: 'Invalid JSON configuration' } as any);
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+      await user.type(screen.getByLabelText('Configuration Name'), 'Unsafe target config');
+
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Export YAML' })).toBeDisabled();
+      expect(mockedCallApi).not.toHaveBeenCalledWith('/configs', expect.anything());
+    });
   });
 
   describe('URL Hash Updates', () => {

@@ -55,7 +55,7 @@ function ProviderConfigEditor({
   onSessionTested,
   mode = 'redteam',
 }: ProviderConfigEditorProps) {
-  const { config, updateConfig } = useRedTeamConfig();
+  const { config, updateConfig, targetConfigError, setTargetConfigError } = useRedTeamConfig();
   const isRedTeam = mode === 'redteam';
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -64,17 +64,31 @@ function ProviderConfigEditor({
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
-  const [customConfigError, setCustomConfigError] = useState<string | null>(null);
+  const [customConfigError, setCustomConfigError] = useState<string | null>(
+    isRedTeam ? (targetConfigError ?? null) : null,
+  );
   const previousProviderType = useRef(providerType);
+
+  const handleCustomConfigErrorChange = (error: string | null) => {
+    setCustomConfigError(error);
+    setError?.(error);
+    if (isRedTeam) {
+      setTargetConfigError?.(error);
+    }
+  };
 
   useEffect(() => {
     if (previousProviderType.current !== providerType) {
       previousProviderType.current = providerType;
       setRawConfigJson(JSON.stringify(provider.config, null, 2));
       setCustomConfigError(null);
+      setError?.(null);
+      if (isRedTeam) {
+        setTargetConfigError?.(null);
+      }
       setBodyError(null);
     }
-  }, [provider.config, providerType]);
+  }, [isRedTeam, provider.config, providerType, setError, setTargetConfigError]);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     if (type === 'http' && containsNunjucksTemplate(url)) {
@@ -394,7 +408,7 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
-          onConfigErrorChange={setCustomConfigError}
+          onConfigErrorChange={handleCustomConfigErrorChange}
         />
       )}
 
@@ -477,7 +491,7 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
-          onConfigErrorChange={setCustomConfigError}
+          onConfigErrorChange={handleCustomConfigErrorChange}
         />
       )}
 
@@ -492,7 +506,7 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
-          onConfigErrorChange={setCustomConfigError}
+          onConfigErrorChange={handleCustomConfigErrorChange}
         />
       )}
 
@@ -507,7 +521,7 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
-          onConfigErrorChange={setCustomConfigError}
+          onConfigErrorChange={handleCustomConfigErrorChange}
         />
       )}
 
@@ -529,7 +543,7 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
-          onConfigErrorChange={setCustomConfigError}
+          onConfigErrorChange={handleCustomConfigErrorChange}
         />
       )}
 

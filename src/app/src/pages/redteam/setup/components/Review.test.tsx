@@ -599,6 +599,30 @@ Application Details:
       expect(runButton).toBeEnabled();
     });
 
+    it('should disable Run Now when the target configuration has an invalid JSON edit', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: defaultConfig,
+        updateConfig: mockUpdateConfig,
+        targetConfigError: 'Invalid JSON configuration',
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeDisabled();
+      hoverElement(runButton);
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Invalid JSON configuration');
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+      expect(screen.getByRole('button', { name: 'Save YAML' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'View YAML' })).toBeDisabled();
+    });
+
     it('should disable the Run Now button when API status is blocked', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },

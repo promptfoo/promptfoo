@@ -107,7 +107,7 @@ export default function RedTeamSetupPage() {
 
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const { config, setFullConfig, resetConfig } = useRedTeamConfig();
+  const { config, setFullConfig, resetConfig, targetConfigError } = useRedTeamConfig();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -207,6 +207,11 @@ export default function RedTeamSetupPage() {
   };
 
   const handleSaveConfig = async () => {
+    if (targetConfigError) {
+      toast.showToast(targetConfigError, 'error');
+      return;
+    }
+
     recordEvent('feature_used', {
       feature: 'redteam_config_save',
       numPlugins: config.plugins.length,
@@ -412,6 +417,11 @@ export default function RedTeamSetupPage() {
   };
 
   const handleDownloadYaml = () => {
+    if (targetConfigError) {
+      toast.showToast(targetConfigError, 'error');
+      return;
+    }
+
     const yamlContent = generateOrderedYaml(config);
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
@@ -494,7 +504,7 @@ export default function RedTeamSetupPage() {
                       variant="outline"
                       className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
                       onClick={handleSaveConfig}
-                      disabled={!configName}
+                      disabled={!configName || Boolean(targetConfigError)}
                     >
                       Save now
                     </Button>
@@ -592,7 +602,7 @@ export default function RedTeamSetupPage() {
                         variant="outline"
                         className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
                         onClick={handleSaveConfig}
-                        disabled={!configName}
+                        disabled={!configName || Boolean(targetConfigError)}
                       >
                         Save now
                       </Button>
@@ -695,15 +705,25 @@ export default function RedTeamSetupPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleDownloadYaml} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadYaml}
+                  disabled={Boolean(targetConfigError)}
+                  className="flex-1"
+                >
                   <Download className="mr-2 size-4" />
                   Export YAML
                 </Button>
-                <Button onClick={handleSaveConfig} disabled={!configName} className="flex-1">
+                <Button
+                  onClick={handleSaveConfig}
+                  disabled={!configName || Boolean(targetConfigError)}
+                  className="flex-1"
+                >
                   <Save className="mr-2 size-4" />
                   Save
                 </Button>
               </div>
+              {targetConfigError && <p className="text-sm text-destructive">{targetConfigError}</p>}
             </div>
           </DialogContent>
         </Dialog>

@@ -17,6 +17,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
@@ -201,6 +202,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
+  const { targetConfigError } = useRedTeamConfig();
 
   // ===================================================================
   // State
@@ -356,6 +358,13 @@ export const TestCaseGenerationProvider: React.FC<{
         return;
       }
 
+      if (targetConfigError) {
+        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
+        setIsGenerating(false);
+        onErrorRef.current?.(new Error(targetConfigError));
+        return;
+      }
+
       // Run against target if configured
       setIsRunningTest(true);
 
@@ -401,7 +410,7 @@ export const TestCaseGenerationProvider: React.FC<{
         setIsRunningTest(false);
       }
     },
-    [generatedTestCases, redTeamConfig],
+    [generatedTestCases, redTeamConfig, targetConfigError, toast],
   );
 
   const resetState = useCallback(() => {
@@ -533,6 +542,12 @@ export const TestCaseGenerationProvider: React.FC<{
       testExecutionAbortController.current?.abort();
       resetState();
 
+      if (targetConfigError) {
+        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
+        onError?.(new Error(targetConfigError));
+        return;
+      }
+
       if (onSuccess) {
         onSuccessRef.current = onSuccess;
       }
@@ -566,7 +581,7 @@ export const TestCaseGenerationProvider: React.FC<{
       // Open dialog to show test case generation results
       setIsDialogOpen(true);
     },
-    [shouldEvaluateAgainstTarget, resetState, toast],
+    [shouldEvaluateAgainstTarget, resetState, targetConfigError, toast],
   );
 
   const handleCloseDialog = useCallback(() => {

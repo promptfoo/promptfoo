@@ -3,6 +3,7 @@ import React from 'react';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
@@ -91,6 +92,7 @@ vi.mock('./CommonConfigurationOptions', () => ({
 describe('ProviderConfigEditor', () => {
   beforeEach(() => {
     mockA2AConfigState.advancedConfigError = null;
+    useRedTeamConfig.getState().setTargetConfigError(null);
   });
 
   describe('validate method', () => {
@@ -943,6 +945,73 @@ describe('ProviderConfigEditor', () => {
     expect(validateFn!()).toBe(false);
     expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
     expect(onValidate).toHaveBeenLastCalledWith(false);
+  });
+
+  it('propagates malformed Open Interpreter configuration to the redteam store immediately', () => {
+    const setError = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+  });
+
+  it('does not persist malformed custom configuration from the eval creator', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        providerType="openinterpreter"
+        mode="eval"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+  });
+
+  it('clears propagated custom configuration errors when the provider type changes', () => {
+    const setError = vi.fn();
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+
+    rerender(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:gpt-4o', config: {} }}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openai"
+      />,
+    );
+
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
   });
 
   it.each([

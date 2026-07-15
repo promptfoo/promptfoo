@@ -13,6 +13,7 @@ import { within } from '@testing-library/dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -165,6 +166,7 @@ describe('TestCaseGenerationProvider', () => {
   beforeEach(() => {
     callApiMock.mockReset();
     callApiMock.mockImplementation(defaultCallApiImplementation);
+    useRedTeamConfig.getState().setTargetConfigError(null);
   });
 
   it('should render', () => {
@@ -480,6 +482,37 @@ describe('TestCaseGenerationProvider', () => {
   });
 
   describe('Test case execution', () => {
+    it.each([
+      ['plugin preview', 'basic'],
+      ['strategy preview', 'goat'],
+    ] as const)('does not execute an unsafe target during %s when its config is invalid', async (_case, strategy) => {
+      const user = userEvent.setup();
+      useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: {
+                id: 'openinterpreter',
+                config: { sandbox_mode: 'danger-full-access' },
+              },
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy={strategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      expect(screen.getByText('Invalid JSON configuration')).toBeInTheDocument();
+      expect(callApiMock).not.toHaveBeenCalledWith('/providers/test', expect.anything());
+      expect(callApiMock).not.toHaveBeenCalledWith('/redteam/generate-test', expect.anything());
+      expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+    });
+
     it('should execute a test case against a target', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';

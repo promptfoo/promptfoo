@@ -8,6 +8,27 @@ describe('useRedTeamConfig', () => {
     useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
   });
 
+  it('tracks a target configuration error and clears it when loading a full configuration', () => {
+    const config = useRedTeamConfig.getState().config;
+
+    useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+
+    useRedTeamConfig.getState().setFullConfig(config);
+    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+  });
+
+  it('clears a target configuration error only when the provider type changes', () => {
+    useRedTeamConfig.setState({ providerType: 'openinterpreter' });
+    useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+
+    useRedTeamConfig.getState().setProviderType('openinterpreter');
+    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+
+    useRedTeamConfig.getState().setProviderType('openai');
+    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+  });
+
   describe('updatePlugins', () => {
     it('should update plugins when they are different', () => {
       const { updatePlugins, config } = useRedTeamConfig.getState();

@@ -2,6 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { TestCaseDialog, TestCaseGenerateButton } from './TestCaseDialog';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -34,6 +35,7 @@ describe('TestCaseGenerateButton', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useRedTeamConfig.getState().setTargetConfigError(null);
     mockUseApiHealth.mockReturnValue({
       data: { status: 'connected', message: null },
       refetch: vi.fn(),
@@ -127,6 +129,22 @@ describe('TestCaseGenerateButton', () => {
           'Requires Promptfoo Cloud connection',
         );
       });
+    });
+
+    it('disables test generation and shows the target config error in the tooltip', async () => {
+      const user = userEvent.setup();
+      useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Generate SQL Injection test" />,
+      );
+
+      const iconButton = screen.getByRole('button', { name: 'Invalid JSON configuration' });
+      expect(iconButton).toBeDisabled();
+      await user.hover(iconButton);
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Invalid JSON configuration');
+      await user.click(iconButton);
+      expect(mockOnClick).not.toHaveBeenCalled();
     });
 
     it('should maintain tooltip state independently across multiple hover/unhover cycles', async () => {
