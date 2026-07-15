@@ -448,6 +448,10 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
     };
   }
 
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
+
   id(): string {
     return `cloudflare-gateway:anthropic:${this.modelName}`;
   }

@@ -660,6 +660,65 @@ describe('AnthropicMessagesProvider', () => {
       }
     });
 
+    it('invalidates unlabeled message cache entries when the cache is cleared directly', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any);
+
+      await provider.callApi('Same prompt');
+      await getCache().clear();
+      const afterClear = await provider.callApi('Same prompt');
+
+      expect(afterClear).toMatchObject({ output: 'fresh-2' });
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates unlabeled message cache entries when a namespaced cache is cleared', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any);
+
+      await withCacheNamespace('repeat:0', () => provider.callApi('Same prompt'));
+      await withCacheNamespace('repeat:0', async () => getCache().clear());
+      const afterClear = await withCacheNamespace('repeat:0', () =>
+        provider.callApi('Same prompt'),
+      );
+
+      expect(afterClear).toMatchObject({ output: 'fresh-2' });
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps unlabeled message cache entries when PROMPTFOO_CACHE_TTL is zero', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '0' });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ content: [{ type: 'text', text: 'fresh-1' }] } as any);
+
+      try {
+        await provider.callApi('Same prompt');
+        now.mockReturnValue(10_000_000);
+        const cached = await provider.callApi('Same prompt');
+
+        expect(cached).toMatchObject({ output: 'fresh-1', cached: true });
+        expect(create).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreEnv();
+        now.mockRestore();
+      }
+    });
+
     it('should include beta request headers in hashed cache keys without leaking them', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
         config: {

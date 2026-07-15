@@ -111,6 +111,12 @@ function getCacheInstance() {
       ttl: getCacheTtlMs(),
       refreshThreshold: 0, // Disable background refresh
     });
+    const clear = cacheInstance.clear.bind(cacheInstance);
+    cacheInstance.clear = async () => {
+      const result = await clear();
+      cacheClearGeneration += 1;
+      return result;
+    };
   }
   return cacheInstance;
 }
@@ -223,6 +229,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
     }
   }
 
+  cacheClearGeneration += 1;
   return true;
 }
 
@@ -883,7 +890,6 @@ export function disableCache() {
 export async function clearCache() {
   inflightFetchResponses.clear();
   namespacedCacheInstances.clear();
-  cacheClearGeneration += 1;
   return getCacheInstance().clear();
 }
 

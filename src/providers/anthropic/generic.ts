@@ -417,7 +417,7 @@ export class AnthropicGenericProvider implements ApiProvider {
     }
     this.ephemeralResponseCache.set(ephemeralCacheKey, {
       response,
-      expiresAt: Date.now() + ttlMs,
+      expiresAt: ttlMs <= 0 ? Number.POSITIVE_INFINITY : Date.now() + ttlMs,
     });
   }
 

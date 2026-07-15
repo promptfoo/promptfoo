@@ -240,6 +240,65 @@ describe('AnthropicCompletionProvider', () => {
       }
     });
 
+    it('invalidates unlabeled completion cache entries when the cache is cleared directly', async () => {
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.completions, 'create')
+        .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
+        .mockResolvedValueOnce({ completion: 'fresh-2' } as any);
+
+      await provider.callApi('Same prompt');
+      await getCache().clear();
+      const afterClear = await provider.callApi('Same prompt');
+
+      expect(afterClear).toMatchObject({ output: 'fresh-2' });
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates unlabeled completion cache entries when a namespaced cache is cleared', async () => {
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.completions, 'create')
+        .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
+        .mockResolvedValueOnce({ completion: 'fresh-2' } as any);
+
+      await withCacheNamespace('repeat:0', () => provider.callApi('Same prompt'));
+      await withCacheNamespace('repeat:0', async () => getCache().clear());
+      const afterClear = await withCacheNamespace('repeat:0', () =>
+        provider.callApi('Same prompt'),
+      );
+
+      expect(afterClear).toMatchObject({ output: 'fresh-2' });
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps unlabeled completion cache entries when PROMPTFOO_CACHE_TTL is zero', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '0' });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.completions, 'create')
+        .mockResolvedValue({ completion: 'fresh-1' } as any);
+
+      try {
+        await provider.callApi('Same prompt');
+        now.mockReturnValue(10_000_000);
+        const cached = await provider.callApi('Same prompt');
+
+        expect(cached).toMatchObject({ output: 'fresh-1', cached: true });
+        expect(create).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreEnv();
+        now.mockRestore();
+      }
+    });
+
     it('should bypass the response cache for scoped Anthropic custom headers', async () => {
       const providerA = new AnthropicCompletionProvider('claude-1', {
         config: { apiKey: 'shared-api-key' },
