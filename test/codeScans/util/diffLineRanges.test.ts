@@ -103,6 +103,29 @@ deleted file mode 100644
     const ranges = extractValidLineRanges(diff);
     expect(ranges.has('src/deleted.ts')).toBe(false);
   });
+
+  it('should not count a trailing newline as an extra context line', () => {
+    // GitHub's octokit diff media type is trailing-newline-terminated, which makes
+    // `unifiedDiff.split('\n')` produce a final empty-string element. That element
+    // must not be treated as a real content line.
+    const diffWithoutTrailingNewline = `diff --git a/src/foo.ts b/src/foo.ts
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -10,3 +10,3 @@
+ context line 1
+-removed line
++added line
+ context line 3`;
+
+    const diffWithTrailingNewline = `${diffWithoutTrailingNewline}\n`;
+
+    expect(extractValidLineRanges(diffWithTrailingNewline).get('src/foo.ts')).toEqual(
+      extractValidLineRanges(diffWithoutTrailingNewline).get('src/foo.ts'),
+    );
+    expect(extractValidLineRanges(diffWithTrailingNewline).get('src/foo.ts')).toEqual([
+      { start: 10, end: 12 },
+    ]);
+  });
 });
 
 describe('clampCommentLines', () => {

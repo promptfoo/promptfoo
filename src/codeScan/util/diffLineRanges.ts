@@ -70,7 +70,10 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   let currentNewLine = 0;
   let hunkStartLine = 0;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isLastLine = i === lines.length - 1;
+
     // Match file header: diff --git a/path b/path
     // or +++ b/path (for new file path)
     const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
@@ -121,6 +124,9 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
     if (currentFile && hunkStartLine > 0) {
       if (line.startsWith('-')) {
         // Removed line - doesn't exist in new file
+        continue;
+      } else if (line === '' && isLastLine) {
+        // Trailing empty line (from string split on a trailing newline) - not real content
         continue;
       } else if (line.startsWith('+') || line.startsWith(' ') || line === '') {
         // Added line, context line, or empty line within hunk
