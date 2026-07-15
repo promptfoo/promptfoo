@@ -366,11 +366,13 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 //   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
 // - sanitized env (createSubprocessEnv) with tokens stripped, plus every env-level
 //   npm config override removed (see below)
+// - an action-owned writable install prefix, with the installed binary invoked
+//   directly instead of trusting PATH or a runner-global prefix
 // - cwd outside the checked-out workspace: npm's global mode documents (and testing
 //   confirms) that it ignores the per-project .npmrc, but the workspace holds the
 //   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
 //   strict-ssl, ignore-scripts…) may ever be in scope
-async function installPromptfooCli(promptfooVersion: string): Promise<void> {
+async function installPromptfooCli(promptfooVersion: string): Promise<string> {
   const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
 
   // npm reads its registry (and other config) from both env vars and user/global
@@ -381,7 +383,7 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
   //  - strip every npm_config_*/NPM_CONFIG_* env var, and
   //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
   //    consulted (two distinct paths: npm rejects loading one file as both).
-  // The pinned version therefore resolves from the runner's default (public) registry.
+  // The pinned version therefore resolves only from the public npm registry.
   // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
   // for this one install (the SaaS scan already requires public egress); the scan
   // subprocess keeps workflow-provided npm config because its nested npx (MCP)
@@ -395,6 +397,7 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
   const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
   const emptyUserConfig = path.join(npmrcDir, 'user');
   const emptyGlobalConfig = path.join(npmrcDir, 'global');
+  const installPrefix = path.join(npmrcDir, 'prefix');
 
   core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
   await exec.exec(
@@ -404,6 +407,9 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
       '-g',
       `promptfoo@${promptfooVersion}`,
       '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
+      '--prefix',
+      installPrefix,
       '--userconfig',
       emptyUserConfig,
       '--globalconfig',
@@ -412,6 +418,9 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
     { env, cwd: installCwd },
   );
   core.info('✅ Promptfoo installed successfully');
+  return process.platform === 'win32'
+    ? path.join(installPrefix, 'promptfoo.cmd')
+    : path.join(installPrefix, 'bin', 'promptfoo');
 }
 
 async function runPromptfooScan(
@@ -419,7 +428,7 @@ async function runPromptfooScan(
   oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
-  await installPromptfooCli(promptfooVersion);
+  const promptfooCli = await installPromptfooCli(promptfooVersion);
 
   core.info('🚀 Running promptfoo code-scans run...');
 
@@ -427,7 +436,7 @@ async function runPromptfooScan(
   let scanError = '';
   const scanEnv = createScanEnv(oidcToken);
 
-  const exitCode = await exec.exec('promptfoo', cliArgs, {
+  const exitCode = await exec.exec(promptfooCli, cliArgs, {
     env: scanEnv,
     listeners: {
       stdout: (data: Buffer) => {
