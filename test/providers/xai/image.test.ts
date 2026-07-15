@@ -1,10 +1,34 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
+import { storeBlob } from '../../../src/blobs/index';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
+import {
+  fetchWithProxy,
+  getFetchTlsOptions,
+  getProxyUrlForTarget,
+} from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+vi.mock('../../../src/blobs/extractor', () => ({
+  isBlobStorageEnabled: vi.fn(),
+}));
+vi.mock('../../../src/blobs/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/blobs/index')>()),
+  storeBlob: vi.fn(),
+}));
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
+  getFetchTlsOptions: vi.fn(),
+  getProxyUrlForTarget: vi.fn(),
+}));
 vi.mock('../../../src/providers/openai/image', async () => {
   const actual = await vi.importActual('../../../src/providers/openai/image');
   return {
@@ -13,7 +37,10 @@ vi.mock('../../../src/providers/openai/image', async () => {
   };
 });
 
+const lookupMock = lookup as unknown as Mock;
+
 describe('XAI Image Provider', () => {
+  const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
@@ -58,7 +85,32 @@ describe('XAI Image Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.clearAllMocks();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+    vi.mocked(getFetchTlsOptions).mockResolvedValue({});
+    vi.mocked(getProxyUrlForTarget).mockReturnValue('');
+    vi.mocked(fetchWithProxy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+      arrayBuffer: async () => new ArrayBuffer(1024),
+    } as Response);
+    let blobIndex = 0;
+    vi.mocked(storeBlob).mockImplementation(async (_buffer, mimeType) => {
+      blobIndex += 1;
+      return {
+        ref: {
+          uri: blobUri(blobIndex),
+          hash: blobIndex.toString(16).padStart(32, '0'),
+          mimeType,
+          sizeBytes: 1024,
+          provider: 'filesystem',
+        },
+        deduplicated: false,
+      };
+    });
   });
 
   afterEach(() => {
@@ -370,9 +422,9 @@ describe('XAI Image Provider', () => {
         getRequestTimeoutMs(),
       );
 
-      expect(result).toEqual({
-        output: '![Generate a cat](https://example.com/image.jpg)',
-        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
+      expect(result).toMatchObject({
+        output: `![Generate a cat](${blobUri(1)})`,
+        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/jpeg' }],
         cached: false,
         cost: 0.07, // xAI pricing: $0.07 per generated image
       });
@@ -387,9 +439,9 @@ describe('XAI Image Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image.jpg)',
-        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
+      expect(result).toMatchObject({
+        output: `![test prompt](${blobUri(1)})`,
+        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/jpeg' }],
         cached: true,
         cost: 0,
       });
@@ -414,11 +466,11 @@ describe('XAI Image Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image-1.jpg)',
+      expect(result).toMatchObject({
+        output: `![test prompt](${blobUri(1)})`,
         images: [
-          { data: 'https://example.com/image-1.jpg', mimeType: 'image/jpeg' },
-          { data: 'https://example.com/image-2.jpg', mimeType: 'image/jpeg' },
+          { blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/jpeg' },
+          { blobRef: expect.objectContaining({ uri: blobUri(2) }), mimeType: 'image/jpeg' },
         ],
         cached: false,
         cost: 0.14,
@@ -649,6 +701,7 @@ describe('XAI Image Provider', () => {
     });
 
     it('should handle missing base64 data in response', async () => {
+      const deleteFromCache = vi.fn();
       const provider = new XAIImageProvider('grok-2-image', {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
@@ -658,12 +711,14 @@ describe('XAI Image Provider', () => {
         cached: false,
         status: 200,
         statusText: 'OK',
+        deleteFromCache,
       });
 
       const result = await provider.callApi('test prompt');
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No base64 image data found in response');
+      expect(deleteFromCache).toHaveBeenCalledWith();
     });
 
     it('should handle custom response format', async () => {
