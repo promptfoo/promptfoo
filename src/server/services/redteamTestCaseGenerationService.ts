@@ -39,6 +39,12 @@ async function getRemoteGenerationError(task: string, response: Response): Promi
   return tokenUsage ? Object.assign(error, { tokenUsage }) : error;
 }
 
+function getRemoteValidationError(message: string, usage: unknown): Error {
+  const error = new Error(message);
+  const tokenUsage = getRemoteTokenUsage(usage);
+  return tokenUsage ? Object.assign(error, { tokenUsage }) : error;
+}
+
 export class RemoteGenerationDisabledError extends Error {
   constructor() {
     super('Remote generation is disabled. Enable remote generation to test multi-turn strategies.');
@@ -308,7 +314,10 @@ async function handleGoatStrategy(ctx: MultiTurnHandlerContext): Promise<MultiTu
   const nextQuestion = attackerMessage?.content;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('GOAT task did not return a valid next question');
+    throw getRemoteValidationError(
+      'GOAT task did not return a valid next question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -368,7 +377,10 @@ async function handleMischievousUserStrategy(
         : '';
 
   if (!nextMessage) {
-    throw new Error('Mischievous User task did not return a valid message');
+    throw getRemoteValidationError(
+      'Mischievous User task did not return a valid message',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextMessage.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -505,7 +517,10 @@ async function handleHydraLikeStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new Error(`${options.strategyName} task did not return a valid next prompt`);
+    throw getRemoteValidationError(
+      `${options.strategyName} task did not return a valid next prompt`,
+      data?.tokenUsage,
+    );
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -595,7 +610,10 @@ async function handleCrescendoLikeStrategy(
   const nextQuestion = parsedResult?.generatedQuestion;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('Crescendo task did not return a valid generated question');
+    throw getRemoteValidationError(
+      'Crescendo task did not return a valid generated question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || roundNumber >= ctx.resolvedMaxTurns;

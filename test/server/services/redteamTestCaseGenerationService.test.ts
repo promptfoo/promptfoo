@@ -147,6 +147,21 @@ describe('redteamTestCaseGenerationService', () => {
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      'goat',
+      'mischievous-user',
+      'crescendo',
+      'custom',
+      'jailbreak:hydra',
+      'jailbreak:goblin',
+    ] as const)('preserves usage from a malformed successful %s generation response', async (strategyId) => {
+      const tokenUsage = { total: 19, prompt: 12, completion: 7, numRequests: 1 };
+      const fetchWithRetries = mockRemoteGeneration({ message: {}, result: {}, tokenUsage });
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({ tokenUsage });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
     it('should ignore malformed remote generation token usage', async () => {
       mockRemoteGeneration({
         message: { content: 'test prompt' },
