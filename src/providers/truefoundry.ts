@@ -56,9 +56,20 @@ function getString(value: unknown): string | undefined {
 
 function hasGuardrailCheck(value: unknown): boolean {
   if (Array.isArray(value)) {
-    return value.length > 0;
+    return value.some(hasGuardrailCheck);
   }
   if (isJsonRecord(value)) {
+    const result = getString(value.result)?.toLowerCase();
+    if (result === 'passed') {
+      return false;
+    }
+    if (result === 'failed') {
+      return true;
+    }
+    const verdict = isJsonRecord(value.data) ? value.data.verdict : value.verdict;
+    if (typeof verdict === 'boolean') {
+      return !verdict;
+    }
     return Object.keys(value).length > 0;
   }
   return Boolean(value);

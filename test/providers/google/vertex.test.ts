@@ -276,6 +276,20 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
+  it('should initialize request usage for a legacy cached response without token usage', async () => {
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ cached: true, output: 'legacy cached response text' }),
+    );
+
+    const response = await provider.callGeminiApi('test prompt');
+
+    expect(response).toEqual({
+      cached: true,
+      output: 'legacy cached response text',
+      tokenUsage: { numRequests: 0 },
+    });
+  });
+
   it('should handle API call errors', async () => {
     const mockError = new Error('something went wrong');
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({

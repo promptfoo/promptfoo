@@ -489,6 +489,37 @@ describe('TrueFoundry', () => {
         expect(result.guardrails).toMatchObject({ flaggedInput: true, flaggedOutput: false });
       });
 
+      it('should ignore passed input guardrails when an output guardrail fails', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: { type: 'guardrail_checks_failed' },
+              message: 'Output Guardrail checks failed',
+              guardrail_checks: {
+                input_guardrails: [
+                  {
+                    guardrail_integration: 'demo/input',
+                    result: 'passed',
+                    data: { verdict: true },
+                  },
+                ],
+                output_guardrails: [
+                  {
+                    guardrail_integration: 'demo/output',
+                    data: { verdict: false },
+                  },
+                ],
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: false, flaggedOutput: true });
+      });
+
       it('should prefer the structured Azure prompt parameter over ambiguous error text', async () => {
         mockedFetchWithRetries.mockResolvedValueOnce(
           new Response(

@@ -632,6 +632,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
           tokenUsage.numRequests = 0;
+        } else {
+          parsedCachedResponse.tokenUsage = { numRequests: 0 };
         }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
