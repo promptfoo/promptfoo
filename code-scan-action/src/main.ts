@@ -372,7 +372,7 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 //   confirms) that it ignores the per-project .npmrc, but the workspace holds the
 //   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
 //   strict-ssl, ignore-scripts…) may ever be in scope
-async function installPromptfooCli(promptfooVersion: string): Promise<string> {
+async function installPromptfooCli(promptfooVersion: string, npmrcDir: string): Promise<string> {
   const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
 
   // npm reads its registry (and other config) from both env vars and user/global
@@ -394,7 +394,6 @@ async function installPromptfooCli(promptfooVersion: string): Promise<string> {
       delete env[key];
     }
   }
-  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
   const emptyUserConfig = path.join(npmrcDir, 'user');
   const emptyGlobalConfig = path.join(npmrcDir, 'global');
   const installPrefix = path.join(npmrcDir, 'prefix');
@@ -428,45 +427,52 @@ async function runPromptfooScan(
   oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
-  const promptfooCli = await installPromptfooCli(promptfooVersion);
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
 
-  core.info('🚀 Running promptfoo code-scans run...');
+  try {
+    const promptfooCli = await installPromptfooCli(promptfooVersion, npmrcDir);
 
-  let scanOutput = '';
-  let scanError = '';
-  const scanEnv = createScanEnv(oidcToken);
+    core.info('🚀 Running promptfoo code-scans run...');
 
-  const exitCode = await exec.exec(promptfooCli, cliArgs, {
-    env: scanEnv,
-    listeners: {
-      stdout: (data: Buffer) => {
-        scanOutput += data.toString();
+    let scanOutput = '';
+    let scanError = '';
+    const scanEnv = createScanEnv(oidcToken);
+
+    const exitCode = await exec.exec(promptfooCli, cliArgs, {
+      env: scanEnv,
+      listeners: {
+        stdout: (data: Buffer) => {
+          scanOutput += data.toString();
+        },
+        stderr: (data: Buffer) => {
+          scanError += data.toString();
+        },
       },
-      stderr: (data: Buffer) => {
-        scanError += data.toString();
-      },
-    },
-    ignoreReturnCode: true,
-  });
+      ignoreReturnCode: true,
+    });
 
-  if (exitCode === 0) {
-    core.info('✅ Scan completed successfully');
-    return parseScanOutput(scanOutput);
+    if (exitCode === 0) {
+      core.info('✅ Scan completed successfully');
+      return parseScanOutput(scanOutput);
+    }
+
+    // Keep compatibility with CLI releases that reported an authorized fork skip as text
+    // while the action and CLI roll out independently.
+    if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+      return {
+        success: true,
+        comments: [],
+        skipReason: FORK_PR_AUTH_SKIP_REASON,
+      };
+    }
+
+    core.error(`CLI exited with code ${exitCode}`);
+    core.error(`Error output: ${scanError}`);
+    throw new Error(`Code scan failed with exit code ${exitCode}`);
+  } finally {
+    fs.rmSync(npmrcDir, { recursive: true, force: true });
   }
-
-  // Keep compatibility with CLI releases that reported an authorized fork skip as text
-  // while the action and CLI roll out independently.
-  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
-    return {
-      success: true,
-      comments: [],
-      skipReason: FORK_PR_AUTH_SKIP_REASON,
-    };
-  }
-
-  core.error(`CLI exited with code ${exitCode}`);
-  core.error(`Error output: ${scanError}`);
-  throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
 function getScanResponse(

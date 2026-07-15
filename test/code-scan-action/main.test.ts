@@ -107,6 +107,7 @@ const mocks = vi.hoisted(() => {
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     mkdtempSync: vi.fn(),
+    rmSync: vi.fn(),
     realpathSync: vi.fn(),
     lstatSync: vi.fn(),
   };
@@ -143,6 +144,7 @@ vi.mock('fs', async () => {
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
     mkdtempSync: mocks.fs.mkdtempSync,
+    rmSync: mocks.fs.rmSync,
     realpathSync: mocks.fs.realpathSync,
     lstatSync: mocks.fs.lstatSync,
     // Strip O_NOFOLLOW so writeSarifFile takes the writeFileSync fallback path that the
@@ -526,6 +528,36 @@ describe('code-scan-action main', () => {
       const { args } = await importActionAndGetNpmInstallCall();
 
       expect(args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
+    });
+
+    it('cleans up the temporary CLI install after a successful scan', async () => {
+      await importActionAndGetPromptfooCall();
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.rmSync).toHaveBeenCalledWith(MOCK_NPMRC_DIR, {
+          recursive: true,
+          force: true,
+        });
+      });
+    });
+
+    it('cleans up the temporary CLI install when npm install fails', async () => {
+      mocks.exec.exec.mockImplementation(async (command: string) => {
+        if (command === 'npm') {
+          throw new Error('npm install failed');
+        }
+        return 0;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('npm install failed');
+        expect(mocks.fs.rmSync).toHaveBeenCalledWith(MOCK_NPMRC_DIR, {
+          recursive: true,
+          force: true,
+        });
+      });
     });
 
     it('installs an exact promptfoo-version input override', async () => {
