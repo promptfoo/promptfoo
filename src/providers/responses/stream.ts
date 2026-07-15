@@ -304,11 +304,14 @@ function mergeFinalizedStreamOutput(
     if (matchingRefusals.length === 0) {
       continue;
     }
-    const refusalContent = matchingRefusals.flatMap(({ item }) =>
-      Array.isArray(item.content)
+    const refusalContent = matchingRefusals.flatMap(({ item }) => [
+      ...(Array.isArray(item.content)
         ? item.content.filter((content: any) => content?.type === 'refusal')
-        : [],
-    );
+        : []),
+      ...(typeof item.refusal === 'string' && item.refusal.length > 0
+        ? [{ type: 'refusal', refusal: item.refusal }]
+        : []),
+    ]);
     entry.item = {
       ...entry.item,
       refusal: undefined,
@@ -517,6 +520,7 @@ export async function readResponsesStream(
   const decoder = new TextDecoder();
   let buffer = '';
   let latestResponse: any;
+  let latestResponseEventType: string | undefined;
   let outputText = '';
   const outputTextByContent = new Map<string, string>();
   let currentOutputTextKey: string | undefined;
@@ -762,14 +766,19 @@ export async function readResponsesStream(
       );
     }
 
-    if (event.type === 'response.output_item.added') {
+    if (
+      event.type === 'response.output_item.added' ||
+      (event.type === 'response.content_part.added' && event.part?.type === 'output_text')
+    ) {
       finalizedUnindexedOutputText = false;
     }
 
     if (event.response && typeof event.response === 'object') {
       latestResponse = boundedResponse(event.response);
+      latestResponseEventType = event.type;
     } else if (Array.isArray(event.output)) {
       latestResponse = boundedResponse(event);
+      latestResponseEventType = event.type;
     }
 
     let finalizedRefusalItem = getOutputRefusalItem(event);
@@ -890,7 +899,9 @@ export async function readResponsesStream(
     reader.releaseLock();
   }
 
-  const useFinalizedItems = latestResponse?.status !== 'completed';
+  const isCompletedResponse =
+    latestResponseEventType === 'response.completed' || latestResponse?.status === 'completed';
+  const useFinalizedItems = !isCompletedResponse;
   const finalizedOutputTextByContent = new Map(
     Array.from(outputTextByContent).filter(([key]) => finalizedOutputTextKeys.has(key)),
   );
@@ -1012,7 +1023,7 @@ export async function readResponsesStream(
       terminalTextCounts.set(text, (terminalTextCounts.get(text) ?? 0) + 1);
     }
     for (const [key, text] of invalidlyIndexedOutputTextByContent) {
-      if (finalizedInvalidOutputTextKeys.has(key) || latestResponse.status === 'completed') {
+      if (finalizedInvalidOutputTextKeys.has(key) || isCompletedResponse) {
         continue;
       }
       const remainingMatches = terminalTextCounts.get(text) ?? 0;
@@ -1042,11 +1053,11 @@ export async function readResponsesStream(
           (content: any) =>
             content?.type === 'output_text' &&
             typeof content.text === 'string' &&
-            (content.text.length > 0 || latestResponse.status === 'completed'),
+            (content.text.length > 0 || isCompletedResponse),
         ),
     );
 
-  if (latestResponse && latestResponse.status !== 'completed' && outputText && !hasOutputText) {
+  if (latestResponse && !isCompletedResponse && outputText && !hasOutputText) {
     return boundedResponse({
       ...latestResponse,
       output: [

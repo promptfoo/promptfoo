@@ -1392,6 +1392,33 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
+    it('accepts a new unindexed content part after output text is finalized', async () => {
+      const body = [
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","text":"FIRST"}',
+        '',
+        'event: response.content_part.added',
+        'data: {"type":"response.content_part.added","part":{"type":"output_text","text":""}}',
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","delta":"SECOND"}',
+        '',
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","text":"SECOND"}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'FIRST' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'SECOND' }] },
+      ]);
+    });
+
     it.each([
       false,
       true,
@@ -1699,6 +1726,40 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.output).toEqual([
         expect.objectContaining({ type: 'message', refusal: 'I cannot help with that.' }),
+      ]);
+      expect(processed.isRefusal).toBe(true);
+    });
+
+    it('preserves a finalized top-level refusal when merging an incomplete terminal message', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","refusal":"I cannot help with that."}}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECRET OR UNSAFE TERMINAL DRAFT"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls: vi.fn() } as any,
+        costCalculator: vi.fn(),
+      });
+      const processed = await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          type: 'message',
+          content: [
+            expect.objectContaining({
+              type: 'output_text',
+              text: 'SECRET OR UNSAFE TERMINAL DRAFT',
+            }),
+            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
+          ],
+        }),
       ]);
       expect(processed.isRefusal).toBe(true);
     });
@@ -2240,6 +2301,36 @@ describe('bedrock openaiResponses helper', () => {
         '',
         'event: response.completed',
         'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Action was not approved."}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const processor = new ResponsesProcessor({
+        modelName: 'test',
+        providerType: 'openai',
+        functionCallbackHandler: { processCalls } as any,
+        costCalculator: vi.fn(),
+      });
+
+      await processor.processResponseOutput(result, {}, false);
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          type: 'message',
+          content: [expect.objectContaining({ text: 'Action was not approved.' })],
+        }),
+      ]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it('does not restore a finalized tool call when a completed response omits status', async () => {
+      const body = [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Action was not approved."}]}]}}',
         '',
       ].join('\n');
 
