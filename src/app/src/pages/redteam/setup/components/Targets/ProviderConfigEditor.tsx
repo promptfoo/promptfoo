@@ -292,9 +292,6 @@ function ProviderConfigEditor({
           'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
         );
       }
-      if (customConfigError) {
-        errors.push(customConfigError);
-      }
       if (providerType === 'a2a') {
         if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {
           errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
@@ -333,6 +330,10 @@ function ProviderConfigEditor({
           errors.push(a2aAdvancedConfigError);
         }
       }
+    }
+
+    if (customConfigError) {
+      errors.push(customConfigError);
     }
 
     if (extensionErrors) {
@@ -465,8 +466,9 @@ function ProviderConfigEditor({
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={setCustomConfigError}
         />
       )}
 
@@ -479,8 +481,9 @@ function ProviderConfigEditor({
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={setCustomConfigError}
         />
       )}
 
@@ -493,8 +496,9 @@ function ProviderConfigEditor({
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={setCustomConfigError}
         />
       )}
 
@@ -514,8 +518,9 @@ function ProviderConfigEditor({
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={setCustomConfigError}
         />
       )}
 
