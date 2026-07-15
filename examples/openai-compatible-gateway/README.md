@@ -17,11 +17,19 @@ This example uses [DaoXE](https://daoxe.com) (`https://daoxe.com/v1`). Any OpenA
 
 3. Set `your-account-model-id` in `promptfooconfig.yaml` to an exact model ID available to your account (`GET /v1/models` or the dashboard).
 
-4. Run:
+4. Initialize and run the example:
 
    ```bash
+   npx promptfoo@latest init --example openai-compatible-gateway
+   cd openai-compatible-gateway
    npx promptfoo@latest eval
    ```
+
+## What this example covers
+
+- Using `openai:chat:<model>` against a custom OpenAI-compatible `apiBaseUrl`
+- Account-scoped model IDs (no static public catalog)
+- Optional `OPENAI_BASE_URL` environment variable
 
 ## Notes
 
@@ -29,3 +37,5 @@ This example uses [DaoXE](https://daoxe.com) (`https://daoxe.com/v1`). Any OpenA
 - Model IDs are account-scoped; do not rely on a static public list.
 - DaoXE is not available in mainland China.
 - Contributor disclosure: this example was contributed by a DaoXE affiliate.
+
+See also the [OpenAI provider documentation](https://www.promptfoo.dev/docs/providers/openai/) section on OpenAI-compatible multi-model gateways.
