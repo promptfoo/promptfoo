@@ -21,6 +21,7 @@ import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
   getPluginConfigurationError,
+  RemoteGenerationDisabledError,
 } from '../../../src/server/services/redteamTestCaseGenerationService';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
@@ -654,6 +655,52 @@ describe('Redteam Routes', () => {
           cached: 0,
           numRequests: 1,
         });
+      });
+
+      it('counts an unmetered failed multi-turn request', async () => {
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'harmful:hate',
+          action: vi
+            .fn()
+            .mockResolvedValue([
+              { vars: { query: 'generated prompt' }, metadata: { goal: 'goal' } },
+            ]),
+        });
+        mockedGenerateMultiTurnPrompt.mockRejectedValueOnce(new Error('multi-turn request failed'));
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body.tokenUsage).toMatchObject({ numRequests: 1 });
+      });
+
+      it('does not count a multi-turn request when remote generation is disabled', async () => {
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'harmful:hate',
+          action: vi
+            .fn()
+            .mockResolvedValue([
+              { vars: { query: 'generated prompt' }, metadata: { goal: 'goal' } },
+            ]),
+        });
+        mockedGenerateMultiTurnPrompt.mockRejectedValueOnce(new RemoteGenerationDisabledError());
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.tokenUsage?.numRequests ?? 0).toBe(0);
       });
 
       it('preserves validated usage carried by an unwrapped plugin error', async () => {

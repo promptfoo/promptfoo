@@ -216,6 +216,29 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBeNull();
   });
 
+  it.each([
+    new Error('network connection failed'),
+    Object.assign(new Error('goal extraction timed out'), { name: 'TimeoutError' }),
+  ])('should track a failed goal extraction request for %s', async (error) => {
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    const trackTokenUsage = vi.fn();
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      trackTokenUsage,
+    );
+
+    expect(result).toBeNull();
+    expect(trackTokenUsage).toHaveBeenCalledExactlyOnceWith({
+      tokenUsage: undefined,
+      cached: false,
+    });
+  });
+
   it('should handle empty prompt and purpose', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
