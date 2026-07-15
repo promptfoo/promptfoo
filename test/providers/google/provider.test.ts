@@ -716,6 +716,7 @@ describe('GoogleProvider', () => {
           }),
           cached: true,
           raw: responseData,
+          tokenUsage: { prompt: 10, completion: 0, total: 10, numRequests: 0 },
         }),
       );
     });

@@ -405,6 +405,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
           tokenUsage.numRequests = 0;
+        } else {
+          parsedCachedResponse.tokenUsage = { numRequests: 0 };
         }
         logger.debug('Returning cached Vertex Claude response', {
           model: this.modelName,
@@ -947,6 +949,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
           tokenUsage.numRequests = 0;
+        } else {
+          parsedCachedResponse.tokenUsage = { numRequests: 0 };
         }
         logger.debug('Returning cached Vertex Palm2 response', {
           model: this.modelName,

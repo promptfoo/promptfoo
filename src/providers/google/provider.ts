@@ -516,6 +516,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             total: datum.usageMetadata?.totalTokenCount || 0,
             prompt: datum.usageMetadata?.promptTokenCount || 0,
             completion: datum.usageMetadata?.candidatesTokenCount || 0,
+            numRequests: cached ? 0 : 1,
           };
 
           const guardrails: GuardrailResponse = {
@@ -562,6 +563,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             total: datum.usageMetadata?.totalTokenCount || 0,
             prompt: datum.usageMetadata?.promptTokenCount || 0,
             completion: datum.usageMetadata?.candidatesTokenCount || 0,
+            numRequests: cached ? 0 : 1,
           };
           const guardrails: GuardrailResponse = {
             flagged: true,

@@ -1916,6 +1916,21 @@ describe('VertexChatProvider.callPalm2Api', () => {
     vi.clearAllMocks();
   });
 
+  it('does not count a Palm2 cache hit as an upstream request when usage is absent', async () => {
+    const provider = new VertexChatProvider('chat-bison');
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ output: 'cached Palm2 response', cached: false }),
+    );
+
+    const result = await provider.callPalm2Api('test prompt');
+
+    expect(result).toEqual({
+      output: 'cached Palm2 response',
+      cached: true,
+      tokenUsage: { numRequests: 0 },
+    });
+  });
+
   it('hashes Palm2 request body cache keys without leaking prompts', async () => {
     const prompt = 'palm2-secret-prompt-value';
     const provider = new VertexChatProvider('chat-bison', {
