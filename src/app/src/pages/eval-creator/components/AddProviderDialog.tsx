@@ -73,6 +73,9 @@ export default function AddProviderDialog({
     // Only move to configure step if user has made an explicit selection
     // (not when ProviderTypeSelector auto-sets a default or we're using placeholder)
     if (newProvider.id && newProvider.id !== '' && newProvider.id !== '__selecting__') {
+      validateRef.current = null;
+      setError(null);
+      setShouldValidate(false);
       setProvider(newProvider);
       setProviderType(type);
       setStep('configure');

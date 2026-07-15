@@ -109,7 +109,7 @@ export default function RedTeamSetupPage() {
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
-  const { targetConfigError } = useRedTeamTargetConfigValidation();
+  const { targetConfigError, targetConfigRevision } = useRedTeamTargetConfigValidation();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -655,7 +655,11 @@ export default function RedTeamSetupPage() {
             )}
             {value === 1 && (
               <ErrorBoundary name="Target Configuration Page">
-                <TargetConfiguration onNext={handleNext} onBack={handleBack} />
+                <TargetConfiguration
+                  key={targetConfigRevision}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                />
               </ErrorBoundary>
             )}
             {value === 2 && (

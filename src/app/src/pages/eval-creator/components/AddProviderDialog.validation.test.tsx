@@ -11,7 +11,41 @@ vi.mock('@app/pages/redteam/setup/hooks/useRedTeamConfig', () => ({
 }));
 
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
-  default: () => <div>provider type selector</div>,
+  default: ({
+    setProvider,
+  }: {
+    setProvider: (provider: ProviderOptions, type: string) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        onClick={() =>
+          setProvider(
+            { id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } },
+            'openinterpreter',
+          )
+        }
+      >
+        Choose Open Interpreter
+      </button>
+      <button
+        type="button"
+        onClick={() => setProvider({ id: 'openai:gpt-4.1', config: {} }, 'openai')}
+      >
+        Choose OpenAI
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock('react-simple-code-editor', () => ({
+  default: ({ value, onValueChange }: any) => (
+    <textarea
+      data-testid="code-editor"
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    />
+  ),
 }));
 
 vi.mock('@app/pages/redteam/setup/components/Targets/HttpEndpointConfiguration', () => ({
@@ -46,6 +80,29 @@ const renderDialog = (url: string, body = '{{prompt}}') => {
 };
 
 describe('AddProviderDialog HTTP validation', () => {
+  it('re-enables Add Provider after backing out of malformed JSON and selecting a valid provider', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose Open Interpreter' }));
+    await user.clear(screen.getByTestId('code-editor'));
+    await user.type(screen.getByTestId('code-editor'), '{{"sandbox_mode":"read-only",}}');
+    expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+
+    const save = screen.getByRole('button', { name: 'Add Provider' });
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai:gpt-4.1' }));
+  });
+
   it.each([
     '{{ env.MODEL_ARMOR_URL }}',
     'https://modelarmor.{{ env.MODEL_ARMOR_LOCATION }}.rep.googleapis.com/v1',
