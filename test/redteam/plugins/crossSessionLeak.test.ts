@@ -193,6 +193,40 @@ describe('CrossSessionLeakPlugin', () => {
     }
   });
 
+  it.each([
+    { errorTokenUsage: undefined },
+    { errorTokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 } },
+  ])('tracks failed JSON-only generation requests', async ({ errorTokenUsage }) => {
+    const error = Object.assign(new Error('cross-session generation failed'), {
+      tokenUsage: errorTokenUsage,
+    });
+    const jsonOnlyProvider = createMockProvider();
+    vi.spyOn(jsonOnlyProvider, 'callApi').mockRejectedValue(error);
+    const getProviderSpy = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(jsonOnlyProvider);
+    const trackTokenUsage = vi.fn();
+
+    try {
+      const plugin = new CrossSessionLeakPlugin(
+        mockProvider,
+        'test-purpose',
+        'testVar',
+        {},
+        undefined,
+        trackTokenUsage,
+      );
+
+      await expect(plugin.generateTests(1, 0)).rejects.toBe(error);
+      expect(trackTokenUsage).toHaveBeenCalledExactlyOnceWith({
+        tokenUsage: errorTokenUsage,
+        cached: false,
+      });
+    } finally {
+      getProviderSpy.mockRestore();
+    }
+  });
+
   it('does not double count a JSON-only provider that is already tracked', async () => {
     const generationTokenUsage = {};
     vi.spyOn(mockProvider, 'callApi').mockResolvedValue({
