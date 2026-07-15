@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
+
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
@@ -27,19 +29,34 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () =
     provider,
     providerType,
     setProvider,
+    setError,
+    validateAll,
     onValidationRequest,
   }: {
     provider: { id: string; config: Record<string, unknown> };
     providerType?: string;
     setProvider: (provider: { id: string; config: Record<string, unknown> }) => void;
+    setError?: (error: string | null) => void;
+    validateAll?: boolean;
     onValidationRequest?: (validator: () => boolean) => void;
   }) => {
-    onValidationRequest?.(
-      () =>
-        providerType !== 'openinterpreter' ||
-        provider.id === 'openinterpreter' ||
-        provider.id.startsWith('openinterpreter:'),
-    );
+    const isValid =
+      providerType !== 'openinterpreter' ||
+      provider.id === 'openinterpreter' ||
+      provider.id.startsWith('openinterpreter:');
+    const validationError = isValid
+      ? null
+      : 'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"';
+
+    onValidationRequest?.(() => {
+      setError?.(validationError);
+      return isValid;
+    });
+    useEffect(() => {
+      if (validateAll) {
+        setError?.(validationError);
+      }
+    }, [setError, validateAll, validationError]);
     return (
       <div>
         provider config editor
@@ -48,6 +65,9 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () =
           onClick={() => setProvider({ ...provider, id: 'openai:chat:gpt-4o' })}
         >
           Set invalid Open Interpreter ID
+        </button>
+        <button type="button" onClick={() => setProvider({ ...provider, id: 'openinterpreter' })}>
+          Correct Open Interpreter ID
         </button>
       </div>
     );
@@ -189,5 +209,32 @@ describe('AddProviderDialog layout', () => {
 
     expect(onSave).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('re-enables Save Changes after an invalid Open Interpreter ID is corrected', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={{ id: 'openinterpreter', config: {} }}
+        />
+      </TooltipProvider>,
+    );
+
+    const save = screen.getByRole('button', { name: 'Save Changes' });
+    await user.click(screen.getByRole('button', { name: 'Set invalid Open Interpreter ID' }));
+    await user.click(save);
+    expect(save).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Correct Open Interpreter ID' }));
+
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: 'openinterpreter' }));
   });
 });

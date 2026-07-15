@@ -140,7 +140,8 @@ function containsTemplate(value: unknown): boolean {
   if (typeof value === 'string') {
     return (
       (value.includes('{{') && value.includes('}}')) ||
-      (value.includes('{%') && value.includes('%}'))
+      (value.includes('{%') && value.includes('%}')) ||
+      (value.includes('{#') && value.includes('#}'))
     );
   }
   if (Array.isArray(value)) {

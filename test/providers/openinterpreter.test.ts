@@ -551,6 +551,28 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it('renders Nunjucks comment templates in typed base-provider options', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        sandbox_mode: '{# choose readonly #}read-only',
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('comment config', {
+      vars: {},
+      prompt: { raw: 'comment config', label: 'comment template' },
+    } as any);
+    const { turnStart } = await startTurn(server);
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it('renders a nested base-provider approval template for each row', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const server = createMockAppServer();

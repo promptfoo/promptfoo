@@ -38,6 +38,7 @@ export default function AddProviderDialog({
     initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
+  const [shouldValidate, setShouldValidate] = useState(false);
   const validateRef = useRef<(() => boolean) | null>(null);
 
   const handleValidationRequest = useCallback((validator: () => boolean) => {
@@ -58,6 +59,7 @@ export default function AddProviderDialog({
         setStep('select');
       }
       setError(null);
+      setShouldValidate(false);
     }
   }, [open, initialProvider]);
 
@@ -72,6 +74,7 @@ export default function AddProviderDialog({
   };
 
   const handleSave = () => {
+    setShouldValidate(true);
     if (provider && (validateRef.current?.() ?? false)) {
       // Auto-generate label from ID if not provided
       const providerToSave = provider.label
@@ -148,7 +151,7 @@ export default function AddProviderDialog({
                   provider={provider as RedteamProviderOptions}
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
-                  validateAll={false}
+                  validateAll={shouldValidate}
                   onValidationRequest={handleValidationRequest}
                   providerType={providerType}
                   mode="eval"
