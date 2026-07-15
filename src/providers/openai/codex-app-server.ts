@@ -77,9 +77,14 @@ function redactAppServerText(value: string): string {
       REDACTED,
     )
     .replace(
-      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
-      (_match, key, separator, spacing, quote) =>
-        `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+      /\b(authorization|auth)(["']?)\s*([=:])(\s*)(["']?)(?:bearer|basic)\s+[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
+    )
+    .replace(
+      /\b(api[_-]?key|token|password|secret|authorization|auth)(["']?)\s*([=:])(\s*)(["']?)[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
     );
 }
 
@@ -2504,7 +2509,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     state.error = `codex app-server turn events exceeded ${MAX_BUFFERED_TURN_EVENT_CHARS} characters`;
-    state.completed.resolve();
+    this.handleConnectionClose(
+      state.connectionKey,
+      state.connectionInstanceId,
+      new Error(state.error),
+    );
     void state.connection.close();
     return false;
   }

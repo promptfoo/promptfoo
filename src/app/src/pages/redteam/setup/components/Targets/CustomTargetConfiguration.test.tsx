@@ -23,6 +23,35 @@ const render = (ui: React.ReactElement) => {
 };
 
 describe('CustomTargetConfiguration', () => {
+  it('shows valid Open Interpreter target and configuration examples', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config: {} }}
+        updateCustomTarget={vi.fn()}
+        rawConfigJson="{}"
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(screen.getByText('Open Interpreter Target')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Target ID/i)).toHaveAttribute('placeholder', 'openinterpreter');
+    expect(screen.getByRole('link', { name: 'documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/openinterpreter/',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Examples/i }));
+    const example = screen.getByText((_, element) => element?.tagName === 'PRE');
+    expect(example.textContent).toContain('"sandbox_mode": "read-only"');
+    expect(example.textContent).toContain('"turn_timeout_ms": 60000');
+    expect(example.textContent).not.toContain('temperature');
+    expect(example.textContent).not.toContain('max_tokens');
+  });
+
   describe('file:// prefix handling', () => {
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();

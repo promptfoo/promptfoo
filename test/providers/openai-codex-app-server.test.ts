@@ -4653,6 +4653,9 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({
       error: expect.stringContaining('codex app-server turn events exceeded'),
     });
+    if (reuseServer) {
+      expect((provider as any).connections.size).toBe(0);
+    }
   });
 
   it('sanitizes sensitive command metadata', async () => {
@@ -4724,6 +4727,26 @@ describe('OpenAICodexAppServerProvider', () => {
     const rawJson = result.raw as string;
     expect(rawJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
     expect(rawJson).toContain('[REDACTED]');
+  });
+
+  it.each([
+    'Authorization: bearer short-secret-token',
+    '{"Authorization":"bearer short-secret-token"}',
+    "{'authorization':'basic short-secret-token'}",
+  ])('redacts authorization credentials from app-server stderr failures: %s', async (stderr) => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider();
+
+    const resultPromise = provider.callApi('Crash during startup');
+    await waitForMessage(server, (message) => message.method === 'initialize');
+    server.stderr.write(`${stderr}\n`);
+    server.proc.exitCode = 1;
+    server.proc.emit('exit', 1, null);
+
+    const result = await resultPromise;
+    expect(result.error).toContain('[REDACTED]');
+    expect(result.error).not.toContain('short-secret-token');
   });
 
   it('detects skill calls using the resolved app-server process environment', async () => {

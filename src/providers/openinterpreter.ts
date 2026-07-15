@@ -4,6 +4,7 @@ import path from 'path';
 
 import { z } from 'zod';
 import cliState from '../cliState';
+import { renderVarsInObject } from '../util/render';
 import {
   CodexAppServerConfigSchema,
   OpenAICodexAppServerProvider,
@@ -20,6 +21,71 @@ import type {
 import type { CodexAppServerConfig } from './openai/codex-app-server';
 
 const MAX_INLINE_IMAGE_CHARS = 5_000_000;
+const FRAMEWORK_PROMPT_OPTION_KEYS = new Set([
+  'prefix',
+  'suffix',
+  'postprocess',
+  'transform',
+  'transformVars',
+  'storeOutputAs',
+  'rubricPrompt',
+  'provider',
+  'factuality',
+  'disableVarExpansion',
+  'disableConversationVar',
+  'disableDefaultAsserts',
+  'runSerially',
+  'repeat',
+]);
+const NUMERIC_PROMPT_OPTION_KEYS = new Set([
+  'thread_pool_size',
+  'request_timeout_ms',
+  'startup_timeout_ms',
+  'turn_timeout_ms',
+]);
+const BOOLEAN_PROMPT_OPTION_KEYS = new Set([
+  'skip_git_repo_check',
+  'network_access_enabled',
+  'persist_threads',
+  'ephemeral',
+  'persist_extended_history',
+  'experimental_raw_events',
+  'experimental_api',
+  'include_raw_events',
+  'inherit_process_env',
+  'reuse_server',
+  'deep_tracing',
+  'harness_guidance',
+]);
+const ENUM_PROMPT_OPTION_KEYS = new Set([
+  'service_tier',
+  'sandbox_mode',
+  'approval_policy',
+  'approvals_reviewer',
+  'model_reasoning_effort',
+  'reasoning_summary',
+  'personality',
+  'thread_cleanup',
+]);
+const TYPED_PROMPT_OPTION_KEYS = new Set([
+  ...NUMERIC_PROMPT_OPTION_KEYS,
+  ...BOOLEAN_PROMPT_OPTION_KEYS,
+  ...ENUM_PROMPT_OPTION_KEYS,
+]);
+const NESTED_TYPED_PROMPT_OPTION_KEYS = new Set([
+  'approval_policy',
+  'collaboration_mode',
+  'server_request_policy',
+]);
+const NESTED_BOOLEAN_PROMPT_OPTION_KEYS = new Set([
+  'sandbox_approval',
+  'rules',
+  'skill_approval',
+  'request_permissions',
+  'mcp_elicitations',
+  'strict_auto_review',
+  'success',
+]);
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -54,6 +120,47 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function containsTemplate(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return (
+      (value.includes('{{') && value.includes('}}')) ||
+      (value.includes('{%') && value.includes('%}'))
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsTemplate);
+  }
+  return isRecord(value) && Object.values(value).some(containsTemplate);
+}
+
+function coerceRenderedPromptOption(key: string, value: unknown, nestedTyped = false): unknown {
+  if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+  if (
+    (BOOLEAN_PROMPT_OPTION_KEYS.has(key) ||
+      (nestedTyped && NESTED_BOOLEAN_PROMPT_OPTION_KEYS.has(key))) &&
+    (value === 'true' || value === 'false')
+  ) {
+    return value === 'true';
+  }
+  if (Array.isArray(value) && nestedTyped) {
+    return value.map((entry) => coerceRenderedPromptOption(key, entry, true));
+  }
+  if (isRecord(value) && nestedTyped) {
+    return Object.fromEntries(
+      Object.entries(value).map(([nestedKey, nestedValue]) => [
+        nestedKey,
+        coerceRenderedPromptOption(nestedKey, nestedValue, true),
+      ]),
+    );
+  }
+  return value;
+}
+
 function parseOpenInterpreterConfig(
   config: OpenInterpreterConfig | undefined,
 ): OpenInterpreterConfig {
@@ -66,6 +173,57 @@ function parseOpenInterpreterConfig(
   }
 
   return parsed.data as OpenInterpreterConfig;
+}
+
+function parseOpenInterpreterPromptConfig(
+  config: unknown,
+  vars?: CallApiContextParams['vars'],
+  stripFrameworkOptions = true,
+): OpenInterpreterConfig {
+  if (!isRecord(config)) {
+    return parseOpenInterpreterConfig(config as OpenInterpreterConfig);
+  }
+
+  const renderableConfig = Object.fromEntries(
+    Object.entries(config).filter(
+      ([key]) => !stripFrameworkOptions || !FRAMEWORK_PROMPT_OPTION_KEYS.has(key),
+    ),
+  );
+  const providerConfig = Object.fromEntries(
+    Object.entries(renderVarsInObject(renderableConfig, vars)).map(([key, value]) => [
+      key,
+      coerceRenderedPromptOption(key, value, NESTED_TYPED_PROMPT_OPTION_KEYS.has(key)),
+    ]),
+  );
+
+  return parseOpenInterpreterConfig(providerConfig as OpenInterpreterConfig);
+}
+
+function parseInitialOpenInterpreterConfig(
+  config: OpenInterpreterConfig | undefined,
+): OpenInterpreterConfig {
+  if (!isRecord(config)) {
+    return parseOpenInterpreterConfig(config);
+  }
+
+  const initialConfig = Object.fromEntries(
+    Object.entries(config).filter(
+      ([key, value]) =>
+        !(
+          (TYPED_PROMPT_OPTION_KEYS.has(key) || NESTED_TYPED_PROMPT_OPTION_KEYS.has(key)) &&
+          containsTemplate(value)
+        ),
+    ),
+  );
+  if (containsTemplate(initialConfig.interpreter_home)) {
+    delete initialConfig.interpreter_home;
+  }
+  if (isRecord(initialConfig.cli_env) && containsTemplate(initialConfig.cli_env.INTERPRETER_HOME)) {
+    const cliEnv = { ...initialConfig.cli_env };
+    delete cliEnv.INTERPRETER_HOME;
+    initialConfig.cli_env = cliEnv;
+  }
+  return parseOpenInterpreterConfig(initialConfig as OpenInterpreterConfig);
 }
 
 function validateThreadPersistence(config: OpenInterpreterConfig): void {
@@ -288,12 +446,13 @@ export class OpenInterpreterProvider implements ApiProvider {
   private readonly interpreterHome: string;
 
   constructor(options: OpenInterpreterProviderOptions = {}) {
-    this.config = parseOpenInterpreterConfig(options.config);
-    validateThreadPersistence(this.config);
+    const initialConfig = parseInitialOpenInterpreterConfig(options.config);
+    this.config = { ...initialConfig, ...(options.config ?? {}) };
+    validateThreadPersistence(initialConfig);
     this.env = options.env;
     this.providerId = options.id ?? 'openinterpreter';
 
-    const configuredHome = resolveInterpreterHome(this.config);
+    const configuredHome = resolveInterpreterHome(initialConfig);
     if (configuredHome) {
       this.interpreterHome = configuredHome;
     } else {
@@ -306,7 +465,7 @@ export class OpenInterpreterProvider implements ApiProvider {
     try {
       this.delegate = new OpenAICodexAppServerProvider({
         id: this.providerId,
-        config: toCodexAppServerConfig(this.config, this.interpreterHome),
+        config: toCodexAppServerConfig(initialConfig, this.interpreterHome),
         env: this.env,
       });
     } catch (error) {
@@ -347,14 +506,21 @@ export class OpenInterpreterProvider implements ApiProvider {
     let temporaryWorkspace: string | undefined;
     try {
       const promptConfig = context?.prompt?.config
-        ? parseOpenInterpreterConfig(context.prompt.config as OpenInterpreterConfig)
+        ? parseOpenInterpreterPromptConfig(context.prompt.config, context?.vars)
         : undefined;
-      const effectiveConfig: OpenInterpreterConfig = {
-        ...this.config,
+      const renderableBaseConfig = { ...this.config };
+      delete renderableBaseConfig.provider;
+      const renderedBaseConfig = parseOpenInterpreterPromptConfig(
+        renderableBaseConfig,
+        context?.vars,
+        false,
+      );
+      const effectiveConfig = {
+        ...renderedBaseConfig,
         ...(promptConfig ?? {}),
-        cli_config: mergeRecords(this.config.cli_config, promptConfig?.cli_config),
-        cli_env: { ...(this.config.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
-      };
+        cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
+        cli_env: { ...(renderedBaseConfig.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
+      } as OpenInterpreterConfig;
       validateThreadPersistence(effectiveConfig);
 
       if (!effectiveConfig.working_dir) {
@@ -375,6 +541,9 @@ export class OpenInterpreterProvider implements ApiProvider {
       );
       const mappedContext: CallApiContextParams = {
         ...(context ?? { vars: {}, prompt: { raw: prompt, label: 'Open Interpreter' } }),
+        // The config above is already rendered and validated. Prevent the delegate
+        // from evaluating literal template syntax returned by a row variable.
+        vars: undefined as unknown as CallApiContextParams['vars'],
         prompt: {
           ...(context?.prompt ?? { raw: prompt, label: 'Open Interpreter' }),
           config: mappedConfig,
