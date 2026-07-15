@@ -729,11 +729,24 @@ export async function materializeInputValueWithMetadata(
     const response = await context.provider.callApi(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
     );
-    context.trackTokenUsage?.({
-      tokenUsage: response.tokenUsage,
-      cached: Boolean(response.cached),
-    });
     output = response.output;
+    let tokenUsage: unknown;
+    let cached = false;
+    try {
+      tokenUsage = response.tokenUsage;
+    } catch {
+      tokenUsage = undefined;
+    }
+    try {
+      cached = Boolean(response.cached);
+    } catch {
+      cached = false;
+    }
+    try {
+      context.trackTokenUsage?.({ tokenUsage, cached });
+    } catch (error) {
+      logger.debug('[inputVariables] Failed to track DOCX wrapper token usage', { error });
+    }
   } catch (error) {
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,
