@@ -55,12 +55,21 @@ function ProviderConfigEditor({
   onSessionTested,
   mode = 'redteam',
 }: ProviderConfigEditorProps) {
-  const { config, updateConfig, targetConfigError, setTargetConfigError } = useRedTeamConfig();
+  const {
+    config,
+    updateConfig,
+    targetConfigError,
+    setTargetConfigError,
+    targetConfigDraft,
+    setTargetConfigDraft,
+  } = useRedTeamConfig();
   const isRedTeam = mode === 'redteam';
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
-  const [rawConfigJson, setRawConfigJson] = useState<string>(
-    JSON.stringify(provider.config, null, 2),
+  const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
+    isRedTeam && targetConfigDraft !== null
+      ? targetConfigDraft
+      : JSON.stringify(provider.config, null, 2),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
@@ -74,6 +83,16 @@ function ProviderConfigEditor({
     setError?.(error);
     if (isRedTeam) {
       setTargetConfigError?.(error);
+      if (!error) {
+        setTargetConfigDraft?.(null);
+      }
+    }
+  };
+
+  const handleCustomRawConfigJsonChange = (value: string) => {
+    setRawConfigJson(value);
+    if (isRedTeam) {
+      setTargetConfigDraft?.(value);
     }
   };
 
@@ -85,10 +104,18 @@ function ProviderConfigEditor({
       setError?.(null);
       if (isRedTeam) {
         setTargetConfigError?.(null);
+        setTargetConfigDraft?.(null);
       }
       setBodyError(null);
     }
-  }, [isRedTeam, provider.config, providerType, setError, setTargetConfigError]);
+  }, [
+    isRedTeam,
+    provider.config,
+    providerType,
+    setError,
+    setTargetConfigDraft,
+    setTargetConfigError,
+  ]);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     if (type === 'http' && containsNunjucksTemplate(url)) {
@@ -405,7 +432,7 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
@@ -488,7 +515,7 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
@@ -503,7 +530,7 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
@@ -518,7 +545,7 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
@@ -540,7 +567,7 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}

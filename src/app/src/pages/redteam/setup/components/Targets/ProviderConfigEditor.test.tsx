@@ -22,15 +22,20 @@ vi.mock('./CustomTargetConfiguration', () => ({
   default: ({
     onConfigErrorChange,
     rawConfigJson,
+    setRawConfigJson,
   }: {
     onConfigErrorChange?: (error: string | null) => void;
     rawConfigJson?: string;
+    setRawConfigJson?: (value: string) => void;
   }) => (
     <div data-testid="custom-config">
       <pre data-testid="custom-raw-config">{rawConfigJson}</pre>
       <button
         data-testid="invalidate-custom-config"
-        onClick={() => onConfigErrorChange?.('Invalid JSON configuration')}
+        onClick={() => {
+          setRawConfigJson?.('{"sandbox_mode":"read-only",}');
+          onConfigErrorChange?.('Invalid JSON configuration');
+        }}
       >
         Invalidate custom config
       </button>
@@ -93,6 +98,7 @@ describe('ProviderConfigEditor', () => {
   beforeEach(() => {
     mockA2AConfigState.advancedConfigError = null;
     useRedTeamConfig.getState().setTargetConfigError(null);
+    useRedTeamConfig.getState().setTargetConfigDraft(null);
   });
 
   describe('validate method', () => {
@@ -965,6 +971,7 @@ describe('ProviderConfigEditor', () => {
 
     expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
     expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
   });
 
   it('does not persist malformed custom configuration from the eval creator', () => {
@@ -982,6 +989,7 @@ describe('ProviderConfigEditor', () => {
     });
 
     expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
   });
 
   it('clears propagated custom configuration errors when the provider type changes', () => {
@@ -1000,6 +1008,7 @@ describe('ProviderConfigEditor', () => {
     });
     expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
     expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
 
     rerender(
       <ProviderConfigEditor
@@ -1012,6 +1021,7 @@ describe('ProviderConfigEditor', () => {
 
     expect(setError).toHaveBeenLastCalledWith(null);
     expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
   });
 
   it.each([

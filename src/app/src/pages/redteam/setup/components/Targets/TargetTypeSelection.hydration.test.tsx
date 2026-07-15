@@ -45,6 +45,7 @@ describe('TargetTypeSelection hydration', () => {
         },
         providerType: undefined,
         targetConfigError: 'Invalid JSON configuration',
+        targetConfigDraft: '{"sandbox_mode":"read-only",}',
       });
     });
   });
@@ -63,6 +64,7 @@ describe('TargetTypeSelection hydration', () => {
       config: { sandbox_mode: 'danger-full-access' },
     });
     expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
   });
 
   it('clears the target error only when the user explicitly replaces the target', async () => {
@@ -83,5 +85,6 @@ describe('TargetTypeSelection hydration', () => {
       config: {},
     });
     expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
   });
 });

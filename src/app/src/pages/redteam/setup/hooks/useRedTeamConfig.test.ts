@@ -12,10 +12,13 @@ describe('useRedTeamConfig', () => {
     const config = useRedTeamConfig.getState().config;
 
     useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+    useRedTeamConfig.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
     expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
 
     useRedTeamConfig.getState().setFullConfig(config);
     expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
+    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
   });
 
   it('preserves a target configuration error when the provider type changes', () => {

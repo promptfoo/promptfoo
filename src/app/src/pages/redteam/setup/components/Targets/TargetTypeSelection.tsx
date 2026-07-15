@@ -17,8 +17,14 @@ interface TargetTypeSelectionProps {
 }
 
 export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
-  const { config, updateConfig, providerType, setProviderType, setTargetConfigError } =
-    useRedTeamConfig();
+  const {
+    config,
+    updateConfig,
+    providerType,
+    setProviderType,
+    setTargetConfigError,
+    setTargetConfigDraft,
+  } = useRedTeamConfig();
 
   // Use saved selections only when they have enough data to represent an actual target.
   // For custom providers, id is intentionally empty but providerType is set to 'custom'
@@ -58,6 +64,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     setProviderType(providerType);
     updateConfig('target', updatedProvider);
     setTargetConfigError?.(null);
+    setTargetConfigDraft?.(null);
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,

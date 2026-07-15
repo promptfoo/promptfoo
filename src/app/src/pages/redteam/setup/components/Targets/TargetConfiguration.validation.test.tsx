@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
     config: { sandbox_mode: 'danger-full-access' },
   },
   targetConfigError: null as string | null,
+  targetConfigDraft: null as string | null,
 }));
 const updateConfig = vi.hoisted(() =>
   vi.fn((section: string, value: typeof state.target) => {
@@ -25,6 +26,11 @@ const setTargetConfigError = vi.hoisted(() =>
     state.targetConfigError = error;
   }),
 );
+const setTargetConfigDraft = vi.hoisted(() =>
+  vi.fn((draft: string | null) => {
+    state.targetConfigDraft = draft;
+  }),
+);
 const onNext = vi.fn();
 
 vi.mock('../../hooks/useRedTeamConfig', () => ({
@@ -33,7 +39,9 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
     config: { target: state.target, extensions: [], prompts: [] },
     providerType: 'openinterpreter',
     targetConfigError: state.targetConfigError,
+    targetConfigDraft: state.targetConfigDraft,
     setTargetConfigError,
+    setTargetConfigDraft,
     updateConfig,
   }),
 }));
@@ -57,6 +65,9 @@ function Harness() {
       <button type="button" onClick={() => setShowConfig(false)}>
         Review tab
       </button>
+      <button type="button" onClick={() => setShowConfig(true)}>
+        Target tab
+      </button>
       {showConfig ? (
         <TargetConfiguration onNext={onNext} onBack={vi.fn()} />
       ) : (
@@ -77,6 +88,7 @@ describe('TargetConfiguration custom configuration validation', () => {
       config: { sandbox_mode: 'danger-full-access' },
     };
     state.targetConfigError = null;
+    state.targetConfigDraft = null;
   });
 
   it.each([
@@ -89,6 +101,7 @@ describe('TargetConfiguration custom configuration validation', () => {
 
     expect(screen.getAllByText(error).length).toBeGreaterThan(0);
     expect(setTargetConfigError).toHaveBeenLastCalledWith(error);
+    expect(state.targetConfigDraft).toBe(value);
     const footerNext = within(screen.getByTestId('page-navigation')).getByRole('button', {
       name: /Next/i,
     });
@@ -108,12 +121,14 @@ describe('TargetConfiguration custom configuration validation', () => {
       target: { value: '{"sandbox_mode":"read-only",}' },
     });
     expect(setTargetConfigError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(state.targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
 
     fireEvent.change(screen.getByTestId('code-editor'), {
       target: { value: '{"sandbox_mode":"read-only"}' },
     });
 
     expect(setTargetConfigError).toHaveBeenLastCalledWith(null);
+    expect(state.targetConfigDraft).toBeNull();
     const footerNext = within(screen.getByTestId('page-navigation')).getByRole('button', {
       name: /Next/i,
     });
@@ -121,5 +136,28 @@ describe('TargetConfiguration custom configuration validation', () => {
     fireEvent.click(footerNext);
     expect(onNext).toHaveBeenCalledTimes(1);
     expect(state.target.config).toEqual({ sandbox_mode: 'read-only' });
+  });
+
+  it('retains the malformed draft and validation guard after leaving and remounting the target tab', () => {
+    const malformedConfig = '{"sandbox_mode":"read-only",}';
+    render(<Harness />);
+
+    fireEvent.change(screen.getByTestId('code-editor'), { target: { value: malformedConfig } });
+    expect(state.target.config).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(state.targetConfigError).toBe('Invalid JSON configuration');
+    expect(state.targetConfigDraft).toBe(malformedConfig);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Target tab' }));
+
+    const remountedEditor = screen.getByTestId('code-editor');
+    expect(remountedEditor).toHaveValue(malformedConfig);
+
+    fireEvent.change(remountedEditor, { target: { value: `${malformedConfig} ` } });
+    expect(state.target.config).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(state.targetConfigError).toBe('Invalid JSON configuration');
+    expect(
+      within(screen.getByTestId('page-navigation')).getByRole('button', { name: /Next/i }),
+    ).toBeDisabled();
   });
 });
