@@ -60,6 +60,7 @@ export function trackGenerationResponseTokenUsage(
       completion: 0,
       numRequests: 0,
       prompt: 0,
+      total: cachedTotal,
     };
   }
 

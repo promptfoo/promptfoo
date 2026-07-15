@@ -205,8 +205,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         );
         return;
       } catch (error) {
-        trackGenerationErrorTokenUsage(generationTokenUsage, error, false);
-        if (error instanceof RemoteGenerationDisabledError) {
+        const isRemoteGenerationDisabled = error instanceof RemoteGenerationDisabledError;
+        trackGenerationErrorTokenUsage(generationTokenUsage, error, !isRemoteGenerationDisabled);
+        if (isRemoteGenerationDisabled) {
           res.status(400).json({
             error: error.message,
             tokenUsage: BaseTokenUsageSchema.parse(generationTokenUsage),

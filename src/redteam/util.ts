@@ -12,6 +12,7 @@ import {
   materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
+import { trackGenerationFetch } from './providers/generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -385,17 +386,19 @@ export async function extractGoalFromPrompt(
   }
 
   try {
-    const { data, status, statusText, cached } = await fetchWithCache<ExtractIntentResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(requestBody),
-      },
-      getRequestTimeoutMs(),
+    const { data, status, statusText } = await trackGenerationFetch(
+      () =>
+        fetchWithCache<ExtractIntentResponse>(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(requestBody),
+          },
+          getRequestTimeoutMs(),
+        ),
+      trackTokenUsage,
     );
-
-    trackTokenUsage?.({ tokenUsage: data?.tokenUsage, cached });
 
     logger.debug(
       `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,

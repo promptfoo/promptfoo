@@ -589,6 +589,43 @@ describe('synthesize', () => {
       }
     });
 
+    it('derives cached direct-remote token totals from prompt and completion usage', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { prompt: 11, completion: 7, numRequests: 1 },
+          cached: true,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'cached-remote-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'cached-remote-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          cached: 18,
+          completion: 0,
+          numRequests: 0,
+          prompt: 0,
+          total: 18,
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
     it('attaches accumulated generation usage when synthesis aborts after a local call', async () => {
       const abortController = new AbortController();
       const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
