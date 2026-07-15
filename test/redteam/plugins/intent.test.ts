@@ -94,6 +94,51 @@ describe('IntentPlugin', () => {
     expect(requestBody.targetId).toBe('cloud-target-123');
   });
 
+  it('reports extract-intent usage for scalar and multi-turn intents', async () => {
+    const trackTokenUsage = vi.fn();
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: {
+          intent: 'Access unauthorized customer data',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          intent: 'Escalate access across turns',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: true,
+      });
+
+    const plugin = new IntentPlugin(
+      mockProvider,
+      'test-purpose',
+      'prompt',
+      { intent: ['Read another customer record', ['Escalate access', 'Read the record']] },
+      'cloud-target-123',
+      trackTokenUsage,
+    );
+
+    const tests = await plugin.generateTests(2, 0);
+
+    expect(tests).toHaveLength(2);
+    expect(trackTokenUsage).toHaveBeenCalledTimes(2);
+    expect(trackTokenUsage).toHaveBeenNthCalledWith(1, {
+      tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+      cached: false,
+    });
+    expect(trackTokenUsage).toHaveBeenNthCalledWith(2, {
+      tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      cached: true,
+    });
+  });
+
   it('should initialize with an array of string intents', async () => {
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
       intent: ['intent1', 'intent2', 'intent3'],

@@ -11,6 +11,7 @@ import type {
   AssertionValue,
   AtomicTestCase,
   GradingResult,
+  PluginActionParams,
   PluginConfig,
   TestCase,
 } from '../../types/index';
@@ -29,8 +30,9 @@ export class IntentPlugin extends RedteamPluginBase {
     injectVar: string,
     config: PluginConfig,
     private readonly targetId?: string,
+    trackTokenUsage?: PluginActionParams['trackTokenUsage'],
   ) {
-    super(provider, purpose, injectVar, config);
+    super(provider, purpose, injectVar, config, targetId, trackTokenUsage);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
     const loadedIntents = maybeLoadFromExternalFile(config.intent) as (string | string[])[];
@@ -64,6 +66,7 @@ export class IntentPlugin extends RedteamPluginBase {
           this.id,
           undefined,
           this.targetId,
+          this.trackTokenUsage,
         );
 
         testCases.push({
@@ -85,6 +88,7 @@ export class IntentPlugin extends RedteamPluginBase {
           this.id,
           undefined,
           this.targetId,
+          this.trackTokenUsage,
         );
 
         testCases.push({
