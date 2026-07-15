@@ -146,6 +146,9 @@ describe('release-please automation', () => {
     ]);
 
     expect(attestJob.needs).toEqual(['build-code-scan-action-release']);
+    expect(attestJob.if).toBe(
+      "${{ always() && !cancelled() && needs.build-code-scan-action-release.result == 'success' }}",
+    );
     expect(attestJob.permissions).toEqual({
       contents: 'read',
       'id-token': 'write',

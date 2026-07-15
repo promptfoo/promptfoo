@@ -439,7 +439,7 @@ async function runPromptfooScan(
     let scanError = '';
     const scanEnv = createScanEnv(oidcToken);
 
-    const exitCode = await exec.exec(promptfooCli, cliArgs, {
+    const exitCode = await exec.exec(`"${promptfooCli.replaceAll('"', '\\"')}"`, cliArgs, {
       env: scanEnv,
       listeners: {
         stdout: (data: Buffer) => {

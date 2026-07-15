@@ -251,7 +251,7 @@ function setupMocks() {
       _args: string[] | undefined,
       options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
     ) => {
-      if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
+      if (command === `"${MOCK_PROMPTFOO_BIN}"` && options?.listeners?.stdout) {
         const response = JSON.stringify({
           success: true,
           comments: [],
@@ -295,7 +295,7 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
 
   const call = await vi.waitFor(() => {
     const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === MOCK_PROMPTFOO_BIN && Array.isArray(args),
+      ([command, args]) => command === `"${MOCK_PROMPTFOO_BIN}"` && Array.isArray(args),
     );
 
     if (!promptfooCall || !Array.isArray(promptfooCall[1])) {
@@ -347,7 +347,7 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
 
   const calls = await vi.waitFor(() => {
     const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === MOCK_PROMPTFOO_BIN && Array.isArray(args),
+      ([command, args]) => command === `"${MOCK_PROMPTFOO_BIN}"` && Array.isArray(args),
     );
     const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
@@ -671,6 +671,27 @@ describe('code-scan-action main', () => {
       expect(options?.cwd).toBe(runnerTemp);
     });
 
+    it('quotes the installed Promptfoo executable when RUNNER_TEMP contains spaces', async () => {
+      const runnerTemp = path.resolve('/runner/temp with spaces');
+      const npmrcDir = path.join(runnerTemp, 'promptfoo-npmrc-test');
+      const promptfooBin =
+        process.platform === 'win32'
+          ? path.join(npmrcDir, 'prefix', 'promptfoo.cmd')
+          : path.join(npmrcDir, 'prefix', 'bin', 'promptfoo');
+      mockProcessEnv({ RUNNER_TEMP: runnerTemp });
+      mocks.fs.mkdtempSync.mockReturnValue(npmrcDir);
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.exec.exec).toHaveBeenCalledWith(
+          `"${promptfooBin}"`,
+          expect.any(Array),
+          expect.objectContaining({ ignoreReturnCode: true }),
+        );
+      });
+    });
+
     it('falls back to os.tmpdir() for the install cwd when RUNNER_TEMP is unset', async () => {
       mockProcessEnv({ RUNNER_TEMP: undefined });
 
@@ -796,7 +817,7 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
+          if (command === `"${MOCK_PROMPTFOO_BIN}"` && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
                 JSON.stringify({
@@ -833,7 +854,7 @@ describe('code-scan-action main', () => {
             | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
             | undefined,
         ) => {
-          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stderr) {
+          if (command === `"${MOCK_PROMPTFOO_BIN}"` && options?.listeners?.stderr) {
             options.listeners.stderr(Buffer.from('Fork PR scanning not authorized'));
             return 1;
           }
@@ -879,7 +900,7 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
+          if (command === `"${MOCK_PROMPTFOO_BIN}"` && options?.listeners?.stdout) {
             options.listeners.stdout(Buffer.from(JSON.stringify(response)));
           }
           return 0;
@@ -947,7 +968,7 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === MOCK_PROMPTFOO_BIN && options?.listeners?.stdout) {
+          if (command === `"${MOCK_PROMPTFOO_BIN}"` && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
                 JSON.stringify({
@@ -1198,7 +1219,7 @@ describe('code-scan-action main', () => {
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
       expect(mocks.exec.exec).not.toHaveBeenCalledWith(
-        MOCK_PROMPTFOO_BIN,
+        `"${MOCK_PROMPTFOO_BIN}"`,
         expect.anything(),
         expect.anything(),
       );

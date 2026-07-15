@@ -319,6 +319,7 @@ jobs:
     # promptfoo/code-scan-action. Keep OIDC/attestation permissions isolated
     # from dependency installation and make successful attestation a hard gate
     # before any mirror branch or PR can be published.
+    if: ${{ always() && !cancelled() && needs.build-code-scan-action-release.result == 'success' }}
     needs: [build-code-scan-action-release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
