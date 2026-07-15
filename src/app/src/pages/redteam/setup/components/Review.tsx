@@ -567,6 +567,13 @@ export default function Review({
 
     const { hasRunningJob } = await checkForRunningJob();
 
+    const { config: latestConfig, targetConfigError: latestTargetConfigError } =
+      useRedTeamConfig.getState();
+    if (latestTargetConfigError) {
+      showToast(latestTargetConfigError, 'error');
+      return;
+    }
+
     if (hasRunningJob) {
       setIsJobStatusDialogOpen(true);
       return;
@@ -580,12 +587,15 @@ export default function Review({
 
     recordEvent('feature_used', {
       feature: 'redteam_config_run',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
+      numPlugins: latestConfig.plugins.length,
+      numStrategies: latestConfig.strategies.length,
+      targetType: latestConfig.target.id,
     });
 
-    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
+    if (
+      latestConfig.target.id === 'http' &&
+      latestConfig.target.config.url?.includes('promptfoo.app')
+    ) {
       // Track report export
       recordEvent('webui_action', {
         action: 'redteam_run_with_example',
@@ -596,9 +606,9 @@ export default function Review({
       type: 'redteam',
       step: 'webui_evaluation_started',
       source: 'webui',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
+      numPlugins: latestConfig.plugins.length,
+      numStrategies: latestConfig.strategies.length,
+      targetType: latestConfig.target.id,
     });
 
     setIsRunning(true);
@@ -612,11 +622,11 @@ export default function Review({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          config: getUnifiedConfig(config),
+          config: getUnifiedConfig(latestConfig),
           force: forceRegeneration,
-          verbose: config.target.config.verbose,
+          verbose: latestConfig.target.config.verbose,
           maxConcurrency,
-          delay: config.target.config.delay,
+          delay: latestConfig.target.config.delay,
         }),
       });
 
