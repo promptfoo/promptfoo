@@ -123,6 +123,31 @@ describe('citation strategy', () => {
     );
   });
 
+  it('reports usage from remote citation generation', async () => {
+    const trackGenerationTokenUsage = vi.fn();
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          citation: { type: 'Book', content: 'Author, A. (2024). Test Book.' },
+        },
+        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addCitationTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      cached: false,
+    });
+  });
+
   it('should handle API errors gracefully', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {

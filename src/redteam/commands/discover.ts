@@ -13,12 +13,13 @@ import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
-import { BaseTokenUsageSchema } from '../../types/shared';
+import { BaseTokenUsageSchema, type TokenUsage } from '../../types/shared';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
+import { trackGenerationResponseTokenUsage } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -74,6 +75,7 @@ export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
   error: z.string().optional(),
+  tokenUsage: BaseTokenUsageSchema.optional().catch(undefined),
 });
 
 export const ArgsSchema = z
@@ -249,6 +251,7 @@ export async function doTargetPurposeDiscovery(
     answers: [],
   });
   let turn = 0;
+  const discoveryTokenUsage: TokenUsage = {};
 
   try {
     while (!done && turn < MAX_TURN_COUNT) {
@@ -283,6 +286,10 @@ export async function doTargetPurposeDiscovery(
 
         const responseData = await response.json();
         const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
+        trackGenerationResponseTokenUsage(discoveryTokenUsage, {
+          tokenUsage: data.tokenUsage,
+          cached: false,
+        });
 
         logger.debug(
           `${LOG_PREFIX} Received response from remote server: ${JSON.stringify(data, null, 2)}`,
@@ -317,6 +324,10 @@ export async function doTargetPurposeDiscovery(
             vars: { sessionId },
             bustCache: true,
           });
+          trackGenerationResponseTokenUsage(discoveryTokenUsage, {
+            tokenUsage: targetResponse.tokenUsage,
+            cached: false,
+          });
 
           if (targetResponse.error) {
             const errorMessage = `Error from target: ${targetResponse.error}`;
@@ -348,7 +359,21 @@ export async function doTargetPurposeDiscovery(
       }
     }
 
-    return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
+    if (!discoveryResult) {
+      return undefined;
+    }
+
+    if (discoveryResult.tokenUsage) {
+      trackGenerationResponseTokenUsage(discoveryTokenUsage, {
+        tokenUsage: discoveryResult.tokenUsage,
+        cached: false,
+      });
+    }
+
+    return normalizeTargetPurposeDiscoveryResult({
+      ...discoveryResult,
+      ...(Object.keys(discoveryTokenUsage).length > 0 ? { tokenUsage: discoveryTokenUsage } : {}),
+    });
   } finally {
     pbar?.stop();
   }

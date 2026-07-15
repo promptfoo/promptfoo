@@ -40,7 +40,10 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
-import { trackGenerationTokenUsage } from './providers/generationTokenUsage';
+import {
+  trackGenerationResponseTokenUsage,
+  trackGenerationTokenUsage,
+} from './providers/generationTokenUsage';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -65,6 +68,7 @@ import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
 import type { Inputs, TokenUsage } from '../types/shared';
 import type {
   FailedPluginInfo,
+  PluginActionParams,
   Policy,
   RedteamGenerationContext,
   RedteamPluginObject,
@@ -601,6 +605,7 @@ async function applyStrategies(
   maxCharsPerMessage?: number,
   redteamGenerationContext?: RedteamGenerationContext,
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -681,6 +686,7 @@ async function applyStrategies(
         redteamProvider: cliState.config?.redteam?.provider,
         // Generation-time strategies that load a specialized local provider must remain in usage totals.
         __wrapGenerationProvider: wrapGenerationProvider,
+        __trackGenerationTokenUsage: trackTokenUsage,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
@@ -1083,6 +1089,9 @@ export async function synthesize({
     total: 0,
   };
   const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
+  const trackTokenUsage: PluginActionParams['trackTokenUsage'] = (response) => {
+    trackGenerationResponseTokenUsage(generationTokenUsage, response);
+  };
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1392,6 +1401,7 @@ export async function synthesize({
           delayMs: delay || 0,
           targetId: cloudTargetId,
           redteamGenerationContext,
+          trackTokenUsage,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
@@ -1694,6 +1704,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      trackTokenUsage,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1720,6 +1731,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      trackTokenUsage,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

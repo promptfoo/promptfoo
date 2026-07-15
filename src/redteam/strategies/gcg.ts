@@ -61,9 +61,10 @@ async function generateGcgPrompts(
       interface GCGGenerationResponse {
         error?: string;
         responses?: string[];
+        tokenUsage?: unknown;
       }
 
-      const { data, status, statusText } = await fetchWithCache<GCGGenerationResponse>(
+      const { data, status, statusText, cached } = await fetchWithCache<GCGGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -76,6 +77,7 @@ async function generateGcgPrompts(
         'json',
         true,
       );
+      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug('[GCG] Got generation result', {
         caseNumber,

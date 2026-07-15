@@ -94,6 +94,29 @@ describe('likert strategy', () => {
     expect(result[0]?.assert?.[0].metric).toBe('test-metric/Likert');
   });
 
+  it('reports usage from remote Likert generation', async () => {
+    const trackGenerationTokenUsage = vi.fn();
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        modifiedPrompts: ['modified prompt'],
+        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addLikertTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      cached: false,
+    });
+  });
+
   it('should handle API errors gracefully', async () => {
     const mockResponse = {
       data: {

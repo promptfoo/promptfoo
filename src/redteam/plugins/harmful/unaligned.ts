@@ -74,7 +74,7 @@ async function processPromptForInputs(
 }
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
+  { purpose, injectVar, n, delayMs = 0, config, targetId, trackTokenUsage }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
@@ -88,6 +88,7 @@ export async function getHarmfulTests(
 
   const generatePrompts = async (): Promise<string[]> => {
     const result = await unalignedProvider.callApi('');
+    trackTokenUsage?.({ tokenUsage: result.tokenUsage, cached: Boolean(result.cached) });
     if (result.output) {
       if (delayMs > 0) {
         await sleep(delayMs);

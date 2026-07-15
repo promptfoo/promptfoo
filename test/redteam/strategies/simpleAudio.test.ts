@@ -127,6 +127,33 @@ describe('audio strategy', () => {
   });
 
   describe('addAudioToBase64', () => {
+    it('reports usage from remote audio generation', async () => {
+      const trackGenerationTokenUsage = vi.fn();
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          audioBase64: 'bW9ja2VkLWF1ZGlv',
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await addAudioToBase64(
+        [{ vars: { prompt: 'test' } }] as TestCase[],
+        'prompt',
+        {
+          __trackGenerationTokenUsage: trackGenerationTokenUsage,
+        },
+      );
+
+      expect(result).toHaveLength(1);
+      expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        cached: false,
+      });
+    });
+
     it('should convert test cases with the specified variable', async () => {
       // Setup mock to return a predictable response
       mockFetchWithCache.mockResolvedValue({

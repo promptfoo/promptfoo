@@ -56,9 +56,10 @@ async function generateLikertPrompts(
       interface LikertGenerationResponse {
         error?: string;
         modifiedPrompts?: string[];
+        tokenUsage?: unknown;
       }
 
-      const { data } = await fetchWithCache<LikertGenerationResponse>(
+      const { data, cached } = await fetchWithCache<LikertGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -67,6 +68,7 @@ async function generateLikertPrompts(
         },
         getRequestTimeoutMs(),
       );
+      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug(
         `Got Likert jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(

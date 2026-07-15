@@ -797,6 +797,44 @@ Trailing model explanation.`;
       ]);
     });
 
+    it('does not reparse an accumulated JSON prefix for every interior blank line', () => {
+      const parseSpy = vi.spyOn(JSON, 'parse');
+      const interiorBlankLines = '\n'.repeat(32000);
+      const input = `Prompt:\n{${interiorBlankLines}\n  "query": "hello",\n  "context": "world"\n}\n\nTrailing model explanation.`;
+
+      try {
+        const result = parseGeneratedPrompts(input);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].__prompt).toContain('"query": "hello"');
+        expect(result[0].__prompt).toContain('"context": "world"');
+        expect(result[0].__prompt).not.toContain('Trailing model explanation');
+        expect(parseSpy.mock.calls.length).toBeLessThan(5);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('does not reparse a growing JSON prefix across alternating fields and blank lines', () => {
+      const parseSpy = vi.spyOn(JSON, 'parse');
+      const fields = Array.from({ length: 6000 }, (_, index) => `  "key${index}": ${index}`).join(
+        ',\n\n',
+      );
+      const input = `Prompt:\n{\n${fields}\n}\n\nTrailing model explanation.`;
+
+      try {
+        const result = parseGeneratedPrompts(input);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].__prompt).toContain('"key0": 0');
+        expect(result[0].__prompt).toContain('"key5999": 5999');
+        expect(result[0].__prompt).not.toContain('Trailing model explanation');
+        expect(parseSpy.mock.calls.length).toBeLessThan(5);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
     it('should not append trailing explanations to multiline prose prompts', () => {
       const input = `Prompt:
 First line

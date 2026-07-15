@@ -3626,6 +3626,54 @@ describe('doGenerateRedteam', () => {
       expect(logger.info).toHaveBeenCalledWith('  Generating tests for context: ctx2');
       expect(logger.info).toHaveBeenCalledWith('Generated 2 total test cases across 2 contexts');
     });
+
+    it('reports earlier context usage and cleans up when a later context rejects', async () => {
+      const cleanup = vi.fn();
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' }, cleanup })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'ctx1', purpose: 'Purpose 1' },
+              { id: 'ctx2', purpose: 'Purpose 2' },
+            ],
+          },
+        },
+      });
+      vi.mocked(synthesize)
+        .mockResolvedValueOnce({
+          testCases: [{ vars: { input: 'Test input' }, metadata: { pluginId: 'harmful:hate' } }],
+          purpose: 'Purpose 1',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+          generationTokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        })
+        .mockRejectedValueOnce(new Error('second context failed'));
+
+      await expect(
+        doGenerateRedteam({
+          output: 'output.yaml',
+          config: 'config.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: true,
+        }),
+      ).rejects.toThrow('second context failed');
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Observed generation token usage: 17 total'),
+      );
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
   });
 });
 

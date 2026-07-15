@@ -146,7 +146,8 @@ async function processRemoteChunk(
     },
     getRequestTimeoutMs(),
   );
-  const { data, status, statusText } = resp as any;
+  const { data, status, statusText, cached } = resp as any;
+  config.__trackGenerationTokenUsage?.({ tokenUsage: data?.tokenUsage, cached });
   const result = (data as any)?.result;
   if (!Array.isArray(result)) {
     throw new Error(

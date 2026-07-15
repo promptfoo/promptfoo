@@ -67,9 +67,10 @@ export async function generateMathPrompt(
 
       interface MathPromptGenerationResponse {
         result?: TestCase[];
+        tokenUsage?: unknown;
       }
 
-      const { data } = await fetchWithCache<MathPromptGenerationResponse>(
+      const { data, cached } = await fetchWithCache<MathPromptGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -78,6 +79,7 @@ export async function generateMathPrompt(
         },
         getRequestTimeoutMs(),
       );
+      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug(
         `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,

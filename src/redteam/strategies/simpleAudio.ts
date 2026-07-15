@@ -33,7 +33,12 @@ export interface TextToAudioResult {
 export async function textToAudio(
   text: string,
   language: string = 'en',
-  options?: { evalId?: string; storeToStorage?: boolean; targetId?: string },
+  options?: {
+    evalId?: string;
+    storeToStorage?: boolean;
+    targetId?: string;
+    trackTokenUsage?: (response: { tokenUsage?: unknown; cached?: boolean }) => void;
+  },
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
@@ -55,9 +60,10 @@ export async function textToAudio(
     interface AudioGenerationResponse {
       error?: string;
       audioBase64?: string;
+      tokenUsage?: unknown;
     }
 
-    const { data } = await fetchWithCache<AudioGenerationResponse>(
+    const { data, cached } = await fetchWithCache<AudioGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -66,6 +72,7 @@ export async function textToAudio(
       },
       getRequestTimeoutMs(),
     );
+    options?.trackTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
     if (data.error || !data.audioBase64) {
       throw new Error(
@@ -150,6 +157,7 @@ export async function addAudioToBase64(
     const audioResult = await textToAudio(originalText, language, {
       evalId,
       targetId: typeof config.targetId === 'string' ? config.targetId : undefined,
+      trackTokenUsage: config.__trackGenerationTokenUsage,
     });
 
     audioTestCases.push({

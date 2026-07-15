@@ -4,6 +4,63 @@ import { accumulateResponseTokenUsage, getErrorTokenUsage } from '../../util/tok
 import type { ApiProvider } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 
+const trackedGenerationErrors = new WeakMap<object, WeakSet<TokenUsage>>();
+
+export function trackGenerationResponseTokenUsage(
+  tokenUsage: TokenUsage,
+  response: { tokenUsage?: unknown; cached?: boolean },
+): void {
+  let responseTokenUsage: TokenUsage | undefined;
+  try {
+    const parsedTokenUsage = BaseTokenUsageSchema.safeParse(response.tokenUsage);
+    responseTokenUsage = parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
+  } catch {
+    responseTokenUsage = undefined;
+  }
+
+  accumulateResponseTokenUsage(
+    tokenUsage,
+    { tokenUsage: responseTokenUsage },
+    { countAsRequest: false },
+  );
+  let cached = false;
+  try {
+    cached = Boolean(response.cached);
+  } catch {
+    cached = false;
+  }
+  tokenUsage.numRequests ??= 0;
+  if (!cached) {
+    tokenUsage.numRequests =
+      (tokenUsage.numRequests ?? 0) + Math.max(1, responseTokenUsage?.numRequests ?? 0);
+  }
+}
+
+export function trackGenerationErrorTokenUsage(
+  tokenUsage: TokenUsage,
+  error: unknown,
+  countUnmetered = true,
+): void {
+  const errorTokenUsage = getErrorTokenUsage(error);
+  if (!errorTokenUsage && !countUnmetered) {
+    return;
+  }
+
+  if (error && typeof error === 'object') {
+    const trackedUsages = trackedGenerationErrors.get(error) ?? new WeakSet<TokenUsage>();
+    if (trackedUsages.has(tokenUsage)) {
+      return;
+    }
+    trackedUsages.add(tokenUsage);
+    trackedGenerationErrors.set(error, trackedUsages);
+  }
+
+  trackGenerationResponseTokenUsage(tokenUsage, {
+    tokenUsage: errorTokenUsage,
+    cached: false,
+  });
+}
+
 export function trackGenerationTokenUsage(
   provider: ApiProvider,
   tokenUsage: TokenUsage,
@@ -12,38 +69,10 @@ export function trackGenerationTokenUsage(
   const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
     try {
       const response = await callApi(...args);
-      let responseTokenUsage: TokenUsage | undefined;
-      try {
-        const parsedTokenUsage = BaseTokenUsageSchema.safeParse(response.tokenUsage);
-        responseTokenUsage = parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
-      } catch {
-        responseTokenUsage = undefined;
-      }
-      accumulateResponseTokenUsage(
-        tokenUsage,
-        { tokenUsage: responseTokenUsage },
-        { countAsRequest: false },
-      );
-      let cached = false;
-      try {
-        cached = Boolean(response.cached);
-      } catch {
-        cached = false;
-      }
-      if (!cached) {
-        const reportedRequests = responseTokenUsage?.numRequests ?? 0;
-        tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + Math.max(1, reportedRequests);
-      }
+      trackGenerationResponseTokenUsage(tokenUsage, response);
       return response;
     } catch (error) {
-      const errorTokenUsage = getErrorTokenUsage(error);
-      accumulateResponseTokenUsage(
-        tokenUsage,
-        { tokenUsage: errorTokenUsage },
-        { countAsRequest: false },
-      );
-      tokenUsage.numRequests =
-        (tokenUsage.numRequests ?? 0) + Math.max(1, errorTokenUsage?.numRequests ?? 0);
+      trackGenerationErrorTokenUsage(tokenUsage, error);
       throw error;
     }
   };

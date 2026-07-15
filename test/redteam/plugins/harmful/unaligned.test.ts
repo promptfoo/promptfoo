@@ -37,6 +37,33 @@ describe('harmful plugin', () => {
   });
 
   describe('getHarmfulTests', () => {
+    it('reports usage from the harmful generation provider', async () => {
+      const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
+      const trackTokenUsage = vi.fn();
+      mockCallApi.mockResolvedValueOnce({
+        output: ['Test harmful output'],
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      });
+
+      const result = await getHarmfulTests(
+        {
+          provider: mockProvider,
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 1,
+          delayMs: 0,
+          trackTokenUsage,
+        },
+        unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(trackTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        cached: false,
+      });
+    });
+
     it('should handle unaligned provider plugins with multiple prompts', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
 

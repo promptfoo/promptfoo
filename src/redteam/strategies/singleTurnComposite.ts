@@ -75,9 +75,10 @@ async function generateCompositePrompts(
       interface CompositeGenerationResponse {
         error?: string;
         modifiedPrompts?: string[];
+        tokenUsage?: unknown;
       }
 
-      const { data } = await fetchWithCache<CompositeGenerationResponse>(
+      const { data, cached } = await fetchWithCache<CompositeGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -86,6 +87,7 @@ async function generateCompositePrompts(
         },
         getRequestTimeoutMs(),
       );
+      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug(
         `Got composite jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(

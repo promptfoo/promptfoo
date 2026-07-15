@@ -56,6 +56,7 @@ async function generateCitations(
 
       interface CitationGenerationResponse {
         error?: string;
+        tokenUsage?: unknown;
         result?: {
           citation: {
             type: string;
@@ -64,7 +65,7 @@ async function generateCitations(
         };
       }
 
-      const { data } = await fetchWithCache<CitationGenerationResponse>(
+      const { data, cached } = await fetchWithCache<CitationGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -73,6 +74,7 @@ async function generateCitations(
         },
         getRequestTimeoutMs(),
       );
+      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,

@@ -305,6 +305,54 @@ describe('synthesize', () => {
       });
     });
 
+    it('tracks direct-remote plugin and strategy usage callbacks during synthesis', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+          cached: false,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const strategyAction = vi.fn().mockImplementation(async (testCases, _injectVar, config) => {
+        config.__trackGenerationTokenUsage({
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+          cached: false,
+        });
+        return testCases;
+      });
+      const pluginFindSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'contracts' });
+      const strategyFindSpy = vi
+        .spyOn(Strategies, 'find')
+        .mockReturnValue({ action: strategyAction, id: 'citation' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'contracts', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [{ id: 'citation' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          total: 28,
+          prompt: 17,
+          completion: 11,
+          cached: 0,
+          numRequests: 2,
+        });
+      } finally {
+        pluginFindSpy.mockRestore();
+        strategyFindSpy.mockRestore();
+      }
+    });
+
     it('should preserve custom provider receivers while tracking generation usage', async () => {
       class PrivateFieldProvider implements ApiProvider {
         #providerId = 'private-generation-provider';
