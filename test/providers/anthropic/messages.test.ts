@@ -574,13 +574,16 @@ describe('AnthropicMessagesProvider', () => {
       }
     });
 
-    it('should bypass the response cache for unlabeled credentials', async () => {
+    it('keeps unlabeled credentials isolated without persisting unreachable cache entries', async () => {
       const providerA = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
         config: { apiKey: 'sk-ant-tenant-a' },
       });
       const providerB = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
         config: { apiKey: 'sk-ant-tenant-b' },
       });
+      const persistentCache = await getCache();
+      const getSpy = vi.spyOn(persistentCache, 'get');
+      const setSpy = vi.spyOn(persistentCache, 'set');
       vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Tenant A response' }],
       } as Anthropic.Messages.Message);
@@ -590,11 +593,17 @@ describe('AnthropicMessagesProvider', () => {
 
       const resultA = await providerA.callApi('Shared sensitive prompt');
       const resultB = await providerB.callApi('Shared sensitive prompt');
+      const cachedResultA = await providerA.callApi('Shared sensitive prompt');
+      const cachedResultB = await providerB.callApi('Shared sensitive prompt');
 
       expect(resultA.output).toBe('Tenant A response');
       expect(resultB.output).toBe('Tenant B response');
+      expect(cachedResultA).toMatchObject({ output: 'Tenant A response', cached: true });
+      expect(cachedResultB).toMatchObject({ output: 'Tenant B response', cached: true });
       expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
     });
 
     it('should include beta request headers in hashed cache keys without leaking them', async () => {

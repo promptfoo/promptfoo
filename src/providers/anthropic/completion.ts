@@ -90,7 +90,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await this.getCachedResponse(cache, cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic completion response', { model: this.modelName });
         return {
@@ -112,7 +112,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     logger.debug('\tAnthropic API response', { response: getCompletionResponseMetadata(response) });
     if (shouldUseResponseCache) {
       try {
-        await cache.set(cacheKey, JSON.stringify(response.completion));
+        await this.setCachedResponse(cache, cacheKey, JSON.stringify(response.completion));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }

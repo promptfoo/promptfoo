@@ -912,6 +912,28 @@ describe('MetaMessagesProvider', () => {
     }
   });
 
+  it('suppresses every duplicate-case Anthropic header before calling Meta', async () => {
+    const restore = mockProcessEnv({
+      ANTHROPIC_CUSTOM_HEADERS:
+        'Authorization: Bearer first-secret\nauthorization: Bearer second-secret\nX-Proxy-Secret: first-proxy\nx-proxy-secret: second-proxy',
+      MODEL_API_KEY: 'LLM|1|messages-key',
+    });
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
+      const { req } = await (provider as any).anthropic.buildRequest({
+        method: 'post',
+        path: '/v1/messages',
+        body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
+      });
+      const headers = new Headers(req.headers);
+
+      expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
+      expect(headers.has('x-proxy-secret')).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
   it('preserves Meta bearer auth when ambient and scoped Anthropic headers differ only by casing', async () => {
     const restore = mockProcessEnv({
       ANTHROPIC_CUSTOM_HEADERS: 'Authorization: Bearer ambient-secret',

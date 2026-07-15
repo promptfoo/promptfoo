@@ -860,7 +860,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
+      const cachedResponse = await this.getCachedResponse(cache, cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
@@ -941,7 +941,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       if (shouldUseResponseCache) {
         try {
-          await cache.set(cacheKey, JSON.stringify(resolvedMessage));
+          await this.setCachedResponse(cache, cacheKey, JSON.stringify(resolvedMessage));
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }

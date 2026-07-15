@@ -592,6 +592,11 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
         ([name]) => !suppressedNames.has(name.toLowerCase()),
       ),
     );
+    const authorizationHeaders = Object.fromEntries(
+      Object.keys(suppressedEnvHeaders)
+        .filter((name) => name.toLowerCase() === 'authorization')
+        .map((name) => [name, `Bearer ${this.apiKey}`]),
+    );
     return {
       ...options,
       apiKey: null,
@@ -599,7 +604,7 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
       defaultHeaders: {
         ...safeDefaultHeaders,
         ...suppressedEnvHeaders,
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}`, ...authorizationHeaders } : {}),
       },
     };
   }

@@ -43,12 +43,17 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
         ([name]) => !suppressedNames.has(name.toLowerCase()),
       ),
     );
+    const apiKeyHeaders = Object.fromEntries(
+      Object.keys(suppressedEnvHeaders)
+        .filter((name) => name.toLowerCase() === 'x-api-key')
+        .map((name) => [name, this.apiKey]),
+    );
     return {
       ...options,
       defaultHeaders: {
         ...safeDefaultHeaders,
         ...suppressedEnvHeaders,
-        ...(this.apiKey ? { 'x-api-key': this.apiKey } : {}),
+        ...(this.apiKey ? { 'x-api-key': this.apiKey, ...apiKeyHeaders } : {}),
       },
     };
   }

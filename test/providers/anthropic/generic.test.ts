@@ -108,6 +108,30 @@ describe('AnthropicGenericProvider', () => {
         restoreEnv();
       }
     });
+
+    it('clears every duplicate-case inherited auth header for a provider-scoped override', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS:
+          'x-api-key: first-wrong-key\nX-Api-Key: second-wrong-key\nX-Proxy-Secret: first-proxy\nx-proxy-secret: second-proxy',
+      });
+
+      try {
+        const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+          env: { ANTHROPIC_CUSTOM_HEADERS: '' },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+        });
+
+        expect(req.headers.get('x-api-key')).toBe('test-key');
+        expect(req.headers.get('x-proxy-secret')).toBeNull();
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('id', () => {

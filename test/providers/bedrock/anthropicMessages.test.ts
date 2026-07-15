@@ -143,6 +143,24 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(req.headers.get('x-api-key')).toBe('bedrock-key');
   });
 
+  it('suppresses every duplicate-case Anthropic header before calling Bedrock', async () => {
+    restoreEnv = mockProcessEnv({
+      ANTHROPIC_CUSTOM_HEADERS:
+        'x-api-key: first-wrong-key\nX-Api-Key: second-wrong-key\nX-Proxy-Secret: first-proxy\nx-proxy-secret: second-proxy',
+    });
+    const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
+      config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+    });
+    const { req } = await (provider.anthropic as any).buildRequest({
+      method: 'post',
+      path: '/v1/messages',
+      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
+    });
+
+    expect(req.headers.get('x-api-key')).toBe('bedrock-key');
+    expect(req.headers.get('x-proxy-secret')).toBeNull();
+  });
+
   it('keeps response caching enabled when Anthropic custom headers are suppressed', async () => {
     restoreEnv = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: do-not-forward' });
     enableCache();
