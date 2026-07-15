@@ -254,6 +254,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const mockCachedResponse = {
       cached: true,
       output: 'cached response text',
+      cost: 0.00001,
       tokenUsage: {
         total: 10,
         prompt: 5,
@@ -268,6 +269,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       ...mockCachedResponse,
+      cost: undefined,
       tokenUsage: {
         ...mockCachedResponse.tokenUsage,
         cached: mockCachedResponse.tokenUsage.total,
@@ -821,7 +823,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       cached: 15,
       numRequests: 0,
     });
-    expect(result.cost).toBe(0.00045);
+    expect(result.cost).toBeUndefined();
     expect(result.metadata).toEqual({
       groundingMetadata: {
         test: true,
@@ -2428,6 +2430,27 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('should clear the original cost from a cached Claude response', async () => {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: false,
+        output: 'cached Claude response',
+        cost: 0.00045,
+        tokenUsage: { total: 50, prompt: 20, completion: 30, numRequests: 1 },
+      }),
+    );
+
+    const response = await provider.callClaudeApi('test prompt');
+
+    expect(response).toEqual({
+      cached: true,
+      output: 'cached Claude response',
+      cost: undefined,
+      tokenUsage: { total: 50, prompt: 20, completion: 30, cached: 50, numRequests: 0 },
+    });
   });
 
   it('should accept anthropicVersion parameter', async () => {

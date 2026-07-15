@@ -59,6 +59,9 @@ function hasGuardrailCheck(value: unknown): boolean {
     return value.some(hasGuardrailCheck);
   }
   if (isJsonRecord(value)) {
+    if (typeof value.result === 'boolean') {
+      return !value.result;
+    }
     const result = getString(value.result)?.toLowerCase();
     if (result === 'passed') {
       return false;
