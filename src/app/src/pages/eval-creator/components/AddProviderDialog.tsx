@@ -41,9 +41,15 @@ export default function AddProviderDialog({
   const [shouldValidate, setShouldValidate] = useState(false);
   const validateRef = useRef<(() => boolean) | null>(null);
 
-  const handleValidationRequest = useCallback((validator: () => boolean) => {
-    validateRef.current = validator;
-  }, []);
+  const handleValidationRequest = useCallback(
+    (validator: () => boolean) => {
+      validateRef.current = validator;
+      if (shouldValidate) {
+        validator();
+      }
+    },
+    [shouldValidate],
+  );
 
   useEffect(() => {
     if (open) {

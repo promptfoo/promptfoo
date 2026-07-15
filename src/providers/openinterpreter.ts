@@ -18,7 +18,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
-import type { CodexAppServerConfig } from './openai/codex-app-server';
+import type { CodexAppServerConfig, CodexAppServerRequestPolicy } from './openai/codex-app-server';
 
 const MAX_INLINE_IMAGE_CHARS = 5_000_000;
 const FRAMEWORK_PROMPT_OPTION_KEYS = new Set([
@@ -320,6 +320,31 @@ function mergeRecords<T extends object>(base: T | undefined, override: T | undef
   return merged as T;
 }
 
+function mergeServerRequestPolicy(
+  base: CodexAppServerRequestPolicy | undefined,
+  override: CodexAppServerRequestPolicy | undefined,
+): CodexAppServerRequestPolicy | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+
+  const permissions =
+    base?.permissions || override?.permissions
+      ? { ...(base?.permissions ?? {}), ...(override?.permissions ?? {}) }
+      : undefined;
+  const dynamicTools =
+    base?.dynamic_tools || override?.dynamic_tools
+      ? { ...(base?.dynamic_tools ?? {}), ...(override?.dynamic_tools ?? {}) }
+      : undefined;
+
+  return {
+    ...(base ?? {}),
+    ...(override ?? {}),
+    ...(permissions ? { permissions } : {}),
+    ...(dynamicTools ? { dynamic_tools: dynamicTools } : {}),
+  };
+}
+
 function toCodexAppServerConfig(
   config: OpenInterpreterConfig,
   interpreterHome: string,
@@ -554,7 +579,7 @@ export class OpenInterpreterProvider implements ApiProvider {
         ...(promptConfig ?? {}),
         cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
         cli_env: { ...(renderedBaseConfig.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
-        server_request_policy: mergeRecords(
+        server_request_policy: mergeServerRequestPolicy(
           renderedBaseConfig.server_request_policy,
           promptConfig?.server_request_policy,
         ),

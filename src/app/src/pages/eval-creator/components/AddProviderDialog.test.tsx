@@ -6,6 +6,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
 
+const mockEditorState = vi.hoisted(() => ({ deferRegistration: false }));
+
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
   default: ({
     setProvider,
@@ -48,13 +50,23 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () =
       ? null
       : 'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"';
 
-    onValidationRequest?.(() => {
+    const validate = () => {
       setError?.(validationError);
       return isValid;
-    });
+    };
+    useEffect(() => {
+      if (!mockEditorState.deferRegistration) {
+        onValidationRequest?.(() => {
+          setError?.(validationError);
+          return isValid;
+        });
+      }
+    }, [isValid, onValidationRequest, setError, validationError]);
     useEffect(() => {
       if (validateAll) {
-        setError?.(validationError);
+        setError?.(
+          mockEditorState.deferRegistration ? 'Provider validation is not ready' : validationError,
+        );
       }
     }, [setError, validateAll, validationError]);
     return (
@@ -69,12 +81,22 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () =
         <button type="button" onClick={() => setProvider({ ...provider, id: 'openinterpreter' })}>
           Correct Open Interpreter ID
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            mockEditorState.deferRegistration = false;
+            onValidationRequest?.(validate);
+          }}
+        >
+          Register validator
+        </button>
       </div>
     );
   },
 }));
 
 afterEach(() => {
+  mockEditorState.deferRegistration = false;
   vi.resetAllMocks();
 });
 
@@ -232,6 +254,34 @@ describe('AddProviderDialog layout', () => {
     expect(save).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Correct Open Interpreter ID' }));
+
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: 'openinterpreter' }));
+  });
+
+  it('clears a stale Save error when a deferred validator registers', async () => {
+    mockEditorState.deferRegistration = true;
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={{ id: 'openinterpreter', config: {} }}
+        />
+      </TooltipProvider>,
+    );
+
+    const save = screen.getByRole('button', { name: 'Save Changes' });
+    await user.click(save);
+    expect(save).toBeDisabled();
+    expect(onSave).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Register validator' }));
 
     await waitFor(() => expect(save).toBeEnabled());
     await user.click(save);

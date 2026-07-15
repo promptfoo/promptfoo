@@ -646,6 +646,7 @@ describe('OpenInterpreterProvider', () => {
           permissions: { permissions: { read: true }, scope: 'session' },
           user_input: { q1: '{{answer}}' },
           dynamic_tools: { baseTool: { success: true, text: 'base result' } },
+          mcp_elicitation: { action: 'accept', content: { answer: 'base' } },
         },
       } as any,
     });
@@ -659,7 +660,11 @@ describe('OpenInterpreterProvider', () => {
           server_request_policy: {
             file_change: 'decline',
             permissions: { strict_auto_review: false },
-            dynamic_tools: { rowTool: { success: true, text: 'row result' } },
+            dynamic_tools: {
+              baseTool: { success: false },
+              rowTool: { success: true, text: 'row result' },
+            },
+            mcp_elicitation: { action: 'decline' },
           },
         },
       },
@@ -723,7 +728,18 @@ describe('OpenInterpreterProvider', () => {
     await expect(
       waitForMessage(server, (message) => message.id === 87 && message.result),
     ).resolves.toMatchObject({
-      result: { contentItems: [{ type: 'inputText', text: 'base result' }], success: true },
+      result: { contentItems: [{ type: 'inputText', text: '' }], success: false },
+    });
+
+    server.send({
+      id: 88,
+      method: 'mcpServer/elicitation/request',
+      params: { threadId: 'thr_1', turnId: 'turn_1', serverName: 'forms', mode: 'form' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 88 && message.result),
+    ).resolves.toMatchObject({
+      result: { action: 'decline', content: null, _meta: null },
     });
 
     completeTurn(server, 'reviewed');
