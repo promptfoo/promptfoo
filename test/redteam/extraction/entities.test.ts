@@ -117,11 +117,18 @@ describe('Entities Extractor', () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
+    const trackTokenUsage = vi.fn();
 
-    const result = await extractEntities(provider, ['prompt1', 'prompt2']);
+    const result = await extractEntities(
+      provider,
+      ['prompt1', 'prompt2'],
+      undefined,
+      trackTokenUsage,
+    );
 
     expect(result).toEqual([]);
     expect(provider.callApi).not.toHaveBeenCalled();
+    expect(trackTokenUsage).toHaveBeenCalledWith({ tokenUsage: undefined, cached: false });
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Error using remote generation'),
     );

@@ -24,6 +24,7 @@ async function processPromptForInputs(
   provider: PromptfooHarmfulCompletionProvider,
   purpose: string,
   materializationIndex: number,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<{
   additionalMetadata?: Record<string, unknown>;
   additionalVars: Record<string, string>;
@@ -59,6 +60,7 @@ async function processPromptForInputs(
             pluginId: plugin,
             provider,
             purpose,
+            trackTokenUsage,
           },
         );
         Object.assign(additionalVars, materializedVars.vars);
@@ -121,6 +123,7 @@ export async function getHarmfulTests(
         unalignedProvider,
         purpose,
         materializationIndex,
+        trackTokenUsage,
       );
       const testCase = createTestCase(injectVar, processedPrompt, plugin);
 
