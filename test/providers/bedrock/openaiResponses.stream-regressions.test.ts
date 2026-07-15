@@ -18,6 +18,113 @@ function createProcessor(processCalls = vi.fn()) {
 }
 
 describe('Responses stream regressions', () => {
+  it('cancels an aborted Responses stream delivered in single-byte chunks', async () => {
+    const abortController = new AbortController();
+    const prefix = new TextEncoder().encode('data: {"type":"ignored","payload":"');
+    const byteLimit = 64 * 1024;
+    let sent = 0;
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent === 0) {
+          sent = prefix.length;
+          controller.enqueue(prefix);
+          return;
+        }
+        if (sent >= byteLimit) {
+          controller.close();
+          return;
+        }
+        sent++;
+        controller.enqueue(Uint8Array.of(97));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const timer = setTimeout(() => abortController.abort(), 25);
+
+    try {
+      await expect(
+        readResponsesStream(
+          new Response(stream),
+          'test',
+          { debug: vi.fn() },
+          abortController.signal,
+        ),
+      ).rejects.toThrow(/abort/i);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    expect(cancelled).toBe(true);
+    expect(sent).toBeLessThan(byteLimit);
+  });
+
+  it.each([
+    '\n',
+    '\r\n',
+  ])('parses single-byte-chunk SSE events with %j line endings', async (eol) => {
+    const body = new TextEncoder().encode(
+      [
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"hello"}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}]}}',
+        '',
+        '',
+      ].join(eol),
+    );
+    let index = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (index >= body.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(body.subarray(index, ++index));
+      },
+    });
+
+    const parsed = await readResponsesStream(new Response(stream), 'test', { debug: vi.fn() });
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        content: [expect.objectContaining({ type: 'output_text', text: 'hello' })],
+      }),
+    ]);
+  });
+
+  it('does not treat an extra carriage return inside a multiline data event as a separator', async () => {
+    const body = new TextEncoder().encode(
+      'event: response.output_text.done\n' +
+        'data: {"type":"response.output_text.done",\n' +
+        '\r\r\n' +
+        'data: "output_index":0,"content_index":0,"text":"hello"}\n\n',
+    );
+    let index = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (index >= body.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(body.subarray(index, ++index));
+      },
+    });
+
+    const parsed = await readResponsesStream(new Response(stream), 'test', { debug: vi.fn() });
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        content: [expect.objectContaining({ type: 'output_text', text: 'hello' })],
+      }),
+    ]);
+  });
+
   it('removes filtered terminal draft text before returning refusal output', async () => {
     const response = createSseResponse([
       {

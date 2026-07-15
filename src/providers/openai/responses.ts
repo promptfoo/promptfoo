@@ -571,7 +571,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           const streamResponse =
             response.data instanceof Response ? response.data : new Response(response.data);
           if (status >= 200 && status < 300) {
-            data = await readResponsesStream(streamResponse, 'OpenAI', logger);
+            data = await readResponsesStream(streamResponse, 'OpenAI', logger, controller.signal);
           } else {
             const responseText = await streamResponse.text();
             try {

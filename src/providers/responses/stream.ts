@@ -45,6 +45,8 @@ const MAX_STREAM_OUTPUT_KEYS = 1024;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
+const MAX_STREAM_FRAGMENT_BATCH = 1024;
+const STREAM_READ_YIELD_INTERVAL = 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -527,6 +529,7 @@ export async function readResponsesStream(
   response: Response,
   providerName: string,
   logger: ResponsesStreamLogger,
+  signal?: AbortSignal,
 ): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
@@ -534,7 +537,11 @@ export async function readResponsesStream(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let bufferedEventLength = 0;
+  let bufferedEventFragments: string[] = [];
+  let bufferedEventBatches: string[] = [];
+  let separatorState = 0;
+  let readsSinceYield = 0;
   let latestResponse: any;
   let latestResponseEventType: string | undefined;
   let outputText = '';
@@ -925,34 +932,92 @@ export async function readResponsesStream(
     }
   };
 
+  const appendEventFragment = (fragment: string, complete: boolean): void => {
+    if (!fragment) {
+      return;
+    }
+    bufferedEventLength += fragment.length;
+    if (bufferedEventLength > MAX_STREAM_OUTPUT_CHARS + (complete ? 4 : 0)) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (${complete ? 'event data' : 'buffered event data'})`,
+      );
+    }
+    bufferedEventFragments.push(fragment);
+    if (bufferedEventFragments.length >= MAX_STREAM_FRAGMENT_BATCH) {
+      bufferedEventBatches.push(bufferedEventFragments.join(''));
+      bufferedEventFragments = [];
+    }
+  };
+
+  const takeBufferedEvent = (): string => {
+    if (bufferedEventFragments.length > 0) {
+      bufferedEventBatches.push(bufferedEventFragments.join(''));
+    }
+    const event = bufferedEventBatches.join('');
+    bufferedEventLength = 0;
+    bufferedEventFragments = [];
+    bufferedEventBatches = [];
+    return event;
+  };
+
+  const processDecodedText = (decoded: string): void => {
+    let segmentStart = 0;
+    for (let index = 0; index < decoded.length; index++) {
+      const char = decoded[index];
+      let complete = false;
+      if (char === '\n') {
+        complete = separatorState === 1 || separatorState === 3;
+        separatorState = complete ? 0 : 1;
+      } else if (char === '\r') {
+        separatorState = separatorState === 1 ? 3 : 2;
+      } else {
+        separatorState = 0;
+      }
+      if (!complete) {
+        continue;
+      }
+
+      appendEventFragment(decoded.slice(segmentStart, index + 1), true);
+      const chunk = takeBufferedEvent().replace(/\r?\n\r?\n$/, '');
+      if (chunk.length > MAX_STREAM_OUTPUT_CHARS) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (event data)`,
+        );
+      }
+      processChunk(chunk);
+      segmentStart = index + 1;
+    }
+    appendEventFragment(decoded.slice(segmentStart), false);
+  };
+
+  const throwIfAborted = (): void => {
+    if (signal?.aborted) {
+      throw new DOMException(`${providerName} streaming response aborted`, 'AbortError');
+    }
+  };
+
   try {
     while (true) {
+      throwIfAborted();
       const { done, value } = await reader.read();
       if (done) {
         break;
       }
 
-      buffer += decoder.decode(value, { stream: true });
-      const chunks = buffer.split(/\r?\n\r?\n/);
-      buffer = chunks.pop() || '';
-      if (buffer.length > MAX_STREAM_OUTPUT_CHARS) {
-        throw new Error(
-          `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (buffered event data)`,
-        );
-      }
-      for (const chunk of chunks) {
-        if (chunk.length > MAX_STREAM_OUTPUT_CHARS) {
-          throw new Error(
-            `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (event data)`,
-          );
-        }
-        processChunk(chunk);
+      processDecodedText(decoder.decode(value, { stream: true }));
+      if (++readsSinceYield >= STREAM_READ_YIELD_INTERVAL) {
+        readsSinceYield = 0;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        throwIfAborted();
       }
     }
 
-    buffer += decoder.decode();
-    if (buffer.trim()) {
-      processChunk(buffer);
+    processDecodedText(decoder.decode());
+    if (bufferedEventLength > 0) {
+      const chunk = takeBufferedEvent();
+      if (chunk.trim()) {
+        processChunk(chunk);
+      }
     }
   } catch (error) {
     await reader.cancel().catch(() => undefined);
