@@ -560,6 +560,47 @@ describe('code-scan-action main', () => {
       });
     });
 
+    it('does not fail a completed scan when temporary CLI cleanup is blocked', async () => {
+      mocks.fs.rmSync.mockImplementation(() => {
+        const error = new Error('directory is busy') as NodeJS.ErrnoException;
+        error.code = 'EBUSY';
+        throw error;
+      });
+
+      await importActionAndGetPromptfooCall();
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+      });
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove temporary Promptfoo CLI install'),
+      );
+    });
+
+    it('preserves the npm install failure when temporary CLI cleanup is blocked', async () => {
+      mocks.exec.exec.mockImplementation(async (command: string) => {
+        if (command === 'npm') {
+          throw new Error('npm install failed');
+        }
+        return 0;
+      });
+      mocks.fs.rmSync.mockImplementation(() => {
+        const error = new Error('directory is not empty') as NodeJS.ErrnoException;
+        error.code = 'ENOTEMPTY';
+        throw error;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('npm install failed');
+      });
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove temporary Promptfoo CLI install'),
+      );
+    });
+
     it('installs an exact promptfoo-version input override', async () => {
       mockPromptfooVersionInput('0.100.5');
 

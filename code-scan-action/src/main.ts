@@ -471,7 +471,11 @@ async function runPromptfooScan(
     core.error(`Error output: ${scanError}`);
     throw new Error(`Code scan failed with exit code ${exitCode}`);
   } finally {
-    fs.rmSync(npmrcDir, { recursive: true, force: true });
+    try {
+      fs.rmSync(npmrcDir, { recursive: true, force: true });
+    } catch (error) {
+      core.warning(`Failed to remove temporary Promptfoo CLI install: ${formatError(error)}`);
+    }
   }
 }
 
