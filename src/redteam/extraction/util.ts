@@ -8,6 +8,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -74,21 +75,20 @@ export async function fetchRemoteGeneration(
       ...remoteGenerationContextPayload(generationContext),
     };
 
-    const response = await fetchWithCache(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(body),
-      },
-      getRequestTimeoutMs(),
-      'json',
+    const response = await trackGenerationFetch(
+      () =>
+        fetchWithCache(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(body),
+          },
+          getRequestTimeoutMs(),
+          'json',
+        ),
+      trackTokenUsage,
     );
-
-    trackTokenUsage?.({
-      tokenUsage: (response.data as { tokenUsage?: unknown }).tokenUsage,
-      cached: response.cached,
-    });
 
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);
     return parsedResponse.result;

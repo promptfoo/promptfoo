@@ -107,10 +107,17 @@ describe('System Purpose Extractor', () => {
     const originalOpenaiKey = process.env.OPENAI_API_KEY;
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
-    const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
+    const trackTokenUsage = vi.fn();
+    const result = await extractSystemPurpose(
+      provider,
+      ['prompt1', 'prompt2'],
+      undefined,
+      trackTokenUsage,
+    );
 
     expect(result).toBe('');
     expect(provider.callApi).not.toHaveBeenCalled();
+    expect(trackTokenUsage).toHaveBeenCalledWith({ tokenUsage: undefined, cached: false });
     mockProcessEnv({ OPENAI_API_KEY: originalOpenaiKey });
   });
 
