@@ -465,7 +465,6 @@ const CustomTargetConfiguration = ({
         parsedConfig === null ||
         Array.isArray(parsedConfig)
       ) {
-        updateCustomTarget('config', {});
         onConfigErrorChange?.('Configuration must be a JSON object');
         return;
       }
@@ -473,7 +472,6 @@ const CustomTargetConfiguration = ({
       onConfigErrorChange?.(null);
       updateCustomTarget('config', parsedConfig);
     } catch {
-      updateCustomTarget('config', {});
       onConfigErrorChange?.('Invalid JSON configuration');
     }
   };
@@ -483,7 +481,6 @@ const CustomTargetConfiguration = ({
       try {
         const parsed = JSON.parse(rawConfigJson);
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-          updateCustomTarget('config', {});
           onConfigErrorChange?.('Configuration must be a JSON object');
           return;
         }
@@ -493,7 +490,7 @@ const CustomTargetConfiguration = ({
         updateCustomTarget('config', parsed);
         onConfigErrorChange?.(null);
       } catch {
-        // Error state is already shown via bodyError prop
+        onConfigErrorChange?.('Invalid JSON configuration');
       }
     }
   };

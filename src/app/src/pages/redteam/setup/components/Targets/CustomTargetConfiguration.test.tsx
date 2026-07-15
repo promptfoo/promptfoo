@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render as rtlRender, screen } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -52,8 +52,10 @@ describe('CustomTargetConfiguration', () => {
     expect(example.textContent).not.toContain('max_tokens');
   });
 
-  it('clears stale Open Interpreter config and reports malformed JSON', async () => {
-    const user = userEvent.setup();
+  it.each([
+    ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
+    ['non-object JSON', '[]', 'Configuration must be a JSON object'],
+  ])('preserves the last valid Open Interpreter config for %s', async (_case, value, error) => {
     const updateCustomTarget = vi.fn();
     const onConfigErrorChange = vi.fn();
 
@@ -69,14 +71,16 @@ describe('CustomTargetConfiguration', () => {
       />,
     );
 
-    await user.clear(screen.getByTestId('code-editor'));
-    await user.paste('{"sandbox_mode":"read-only",}');
+    fireEvent.change(screen.getByTestId('code-editor'), { target: { value } });
 
-    expect(updateCustomTarget).toHaveBeenLastCalledWith('config', {});
-    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(updateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
   });
 
-  it('does not clear the configuration error when formatting a non-object value', async () => {
+  it.each([
+    ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
+    ['non-object JSON', '[]', 'Configuration must be a JSON object'],
+  ])('preserves the last valid Open Interpreter config when formatting %s', async (_case, value, error) => {
     const user = userEvent.setup();
     const updateCustomTarget = vi.fn();
     const onConfigErrorChange = vi.fn();
@@ -85,7 +89,7 @@ describe('CustomTargetConfiguration', () => {
       <CustomTargetConfiguration
         selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
         updateCustomTarget={updateCustomTarget}
-        rawConfigJson="[]"
+        rawConfigJson={value}
         setRawConfigJson={vi.fn()}
         bodyError={null}
         providerType="openinterpreter"
@@ -95,8 +99,8 @@ describe('CustomTargetConfiguration', () => {
 
     await user.click(screen.getByRole('button', { name: /Format/i }));
 
-    expect(updateCustomTarget).toHaveBeenLastCalledWith('config', {});
-    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Configuration must be a JSON object');
+    expect(updateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
   });
 
   describe('file:// prefix handling', () => {
