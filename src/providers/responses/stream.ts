@@ -181,11 +181,17 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 
 function hasTerminalSafetyDecision(response: any): boolean {
   if (
-    [response?.incomplete_details?.reason, response?.error?.code, response?.error?.message].some(
+    [response?.incomplete_details?.reason, response?.error?.code].some(
       (reason) =>
         typeof reason === 'string' &&
         /(?:content[_-]?filter|content[_-]?policy|safety|guardrail)/i.test(reason),
     )
+  ) {
+    return true;
+  }
+  if (
+    typeof response?.error?.message === 'string' &&
+    /\b(?:blocked|refused|rejected|filtered|disallowed)\b/i.test(response.error.message)
   ) {
     return true;
   }
@@ -202,7 +208,7 @@ function hasTerminalSafetyDecision(response: any): boolean {
   );
 }
 
-function filterExecutableToolCalls(output: any[] | undefined): any[] {
+function filterExecutableToolCalls(output: any[] | undefined, stripText = false): any[] {
   if (!Array.isArray(output)) {
     return [];
   }
@@ -216,14 +222,22 @@ function filterExecutableToolCalls(output: any[] | undefined): any[] {
             role: 'assistant',
             content: [{ type: 'refusal', refusal: item.refusal }],
           }
-        : item?.type === 'message' && Array.isArray(item.content)
+        : item?.type === 'message' && typeof item.refusal === 'string' && item.refusal.length > 0
           ? {
               ...item,
-              content: item.content.filter(
-                (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
-              ),
+              content: [{ type: 'refusal', refusal: item.refusal }],
             }
-          : item,
+          : item?.type === 'message' && Array.isArray(item.content)
+            ? {
+                ...item,
+                content: item.content.filter(
+                  (content: any) =>
+                    content?.type !== 'tool_use' &&
+                    content?.type !== 'function_call' &&
+                    (!stripText || content?.type !== 'output_text'),
+                ),
+              }
+            : item,
     );
 }
 
@@ -267,7 +281,9 @@ function mergeFinalizedStreamOutput(
     .filter(({ item }) => item !== undefined);
 
   for (const finalizedItem of finalizedNonMessageItems) {
-    const identity = finalizedItem.item?.id ?? finalizedItem.item?.call_id;
+    const identities = [finalizedItem.item?.id, finalizedItem.item?.call_id].filter(
+      (identity): identity is string => typeof identity === 'string',
+    );
     const existingIndex = entries.findIndex(({ item, outputIndex }) => {
       if (
         finalizedItem.outputIndex !== undefined &&
@@ -277,9 +293,8 @@ function mergeFinalizedStreamOutput(
         return true;
       }
       return (
-        typeof identity === 'string' &&
         item?.type === finalizedItem.item?.type &&
-        (item?.id === identity || item?.call_id === identity)
+        identities.some((identity) => item?.id === identity || item?.call_id === identity)
       );
     });
     if (existingIndex < 0 && preferFinalizedNonMessageItems) {
@@ -287,6 +302,7 @@ function mergeFinalizedStreamOutput(
     } else if (preferFinalizedNonMessageItems) {
       entries[existingIndex] = {
         ...entries[existingIndex],
+        outputIndex: finalizedItem.outputIndex ?? entries[existingIndex].outputIndex,
         item: { ...entries[existingIndex].item, ...finalizedItem.item },
       };
     }
@@ -534,6 +550,7 @@ export async function readResponsesStream(
   let currentInvalidOutputTextKey: string | undefined;
   const finalizedNonMessageItems = new Map<string, RetainedStreamOutputItem>();
   const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
+  const refusalDeltaChunks = new Map<string, string[]>();
   const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
@@ -564,12 +581,13 @@ export async function readResponsesStream(
     key: string,
     outputIndex: number | undefined,
     item: any,
+    knownSerializedLength?: number,
   ): void => {
     if (!hasStreamOutputCapacity(target.has(key), target !== finalizedRefusalItems)) {
       return;
     }
 
-    const serializedLength = JSON.stringify(item).length;
+    const serializedLength = knownSerializedLength ?? JSON.stringify(item).length;
     const previousLength = target.get(key)?.serializedLength ?? 0;
     const growth = serializedLength - previousLength;
     if (growth > MAX_STREAM_OUTPUT_CHARS - outputText.length - finalizedOutputChars) {
@@ -790,36 +808,80 @@ export async function readResponsesStream(
           if (previousItem.outputIndex === outputIndex) {
             finalizedOutputChars -= previousItem.serializedLength;
             finalizedRefusalItems.delete(previousKey);
+            refusalDeltaChunks.delete(previousKey);
           }
         }
       }
       const key = getOutputTextKey(event) ?? getInvalidOutputTextKey(event);
+      let knownSerializedLength: number | undefined;
       if (event.type === 'response.refusal.delta') {
-        const previousRefusal = finalizedRefusalItems
-          .get(key)
-          ?.item?.content?.find((part: any) => part?.type === 'refusal')?.refusal;
-        if (typeof previousRefusal === 'string') {
-          finalizedRefusalItem = {
-            ...finalizedRefusalItem,
-            content: [
-              {
-                type: 'refusal',
-                refusal: `${previousRefusal}${finalizedRefusalItem.content[0].refusal}`,
-              },
-            ],
-          };
+        const previousItem = finalizedRefusalItems.get(key);
+        const delta = event.delta ?? '';
+        const chunks = refusalDeltaChunks.get(key);
+        if (chunks) {
+          chunks.push(delta);
+        } else {
+          refusalDeltaChunks.set(key, [delta]);
         }
+        if (previousItem) {
+          finalizedRefusalItem = previousItem.item;
+          knownSerializedLength = previousItem.serializedLength + JSON.stringify(delta).length - 2;
+        }
+      } else {
+        refusalDeltaChunks.delete(key);
       }
-      setFinalizedOutputItem(finalizedRefusalItems, key, outputIndex, finalizedRefusalItem);
+      setFinalizedOutputItem(
+        finalizedRefusalItems,
+        key,
+        outputIndex,
+        finalizedRefusalItem,
+        knownSerializedLength,
+      );
+      if (!finalizedRefusalItems.has(key)) {
+        refusalDeltaChunks.delete(key);
+      }
     }
     if (
       event.type === 'response.output_item.done' &&
-      event.item?.type !== 'message' &&
       event.item?.type !== 'refusal' &&
-      event.item
+      event.item &&
+      (event.item.type !== 'message' ||
+        (Array.isArray(event.item.content) &&
+          event.item.content.some(
+            (part) =>
+              part?.type === 'output_text' &&
+              Object.keys(part).some((key) => key !== 'type' && key !== 'text'),
+          )))
     ) {
       const outputIndex = getValidOutputIndex(event);
-      const item = event.item as any;
+      let item = event.item as any;
+      if (item.type === 'function_call' && typeof item.call_id === 'string' && !item.id) {
+        const indexPrefix = `${compactStreamIndex(event.output_index, 'missing')}:function_call:`;
+        for (const [previousKey, previousItem] of finalizedNonMessageItems) {
+          if (
+            !previousKey.startsWith(indexPrefix) ||
+            previousItem.outputIndex !== outputIndex ||
+            previousItem.item?.type !== 'function_call' ||
+            typeof previousItem.item.id !== 'string' ||
+            previousItem.item.call_id ||
+            (previousItem.item.name && item.name && previousItem.item.name !== item.name)
+          ) {
+            continue;
+          }
+
+          item = {
+            ...previousItem.item,
+            ...item,
+            arguments:
+              typeof item.arguments === 'string' && item.arguments.length > 0
+                ? item.arguments
+                : previousItem.item.arguments,
+          };
+          finalizedOutputChars -= previousItem.serializedLength;
+          finalizedNonMessageItems.delete(previousKey);
+          break;
+        }
+      }
       const key = `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
@@ -899,6 +961,15 @@ export async function readResponsesStream(
     reader.releaseLock();
   }
 
+  for (const [key, chunks] of refusalDeltaChunks) {
+    const refusalPart = finalizedRefusalItems
+      .get(key)
+      ?.item?.content?.find((part: any) => part?.type === 'refusal');
+    if (refusalPart) {
+      refusalPart.refusal = chunks.join('');
+    }
+  }
+
   const isCompletedResponse =
     latestResponseEventType === 'response.completed' || latestResponse?.status === 'completed';
   const useFinalizedItems = !isCompletedResponse;
@@ -928,7 +999,7 @@ export async function readResponsesStream(
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
-    const safeOutput = filterExecutableToolCalls(finalizedStreamOutput);
+    const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
     if (!hasRefusalOutput(safeOutput)) {
       const reason = [
         latestResponse.incomplete_details?.reason,
