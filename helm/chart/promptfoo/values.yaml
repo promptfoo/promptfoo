@@ -41,20 +41,17 @@ service:
   type: ClusterIP
   port: 3000
 
+# Deprecated: prefer ingress.hosts / ingress.tls below. Retained so existing installs
+# that set only domainName keep rendering their host and TLS secret on upgrade; it is
+# ignored once ingress.hosts is set.
+domainName: 'promptfoo.example.com'
+
 ingress:
   enabled: true
   className: traefik
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
-  hosts:
-    - host: promptfoo.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: promptfoo-certificate-tls
-      hosts:
-        - promptfoo.example.com
+  annotations: {}
+  hosts: []
+  tls: []
 
 resources:
   limits:

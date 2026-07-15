@@ -1,13 +1,22 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "promptfoo.fullname" . -}}
 {{- $svcPort := .Values.service.port -}}
+{{- $hosts := .Values.ingress.hosts -}}
+{{- $annotations := .Values.ingress.annotations -}}
+{{- $tls := .Values.ingress.tls -}}
+{{- if not $hosts -}}
+{{/* Back-compat: reproduce the legacy hard-coded Ingress from the deprecated domainName */}}
+{{- $hosts = list (dict "host" .Values.domainName "paths" (list (dict "path" "/" "pathType" "Prefix"))) -}}
+{{- if not $annotations }}{{- $annotations = dict "cert-manager.io/cluster-issuer" "letsencrypt-cloudflare" -}}{{- end -}}
+{{- if not $tls }}{{- $tls = list (dict "secretName" (printf "%s-certificate-tls" .Release.Name) "hosts" (list .Values.domainName)) -}}{{- end -}}
+{{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $fullName }}
+  name: {{ .Release.Name | quote }}
   labels:
     {{- include "promptfoo.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -15,9 +24,9 @@ spec:
   {{- with .Values.ingress.className }}
   ingressClassName: {{ . }}
   {{- end }}
-  {{- if .Values.ingress.tls }}
+  {{- with $tls }}
   tls:
-    {{- range .Values.ingress.tls }}
+    {{- range . }}
     - hosts:
         {{- range .hosts }}
         - {{ . | quote }}
@@ -26,7 +35,7 @@ spec:
     {{- end }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.hosts }}
+    {{- range $hosts }}
     - host: {{ .host | quote }}
       http:
         paths:
