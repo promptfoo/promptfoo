@@ -65,7 +65,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
-  tokenUsage: BaseTokenUsageSchema.optional(),
+  tokenUsage: BaseTokenUsageSchema.optional().catch(undefined),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({

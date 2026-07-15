@@ -111,6 +111,27 @@ describe('normalizeTargetPurposeDiscoveryResult', () => {
       tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
     });
   });
+
+  it('ignores malformed optional discovery token usage', () => {
+    const parsed = TargetPurposeDiscoveryTaskResponseSchema.parse({
+      done: true,
+      state: { currentQuestionIndex: 0, answers: [] },
+      purpose: {
+        purpose: 'Book travel',
+        limitations: null,
+        user: null,
+        tools: [],
+        tokenUsage: { total: '10' },
+      },
+    });
+
+    expect(normalizeTargetPurposeDiscoveryResult(parsed.purpose!)).toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
   it('should handle null-like values', () => {
     const result = normalizeTargetPurposeDiscoveryResult({
       purpose: null,
