@@ -11,7 +11,6 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -41,6 +40,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { trackGenerationTokenUsage } from './providers/generationTokenUsage';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -73,27 +73,6 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-
-function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
-  const callApi = provider.callApi.bind(provider);
-  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
-    const response = await callApi(...args);
-    accumulateResponseTokenUsage(tokenUsage, response);
-    return response;
-  };
-  trackedCallApi.label = provider.callApi.label;
-
-  return new Proxy(provider, {
-    get(target, property) {
-      if (property === 'callApi') {
-        return trackedCallApi;
-      }
-
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,

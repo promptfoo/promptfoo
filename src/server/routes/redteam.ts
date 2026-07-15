@@ -10,6 +10,7 @@ import {
   REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
+import { trackGenerationTokenUsage } from '../../redteam/providers/generationTokenUsage';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -23,6 +24,7 @@ import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
+import { accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
 import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
@@ -31,6 +33,9 @@ import {
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
 import type { Request, Response } from 'express';
+
+import type { ApiProvider } from '../../types';
+import type { TokenUsage } from '../../types/shared';
 
 export const redteamRouter = Router();
 
@@ -88,7 +93,11 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const injectVar = 'query';
 
     // Get the red team provider
-    const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
+    const generationTokenUsage: TokenUsage = {};
+    const providerForGeneration = await redteamProviderManager.getProvider({
+      provider: REDTEAM_MODEL,
+    });
+    const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
 
     const testCases = await pluginFactory.action({
       provider: redteamProvider,
@@ -119,7 +128,11 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyTestCases = await strategyFactory.action(
           testCases as TestCaseWithPlugin[],
           injectVar,
-          strategy.config || {},
+          {
+            ...(strategy.config || {}),
+            __wrapGenerationProvider: (provider: ApiProvider) =>
+              trackGenerationTokenUsage(provider, generationTokenUsage),
+          },
           strategy.id,
         );
 
@@ -163,12 +176,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           purpose,
           stateful,
         });
+        accumulateResponseTokenUsage(generationTokenUsage, {
+          tokenUsage: multiTurnResult.tokenUsage,
+        });
 
         res.json(
           RedteamSchemas.GenerateTest.Response.parse({
             prompt: multiTurnResult.prompt,
             context,
             metadata: multiTurnResult.metadata,
+            tokenUsage: generationTokenUsage,
           }),
         );
         return;
@@ -202,6 +219,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: batchResults,
           count: batchResults.length,
+          tokenUsage: generationTokenUsage,
         }),
       );
       return;
@@ -218,6 +236,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         prompt: generatedPrompt,
         context,
         metadata: baseMetadata,
+        tokenUsage: generationTokenUsage,
       }),
     );
   } catch (error) {

@@ -52,7 +52,7 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
     '../../../src/server/services/redteamTestCaseGenerationService'
   );
 
-  await generateMultiTurnPrompt({
+  return generateMultiTurnPrompt({
     pluginId: 'harmful:hate',
     strategyId,
     strategyConfigRecord: {},
@@ -99,9 +99,10 @@ describe('redteamTestCaseGenerationService', () => {
         tokenUsage: { total: 100 },
       });
 
-      await generatePromptForStrategy('goat');
+      const result = await generatePromptForStrategy('goat');
 
       await expectTaskRequest(fetchWithRetries, 'goat');
+      expect(result.tokenUsage).toEqual({ total: 100 });
     });
 
     it('should propagate remote generation failures', async () => {
@@ -110,6 +111,17 @@ describe('redteamTestCaseGenerationService', () => {
 
       await expect(generatePromptForStrategy('goat')).rejects.toThrow('remote generation failed');
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should ignore malformed remote generation token usage', async () => {
+      mockRemoteGeneration({
+        message: { content: 'test prompt' },
+        tokenUsage: { total: '100' },
+      });
+
+      const result = await generatePromptForStrategy('goat');
+
+      expect(result.tokenUsage).toBeUndefined();
     });
 
     it('should call fetchWithRetries with correct parameters for Crescendo strategy', async () => {

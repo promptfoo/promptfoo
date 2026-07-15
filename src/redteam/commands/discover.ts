@@ -13,6 +13,7 @@ import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -64,6 +65,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -154,6 +156,7 @@ export function normalizeTargetPurposeDiscoveryResult(
     limitations: isNullLike(result.limitations) ? null : result.limitations,
     user: isNullLike(result.user) ? null : result.user,
     tools: cleanTools(result.tools),
+    ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
   };
 }
 
