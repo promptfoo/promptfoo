@@ -1,5 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getCache, getCacheClearGeneration, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheTtlMs,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -124,6 +130,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
           cacheKey,
           ephemeralCacheKey,
           cacheClearGeneration,
+          getCacheTtlMs(),
           JSON.stringify(response.completion),
         );
       } catch (err) {

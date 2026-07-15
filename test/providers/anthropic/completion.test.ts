@@ -215,6 +215,31 @@ describe('AnthropicCompletionProvider', () => {
       expect(create).toHaveBeenCalledTimes(3);
     });
 
+    it('expires unlabeled completion cache entries using PROMPTFOO_CACHE_TTL', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '1' });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.completions, 'create')
+        .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
+        .mockResolvedValueOnce({ completion: 'fresh-2' } as any);
+
+      try {
+        const first = await provider.callApi('Same prompt');
+        now.mockReturnValue(2_001);
+        const second = await provider.callApi('Same prompt');
+
+        expect(first).toMatchObject({ output: 'fresh-1' });
+        expect(second).toMatchObject({ output: 'fresh-2' });
+        expect(create).toHaveBeenCalledTimes(2);
+      } finally {
+        restoreEnv();
+        now.mockRestore();
+      }
+    });
+
     it('should bypass the response cache for scoped Anthropic custom headers', async () => {
       const providerA = new AnthropicCompletionProvider('claude-1', {
         config: { apiKey: 'shared-api-key' },

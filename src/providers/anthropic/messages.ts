@@ -1,5 +1,11 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { getCache, getCacheClearGeneration, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheTtlMs,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
@@ -953,6 +959,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             cacheKey,
             ephemeralCacheKey,
             cacheClearGeneration,
+            getCacheTtlMs(),
             JSON.stringify(resolvedMessage),
           );
         } catch (err) {

@@ -44,7 +44,7 @@ const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
  * Get the cache TTL in milliseconds.
  * Reads from PROMPTFOO_CACHE_TTL environment variable (in seconds) or uses default.
  */
-function getCacheTtlMs(): number {
+export function getCacheTtlMs(): number {
   return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
 }
 

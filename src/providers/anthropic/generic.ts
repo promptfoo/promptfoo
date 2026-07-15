@@ -189,7 +189,10 @@ export class AnthropicGenericProvider implements ApiProvider {
   label?: string;
   private readonly clientHasCustomHeaders: boolean;
   private readonly ephemeralCacheNamespace = randomUUID();
-  private readonly ephemeralResponseCache = new Map<string, string>();
+  private readonly ephemeralResponseCache = new Map<
+    string,
+    { response: string; expiresAt: number }
+  >();
   private ephemeralCacheClearGeneration = 0;
 
   constructor(
@@ -377,7 +380,15 @@ export class AnthropicGenericProvider implements ApiProvider {
     }
 
     this.syncEphemeralCache(clearGeneration);
-    return this.ephemeralResponseCache.get(ephemeralCacheKey);
+    const entry = this.ephemeralResponseCache.get(ephemeralCacheKey);
+    if (!entry) {
+      return undefined;
+    }
+    if (entry.expiresAt <= Date.now()) {
+      this.ephemeralResponseCache.delete(ephemeralCacheKey);
+      return undefined;
+    }
+    return entry.response;
   }
 
   protected async setCachedResponse(
@@ -385,6 +396,7 @@ export class AnthropicGenericProvider implements ApiProvider {
     cacheKey: string,
     ephemeralCacheKey: string,
     clearGeneration: number,
+    ttlMs: number,
     response: string,
   ): Promise<void> {
     if (this.label) {
@@ -403,7 +415,10 @@ export class AnthropicGenericProvider implements ApiProvider {
         this.ephemeralResponseCache.delete(oldestKey);
       }
     }
-    this.ephemeralResponseCache.set(ephemeralCacheKey, response);
+    this.ephemeralResponseCache.set(ephemeralCacheKey, {
+      response,
+      expiresAt: Date.now() + ttlMs,
+    });
   }
 
   private syncEphemeralCache(clearGeneration: number): void {

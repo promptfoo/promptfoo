@@ -635,6 +635,31 @@ describe('AnthropicMessagesProvider', () => {
       expect(create).toHaveBeenCalledTimes(3);
     });
 
+    it('expires unlabeled message cache entries using PROMPTFOO_CACHE_TTL', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '1' });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any);
+
+      try {
+        const first = await provider.callApi('Same prompt');
+        now.mockReturnValue(2_001);
+        const second = await provider.callApi('Same prompt');
+
+        expect(first).toMatchObject({ output: 'fresh-1' });
+        expect(second).toMatchObject({ output: 'fresh-2' });
+        expect(create).toHaveBeenCalledTimes(2);
+      } finally {
+        restoreEnv();
+        now.mockRestore();
+      }
+    });
+
     it('should include beta request headers in hashed cache keys without leaking them', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
         config: {
