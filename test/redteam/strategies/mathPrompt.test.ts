@@ -93,7 +93,12 @@ describe('mathPrompt', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      const trackGenerationTokenUsage = vi.fn();
+      vi.mocked(fetchWithCache).mockRejectedValue(
+        Object.assign(new Error('Network error'), {
+          tokenUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+        }),
+      );
       (SingleBar as any).mockImplementation(function () {
         return {
           start: vi.fn(),
@@ -102,8 +107,14 @@ describe('mathPrompt', () => {
         } as unknown as SingleBar;
       });
 
-      const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
+      const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        __trackGenerationTokenUsage: trackGenerationTokenUsage,
+      });
       expect(result).toEqual([]);
+      expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+        cached: false,
+      });
     });
   });
 

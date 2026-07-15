@@ -18,10 +18,40 @@ export function isGenerationTokenUsageTracked(provider: ApiProvider): boolean {
   );
 }
 
+type GenerationTokenUsageTracker =
+  | ((response: { tokenUsage?: unknown; cached?: boolean }) => void)
+  | undefined;
+
+export async function trackGenerationFetch<T extends { data?: unknown; cached?: boolean }>(
+  operation: () => Promise<T>,
+  trackTokenUsage: GenerationTokenUsageTracker,
+): Promise<T> {
+  let response: T;
+  try {
+    response = await operation();
+  } catch (error) {
+    trackTokenUsage?.({ tokenUsage: getErrorTokenUsage(error), cached: false });
+    throw error;
+  }
+
+  trackTokenUsage?.({
+    tokenUsage: (response.data as { tokenUsage?: unknown } | undefined)?.tokenUsage,
+    cached: response.cached,
+  });
+  return response;
+}
+
 export function trackGenerationResponseTokenUsage(
   tokenUsage: TokenUsage,
   response: { tokenUsage?: unknown; cached?: boolean },
 ): void {
+  let cached = false;
+  try {
+    cached = Boolean(response.cached);
+  } catch {
+    cached = false;
+  }
+
   let responseTokenUsage: TokenUsage | undefined;
   try {
     const parsedTokenUsage = BaseTokenUsageSchema.safeParse(response.tokenUsage);
@@ -30,17 +60,26 @@ export function trackGenerationResponseTokenUsage(
     responseTokenUsage = undefined;
   }
 
+  if (cached && responseTokenUsage) {
+    const cachedTotal = Math.max(
+      responseTokenUsage.cached ?? 0,
+      responseTokenUsage.total ??
+        (responseTokenUsage.prompt ?? 0) + (responseTokenUsage.completion ?? 0),
+    );
+    responseTokenUsage = {
+      ...responseTokenUsage,
+      cached: cachedTotal,
+      completion: 0,
+      numRequests: 0,
+      prompt: 0,
+    };
+  }
+
   accumulateResponseTokenUsage(
     tokenUsage,
     { tokenUsage: responseTokenUsage },
     { countAsRequest: false },
   );
-  let cached = false;
-  try {
-    cached = Boolean(response.cached);
-  } catch {
-    cached = false;
-  }
   tokenUsage.numRequests ??= 0;
   if (!cached) {
     tokenUsage.numRequests =

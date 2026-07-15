@@ -552,6 +552,84 @@ describe('synthesize', () => {
       }
     });
 
+    it('classifies cached direct-remote token totals without counting a live request', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
+          cached: true,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'cached-remote-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'cached-remote-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          cached: 18,
+          completion: 0,
+          numRequests: 0,
+          prompt: 0,
+          total: 18,
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('attaches accumulated generation usage when synthesis aborts after a local call', async () => {
+      const abortController = new AbortController();
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('generate');
+        abortController.abort();
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const provider = {
+        id: () => 'abort-accounting-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Prompt: generated',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        }),
+      } as unknown as ApiProvider;
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'abort-accounting-plugin' });
+
+      try {
+        await expect(
+          synthesize({
+            abortSignal: abortController.signal,
+            entities: [],
+            language: 'en',
+            numTests: 1,
+            plugins: [{ id: 'abort-accounting-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            provider,
+            purpose: 'Test purpose',
+            strategies: [],
+            targetIds: ['test-provider'],
+          }),
+        ).rejects.toMatchObject({
+          message: 'Operation cancelled',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, cached: 0, numRequests: 1 },
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
     it('should ignore malformed generation usage without dropping a live request', async () => {
       const malformedUsage = Object.defineProperty({}, 'total', {
         enumerable: true,

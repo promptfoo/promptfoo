@@ -3657,7 +3657,11 @@ describe('doGenerateRedteam', () => {
           failedPlugins: [],
           generationTokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
         })
-        .mockRejectedValueOnce(new Error('second context failed'));
+        .mockRejectedValueOnce(
+          Object.assign(new Error('second context failed'), {
+            tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+          }),
+        );
 
       await expect(
         doGenerateRedteam({
@@ -3670,7 +3674,7 @@ describe('doGenerateRedteam', () => {
       ).rejects.toThrow('second context failed');
 
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Observed generation token usage: 17 total'),
+        expect.stringContaining('Observed generation token usage: 28 total'),
       );
       expect(cleanup).toHaveBeenCalledOnce();
     });

@@ -42,7 +42,7 @@ import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateTokenUsage, getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { isUuid } from '../../util/uuid';
 import { loadYaml } from '../../util/yamlLoad';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -832,6 +832,7 @@ async function doGenerateRedteamInternal(
       accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
     }
   } catch (error) {
+    accumulateTokenUsage(generationTokenUsage, getErrorTokenUsage(error));
     reportGenerationTokenUsage();
     await cleanupProvider();
     throw error;

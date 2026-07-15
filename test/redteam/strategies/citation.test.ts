@@ -190,11 +190,18 @@ describe('citation strategy', () => {
   });
 
   it('should handle network errors gracefully', async () => {
+    const trackGenerationTokenUsage = vi.fn();
     mockFetchWithCache.mockRejectedValueOnce(new Error('Network error'));
 
-    const result = await addCitationTestCases(testCases, 'prompt', {});
+    const result = await addCitationTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
 
     expect(result).toHaveLength(0);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: undefined,
+      cached: false,
+    });
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('Error in remote citation generation'),
     );

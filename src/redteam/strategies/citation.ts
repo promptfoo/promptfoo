@@ -6,6 +6,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -65,16 +66,19 @@ async function generateCitations(
         };
       }
 
-      const { data, cached } = await fetchWithCache<CitationGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await trackGenerationFetch(
+        () =>
+          fetchWithCache<CitationGenerationResponse>(
+            getRemoteGenerationUrl(),
+            {
+              method: 'POST',
+              headers: getRemoteGenerationHeaders(),
+              body: JSON.stringify(payload),
+            },
+            getRequestTimeoutMs(),
+          ),
+        config.__trackGenerationTokenUsage,
       );
-      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,

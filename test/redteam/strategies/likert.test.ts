@@ -148,12 +148,21 @@ describe('likert strategy', () => {
   });
 
   it('should handle network errors', async () => {
-    const networkError = new Error('Network error');
+    const trackGenerationTokenUsage = vi.fn();
+    const networkError = Object.assign(new Error('Network error'), {
+      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+    });
     vi.mocked(fetchWithCache).mockRejectedValue(networkError);
 
-    const result = await addLikertTestCases(testCases, 'prompt', {});
+    const result = await addLikertTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
 
     expect(result).toHaveLength(0);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      cached: false,
+    });
     expect(logger.error).toHaveBeenCalledWith(`Error in Likert generation: ${networkError}`);
   });
 
