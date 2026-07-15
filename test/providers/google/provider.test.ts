@@ -536,6 +536,29 @@ describe('GoogleProvider', () => {
       expect(result.metadata?.modelArmor?.blockReason).toBe('MODEL_ARMOR');
     });
 
+    it('should preserve cached token usage and cache state for prompt feedback blocks', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          promptFeedback: {
+            blockReason: 'SAFETY',
+            safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'HIGH' }],
+          },
+          usageMetadata: { promptTokenCount: 10, totalTokenCount: 10 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage).toEqual({ cached: 10, total: 10, numRequests: 0 });
+      expect(result.guardrails).toEqual(
+        expect.objectContaining({ flagged: true, flaggedInput: true, flaggedOutput: false }),
+      );
+    });
+
     it('should handle MAX_TOKENS finish reason as success', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -716,7 +739,7 @@ describe('GoogleProvider', () => {
           }),
           cached: true,
           raw: responseData,
-          tokenUsage: { prompt: 10, completion: 0, total: 10, numRequests: 0 },
+          tokenUsage: { cached: 10, total: 10, numRequests: 0 },
         }),
       );
     });
