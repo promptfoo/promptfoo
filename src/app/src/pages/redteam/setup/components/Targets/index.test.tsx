@@ -255,13 +255,15 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', newConfig);
   });
 
-  it('should handle invalid JSON without calling updateCustomTarget', async () => {
+  it('should clear stale config and report invalid JSON', async () => {
     const user = userEvent.setup();
+    const onConfigErrorChange = vi.fn();
     renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        onConfigErrorChange={onConfigErrorChange}
       />,
     );
 
@@ -280,8 +282,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     // Should still call setRawConfigJson to update the display
     expect(mockSetRawConfigJson).toHaveBeenCalledWith(invalidJson);
 
-    // Should NOT call updateCustomTarget since JSON parsing failed
-    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('config', {});
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
   });
 
   it('should show error state when bodyError is provided', () => {
