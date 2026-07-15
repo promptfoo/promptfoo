@@ -113,6 +113,40 @@ describe('redteamTestCaseGenerationService', () => {
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      'goat',
+      'mischievous-user',
+      'crescendo',
+      'custom',
+      'jailbreak:hydra',
+      'jailbreak:goblin',
+    ] as const)('preserves usage from a failed %s generation response', async (strategyId) => {
+      const tokenUsage = { total: 19, prompt: 12, completion: 7, numRequests: 1 };
+      const fetchWithRetries = vi.fn().mockResolvedValueOnce(
+        createMockResponse({
+          status: 500,
+          text: async () =>
+            JSON.stringify({ error: 'generation failed after inference', tokenUsage }),
+        }),
+      );
+      vi.doMock('../../../src/util/fetch/index', () => ({ fetchWithRetries }));
+      vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
+        getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+        getRemoteGenerationHeaders: vi.fn((extra) => ({
+          'Content-Type': 'application/json',
+          ...extra,
+        })),
+        neverGenerateRemote: vi.fn().mockReturnValue(false),
+      }));
+      vi.doMock('../../../src/providers/shared', () => ({
+        getRequestTimeoutMs: () => TEST_REQUEST_TIMEOUT_MS,
+      }));
+      vi.doMock('../../../src/constants', () => ({ VERSION: '0.0.0-test' }));
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({ tokenUsage });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
     it('should ignore malformed remote generation token usage', async () => {
       mockRemoteGeneration({
         message: { content: 'test prompt' },

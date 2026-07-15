@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { neverGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
-import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
+import type { ApiProvider, PluginActionParams, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
 
 export const DEFAULT_PURPOSE = 'An AI system';
@@ -12,6 +12,7 @@ export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
   generationContext?: RemoteGenerationContext,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<string> {
   const onlyTemplatePrompt =
     prompts.length === 1 && prompts[0] && prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
@@ -27,6 +28,7 @@ export async function extractSystemPurpose(
         'purpose' as RedTeamTask,
         prompts,
         generationContext,
+        trackTokenUsage,
       );
       return result as string;
     } catch (error) {

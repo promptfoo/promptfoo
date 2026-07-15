@@ -59,18 +59,32 @@ describe('System Purpose Extractor', () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { task: 'purpose', result: 'Remote extracted purpose' },
+      data: {
+        task: 'purpose',
+        result: 'Remote extracted purpose',
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      },
       status: 200,
       statusText: 'OK',
       cached: false,
     });
 
-    const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2'], {
-      providerTargetIds: ['file://local-provider.ts'],
-      cloudTargetId: 'cloud-target-123',
-    });
+    const trackTokenUsage = vi.fn();
+    const result = await extractSystemPurpose(
+      provider,
+      ['prompt1', 'prompt2'],
+      {
+        providerTargetIds: ['file://local-provider.ts'],
+        cloudTargetId: 'cloud-target-123',
+      },
+      trackTokenUsage,
+    );
 
     expect(result).toBe('Remote extracted purpose');
+    expect(trackTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      cached: false,
+    });
     expect(fetchWithCache).toHaveBeenCalledWith(
       'https://api.promptfoo.app/api/v1/task',
       expect.objectContaining({

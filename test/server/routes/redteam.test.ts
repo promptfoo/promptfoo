@@ -593,7 +593,7 @@ describe('Redteam Routes', () => {
             : undefined;
         if (failureMode === 'multi-turn failure') {
           mockedGenerateMultiTurnPrompt.mockRejectedValueOnce(
-            new Error('multi-turn failed after generation'),
+            Object.assign(new Error('multi-turn failed after generation'), { tokenUsage: usage }),
           );
         }
 
@@ -608,11 +608,15 @@ describe('Redteam Routes', () => {
 
           expect(response.status).toBe(500);
           expect(response.body.tokenUsage).toEqual({
-            total: failureMode === 'strategy throw' ? 34 : 17,
-            prompt: failureMode === 'strategy throw' ? 20 : 10,
-            completion: failureMode === 'strategy throw' ? 14 : 7,
+            total:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 34 : 17,
+            prompt:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 20 : 10,
+            completion:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 14 : 7,
             cached: 0,
-            numRequests: failureMode === 'strategy throw' ? 2 : 1,
+            numRequests:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 2 : 1,
           });
         } finally {
           strategyFindSpy?.mockRestore();

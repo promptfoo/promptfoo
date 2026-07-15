@@ -171,11 +171,13 @@ describe('synthesize', () => {
         expect.any(Object),
         ['Test prompt'],
         generationContext,
+        expect.any(Function),
       );
       expect(extractSystemPurpose).toHaveBeenCalledWith(
         expect.any(Object),
         ['Test prompt'],
         generationContext,
+        expect.any(Function),
       );
     });
 
@@ -206,11 +208,13 @@ describe('synthesize', () => {
         expect.any(Object),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         expect.any(Object),
+        expect.any(Function),
       );
       expect(extractEntities).toHaveBeenCalledWith(
         expect.objectContaining({ id: expect.any(Function) }),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         expect.any(Object),
+        expect.any(Function),
       );
     });
   });
@@ -350,6 +354,71 @@ describe('synthesize', () => {
       } finally {
         pluginFindSpy.mockRestore();
         strategyFindSpy.mockRestore();
+      }
+    });
+
+    it('tracks remote purpose, entities, plugin, and goal extraction usage during synthesis', async () => {
+      vi.mocked(extractSystemPurpose).mockImplementation(
+        async (_provider, _prompts, _context, trackTokenUsage) => {
+          trackTokenUsage?.({
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            cached: false,
+          });
+          return 'Test purpose';
+        },
+      );
+      vi.mocked(extractEntities).mockImplementation(
+        async (_provider, _prompts, _context, trackTokenUsage) => {
+          trackTokenUsage?.({
+            tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+            cached: false,
+          });
+          return ['entity'];
+        },
+      );
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
+      mockExtractGoal.mockImplementation(
+        async (_prompt, _purpose, _pluginId, _policy, _targetId, trackTokenUsage) => {
+          trackTokenUsage?.({
+            tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+            cached: false,
+          });
+          return 'mocked goal';
+        },
+      );
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+          cached: false,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const pluginFindSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'contracts' });
+
+      try {
+        const result = await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'contracts', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          strategies: [{ id: 'goat' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          total: 45,
+          prompt: 27,
+          completion: 18,
+          cached: 0,
+          numRequests: 4,
+        });
+      } finally {
+        pluginFindSpy.mockRestore();
       }
     });
 

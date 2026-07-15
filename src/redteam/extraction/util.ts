@@ -18,6 +18,7 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import type {
   ApiProvider,
   CallApiOptionsParams,
+  PluginActionParams,
   ProviderResponse,
   RemoteGenerationContext,
 } from '../../types/index';
@@ -58,6 +59,7 @@ export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
   generationContext?: RemoteGenerationContext,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<string | string[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -82,6 +84,11 @@ export async function fetchRemoteGeneration(
       getRequestTimeoutMs(),
       'json',
     );
+
+    trackTokenUsage?.({
+      tokenUsage: (response.data as { tokenUsage?: unknown }).tokenUsage,
+      cached: response.cached,
+    });
 
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);
     return parsedResponse.result;

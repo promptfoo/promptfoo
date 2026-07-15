@@ -128,6 +128,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       return {
         output: validOutputs,
+        tokenUsage: data.tokenUsage,
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation

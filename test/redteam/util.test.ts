@@ -158,12 +158,27 @@ describe('extractGoalFromPrompt', () => {
       status: 200,
       statusText: 'OK',
       headers: {},
-      data: { intent: 'test goal' },
+      data: {
+        intent: 'test goal',
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      },
       deleteFromCache: async () => {},
     });
 
-    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    const trackTokenUsage = vi.fn();
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      trackTokenUsage,
+    );
     expect(result).toBe('test goal');
+    expect(trackTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      cached: false,
+    });
   });
 
   it('should return null on HTTP error', async () => {

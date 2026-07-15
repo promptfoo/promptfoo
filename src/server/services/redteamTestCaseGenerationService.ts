@@ -26,6 +26,19 @@ function getRemoteTokenUsage(value: unknown): TokenUsage | undefined {
   return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
+async function getRemoteGenerationError(task: string, response: Response): Promise<Error> {
+  const responseText = await response.text();
+  let tokenUsage: TokenUsage | undefined;
+  try {
+    tokenUsage = getRemoteTokenUsage(JSON.parse(responseText)?.tokenUsage);
+  } catch {
+    tokenUsage = undefined;
+  }
+
+  const error = new Error(`${task} task failed with status ${response.status}: ${responseText}`);
+  return tokenUsage ? Object.assign(error, { tokenUsage }) : error;
+}
+
 export class RemoteGenerationDisabledError extends Error {
   constructor() {
     super('Remote generation is disabled. Enable remote generation to test multi-turn strategies.');
@@ -287,7 +300,7 @@ async function handleGoatStrategy(ctx: MultiTurnHandlerContext): Promise<MultiTu
   );
 
   if (!response.ok) {
-    throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
+    throw await getRemoteGenerationError('GOAT', response);
   }
 
   const data = await response.json();
@@ -342,9 +355,7 @@ async function handleMischievousUserStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Mischievous User task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteGenerationError('Mischievous User', response);
   }
 
   const data = await response.json();
@@ -479,9 +490,7 @@ async function handleHydraLikeStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `${options.strategyName} task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteGenerationError(options.strategyName, response);
   }
 
   const data = await response.json();
@@ -567,9 +576,7 @@ async function handleCrescendoLikeStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Crescendo task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteGenerationError('Crescendo', response);
   }
 
   const data = await response.json();

@@ -1347,7 +1347,12 @@ export async function synthesize({
   }
   const purpose =
     purposeOverride ||
-    (await extractSystemPurpose(redteamProvider, prompts, redteamGenerationContext));
+    (await extractSystemPurpose(
+      redteamProvider,
+      prompts,
+      redteamGenerationContext,
+      trackTokenUsage,
+    ));
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
@@ -1356,7 +1361,7 @@ export async function synthesize({
   }
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
+    : await extractEntities(redteamProvider, prompts, redteamGenerationContext, trackTokenUsage);
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -1500,6 +1505,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              trackTokenUsage,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1638,6 +1644,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              trackTokenUsage,
             );
 
             (testCase.metadata as any).goal = extractedGoal;

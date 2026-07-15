@@ -70,18 +70,32 @@ describe('Entities Extractor', () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { task: 'entities', result: ['Apple', 'Google'] },
+      data: {
+        task: 'entities',
+        result: ['Apple', 'Google'],
+        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      },
       status: 200,
       statusText: 'OK',
       cached: false,
     });
 
-    const result = await extractEntities(provider, ['prompt1', 'prompt2'], {
-      providerTargetIds: ['file://local-provider.ts'],
-      cloudTargetId: 'cloud-target-123',
-    });
+    const trackTokenUsage = vi.fn();
+    const result = await extractEntities(
+      provider,
+      ['prompt1', 'prompt2'],
+      {
+        providerTargetIds: ['file://local-provider.ts'],
+        cloudTargetId: 'cloud-target-123',
+      },
+      trackTokenUsage,
+    );
 
     expect(result).toEqual(['Apple', 'Google']);
+    expect(trackTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      cached: false,
+    });
     expect(fetchWithCache).toHaveBeenCalledWith(
       'https://api.promptfoo.app/api/v1/task',
       expect.objectContaining({
