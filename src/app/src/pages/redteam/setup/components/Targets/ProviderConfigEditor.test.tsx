@@ -4,6 +4,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
@@ -97,8 +98,7 @@ vi.mock('./CommonConfigurationOptions', () => ({
 describe('ProviderConfigEditor', () => {
   beforeEach(() => {
     mockA2AConfigState.advancedConfigError = null;
-    useRedTeamConfig.getState().setTargetConfigError(null);
-    useRedTeamConfig.getState().setTargetConfigDraft(null);
+    useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
   describe('validate method', () => {
@@ -970,8 +970,86 @@ describe('ProviderConfigEditor', () => {
     });
 
     expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
-    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+  });
+
+  it('keeps malformed Open Interpreter configuration blocked when browser storage is full', () => {
+    const previousStorage = useRedTeamConfig.persist.getOptions().storage;
+    const setError = vi.fn();
+    const setProvider = vi.fn();
+    const setItem = vi.fn(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    useRedTeamConfig.persist.setOptions({
+      storage: {
+        getItem: () => null,
+        removeItem: () => {},
+        setItem,
+      },
+    });
+
+    try {
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+          setProvider={setProvider}
+          setError={setError}
+          providerType="openinterpreter"
+        />,
+      );
+
+      expect(() => {
+        act(() => {
+          screen.getByTestId('invalidate-custom-config').click();
+        });
+      }).not.toThrow();
+
+      expect(setProvider).not.toHaveBeenCalled();
+      expect(setItem).not.toHaveBeenCalled();
+      expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Invalid JSON configuration',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        '{"sandbox_mode":"read-only",}',
+      );
+    } finally {
+      useRedTeamConfig.persist.setOptions({ storage: previousStorage });
+    }
+  });
+
+  it('does not rewrite the persisted red-team configuration on malformed edits', () => {
+    const previousStorage = useRedTeamConfig.persist.getOptions().storage;
+    const setItem = vi.fn();
+    useRedTeamConfig.persist.setOptions({
+      storage: { getItem: () => null, removeItem: () => {}, setItem },
+    });
+
+    try {
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+          setProvider={vi.fn()}
+          setError={vi.fn()}
+          providerType="openinterpreter"
+        />,
+      );
+
+      act(() => {
+        for (let edit = 0; edit < 100; edit += 1) {
+          screen.getByTestId('invalidate-custom-config').click();
+        }
+      });
+
+      expect(setItem).not.toHaveBeenCalled();
+    } finally {
+      useRedTeamConfig.persist.setOptions({ storage: previousStorage });
+    }
   });
 
   it('does not persist malformed custom configuration from the eval creator', () => {
@@ -988,8 +1066,8 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
 
-    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
   });
 
   it('clears propagated custom configuration errors when the provider type changes', () => {
@@ -1007,8 +1085,12 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
-    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
 
     rerender(
       <ProviderConfigEditor
@@ -1020,8 +1102,8 @@ describe('ProviderConfigEditor', () => {
     );
 
     expect(setError).toHaveBeenLastCalledWith(null);
-    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
   });
 
   it.each([

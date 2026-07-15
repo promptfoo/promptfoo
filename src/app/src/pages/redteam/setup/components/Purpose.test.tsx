@@ -17,6 +17,11 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
   DEFAULT_HTTP_TARGET: { id: 'http', config: {} },
 }));
+vi.mock('../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({
+    targetConfigError: mockUseRedTeamConfig()?.targetConfigError ?? null,
+  }),
+}));
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({

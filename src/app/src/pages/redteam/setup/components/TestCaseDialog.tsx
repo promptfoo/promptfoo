@@ -34,7 +34,7 @@ import {
   type Strategy,
 } from '@promptfoo/redteam/constants';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -267,7 +267,7 @@ export const TestCaseGenerateButton: React.FC<{
     data: { status: apiHealthStatus },
   } = useApiHealth();
   const isRemoteDisabled = apiHealthStatus !== 'connected';
-  const { targetConfigError } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // Tooltip component uses controlled state in order to imperatively close it when the Test Case
   // Generation dialog is rendered (by default it will remain open even after the dialog is closed).

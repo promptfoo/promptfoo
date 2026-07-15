@@ -16,6 +16,12 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
     config: {},
   },
 }));
+vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({
+    setTargetConfigError: vi.fn(),
+    setTargetConfigDraft: vi.fn(),
+  }),
+}));
 
 const mockRecordEvent = vi.fn();
 vi.mock('@app/hooks/useTelemetry', () => ({

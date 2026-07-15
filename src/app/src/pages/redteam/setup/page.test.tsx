@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
 
@@ -72,6 +73,7 @@ describe('RedTeamSetupPage', () => {
     // Reset the real Zustand store to initial state
     act(() => {
       useRedTeamConfig.setState(initialRedTeamState);
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     });
 
     // Provide default mock implementations for hooks
@@ -90,6 +92,7 @@ describe('RedTeamSetupPage', () => {
   afterEach(() => {
     act(() => {
       useRedTeamConfig.setState(initialRedTeamState);
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     });
   });
 
@@ -133,7 +136,9 @@ describe('RedTeamSetupPage', () => {
     it('disables Save while a target configuration has an invalid JSON edit', async () => {
       const user = userEvent.setup();
       act(() => {
-        useRedTeamConfig.setState({ targetConfigError: 'Invalid JSON configuration' } as any);
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigError('Invalid JSON configuration');
       });
 
       render(

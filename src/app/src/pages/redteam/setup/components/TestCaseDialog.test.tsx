@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { TestCaseDialog, TestCaseGenerateButton } from './TestCaseDialog';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -35,7 +35,7 @@ describe('TestCaseGenerateButton', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useRedTeamConfig.getState().setTargetConfigError(null);
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError(null);
     mockUseApiHealth.mockReturnValue({
       data: { status: 'connected', message: null },
       refetch: vi.fn(),
@@ -133,7 +133,9 @@ describe('TestCaseGenerateButton', () => {
 
     it('disables test generation and shows the target config error in the tooltip', async () => {
       const user = userEvent.setup();
-      useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
 
       renderWithTooltipProvider(
         <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Generate SQL Injection test" />,

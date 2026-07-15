@@ -229,6 +229,14 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
     getState: () => mockUseRedTeamConfig.getState(),
   }),
 }));
+vi.mock('../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: Object.assign(
+    () => ({ targetConfigError: mockUseRedTeamConfig()?.targetConfigError ?? null }),
+    {
+      getState: () => ({ targetConfigError: mockUseRedTeamConfig.getState()?.targetConfigError }),
+    },
+  ),
+}));
 
 describe('Review Component', () => {
   let timers: TestTimers;

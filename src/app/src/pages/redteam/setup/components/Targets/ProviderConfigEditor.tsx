@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -55,14 +56,9 @@ function ProviderConfigEditor({
   onSessionTested,
   mode = 'redteam',
 }: ProviderConfigEditorProps) {
-  const {
-    config,
-    updateConfig,
-    targetConfigError,
-    setTargetConfigError,
-    targetConfigDraft,
-    setTargetConfigDraft,
-  } = useRedTeamConfig();
+  const { config, updateConfig } = useRedTeamConfig();
+  const { targetConfigError, setTargetConfigError, targetConfigDraft, setTargetConfigDraft } =
+    useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);

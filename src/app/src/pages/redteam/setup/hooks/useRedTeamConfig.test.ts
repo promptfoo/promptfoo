@@ -1,35 +1,83 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from './useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from './useRedTeamTargetConfigValidation';
 
 import type { Config } from '../types';
 
 describe('useRedTeamConfig', () => {
   beforeEach(() => {
     useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+    useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
   });
 
   it('tracks a target configuration error and clears it when loading a full configuration', () => {
     const config = useRedTeamConfig.getState().config;
 
-    useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
-    useRedTeamConfig.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
+    useRedTeamTargetConfigValidation
+      .getState()
+      .setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
 
     useRedTeamConfig.getState().setFullConfig(config);
-    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+  });
+
+  it('keeps malformed target drafts and validation state out of browser storage', () => {
+    const malformedSecret = '{"apiKey":"should-not-be-persisted",}';
+    const config = useRedTeamConfig.getState().config;
+    useRedTeamConfig.setState({
+      config: {
+        ...config,
+        target: {
+          id: 'openinterpreter',
+          config: { sandbox_mode: 'danger-full-access', instructions: 'x'.repeat(2_000_000) },
+        },
+      },
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    setItem.mockClear();
+
+    for (let edit = 0; edit < 100; edit++) {
+      useRedTeamTargetConfigValidation.getState().setTargetConfigDraft(`${malformedSecret}${edit}`);
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+    }
+
+    const persisted = window.localStorage.getItem('redTeamConfig');
+    expect(persisted).not.toBeNull();
+    expect(persisted).not.toContain('should-not-be-persisted');
+    expect(JSON.parse(persisted!).state).not.toHaveProperty('targetConfigDraft');
+    expect(JSON.parse(persisted!).state).not.toHaveProperty('targetConfigError');
+    expect(setItem).not.toHaveBeenCalled();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      `${malformedSecret}99`,
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
   });
 
   it('preserves a target configuration error when the provider type changes', () => {
     useRedTeamConfig.setState({ providerType: 'openinterpreter' });
-    useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
 
     useRedTeamConfig.getState().setProviderType('openinterpreter');
-    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
 
     useRedTeamConfig.getState().setProviderType('openai');
-    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
   });
 
   describe('updatePlugins', () => {

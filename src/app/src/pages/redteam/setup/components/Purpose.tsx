@@ -18,6 +18,7 @@ import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import PageWrapper from './PageWrapper';
 
 import type { ApplicationDefinition } from '../types';
@@ -80,7 +81,8 @@ function DiscoveryResult({
  * "Usage Details" step of the red teaming config setup wizard.
  */
 export default function Purpose({ onNext, onBack }: PromptsProps) {
-  const { config, updateApplicationDefinition, targetConfigError } = useRedTeamConfig();
+  const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },

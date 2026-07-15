@@ -17,7 +17,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
@@ -202,7 +202,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
-  const { targetConfigError } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // ===================================================================
   // State

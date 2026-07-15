@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import TargetTypeSelection from './TargetTypeSelection';
 
 import type { ProviderOptions } from '../../types';
@@ -34,6 +35,7 @@ describe('TargetTypeSelection hydration', () => {
   beforeEach(() => {
     act(() => {
       useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+      useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
       useRedTeamConfig.setState({
         config: {
           ...useRedTeamConfig.getState().config,
@@ -44,6 +46,8 @@ describe('TargetTypeSelection hydration', () => {
           },
         },
         providerType: undefined,
+      });
+      useRedTeamTargetConfigValidation.setState({
         targetConfigError: 'Invalid JSON configuration',
         targetConfigDraft: '{"sandbox_mode":"read-only",}',
       });
@@ -63,8 +67,12 @@ describe('TargetTypeSelection hydration', () => {
       label: 'Unsafe target',
       config: { sandbox_mode: 'danger-full-access' },
     });
-    expect(useRedTeamConfig.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
   });
 
   it('clears the target error only when the user explicitly replaces the target', async () => {
@@ -84,7 +92,7 @@ describe('TargetTypeSelection hydration', () => {
       label: 'Unsafe target',
       config: {},
     });
-    expect(useRedTeamConfig.getState().targetConfigError).toBeNull();
-    expect(useRedTeamConfig.getState().targetConfigDraft).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
   });
 });

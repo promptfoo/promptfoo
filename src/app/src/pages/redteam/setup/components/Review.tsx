@@ -42,6 +42,7 @@ import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -146,7 +147,8 @@ export default function Review({
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
-  const { config, updateConfig, targetConfigError } = useRedTeamConfig();
+  const { config, updateConfig } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -567,8 +569,9 @@ export default function Review({
 
     const { hasRunningJob } = await checkForRunningJob();
 
-    const { config: latestConfig, targetConfigError: latestTargetConfigError } =
-      useRedTeamConfig.getState();
+    const { config: latestConfig } = useRedTeamConfig.getState();
+    const { targetConfigError: latestTargetConfigError } =
+      useRedTeamTargetConfigValidation.getState();
     if (latestTargetConfigError) {
       showToast(latestTargetConfigError, 'error');
       return;

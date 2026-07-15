@@ -38,11 +38,15 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => ({
     config: { target: state.target, extensions: [], prompts: [] },
     providerType: 'openinterpreter',
+    updateConfig,
+  }),
+}));
+vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({
     targetConfigError: state.targetConfigError,
     targetConfigDraft: state.targetConfigDraft,
     setTargetConfigError,
     setTargetConfigDraft,
-    updateConfig,
   }),
 }));
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));

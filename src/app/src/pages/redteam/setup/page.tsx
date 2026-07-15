@@ -53,6 +53,7 @@ import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
@@ -107,7 +108,8 @@ export default function RedTeamSetupPage() {
 
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const { config, setFullConfig, resetConfig, targetConfigError } = useRedTeamConfig();
+  const { config, setFullConfig, resetConfig } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);

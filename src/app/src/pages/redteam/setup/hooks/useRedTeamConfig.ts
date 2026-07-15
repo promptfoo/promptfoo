@@ -2,6 +2,7 @@ import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getProviderType } from '../components/Targets/helpers';
+import { useRedTeamTargetConfigValidation } from './useRedTeamTargetConfigValidation';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
@@ -33,16 +34,12 @@ export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
 interface RedTeamConfigState {
   config: Config;
   providerType: string | undefined; // UI state, not persisted in config
-  targetConfigError: string | null;
-  targetConfigDraft: string | null;
   updateConfig: <K extends keyof Config>(section: K, value: Config[K]) => void;
   updatePlugins: (plugins: Config['plugins']) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
   updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => void;
   setProviderType: (providerType: string | undefined) => void;
-  setTargetConfigError: (error: string | null) => void;
-  setTargetConfigDraft: (draft: string | null) => void;
 }
 
 export const DEFAULT_HTTP_TARGET: ProviderOptions = {
@@ -268,8 +265,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     (set) => ({
       config: defaultConfig,
       providerType: undefined,
-      targetConfigError: null,
-      targetConfigDraft: null,
       updateConfig: (section, value) =>
         set((state) => ({
           config: {
@@ -319,15 +314,15 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         }),
       setFullConfig: (config) => {
         const providerType = getProviderType(config.target?.id);
-        set({ config, providerType, targetConfigError: null, targetConfigDraft: null });
+        set({ config, providerType });
+        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
       },
       resetConfig: () => {
         set({
           config: defaultConfig,
           providerType: undefined,
-          targetConfigError: null,
-          targetConfigDraft: null,
         });
+        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
         // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
         window.location.reload();
       },
@@ -347,8 +342,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           };
         }),
       setProviderType: (providerType) => set({ providerType }),
-      setTargetConfigError: (targetConfigError) => set({ targetConfigError }),
-      setTargetConfigDraft: (targetConfigDraft) => set({ targetConfigDraft }),
     }),
     {
       name: 'redTeamConfig',

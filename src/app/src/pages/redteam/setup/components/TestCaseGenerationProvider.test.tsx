@@ -13,7 +13,7 @@ import { within } from '@testing-library/dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -166,7 +166,7 @@ describe('TestCaseGenerationProvider', () => {
   beforeEach(() => {
     callApiMock.mockReset();
     callApiMock.mockImplementation(defaultCallApiImplementation);
-    useRedTeamConfig.getState().setTargetConfigError(null);
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError(null);
   });
 
   it('should render', () => {
@@ -487,7 +487,9 @@ describe('TestCaseGenerationProvider', () => {
       ['strategy preview', 'goat'],
     ] as const)('does not execute an unsafe target during %s when its config is invalid', async (_case, strategy) => {
       const user = userEvent.setup();
-      useRedTeamConfig.getState().setTargetConfigError('Invalid JSON configuration');
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
 
       render(
         <ToastProvider>
