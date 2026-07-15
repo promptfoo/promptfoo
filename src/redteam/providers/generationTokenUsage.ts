@@ -22,6 +22,10 @@ type GenerationTokenUsageTracker =
   | ((response: { tokenUsage?: unknown; cached?: boolean }) => void)
   | undefined;
 
+export function getGenerationErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  return getErrorTokenUsage(error);
+}
+
 export async function trackGenerationFetch<T extends { data?: unknown; cached?: boolean }>(
   operation: () => Promise<T>,
   trackTokenUsage: GenerationTokenUsageTracker,

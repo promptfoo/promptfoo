@@ -2,9 +2,11 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
-import { isGenerationTokenUsageTracked } from '../providers/generationTokenUsage';
+import {
+  getGenerationErrorTokenUsage,
+  isGenerationTokenUsageTracked,
+} from '../providers/generationTokenUsage';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -114,7 +116,10 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     const response = await provider.callApi(finalTemplate).catch((error: unknown) => {
       if (!isTrackedProvider) {
         try {
-          this.trackTokenUsage?.({ tokenUsage: getErrorTokenUsage(error), cached: false });
+          this.trackTokenUsage?.({
+            tokenUsage: getGenerationErrorTokenUsage(error),
+            cached: false,
+          });
         } catch (trackingError) {
           logger.debug('[cross-session-leak] Failed to track generation token usage', {
             error: trackingError,
