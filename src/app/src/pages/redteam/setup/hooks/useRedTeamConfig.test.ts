@@ -160,6 +160,209 @@ describe('useRedTeamConfig', () => {
     expect(existingTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
   });
 
+  it('reasserts the invalid marker when another tab clears it before a stale config edit', async () => {
+    vi.resetModules();
+    const { useRedTeamConfig: activeTabConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: activeTabValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    activeTabConfig.getState().setFullConfig({
+      ...activeTabConfig.getState().config,
+      target: {
+        id: 'openinterpreter',
+        label: 'Unsafe target',
+        config: { sandbox_mode: 'danger-full-access' },
+      },
+    });
+    activeTabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+    activeTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe('invalid-json');
+
+    window.localStorage.removeItem('redTeamTargetConfigValidation');
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: 'redTeamTargetConfigValidation', newValue: null }),
+    );
+    activeTabConfig.getState().updateApplicationDefinition('purpose', 'An unrelated edit');
+
+    expect(window.localStorage.getItem('redTeamConfig')).toContain('danger-full-access');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe('invalid-json');
+
+    vi.resetModules();
+    const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    expect(reloadedConfig.getState().config.target.config.sandbox_mode).toBe('danger-full-access');
+    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+  });
+
+  it('reasserts the invalid marker after another tab clears all local storage', async () => {
+    vi.resetModules();
+    const { useRedTeamConfig: activeTabConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: activeTabValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    activeTabConfig.getState().setFullConfig({
+      ...activeTabConfig.getState().config,
+      target: {
+        id: 'openinterpreter',
+        label: 'Unsafe target',
+        config: { sandbox_mode: 'danger-full-access' },
+      },
+    });
+    activeTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+
+    window.localStorage.clear();
+    window.dispatchEvent(new StorageEvent('storage', { key: null, newValue: null }));
+    activeTabConfig.getState().updateApplicationDefinition('purpose', 'An unrelated edit');
+
+    expect(window.localStorage.getItem('redTeamConfig')).toContain('danger-full-access');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe('invalid-json');
+
+    vi.resetModules();
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+  });
+
+  it.each([
+    'local',
+    'session',
+  ] as const)('restores a valid fallback cookie when the %s marker is corrupt', async (storage) => {
+    window.localStorage.removeItem('redTeamTargetConfigValidation');
+    window.sessionStorage.removeItem('redTeamTargetConfigValidation');
+    if (storage === 'local') {
+      window.localStorage.setItem('redTeamTargetConfigValidation', 'corrupt');
+    } else {
+      window.sessionStorage.setItem('redTeamTargetConfigValidation', 'corrupt');
+    }
+    document.cookie = 'redTeamTargetConfigValidation=invalid-json; Path=/; SameSite=Lax';
+
+    try {
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+    } finally {
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+    }
+  });
+
+  it('keeps the invalid marker after a quota-fallback tab is closed and reopened', async () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openinterpreter',
+        label: 'Unsafe target',
+        config: { sandbox_mode: 'danger-full-access' },
+      },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const originalCookieDescriptor = Object.getOwnPropertyDescriptor(document, 'cookie');
+    let persistentCookie = '';
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get: () => persistentCookie,
+      set: (value: string) => {
+        if (value.includes('Max-Age=0')) {
+          persistentCookie = '';
+        } else if (/Max-Age=[1-9]\d*/.test(value)) {
+          persistentCookie = value.split(';')[0];
+        }
+      },
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBeNull();
+      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe('invalid-json');
+      expect(document.cookie).toContain('redTeamTargetConfigValidation=invalid-json');
+
+      window.sessionStorage.clear();
+      setItem.mockRestore();
+      vi.resetModules();
+      const { useRedTeamConfig: reopenedConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: reopenedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+
+      expect(reopenedConfig.getState().config.target.config.sandbox_mode).toBe(
+        'danger-full-access',
+      );
+      expect(reopenedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+    } finally {
+      setItem.mockRestore();
+      if (originalCookieDescriptor) {
+        Object.defineProperty(document, 'cookie', originalCookieDescriptor);
+      } else {
+        Reflect.deleteProperty(document, 'cookie');
+      }
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+    }
+  });
+
+  it('reasserts a quota-fallback cookie before a stale config edit is persisted', async () => {
+    vi.resetModules();
+    const { useRedTeamConfig: activeTabConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: activeTabValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    activeTabConfig.getState().setFullConfig({
+      ...activeTabConfig.getState().config,
+      target: {
+        id: 'openinterpreter',
+        label: 'Unsafe target',
+        config: { sandbox_mode: 'danger-full-access' },
+      },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      activeTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      expect(document.cookie).toContain('redTeamTargetConfigValidation=invalid-json');
+
+      document.cookie = 'redTeamTargetConfigValidation=; Max-Age=0; Path=/; SameSite=Lax';
+      activeTabConfig.getState().updateApplicationDefinition('purpose', 'An unrelated edit');
+      expect(window.localStorage.getItem('redTeamConfig')).toContain('danger-full-access');
+      expect(document.cookie).toContain('redTeamTargetConfigValidation=invalid-json');
+
+      window.sessionStorage.clear();
+      setItem.mockRestore();
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reopenedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reopenedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+    } finally {
+      setItem.mockRestore();
+      activeTabValidation.getState().clearTargetConfigValidation();
+    }
+  });
+
   it('broadcasts a validation marker to an already-open tab when local storage is full', async () => {
     const localStorageDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
     const peers = new Set<MockBroadcastChannel>();

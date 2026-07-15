@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 
 const TARGET_CONFIG_VALIDATION_STORAGE_KEY = 'redTeamTargetConfigValidation';
+const TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let targetConfigValidationChannel: BroadcastChannel | null = null;
+
+const getTargetConfigMarkerFromError = (error: string): string =>
+  error === 'Configuration must be a JSON object' ? 'non-object-json' : 'invalid-json';
 
 const getTargetConfigErrorFromMarker = (marker: string | null): string | null => {
   if (marker === 'non-object-json') {
@@ -10,22 +14,62 @@ const getTargetConfigErrorFromMarker = (marker: string | null): string | null =>
   return marker === 'invalid-json' ? 'Invalid JSON configuration' : null;
 };
 
+const getTargetConfigCookieMarker = (): string | null => {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+  try {
+    const prefix = `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=`;
+    return (
+      document.cookie
+        .split(';')
+        .map((cookie) => cookie.trim())
+        .find((cookie) => cookie.startsWith(prefix))
+        ?.slice(prefix.length) ?? null
+    );
+  } catch {
+    return null;
+  }
+};
+
 const getStoredTargetConfigError = (): string | null => {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  let marker: string | null = null;
   try {
-    marker = window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+    const targetConfigError = getTargetConfigErrorFromMarker(
+      window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
+    );
+    if (targetConfigError) {
+      return targetConfigError;
+    }
   } catch {}
-  if (!marker) {
-    try {
-      marker = window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
-    } catch {}
-  }
+  try {
+    const targetConfigError = getTargetConfigErrorFromMarker(
+      window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
+    );
+    if (targetConfigError) {
+      return targetConfigError;
+    }
+  } catch {}
+  return getTargetConfigErrorFromMarker(getTargetConfigCookieMarker());
+};
 
-  return getTargetConfigErrorFromMarker(marker);
+const hasDurableTargetConfigMarker = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  try {
+    if (
+      getTargetConfigErrorFromMarker(
+        window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
+      )
+    ) {
+      return true;
+    }
+  } catch {}
+  return Boolean(getTargetConfigErrorFromMarker(getTargetConfigCookieMarker()));
 };
 
 const persistTargetConfigError = (error: string | null, broadcast = true) => {
@@ -40,11 +84,13 @@ const persistTargetConfigError = (error: string | null, broadcast = true) => {
     try {
       window.sessionStorage.removeItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
     } catch {}
+    try {
+      document.cookie = `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
+    } catch {}
     return;
   }
 
-  const marker =
-    error === 'Configuration must be a JSON object' ? 'non-object-json' : 'invalid-json';
+  const marker = getTargetConfigMarkerFromError(error);
   let persistedLocally = false;
   try {
     window.localStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, marker);
@@ -53,6 +99,9 @@ const persistTargetConfigError = (error: string | null, broadcast = true) => {
   if (!persistedLocally) {
     try {
       window.sessionStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, marker);
+    } catch {}
+    try {
+      document.cookie = `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=${marker}; Max-Age=${TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE}; Path=/; SameSite=Lax`;
     } catch {}
   }
   if (broadcast) {
@@ -69,6 +118,7 @@ interface RedTeamTargetConfigValidationState {
   setTargetConfigError: (error: string | null) => void;
   setTargetConfigDraft: (draft: string | null) => void;
   clearTargetConfigValidation: () => void;
+  reassertTargetConfigValidation: () => void;
 }
 
 export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValidationState>()(
@@ -92,6 +142,12 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
         targetConfigRevision: state.targetConfigRevision + 1,
       }));
     },
+    reassertTargetConfigValidation: () => {
+      const { targetConfigError } = get();
+      if (targetConfigError && !hasDurableTargetConfigMarker()) {
+        persistTargetConfigError(targetConfigError);
+      }
+    },
   }),
 );
 
@@ -107,7 +163,15 @@ if (typeof window !== 'undefined') {
     );
   }
   const handleStorage = (event: StorageEvent) => {
-    if (event.key !== TARGET_CONFIG_VALIDATION_STORAGE_KEY || !event.newValue) {
+    if (event.key !== TARGET_CONFIG_VALIDATION_STORAGE_KEY && event.key !== null) {
+      return;
+    }
+
+    if (!event.newValue) {
+      const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
+      if (targetConfigError) {
+        persistTargetConfigError(targetConfigError, false);
+      }
       return;
     }
 

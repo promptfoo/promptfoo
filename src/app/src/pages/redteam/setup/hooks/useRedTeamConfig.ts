@@ -348,3 +348,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     },
   ),
 );
+
+useRedTeamConfig.subscribe(() => {
+  useRedTeamTargetConfigValidation.getState().reassertTargetConfigValidation();
+});

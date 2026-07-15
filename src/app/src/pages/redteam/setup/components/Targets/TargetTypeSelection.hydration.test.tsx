@@ -95,4 +95,185 @@ describe('TargetTypeSelection hydration', () => {
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
   });
+
+  it('does not restore an unsafe target after a full config is loaded while mounted', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TooltipProvider>
+        <TargetTypeSelection onNext={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'http',
+          label: 'Imported target',
+          config: { url: 'https://example.test', body: '{{prompt}}' },
+        },
+      });
+    });
+
+    const targetName = screen.getByRole('textbox', { name: /Target Name/i });
+    expect(targetName).toHaveValue('Imported target');
+
+    await user.clear(targetName);
+    await user.type(targetName, 'Renamed import');
+
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id: 'http',
+      label: 'Renamed import',
+      config: { url: 'https://example.test', body: '{{prompt}}' },
+    });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+  });
+
+  it('preserves the config of a label-less imported target when its name is entered', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TooltipProvider>
+        <TargetTypeSelection onNext={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
+        },
+      });
+    });
+
+    const targetName = screen.getByRole('textbox', { name: /Target Name/i });
+    expect(targetName).toHaveValue('');
+
+    await user.type(targetName, 'Imported coding target');
+
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id: 'openinterpreter',
+      label: 'Imported coding target',
+      config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
+    });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+  });
+
+  it('keeps the provider editor available when the type step mounts after a label-less import', async () => {
+    const user = userEvent.setup();
+
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
+        },
+      });
+    });
+
+    render(
+      <TooltipProvider>
+        <TargetTypeSelection onNext={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    expect(useRedTeamConfig.getState().providerType).toBe('openinterpreter');
+    const targetName = screen.getByRole('textbox', { name: /Target Name/i });
+    expect(targetName).toHaveValue('');
+
+    await user.type(targetName, 'Imported coding target');
+
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id: 'openinterpreter',
+      label: 'Imported coding target',
+      config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
+    });
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
+  });
+
+  it('preserves a configured label-less HTTP target after the validation store is recreated', async () => {
+    const user = userEvent.setup();
+
+    act(() => {
+      useRedTeamConfig.setState({
+        config: {
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'http',
+            config: { url: 'https://example.test', body: '{{prompt}}' },
+          },
+        },
+        providerType: 'http',
+      });
+      useRedTeamTargetConfigValidation.setState({
+        targetConfigError: null,
+        targetConfigDraft: null,
+        targetConfigRevision: 0,
+      });
+    });
+
+    render(
+      <TooltipProvider>
+        <TargetTypeSelection onNext={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    expect(useRedTeamConfig.getState().providerType).toBe('http');
+    const targetName = screen.getByRole('textbox', { name: /Target Name/i });
+    expect(targetName).toHaveValue('');
+
+    await user.type(targetName, 'Imported HTTP target');
+
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id: 'http',
+      label: 'Imported HTTP target',
+      config: { url: 'https://example.test', body: '{{prompt}}' },
+    });
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
+  });
+
+  it('preserves a label-less raw HTTP request target after the validation store is recreated', async () => {
+    const user = userEvent.setup();
+    const request = 'POST /chat HTTP/1.1\nHost: example.test\n\n{{prompt}}';
+
+    act(() => {
+      useRedTeamConfig.setState({
+        config: {
+          ...useRedTeamConfig.getState().config,
+          target: { id: 'http', config: { request } },
+        },
+        providerType: 'http',
+      });
+      useRedTeamTargetConfigValidation.setState({
+        targetConfigError: null,
+        targetConfigDraft: null,
+        targetConfigRevision: 0,
+      });
+    });
+
+    render(
+      <TooltipProvider>
+        <TargetTypeSelection onNext={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    expect(useRedTeamConfig.getState().providerType).toBe('http');
+    const targetName = screen.getByRole('textbox', { name: /Target Name/i });
+    expect(targetName).toHaveValue('');
+
+    await user.type(targetName, 'Imported raw HTTP target');
+
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id: 'http',
+      label: 'Imported raw HTTP target',
+      config: { request },
+    });
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
+  });
 });

@@ -39,6 +39,7 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import isEqual from 'fast-deep-equal';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -52,6 +53,8 @@ import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
+
+import type { ProviderOptions } from '../types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -69,6 +72,19 @@ interface JobStatusResponse {
   hasRunningJob: boolean;
   jobId?: string;
 }
+
+const getRunTargetValidationError = (
+  targetConfigError: string | null,
+  confirmedTarget: ProviderOptions,
+  latestTarget: ProviderOptions,
+): string | null => {
+  if (targetConfigError) {
+    return targetConfigError;
+  }
+  return isEqual(confirmedTarget, latestTarget)
+    ? null
+    : 'Target configuration changed while preparing the run. Review and try again.';
+};
 
 interface IntentEntry {
   display: string;
@@ -170,6 +186,7 @@ export default function Review({
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const confirmedRunTargetRef = useRef<ProviderOptions | null>(null);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
@@ -540,9 +557,13 @@ export default function Review({
 
   const handleRunWithSettings = async () => {
     if (targetConfigError) {
+      confirmedRunTargetRef.current = null;
       showToast(targetConfigError, 'error');
       return;
     }
+    const confirmedTarget =
+      confirmedRunTargetRef.current ?? structuredClone(useRedTeamConfig.getState().config.target);
+    confirmedRunTargetRef.current = confirmedTarget;
 
     // Check email verification first
     const emailResult = await checkEmailStatus();
@@ -572,8 +593,14 @@ export default function Review({
     const { config: latestConfig } = useRedTeamConfig.getState();
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
-    if (latestTargetConfigError) {
-      showToast(latestTargetConfigError, 'error');
+    const runTargetValidationError = getRunTargetValidationError(
+      latestTargetConfigError,
+      confirmedTarget,
+      latestConfig.target,
+    );
+    if (runTargetValidationError) {
+      confirmedRunTargetRef.current = null;
+      showToast(runTargetValidationError, 'error');
       return;
     }
 
@@ -581,6 +608,7 @@ export default function Review({
       setIsJobStatusDialogOpen(true);
       return;
     }
+    confirmedRunTargetRef.current = null;
 
     // Clear any existing polling interval before starting a new job
     if (pollIntervalRef.current) {
@@ -1255,7 +1283,10 @@ export default function Review({
                   <TooltipTrigger asChild>
                     <span>
                       <Button
-                        onClick={handleRunWithSettings}
+                        onClick={() => {
+                          confirmedRunTargetRef.current = null;
+                          handleRunWithSettings();
+                        }}
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >
@@ -1307,7 +1338,15 @@ export default function Review({
         </Dialog>
 
         {/* Job Status Dialog */}
-        <Dialog open={isJobStatusDialogOpen} onOpenChange={setIsJobStatusDialogOpen}>
+        <Dialog
+          open={isJobStatusDialogOpen}
+          onOpenChange={(open) => {
+            setIsJobStatusDialogOpen(open);
+            if (!open) {
+              confirmedRunTargetRef.current = null;
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Job Already Running</DialogTitle>
@@ -1317,7 +1356,13 @@ export default function Review({
               a new one?
             </p>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsJobStatusDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsJobStatusDialogOpen(false);
+                  confirmedRunTargetRef.current = null;
+                }}
+              >
                 Cancel
               </Button>
               <Button onClick={handleCancelExistingAndRun}>Cancel Existing & Run New</Button>
@@ -1335,7 +1380,10 @@ export default function Review({
 
         <EmailVerificationDialog
           open={isEmailDialogOpen}
-          onClose={() => setIsEmailDialogOpen(false)}
+          onClose={() => {
+            setIsEmailDialogOpen(false);
+            confirmedRunTargetRef.current = null;
+          }}
           onSuccess={() => {
             setIsEmailDialogOpen(false);
             handleRunWithSettings();

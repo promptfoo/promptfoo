@@ -727,26 +727,27 @@ Application Details:
       expect(mockSetJob).not.toHaveBeenCalled();
     });
 
-    it('runs the corrected target configuration when it changes during preflight', async () => {
+    it('does not run a replacement danger-full-access target after preflight', async () => {
       vi.useRealTimers();
       const user = userEvent.setup({ delay: null });
-      const unsafeConfig = {
+      const confirmedConfig = {
         ...defaultConfig,
         target: {
+          id: 'http',
+          label: 'Confirmed HTTP target',
+          config: { url: 'https://example.test', body: '{{prompt}}' },
+        },
+      };
+      const replacementConfig = {
+        ...confirmedConfig,
+        target: {
           id: 'openinterpreter',
-          label: 'Coding target',
+          label: 'Replacement coding target',
           config: { sandbox_mode: 'danger-full-access' },
         },
       };
-      const correctedConfig = {
-        ...unsafeConfig,
-        target: {
-          ...unsafeConfig.target,
-          config: { sandbox_mode: 'read-only' },
-        },
-      };
       let latestState = {
-        config: unsafeConfig,
+        config: confirmedConfig,
         updateConfig: mockUpdateConfig,
         targetConfigError: null as string | null,
         targetConfigDraft: null as string | null,
@@ -772,7 +773,7 @@ Application Details:
           return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
         }
         if (url === '/redteam/run') {
-          return { ok: true, json: async () => ({ id: 'corrected-job' }) } as Response;
+          return { ok: true, json: async () => ({ id: 'unexpected-job' }) } as Response;
         }
         return { ok: true, json: async () => ({}) } as Response;
       });
@@ -787,7 +788,7 @@ Application Details:
       await user.click(screen.getByRole('button', { name: /run now/i }));
       await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/status'));
 
-      latestState = { ...latestState, config: correctedConfig };
+      latestState = { ...latestState, config: replacementConfig };
       rendered.unmount();
 
       await act(async () => {
@@ -797,8 +798,209 @@ Application Details:
         await Promise.resolve();
       });
 
-      expect(mockGetUnifiedConfig).toHaveBeenLastCalledWith(correctedConfig);
-      expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.anything());
+      expect(mockGetUnifiedConfig).not.toHaveBeenCalledWith(replacementConfig);
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+      expect(mockSetJob).not.toHaveBeenCalled();
+    });
+
+    it('does not run a websocket target mutated in place during preflight', async () => {
+      vi.useRealTimers();
+      const user = userEvent.setup({ delay: null });
+      const confirmedConfig = {
+        ...defaultConfig,
+        target: {
+          id: 'websocket',
+          label: 'Confirmed websocket target',
+          config: { url: 'wss://example.test/chat', messageTemplate: '{{prompt}}' },
+        },
+      };
+      const latestState = {
+        config: confirmedConfig,
+        updateConfig: mockUpdateConfig,
+        targetConfigError: null as string | null,
+        targetConfigDraft: null as string | null,
+      };
+      mockUseRedTeamConfig.mockImplementation(() => latestState);
+      let releasePreflight!: () => void;
+      const preflightPromise = new Promise<void>((resolve) => {
+        releasePreflight = resolve;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: null,
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          await preflightPromise;
+          return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
+        }
+        if (url === '/redteam/run') {
+          return { ok: true, json: async () => ({ id: 'unexpected-job' }) } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      const rendered = renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/status'));
+
+      confirmedConfig.target.config.url = 'wss://replacement.test/unsafe';
+      rendered.unmount();
+      await act(async () => {
+        releasePreflight();
+        await preflightPromise;
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockGetUnifiedConfig).not.toHaveBeenCalledWith(confirmedConfig);
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+      expect(mockSetJob).not.toHaveBeenCalled();
+    });
+
+    it('does not run a replacement danger-full-access target after email verification', async () => {
+      vi.useRealTimers();
+      const user = userEvent.setup({ delay: null });
+      const confirmedConfig = {
+        ...defaultConfig,
+        target: {
+          id: 'http',
+          label: 'Confirmed HTTP target',
+          config: { url: 'https://example.test', body: '{{prompt}}' },
+        },
+      };
+      const replacementConfig = {
+        ...confirmedConfig,
+        target: {
+          id: 'openinterpreter',
+          label: 'Replacement coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        },
+      };
+      let latestState = {
+        config: confirmedConfig,
+        updateConfig: mockUpdateConfig,
+        targetConfigError: null as string | null,
+        targetConfigDraft: null as string | null,
+      };
+      mockUseRedTeamConfig.mockImplementation(() => latestState);
+      const checkEmailStatus = vi
+        .fn()
+        .mockResolvedValueOnce({ canProceed: false, needsEmail: true })
+        .mockResolvedValue({ canProceed: true });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus,
+        saveEmail: vi.fn().mockResolvedValue({}),
+        clearEmail: vi.fn(),
+      } as any);
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: null,
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /run now/i }));
+      expect(await screen.findByText('Email Required')).toBeInTheDocument();
+
+      latestState = { ...latestState, config: replacementConfig };
+      await user.type(screen.getByLabelText('Work Email Address'), 'test@example.com');
+      await user.click(screen.getByRole('button', { name: /verify email/i }));
+
+      await waitFor(() => expect(checkEmailStatus).toHaveBeenCalledTimes(3));
+      expect(mockGetUnifiedConfig).not.toHaveBeenCalledWith(replacementConfig);
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+      expect(mockSetJob).not.toHaveBeenCalled();
+    });
+
+    it('does not run a replacement danger-full-access target after cancelling an existing job', async () => {
+      vi.useRealTimers();
+      const user = userEvent.setup({ delay: null });
+      const confirmedConfig = {
+        ...defaultConfig,
+        target: {
+          id: 'http',
+          label: 'Confirmed HTTP target',
+          config: { url: 'https://example.test', body: '{{prompt}}' },
+        },
+      };
+      const replacementConfig = {
+        ...confirmedConfig,
+        target: {
+          id: 'openinterpreter',
+          label: 'Replacement coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        },
+      };
+      let latestState = {
+        config: confirmedConfig,
+        updateConfig: mockUpdateConfig,
+        targetConfigError: null as string | null,
+        targetConfigDraft: null as string | null,
+      };
+      mockUseRedTeamConfig.mockImplementation(() => latestState);
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: null,
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls++;
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: statusCalls === 1 }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return { ok: true, json: async () => ({ success: true }) } as Response;
+        }
+        if (url === '/redteam/run') {
+          return { ok: true, json: async () => ({ id: 'unexpected-job' }) } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /run now/i }));
+      expect(await screen.findByText('Job Already Running')).toBeInTheDocument();
+
+      latestState = { ...latestState, config: replacementConfig };
+      await user.click(screen.getByRole('button', { name: /cancel existing & run new/i }));
+
+      await waitFor(() => expect(statusCalls).toBe(2));
+      expect(mockGetUnifiedConfig).not.toHaveBeenCalledWith(replacementConfig);
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+      expect(mockSetJob).not.toHaveBeenCalled();
     });
 
     it('should disable the Run Now button when API status is blocked', () => {
