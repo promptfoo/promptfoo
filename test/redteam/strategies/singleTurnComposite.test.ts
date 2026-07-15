@@ -47,4 +47,23 @@ describe('composite strategy generation usage', () => {
       cached: false,
     });
   });
+
+  it('reports usage from a failed remote composite request', async () => {
+    const trackGenerationTokenUsage = vi.fn();
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(
+      Object.assign(new Error('Remote generation failed'), {
+        tokenUsage: { total: 14, prompt: 9, completion: 5, numRequests: 1 },
+      }),
+    );
+
+    const result = await addCompositeTestCases([{ vars: { prompt: 'test' } }], 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
+
+    expect(result).toEqual([]);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 14, prompt: 9, completion: 5, numRequests: 1 },
+      cached: false,
+    });
+  });
 });

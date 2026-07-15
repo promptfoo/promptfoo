@@ -7,6 +7,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -70,16 +71,19 @@ export async function generateMathPrompt(
         tokenUsage?: unknown;
       }
 
-      const { data, cached } = await fetchWithCache<MathPromptGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await trackGenerationFetch(
+        () =>
+          fetchWithCache<MathPromptGenerationResponse>(
+            getRemoteGenerationUrl(),
+            {
+              method: 'POST',
+              headers: getRemoteGenerationHeaders(),
+              body: JSON.stringify(payload),
+            },
+            getRequestTimeoutMs(),
+          ),
+        config.__trackGenerationTokenUsage,
       );
-      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug(
         `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,

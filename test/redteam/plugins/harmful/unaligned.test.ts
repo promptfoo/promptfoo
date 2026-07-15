@@ -64,6 +64,43 @@ describe('harmful plugin', () => {
       });
     });
 
+    it('preserves harmful generation when telemetry getters throw', async () => {
+      const trackTokenUsage = vi.fn();
+      const response = Object.defineProperties(
+        { output: ['Test harmful output'] },
+        {
+          tokenUsage: {
+            enumerable: true,
+            get() {
+              throw new Error('usage getter failed');
+            },
+          },
+          cached: {
+            enumerable: true,
+            get() {
+              throw new Error('cached getter failed');
+            },
+          },
+        },
+      );
+      mockCallApi.mockResolvedValueOnce(response);
+
+      const result = await getHarmfulTests(
+        {
+          provider: mockProvider,
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 1,
+          delayMs: 0,
+          trackTokenUsage,
+        },
+        'harmful:hate',
+      );
+
+      expect(result).toHaveLength(1);
+      expect(trackTokenUsage).toHaveBeenCalledWith({ tokenUsage: undefined, cached: false });
+    });
+
     it('should handle unaligned provider plugins with multiple prompts', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
 

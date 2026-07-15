@@ -68,4 +68,34 @@ describe('multilingual', () => {
       cached: false,
     });
   });
+
+  it('reports each failed remote multilingual attempt across retries', async () => {
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network timeout'));
+    const trackGenerationTokenUsage = vi.fn();
+
+    await addMultilingual(
+      [{ vars: { prompt: 'test one' } }, { vars: { prompt: 'test two' } }] as any,
+      'prompt',
+      {
+        languages: ['es'],
+        __trackGenerationTokenUsage: trackGenerationTokenUsage,
+      },
+    );
+
+    expect(fetchWithCache).toHaveBeenCalledTimes(3);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledTimes(3);
+    expect(trackGenerationTokenUsage).toHaveBeenNthCalledWith(1, {
+      tokenUsage: undefined,
+      cached: false,
+    });
+    expect(trackGenerationTokenUsage).toHaveBeenNthCalledWith(2, {
+      tokenUsage: undefined,
+      cached: false,
+    });
+    expect(trackGenerationTokenUsage).toHaveBeenNthCalledWith(3, {
+      tokenUsage: undefined,
+      cached: false,
+    });
+  });
 });

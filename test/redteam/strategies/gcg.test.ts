@@ -277,11 +277,21 @@ describe('gcg strategy', () => {
   });
 
   it('should handle network errors gracefully', async () => {
+    const trackGenerationTokenUsage = vi.fn();
     mockFetchWithCache.mockRejectedValueOnce(
-      new Error('Network error with SECRET_GCG_THROWN_ERROR'),
+      Object.assign(new Error('Network error with SECRET_GCG_THROWN_ERROR'), {
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      }),
     );
 
-    const result = await addGcgTestCases(testCases, 'prompt', {});
+    const result = await addGcgTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
+
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      cached: false,
+    });
 
     expect(result).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith('Error in GCG generation', {

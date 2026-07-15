@@ -103,10 +103,21 @@ describe('audio strategy', () => {
     });
 
     it('should throw an error if remote API fails', async () => {
-      mockFetchWithCache.mockRejectedValueOnce(new Error('Remote API error'));
+      const trackTokenUsage = vi.fn();
+      mockFetchWithCache.mockRejectedValueOnce(
+        Object.assign(new Error('Remote API error'), {
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        }),
+      );
 
       const text = 'Hello, fallback world!';
-      await expect(textToAudio(text, 'en')).rejects.toThrow('Failed to generate audio');
+      await expect(textToAudio(text, 'en', { trackTokenUsage })).rejects.toThrow(
+        'Failed to generate audio',
+      );
+      expect(trackTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        cached: false,
+      });
     });
 
     it('should pass language parameter to API', async () => {

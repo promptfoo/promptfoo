@@ -88,7 +88,19 @@ export async function getHarmfulTests(
 
   const generatePrompts = async (): Promise<string[]> => {
     const result = await unalignedProvider.callApi('');
-    trackTokenUsage?.({ tokenUsage: result.tokenUsage, cached: Boolean(result.cached) });
+    let tokenUsage: unknown;
+    let cached = false;
+    try {
+      tokenUsage = result.tokenUsage;
+    } catch {
+      tokenUsage = undefined;
+    }
+    try {
+      cached = Boolean(result.cached);
+    } catch {
+      cached = false;
+    }
+    trackTokenUsage?.({ tokenUsage, cached });
     if (result.output) {
       if (delayMs > 0) {
         await sleep(delayMs);

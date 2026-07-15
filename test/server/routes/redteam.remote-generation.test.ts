@@ -115,9 +115,9 @@ describe('POST /redteam/generate-test remote generation accounting', () => {
     expect(response.status).toBe(200);
     expect(response.body.tokenUsage).toEqual({
       total: 17,
-      prompt: 10,
-      completion: 7,
-      cached: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 17,
       numRequests: 0,
     });
   });

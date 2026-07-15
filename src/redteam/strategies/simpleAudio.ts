@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -63,16 +64,19 @@ export async function textToAudio(
       tokenUsage?: unknown;
     }
 
-    const { data, cached } = await fetchWithCache<AudioGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(payload),
-      },
-      getRequestTimeoutMs(),
+    const { data } = await trackGenerationFetch(
+      () =>
+        fetchWithCache<AudioGenerationResponse>(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(payload),
+          },
+          getRequestTimeoutMs(),
+        ),
+      options?.trackTokenUsage,
     );
-    options?.trackTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
     if (data.error || !data.audioBase64) {
       throw new Error(

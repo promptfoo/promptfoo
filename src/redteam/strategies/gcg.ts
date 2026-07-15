@@ -5,6 +5,7 @@ import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -64,20 +65,23 @@ async function generateGcgPrompts(
         tokenUsage?: unknown;
       }
 
-      const { data, status, statusText, cached } = await fetchWithCache<GCGGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders({
-            'x-promptfoo-silent': 'true',
-          }),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        true,
+      const { data, status, statusText } = await trackGenerationFetch(
+        () =>
+          fetchWithCache<GCGGenerationResponse>(
+            getRemoteGenerationUrl(),
+            {
+              method: 'POST',
+              headers: getRemoteGenerationHeaders({
+                'x-promptfoo-silent': 'true',
+              }),
+              body: JSON.stringify(payload),
+            },
+            getRequestTimeoutMs(),
+            'json',
+            true,
+          ),
+        config.__trackGenerationTokenUsage,
       );
-      config.__trackGenerationTokenUsage?.({ tokenUsage: data.tokenUsage, cached });
 
       logger.debug('[GCG] Got generation result', {
         caseNumber,
