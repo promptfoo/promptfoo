@@ -77,6 +77,9 @@ function ProviderConfigEditor({
   }, [provider.config, providerType]);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
+    if (type === 'http' && containsNunjucksTemplate(url)) {
+      return true;
+    }
     try {
       const parsedUrl = new URL(url);
       if (type === 'http') {
@@ -128,7 +131,7 @@ function ProviderConfigEditor({
           : String(value);
       const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
       const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (bodyStr.includes('{{prompt}}') || hasInputs) {
+      if (!isRedTeam || bodyStr.includes('{{prompt}}') || hasInputs) {
         setBodyError(null);
       } else if (!updatedTarget.config.request) {
         setBodyError(
@@ -150,7 +153,13 @@ function ProviderConfigEditor({
     } else if (field === 'request') {
       updatedTarget.config.request = value as string;
       const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (value && typeof value === 'string' && !value.includes('{{prompt}}') && !hasInputs) {
+      if (
+        isRedTeam &&
+        value &&
+        typeof value === 'string' &&
+        !value.includes('{{prompt}}') &&
+        !hasInputs
+      ) {
         setBodyError('Raw request must contain {{prompt}} template variable');
       } else {
         setBodyError(null);
