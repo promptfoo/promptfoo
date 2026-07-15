@@ -738,7 +738,6 @@ describe('MetaMessagesProvider', () => {
     const restore = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: do-not-forward' });
     enableCache();
     const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
-      label: 'meta-cache-test',
       config: { apiKey: 'LLM|1|cache-key', stream: false },
     }) as MetaMessagesProvider;
     const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({

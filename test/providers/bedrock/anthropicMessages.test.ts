@@ -147,7 +147,6 @@ describe('Bedrock Anthropic Messages provider', () => {
     restoreEnv = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: do-not-forward' });
     enableCache();
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
-      label: 'bedrock-cache-test',
       config: { apiKey: 'bedrock-key', region: 'us-east-1', stream: false },
     });
     const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({

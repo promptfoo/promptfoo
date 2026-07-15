@@ -50,7 +50,7 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('should return cached output with caching enabled', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1', { label: 'completion-test' });
+      const provider = new AnthropicCompletionProvider('claude-1');
       vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',

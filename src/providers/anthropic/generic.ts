@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
@@ -183,6 +183,7 @@ export class AnthropicGenericProvider implements ApiProvider {
   anthropic: Anthropic;
   label?: string;
   private readonly clientHasCustomHeaders: boolean;
+  private readonly ephemeralCacheNamespace = randomUUID();
 
   constructor(
     modelName: string,
@@ -350,12 +351,12 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   protected getCacheNamespace(): string {
     // Provider aliases are stable, non-secret tenant namespaces. Credentials
-    // must never contribute a persistent cache fingerprint.
-    return hashAnthropicCacheValue({ providerId: this.id(), providerLabel: this.label });
-  }
-
-  protected hasCacheNamespace(): boolean {
-    return Boolean(this.label);
+    // must never contribute a persistent cache fingerprint. An unlabeled
+    // provider can safely reuse responses only within its own process lifetime.
+    return hashAnthropicCacheValue({
+      providerId: this.id(),
+      providerLabel: this.label || this.ephemeralCacheNamespace,
+    });
   }
 
   /**
