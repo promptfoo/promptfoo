@@ -1,9 +1,11 @@
+import { getAnthropicEnvHeaderSuppressions } from '../anthropic/generic';
 import { AnthropicMessagesProvider } from '../anthropic/messages';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -30,6 +32,30 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   // Code OAuth session — that would send an Anthropic OAuth token to the
   // Bedrock mantle host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
+
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
+    return {
+      ...options,
+      defaultHeaders: {
+        ...safeDefaultHeaders,
+        ...suppressedEnvHeaders,
+        ...(this.apiKey ? { 'x-api-key': this.apiKey } : {}),
+      },
+    };
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(

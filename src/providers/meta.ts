@@ -169,9 +169,18 @@ function applyMetaOutputCap(
   value: number | undefined,
 ): void {
   if (field in passthrough) {
+    if (field === 'max_output_tokens') {
+      delete body.max_completion_tokens;
+    }
     return;
   }
-  const outputCap = passthrough.max_tokens ?? value;
+  const outputCap =
+    (field === 'max_output_tokens' ? passthrough.max_completion_tokens : undefined) ??
+    passthrough.max_tokens ??
+    value;
+  if (field === 'max_output_tokens') {
+    delete body.max_completion_tokens;
+  }
   if (outputCap === undefined) {
     delete body[field];
   } else {
@@ -189,6 +198,14 @@ function assertSupportedMetaRequest(
     );
   }
   if ('logprobs' in body) {
+    throw new Error('Muse Spark models do not support logprobs.');
+  }
+  if (
+    Array.isArray(body.include) &&
+    body.include.some(
+      (include) => include === 'logprobs' || include === 'message.output_text.logprobs',
+    )
+  ) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
   if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
@@ -229,8 +246,13 @@ function applyMetaSamplingHygiene(
     }
   }
   for (const key of samplingKeys) {
-    if (config[key] === undefined && !(key in passthrough)) {
+    if (key in passthrough) {
+      continue;
+    }
+    if (config[key] === undefined) {
       delete body[key];
+    } else {
+      body[key] = config[key];
     }
   }
 }
@@ -561,13 +583,21 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // gateway/proxy secrets) and must not be sent to Meta; a null value tells
   // the SDK to drop the header.
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions();
+    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
     return {
       ...options,
       apiKey: null,
       authToken: this.apiKey ?? null,
       defaultHeaders: {
-        ...options.defaultHeaders,
+        ...safeDefaultHeaders,
         ...suppressedEnvHeaders,
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
       },
@@ -583,6 +613,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // Ignore ANTHROPIC_BASE_URL overrides — those are Anthropic-scoped.
   override getApiBaseUrl(): string {
     return (this.config as MetaMessagesConfig).apiBaseUrl || META_MESSAGES_API_BASE_URL;
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
   }
 
   protected override getGenAISystem(): string {

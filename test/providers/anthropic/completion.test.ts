@@ -101,11 +101,13 @@ describe('AnthropicCompletionProvider', () => {
       expect(setSpy).toHaveBeenCalledWith(cacheKey, JSON.stringify('Test output'));
     });
 
-    it('should isolate hashed cache keys by resolved API key', async () => {
+    it('should isolate hashed cache keys by non-secret provider label', async () => {
       const providerA = new AnthropicCompletionProvider('claude-1', {
+        label: 'tenant-a',
         config: { apiKey: 'sk-ant-tenant-a' },
       });
       const providerB = new AnthropicCompletionProvider('claude-1', {
+        label: 'tenant-b',
         config: { apiKey: 'sk-ant-tenant-b' },
       });
       const cache = await getCache();
@@ -144,24 +146,87 @@ describe('AnthropicCompletionProvider', () => {
       }
     });
 
-    it('should keep auth cache namespace stable across module reloads', async () => {
+    it('should bypass the response cache for scoped Anthropic custom headers', async () => {
+      const providerA = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'shared-api-key' },
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: tenant-a-secret' },
+      });
+      const providerB = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'shared-api-key' },
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: tenant-b-secret' },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(providerA.anthropic.completions, 'create').mockResolvedValue({
+        id: 'test-id-a',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Tenant A output',
+      });
+      vi.spyOn(providerB.anthropic.completions, 'create').mockResolvedValue({
+        id: 'test-id-b',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Tenant B output',
+      });
+
+      await providerA.callApi('Shared prompt');
+      await providerB.callApi('Shared prompt');
+
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+      expect(providerA.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.completions.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should keep bypassing the response cache after captured ambient custom headers are cleared', async () => {
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: captured-secret' });
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'shared-api-key' },
+      });
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: undefined });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Tenant output',
+      });
+
+      await provider.callApi('Shared prompt');
+      await provider.callApi('Shared prompt');
+
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should keep the non-secret cache namespace stable across module reloads', async () => {
       async function getNamespaceFromFreshModule() {
         vi.resetModules();
         const anthropicGeneric = await import('../../../src/providers/anthropic/generic');
         return {
-          getAnthropicAuthCacheNamespace: anthropicGeneric.getAnthropicAuthCacheNamespace,
-          namespace: anthropicGeneric.getAnthropicAuthCacheNamespace('sk-ant-reload-secret'),
+          hashAnthropicCacheValue: anthropicGeneric.hashAnthropicCacheValue,
+          namespace: anthropicGeneric.hashAnthropicCacheValue({
+            providerId: 'anthropic:claude-1',
+            providerLabel: 'tenant-a',
+          }),
         };
       }
 
       const firstLoad = await getNamespaceFromFreshModule();
       const secondLoad = await getNamespaceFromFreshModule();
 
-      expect(firstLoad.getAnthropicAuthCacheNamespace).not.toBe(
-        secondLoad.getAnthropicAuthCacheNamespace,
-      );
+      expect(firstLoad.hashAnthropicCacheValue).not.toBe(secondLoad.hashAnthropicCacheValue);
       expect(firstLoad.namespace).toBe(secondLoad.namespace);
       expect(firstLoad.namespace).toMatch(/^[a-f0-9]{64}$/);
+      expect(secondLoad.namespace).toMatch(/^[a-f0-9]{64}$/);
       expect(firstLoad.namespace).not.toContain('sk-ant-reload-secret');
     });
 
@@ -170,21 +235,13 @@ describe('AnthropicCompletionProvider', () => {
     // env-derived state baked in at module load), these literal values will
     // diverge in every process that runs the suite.
     it('should produce known hex digests for fixed inputs', async () => {
-      const { getAnthropicAuthCacheNamespace, hashAnthropicCacheValue } = await import(
-        '../../../src/providers/anthropic/generic'
-      );
+      const { hashAnthropicCacheValue } = await import('../../../src/providers/anthropic/generic');
 
-      expect(getAnthropicAuthCacheNamespace('sk-ant-restart-secret')).toBe(
-        '7c26fdc69a372e71532057f3039c789205d499e73d7b7356842127c3f9280701',
-      );
       expect(hashAnthropicCacheValue({ prompt: 'same prompt' })).toBe(
         '986a0c23b9bf151804afb7cd7ff27307d4450f268f18bdd7d5cea95d52de9114',
       );
       expect(hashAnthropicCacheValue(undefined)).toBe(
         '766c13d249e6c1a4c7ab9b490e2b854b2764a4d88677be73fb242f2238bd3d9d',
-      );
-      expect(getAnthropicAuthCacheNamespace('')).toBe(
-        '7b632cd5180136645b21af8e6f3708e0782bdc3a9d81f094a9385cade8ce0987',
       );
     });
 

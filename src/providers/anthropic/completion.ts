@@ -47,7 +47,12 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: AnthropicCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: AnthropicCompletionOptions;
+      id?: string;
+      label?: string;
+      env?: EnvOverrides;
+    } = {},
   ) {
     super(modelName, options);
   }
@@ -80,9 +85,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     logger.debug('Calling Anthropic API', { params: getCompletionRequestMetadata(params) });
 
     const cache = await getCache();
-    const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(params)}`;
+    const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(params)}`;
+    const shouldUseResponseCache = isCacheEnabled() && !this.hasCustomHeaders();
 
-    if (isCacheEnabled()) {
+    if (shouldUseResponseCache) {
       // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
@@ -104,7 +110,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       };
     }
     logger.debug('\tAnthropic API response', { response: getCompletionResponseMetadata(response) });
-    if (isCacheEnabled()) {
+    if (shouldUseResponseCache) {
       try {
         await cache.set(cacheKey, JSON.stringify(response.completion));
       } catch (err) {

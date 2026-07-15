@@ -1,7 +1,8 @@
-import { createHash, createHmac } from 'crypto';
+import { createHash } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
+import { getEnvOverrides } from '../../envOverrides';
 import logger from '../../logger';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
@@ -23,22 +24,54 @@ import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
  * third-party endpoints use this to keep Anthropic-scoped headers (often
  * gateway/proxy secrets) off foreign hosts.
  */
-export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
-  const suppressed: Record<string, null> = {};
-  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
-  if (!customHeadersEnv) {
-    return suppressed;
-  }
-  for (const line of customHeadersEnv.split('\n')) {
+export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
+  const scopedHeaders =
+    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  const seenHeaderNames = new Set<string>();
+  return Object.fromEntries(
+    Object.keys({
+      ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
+      ...parseAnthropicCustomHeaders(scopedHeaders),
+    })
+      .filter((name) => {
+        const normalizedName = name.toLowerCase();
+        if (seenHeaderNames.has(normalizedName)) {
+          return false;
+        }
+        seenHeaderNames.add(normalizedName);
+        return true;
+      })
+      .map((name) => [name, null]),
+  );
+}
+
+function parseAnthropicCustomHeaders(value: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of value?.split('\n') ?? []) {
     const colon = line.indexOf(':');
     if (colon >= 0) {
       const name = line.substring(0, colon).trim();
       if (name) {
-        suppressed[name] = null;
+        headers[name] = line.substring(colon + 1).trim();
       }
     }
   }
-  return suppressed;
+  return headers;
+}
+
+function getAnthropicCustomHeaderOverrides(
+  env: EnvOverrides | undefined,
+): Record<string, string | null> {
+  const customHeaders =
+    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  if (customHeaders === undefined) {
+    return {};
+  }
+
+  return {
+    ...getAnthropicEnvHeaderSuppressions(env),
+    ...parseAnthropicCustomHeaders(customHeaders),
+  };
 }
 
 /**
@@ -104,10 +137,6 @@ export function hashAnthropicCacheValue(value: unknown): string {
     .digest('hex');
 }
 
-export function getAnthropicAuthCacheNamespace(apiKey: string): string {
-  return createHmac('sha256', apiKey).update(`${ANTHROPIC_CACHE_HASH_CONTEXT}:auth`).digest('hex');
-}
-
 /**
  * Generic provider class for Anthropic APIs.
  *
@@ -152,19 +181,30 @@ export class AnthropicGenericProvider implements ApiProvider {
    */
   claudeCodeCredential?: ClaudeCodeOAuthCredential;
   anthropic: Anthropic;
+  label?: string;
+  private readonly clientHasCustomHeaders: boolean;
 
   constructor(
     modelName: string,
     options: {
       config?: AnthropicBaseOptions;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     } = {},
   ) {
-    const { config, id, env } = options;
+    const { config, id, label, env } = options;
     this.env = env;
     this.modelName = modelName;
     this.config = config || {};
+    this.label = label;
+    const customHeaders =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
+      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+      process.env.ANTHROPIC_CUSTOM_HEADERS;
+    this.clientHasCustomHeaders =
+      Object.keys(this.config.headers ?? {}).length > 0 ||
+      Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
     this.apiKey = this.getApiKey();
     this.usingClaudeCodeOAuth = false;
 
@@ -208,12 +248,39 @@ export class AnthropicGenericProvider implements ApiProvider {
       }
     }
 
+    const clientDefaultHeaders = {
+      ...getAnthropicCustomHeaderOverrides(this.env),
+      ...defaultHeaders,
+    };
+    const scopedCustomHeaderValue =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+    const scopedCustomHeaders = parseAnthropicCustomHeaders(scopedCustomHeaderValue);
+    const scopedAuthHeaders = new Set(
+      Object.keys(scopedCustomHeaders).map((name) => name.toLowerCase()),
+    );
+    if (
+      scopedCustomHeaderValue !== undefined &&
+      this.apiKey &&
+      !scopedAuthHeaders.has('x-api-key')
+    ) {
+      clientDefaultHeaders['x-api-key'] = this.apiKey;
+    }
+    if (
+      scopedCustomHeaderValue !== undefined &&
+      authToken &&
+      !scopedAuthHeaders.has('authorization')
+    ) {
+      clientDefaultHeaders.authorization = `Bearer ${authToken}`;
+    }
+
     this.anthropic = new Anthropic(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
-        ...(Object.keys(defaultHeaders).length > 0 ? { defaultHeaders } : {}),
+        ...(Object.keys(clientDefaultHeaders).length > 0
+          ? { defaultHeaders: clientDefaultHeaders }
+          : {}),
       }),
     );
     this.id = id ? () => id : this.id;
@@ -270,9 +337,21 @@ export class AnthropicGenericProvider implements ApiProvider {
     });
   }
 
-  protected getCacheAuthNamespace(): string {
-    const apiKey = this.apiKey ?? this.getApiKey();
-    return apiKey ? getAnthropicAuthCacheNamespace(apiKey) : 'no-api-key';
+  protected hasCustomHeaders(): boolean {
+    const customHeaders =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
+      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+      process.env.ANTHROPIC_CUSTOM_HEADERS;
+    return (
+      this.clientHasCustomHeaders ||
+      Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0
+    );
+  }
+
+  protected getCacheNamespace(): string {
+    // Provider aliases are stable, non-secret tenant namespaces. Credentials
+    // must never contribute a persistent cache fingerprint.
+    return hashAnthropicCacheValue({ providerId: this.id(), providerLabel: this.label });
   }
 
   /**

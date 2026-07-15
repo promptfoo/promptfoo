@@ -58,6 +58,56 @@ describe('AnthropicGenericProvider', () => {
 
       expect(provider.id()).toBe('custom-id');
     });
+
+    it('clears inherited Anthropic custom headers for a provider-scoped env override', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS:
+          'X-Api-Key: ambient-wrong-key\nX-Proxy-Secret: inherited-secret\nX-Gateway: internal',
+      });
+
+      try {
+        const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+          env: { ANTHROPIC_CUSTOM_HEADERS: '' },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+        });
+        const headers = new Headers(req.headers);
+
+        expect(headers.has('x-proxy-secret')).toBe(false);
+        expect(headers.has('x-gateway')).toBe(false);
+        expect(headers.get('x-api-key')).toBe('test-key');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('replaces inherited Anthropic custom headers with provider-scoped headers', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: inherited-secret',
+      });
+
+      try {
+        const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+          env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Target-Header: configured-value' },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+        });
+        const headers = new Headers(req.headers);
+
+        expect(headers.has('x-proxy-secret')).toBe(false);
+        expect(headers.get('x-target-header')).toBe('configured-value');
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('id', () => {
