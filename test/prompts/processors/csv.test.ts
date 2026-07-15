@@ -144,6 +144,33 @@ describe('processCsvPrompts', () => {
     ]);
   });
 
+  it('should disambiguate base prompt label across multiple rows instead of colliding', async () => {
+    const csvContent = dedent`
+      prompt
+      Tell me about {{topic}}
+      Explain {{topic}} in simple terms
+    `;
+
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+    const basePrompt: Partial<Prompt> = {
+      label: 'My Labeled Prompts',
+      id: 'base-id',
+    };
+
+    const result = await processCsvPrompts('prompts.csv', basePrompt);
+
+    expect(result).toHaveLength(2);
+    const labels = result.map((r) => r.label);
+    // Distinct rows must not collapse onto the same label (and therefore the
+    // same generateIdFromPrompt-derived prompt id).
+    expect(new Set(labels).size).toBe(2);
+    expect(labels).toEqual([
+      'My Labeled Prompts: Tell me about {{topic}}',
+      'My Labeled Prompts: Explain {{topic}} in simple terms',
+    ]);
+  });
+
   it('should skip rows with missing prompt values', async () => {
     const csvContent = dedent`
       prompt,label
