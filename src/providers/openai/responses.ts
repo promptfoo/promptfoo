@@ -557,24 +557,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);
         try {
-          const response = await fetchWithCache<string>(
+          const response = await fetchWithCache<Response | string>(
             url,
             { ...request, signal: controller.signal },
             timeout,
-            'text',
+            'stream',
             true,
             this.config.maxRetries,
           );
           status = response.status;
           statusText = response.statusText;
           responseHeaders = response.headers;
+          const streamResponse =
+            response.data instanceof Response ? response.data : new Response(response.data);
           if (status >= 200 && status < 300) {
-            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
+            data = await readResponsesStream(streamResponse, 'OpenAI', logger);
           } else {
+            const responseText = await streamResponse.text();
             try {
-              data = JSON.parse(response.data);
+              data = JSON.parse(responseText);
             } catch {
-              data = response.data as OpenAIResponsesResponse;
+              data = responseText as OpenAIResponsesResponse;
             }
           }
         } catch (err) {

@@ -450,6 +450,22 @@ describe('fetchWithCache', () => {
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
+    it('returns a live response stream without pre-buffering its body', async () => {
+      const response = new Response('data: {"type":"response.completed"}\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const textSpy = vi.spyOn(response, 'text');
+      mockFetchWithRetries.mockResolvedValueOnce(response);
+
+      const result = await fetchWithCache<Response>(url, {}, 1000, 'stream', true);
+
+      expect(result.data).toBe(response);
+      expect(result.cached).toBe(false);
+      expect(result.headers).toEqual({ 'content-type': 'text/event-stream' });
+      expect(textSpy).not.toHaveBeenCalled();
+    });
+
     it('should return cached false to all concurrent callers on a cache miss', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValue(mockResponse);
