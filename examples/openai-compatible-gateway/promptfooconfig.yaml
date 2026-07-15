@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: OpenAI-compatible multi-model gateway (DaoXE) via openai:chat + apiBaseUrl
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  - id: openai:chat:your-account-model-id
+    config:
+      apiBaseUrl: https://daoxe.com/v1
+      temperature: 0.2
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris

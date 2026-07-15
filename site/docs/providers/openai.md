@@ -1538,6 +1538,34 @@ These OpenAI-related environment variables are supported:
 | `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).         |
 | `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                  |
 
+## OpenAI-compatible multi-model gateways
+
+The OpenAI provider can target any OpenAI-compatible Chat Completions endpoint by setting `apiBaseUrl` (or `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL`). This is useful for multi-model gateways that speak the OpenAI API shape.
+
+Example with [DaoXE](https://daoxe.com) (`https://daoxe.com/v1`):
+
+```bash
+export OPENAI_API_KEY=your_daoxe_api_key
+export OPENAI_BASE_URL=https://daoxe.com/v1
+```
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: openai:chat:your-account-model-id
+    config:
+      apiBaseUrl: https://daoxe.com/v1
+      # apiKeyEnvar: OPENAI_API_KEY  # default; set to DAOXE_API_KEY if preferred
+```
+
+Replace `your-account-model-id` with an exact model ID from your DaoXE account (`GET /v1/models` or the dashboard). Do not hardcode a static catalog — availability is account-scoped.
+
+Notes:
+
+- This path uses OpenAI Chat Completions. DaoXE also exposes other protocols (for example Anthropic Messages) for other clients; use those only with providers that speak those APIs.
+- DaoXE is not available in mainland China.
+- Runnable example: [`examples/openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway).
+
 ## Evaluating assistants
 
 To test out an Assistant via OpenAI's Assistants API, first create an Assistant in the [API playground](https://platform.openai.com/playground).
