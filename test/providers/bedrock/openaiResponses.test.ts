@@ -576,7 +576,7 @@ describe('bedrock openaiResponses helper', () => {
           body: expect.stringContaining(`"model":"${modelId}"`),
         }),
         expect.any(Number),
-        'text',
+        'stream',
         true,
         undefined,
       );
@@ -920,7 +920,80 @@ describe('bedrock openaiResponses helper', () => {
       const result = await provider.callApi('hello');
 
       expect(result.error).toBeUndefined();
-      expect(result.output).toBe('[filtered]');
+      expect(result.output).toContain('content_filter');
+      expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(result.isRefusal).toBe(true);
+    });
+
+    it('returns a refusal for a failed content-filter stream without discarding usage', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
+          '',
+          'event: response.failed',
+          'data: {"type":"response.failed","response":{"id":"resp_failed_filter","model":"openai.gpt-5.5","status":"failed","error":{"code":"content_filter","message":"blocked by safety system"},"output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}',
+          '',
+        ].join('\n'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('content_filter');
+      expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(result.isRefusal).toBe(true);
+      expect(result.tokenUsage).toEqual({
+        total: 5,
+        prompt: 3,
+        completion: 2,
+        numRequests: 1,
+      });
+    });
+
+    it('cancels an oversized live Responses stream before fully buffering it', async () => {
+      const encoder = new TextEncoder();
+      const chunk = `: ${'x'.repeat(1_024 * 1_024)}\n`;
+      let cancelled = false;
+      let pulls = 0;
+      const stream = new ReadableStream({
+        pull(controller) {
+          pulls++;
+          controller.enqueue(encoder.encode(chunk));
+          if (pulls === 24) {
+            controller.close();
+          }
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: new Response(stream, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/event-stream' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toMatch(/streaming response exceeded.*(?:output|event)/i);
+      expect(cancelled).toBe(true);
+      expect(pulls).toBeLessThan(24);
     });
 
     it('does not append a streamed draft to a completed terminal refusal', async () => {

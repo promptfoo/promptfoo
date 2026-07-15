@@ -847,13 +847,7 @@ export async function readResponsesStream(
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput);
-    const hasMeaningfulSafeOutput = safeOutput.some(
-      (item: any) =>
-        item?.type !== 'message' ||
-        (Array.isArray(item.content) && item.content.length > 0) ||
-        (typeof item.refusal === 'string' && item.refusal.length > 0),
-    );
-    if (!hasRefusalOutput(safeOutput) && !hasMeaningfulSafeOutput) {
+    if (!hasRefusalOutput(safeOutput)) {
       const reason = [
         latestResponse.incomplete_details?.reason,
         latestResponse.error?.code,
@@ -862,11 +856,17 @@ export async function readResponsesStream(
       safeOutput.push({
         type: 'message',
         role: 'assistant',
-        content: [{ type: 'refusal', refusal: `Response blocked${reason ? `: ${reason}` : '.'}` }],
+        content: [
+          {
+            type: 'refusal',
+            refusal: `I cannot help with that request. Response blocked${reason ? `: ${reason}` : '.'}`,
+          },
+        ],
       });
     }
     return boundedResponse({
       ...latestResponse,
+      error: undefined,
       output: safeOutput,
     });
   }
