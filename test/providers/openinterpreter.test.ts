@@ -612,6 +612,102 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it('merges templated base request policies with partial row overrides', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        server_request_policy: {
+          command_execution: 'accept',
+          permissions: { permissions: { read: true }, scope: 'session' },
+          user_input: { q1: '{{answer}}' },
+          dynamic_tools: { baseTool: { success: true, text: 'base result' } },
+        },
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('merged request policy', {
+      vars: { answer: 'approved' },
+      prompt: {
+        raw: 'merged request policy',
+        label: 'merged policy',
+        config: {
+          server_request_policy: {
+            file_change: 'decline',
+            permissions: { strict_auto_review: false },
+            dynamic_tools: { rowTool: { success: true, text: 'row result' } },
+          },
+        },
+      },
+    } as any);
+    await startTurn(server);
+
+    server.send({
+      id: 83,
+      method: 'item/commandExecution/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'command_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 83 && message.result),
+    ).resolves.toMatchObject({ result: { decision: 'accept' } });
+
+    server.send({
+      id: 84,
+      method: 'item/fileChange/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'file_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 84 && message.result),
+    ).resolves.toMatchObject({ result: { decision: 'decline' } });
+
+    server.send({
+      id: 85,
+      method: 'item/permissions/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'permission_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 85 && message.result),
+    ).resolves.toMatchObject({
+      result: { permissions: { read: true }, scope: 'session', strictAutoReview: false },
+    });
+
+    server.send({
+      id: 86,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        itemId: 'input_1',
+        questions: [{ id: 'q1', header: 'Question', question: 'Approve?', options: [] }],
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 86 && message.result),
+    ).resolves.toMatchObject({ result: { answers: { q1: { answers: ['approved'] } } } });
+
+    server.send({
+      id: 87,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        callId: 'tool_1',
+        tool: 'baseTool',
+        arguments: {},
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 87 && message.result),
+    ).resolves.toMatchObject({
+      result: { contentItems: [{ type: 'inputText', text: 'base result' }], success: true },
+    });
+
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it.each([
     ['interpreter_home', { interpreter_home: '{{home}}' }],
     ['cli_env.INTERPRETER_HOME', { cli_env: { INTERPRETER_HOME: '{{home}}' } }],
@@ -660,6 +756,9 @@ describe('OpenInterpreterProvider', () => {
           storeOutputAs: 'saved',
           runSerially: true,
           provider: attachedProvider,
+          redteamGraderExamples: [
+            { output: 'example', pass: true, score: 1, reason: 'global grader example' },
+          ],
         },
       },
     } as any);
@@ -675,6 +774,132 @@ describe('OpenInterpreterProvider', () => {
         prompt: { config: { approval_policiy: 'never' } },
       } as any),
     ).resolves.toMatchObject({ error: expect.stringContaining('approval_policiy') });
+  });
+
+  it('coerces env-rendered typed options when loading Open Interpreter', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined, OI_TIMEOUT: '1000', OI_SKIP_GIT: 'true' });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = await loadApiProvider('openinterpreter', {
+      options: {
+        config: {
+          turn_timeout_ms: '{{ env.OI_TIMEOUT }}',
+          skip_git_repo_check: '{{ env.OI_SKIP_GIT }}',
+        },
+      },
+    } as any);
+
+    const resultPromise = provider.callApi('env-rendered config');
+    await startTurn(server);
+    completeTurn(server, 'reviewed');
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+    expect(mocks.spawn.mock.calls[0][1]).toEqual(expect.arrayContaining(['app-server']));
+  });
+
+  it('preserves free-form boolean-like strings while coercing schema-defined request-policy booleans', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        server_request_policy: {
+          permissions: {
+            permissions: {
+              success: '{{yes}}',
+              rules: '{{no}}',
+              turn_timeout_ms: '{{timeout}}',
+              skip_git_repo_check: '{{skip}}',
+            },
+            strict_auto_review: '{{no}}',
+          },
+          user_input: {
+            success: '{{yes}}',
+            rules: '{{no}}',
+            turn_timeout_ms: '{{timeout}}',
+            skip_git_repo_check: '{{skip}}',
+          },
+          dynamic_tools: {
+            boolTool: { success: '{{yes}}', text: '{{no}}' },
+          },
+        },
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('boolean-like strings', {
+      vars: { yes: 'true', no: 'false', timeout: '1000', skip: 'true' },
+      prompt: { raw: 'boolean-like strings', label: 'typed paths' },
+    } as any);
+    await startTurn(server);
+
+    server.send({
+      id: 88,
+      method: 'item/permissions/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'permission_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 88 && message.result),
+    ).resolves.toMatchObject({
+      result: {
+        permissions: {
+          success: 'true',
+          rules: 'false',
+          turn_timeout_ms: '1000',
+          skip_git_repo_check: 'true',
+        },
+        strictAutoReview: false,
+      },
+    });
+
+    server.send({
+      id: 89,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        itemId: 'input_1',
+        questions: [
+          { id: 'success', header: 'Success', question: 'Success?', options: [] },
+          { id: 'rules', header: 'Rules', question: 'Rules?', options: [] },
+          { id: 'turn_timeout_ms', header: 'Timeout', question: 'Timeout?', options: [] },
+          { id: 'skip_git_repo_check', header: 'Skip Git', question: 'Skip Git?', options: [] },
+        ],
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 89 && message.result),
+    ).resolves.toMatchObject({
+      result: {
+        answers: {
+          success: { answers: ['true'] },
+          rules: { answers: ['false'] },
+          turn_timeout_ms: { answers: ['1000'] },
+          skip_git_repo_check: { answers: ['true'] },
+        },
+      },
+    });
+
+    server.send({
+      id: 90,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        callId: 'tool_1',
+        tool: 'boolTool',
+        arguments: {},
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 90 && message.result),
+    ).resolves.toMatchObject({
+      result: { contentItems: [{ type: 'inputText', text: 'false' }], success: true },
+    });
+
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
   it('forwards only the validated absolute local path when the launch directory contains a different file', async () => {

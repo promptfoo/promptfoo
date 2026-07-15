@@ -52,6 +52,53 @@ describe('CustomTargetConfiguration', () => {
     expect(example.textContent).not.toContain('max_tokens');
   });
 
+  it('clears stale Open Interpreter config and reports malformed JSON', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+    const onConfigErrorChange = vi.fn();
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson={'{\n  "sandbox_mode": "danger-full-access"\n}'}
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
+      />,
+    );
+
+    await user.clear(screen.getByTestId('code-editor'));
+    await user.paste('{"sandbox_mode":"read-only",}');
+
+    expect(updateCustomTarget).toHaveBeenLastCalledWith('config', {});
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
+  });
+
+  it('does not clear the configuration error when formatting a non-object value', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+    const onConfigErrorChange = vi.fn();
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson="[]"
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Format/i }));
+
+    expect(updateCustomTarget).toHaveBeenLastCalledWith('config', {});
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Configuration must be a JSON object');
+  });
+
   describe('file:// prefix handling', () => {
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();

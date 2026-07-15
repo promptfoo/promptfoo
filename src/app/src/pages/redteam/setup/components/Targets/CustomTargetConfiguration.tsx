@@ -33,6 +33,7 @@ interface CustomTargetConfigurationProps {
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
   providerType?: string;
+  onConfigErrorChange?: (error: string | null) => void;
 }
 
 interface ProviderConfig {
@@ -427,6 +428,7 @@ const CustomTargetConfiguration = ({
   setRawConfigJson,
   bodyError,
   providerType,
+  onConfigErrorChange,
 }: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
@@ -458,10 +460,21 @@ const CustomTargetConfiguration = ({
     setRawConfigJson(content);
     try {
       const parsedConfig = JSON.parse(content);
+      if (
+        typeof parsedConfig !== 'object' ||
+        parsedConfig === null ||
+        Array.isArray(parsedConfig)
+      ) {
+        updateCustomTarget('config', {});
+        onConfigErrorChange?.('Configuration must be a JSON object');
+        return;
+      }
+
+      onConfigErrorChange?.(null);
       updateCustomTarget('config', parsedConfig);
-    } catch (error) {
-      // Allow invalid JSON while typing - error is shown via bodyError prop
-      console.error('Invalid JSON configuration:', error);
+    } catch {
+      updateCustomTarget('config', {});
+      onConfigErrorChange?.('Invalid JSON configuration');
     }
   };
 
@@ -469,9 +482,16 @@ const CustomTargetConfiguration = ({
     if (rawConfigJson.trim()) {
       try {
         const parsed = JSON.parse(rawConfigJson);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          updateCustomTarget('config', {});
+          onConfigErrorChange?.('Configuration must be a JSON object');
+          return;
+        }
+
         const formatted = JSON.stringify(parsed, null, 2);
         setRawConfigJson(formatted);
         updateCustomTarget('config', parsed);
+        onConfigErrorChange?.(null);
       } catch {
         // Error state is already shown via bodyError prop
       }

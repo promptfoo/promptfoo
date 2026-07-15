@@ -2,7 +2,7 @@
 import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -38,6 +38,11 @@ export default function AddProviderDialog({
     initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
+
+  const handleValidationRequest = useCallback((validator: () => boolean) => {
+    validateRef.current = validator;
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -67,7 +72,7 @@ export default function AddProviderDialog({
   };
 
   const handleSave = () => {
-    if (provider) {
+    if (provider && (validateRef.current?.() ?? false)) {
       // Auto-generate label from ID if not provided
       const providerToSave = provider.label
         ? provider
@@ -144,6 +149,7 @@ export default function AddProviderDialog({
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
                   validateAll={false}
+                  onValidationRequest={handleValidationRequest}
                   providerType={providerType}
                   mode="eval"
                 />
@@ -218,6 +224,9 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
   }
   if (id.startsWith('perplexity:')) {
     return 'perplexity';
+  }
+  if (id === 'openinterpreter' || id.startsWith('openinterpreter:')) {
+    return 'openinterpreter';
   }
   if (id === 'http') {
     return 'http';

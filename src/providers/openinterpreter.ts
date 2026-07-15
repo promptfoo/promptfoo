@@ -36,6 +36,7 @@ const FRAMEWORK_PROMPT_OPTION_KEYS = new Set([
   'disableDefaultAsserts',
   'runSerially',
   'repeat',
+  'redteamGraderExamples',
 ]);
 const NUMERIC_PROMPT_OPTION_KEYS = new Set([
   'thread_pool_size',
@@ -77,15 +78,30 @@ const NESTED_TYPED_PROMPT_OPTION_KEYS = new Set([
   'collaboration_mode',
   'server_request_policy',
 ]);
-const NESTED_BOOLEAN_PROMPT_OPTION_KEYS = new Set([
+const GRANULAR_APPROVAL_BOOLEAN_KEYS = new Set([
   'sandbox_approval',
   'rules',
   'skill_approval',
   'request_permissions',
   'mcp_elicitations',
-  'strict_auto_review',
-  'success',
 ]);
+
+function isSchemaDefinedBooleanPath(path: string[]): boolean {
+  return (
+    (path.length === 3 &&
+      path[0] === 'approval_policy' &&
+      path[1] === 'granular' &&
+      GRANULAR_APPROVAL_BOOLEAN_KEYS.has(path[2])) ||
+    (path.length === 3 &&
+      path[0] === 'server_request_policy' &&
+      path[1] === 'permissions' &&
+      path[2] === 'strict_auto_review') ||
+    (path.length === 4 &&
+      path[0] === 'server_request_policy' &&
+      path[1] === 'dynamic_tools' &&
+      path[3] === 'success')
+  );
+}
 
 const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
   codex_path_override: true,
@@ -133,28 +149,40 @@ function containsTemplate(value: unknown): boolean {
   return isRecord(value) && Object.values(value).some(containsTemplate);
 }
 
-function coerceRenderedPromptOption(key: string, value: unknown, nestedTyped = false): unknown {
-  if (NUMERIC_PROMPT_OPTION_KEYS.has(key) && typeof value === 'string' && value.trim()) {
+function coerceRenderedPromptOption(
+  key: string,
+  value: unknown,
+  nestedTyped = false,
+  optionPath: string[] = [key],
+): unknown {
+  if (
+    optionPath.length === 1 &&
+    NUMERIC_PROMPT_OPTION_KEYS.has(key) &&
+    typeof value === 'string' &&
+    value.trim()
+  ) {
     const numericValue = Number(value);
     if (Number.isFinite(numericValue)) {
       return numericValue;
     }
   }
   if (
-    (BOOLEAN_PROMPT_OPTION_KEYS.has(key) ||
-      (nestedTyped && NESTED_BOOLEAN_PROMPT_OPTION_KEYS.has(key))) &&
+    ((optionPath.length === 1 && BOOLEAN_PROMPT_OPTION_KEYS.has(key)) ||
+      (nestedTyped && isSchemaDefinedBooleanPath(optionPath))) &&
     (value === 'true' || value === 'false')
   ) {
     return value === 'true';
   }
   if (Array.isArray(value) && nestedTyped) {
-    return value.map((entry) => coerceRenderedPromptOption(key, entry, true));
+    return value.map((entry, index) =>
+      coerceRenderedPromptOption(key, entry, true, [...optionPath, String(index)]),
+    );
   }
   if (isRecord(value) && nestedTyped) {
     return Object.fromEntries(
       Object.entries(value).map(([nestedKey, nestedValue]) => [
         nestedKey,
-        coerceRenderedPromptOption(nestedKey, nestedValue, true),
+        coerceRenderedPromptOption(nestedKey, nestedValue, true, [...optionPath, nestedKey]),
       ]),
     );
   }
@@ -223,7 +251,13 @@ function parseInitialOpenInterpreterConfig(
     delete cliEnv.INTERPRETER_HOME;
     initialConfig.cli_env = cliEnv;
   }
-  return parseOpenInterpreterConfig(initialConfig as OpenInterpreterConfig);
+  const providerConfig = Object.fromEntries(
+    Object.entries(initialConfig).map(([key, value]) => [
+      key,
+      coerceRenderedPromptOption(key, value, NESTED_TYPED_PROMPT_OPTION_KEYS.has(key)),
+    ]),
+  );
+  return parseOpenInterpreterConfig(providerConfig as OpenInterpreterConfig);
 }
 
 function validateThreadPersistence(config: OpenInterpreterConfig): void {
@@ -272,18 +306,17 @@ function resolveInterpreterHome(config: OpenInterpreterConfig): string | undefin
   return interpreterHome;
 }
 
-function mergeRecords(
-  base: Record<string, unknown> | undefined,
-  override: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const merged = { ...(base ?? {}), ...(override ?? {}) };
-  for (const [key, value] of Object.entries(override ?? {})) {
-    const original = base?.[key];
+function mergeRecords<T extends object>(base: T | undefined, override: T | undefined): T {
+  const baseRecord: Record<string, unknown> = isRecord(base) ? base : {};
+  const overrideRecord: Record<string, unknown> = isRecord(override) ? override : {};
+  const merged: Record<string, unknown> = { ...baseRecord, ...overrideRecord };
+  for (const [key, value] of Object.entries(overrideRecord)) {
+    const original = baseRecord[key];
     if (isRecord(original) && isRecord(value)) {
       merged[key] = mergeRecords(original, value);
     }
   }
-  return merged;
+  return merged as T;
 }
 
 function toCodexAppServerConfig(
@@ -520,6 +553,10 @@ export class OpenInterpreterProvider implements ApiProvider {
         ...(promptConfig ?? {}),
         cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
         cli_env: { ...(renderedBaseConfig.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
+        server_request_policy: mergeRecords(
+          renderedBaseConfig.server_request_policy,
+          promptConfig?.server_request_policy,
+        ),
       } as OpenInterpreterConfig;
       validateThreadPersistence(effectiveConfig);
 

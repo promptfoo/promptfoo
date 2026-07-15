@@ -77,6 +77,10 @@ function redactAppServerText(value: string): string {
       REDACTED,
     )
     .replace(
+      /(\\["'](?:authorization|auth)\\["']\s*[:=]\s*\\["'])(?:bearer|basic)\s+[^\\\s"'`]+(\\["'])/gi,
+      (_match, prefix, suffix) => `${prefix}${REDACTED}${suffix}`,
+    )
+    .replace(
       /\b(authorization|auth)(["']?)\s*([=:])(\s*)(["']?)(?:bearer|basic)\s+[^\s"'`]+(\5)/gi,
       (_match, key, keyQuote, separator, spacing, quote) =>
         `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,

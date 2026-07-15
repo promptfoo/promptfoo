@@ -4733,6 +4733,7 @@ describe('OpenAICodexAppServerProvider', () => {
     'Authorization: bearer short-secret-token',
     '{"Authorization":"bearer short-secret-token"}',
     "{'authorization':'basic short-secret-token'}",
+    'request failed: {\\"Authorization\\":\\"bearer short-secret-token\\"}',
   ])('redacts authorization credentials from app-server stderr failures: %s', async (stderr) => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

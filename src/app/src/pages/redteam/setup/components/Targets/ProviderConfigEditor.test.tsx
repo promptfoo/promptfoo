@@ -18,7 +18,23 @@ vi.mock('./WebSocketEndpointConfiguration', () => ({
   default: () => <div data-testid="ws-config" />,
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
-  default: () => <div data-testid="custom-config" />,
+  default: ({
+    onConfigErrorChange,
+    rawConfigJson,
+  }: {
+    onConfigErrorChange?: (error: string | null) => void;
+    rawConfigJson?: string;
+  }) => (
+    <div data-testid="custom-config">
+      <pre data-testid="custom-raw-config">{rawConfigJson}</pre>
+      <button
+        data-testid="invalidate-custom-config"
+        onClick={() => onConfigErrorChange?.('Invalid JSON configuration')}
+      >
+        Invalidate custom config
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./A2AEndpointConfiguration', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
@@ -687,6 +703,46 @@ describe('ProviderConfigEditor', () => {
     });
   });
 
+  it('should reset stale HTTP JSON when switching to Open Interpreter', async () => {
+    const TestComponent = () => {
+      const [providerType, setProviderType] = React.useState('http');
+      const [provider, setProvider] = React.useState<ProviderOptions>({
+        id: 'http',
+        config: { url: 'https://api.example.com', body: '{{prompt}}' },
+      });
+
+      return (
+        <>
+          <ProviderConfigEditor
+            provider={provider}
+            setProvider={setProvider}
+            providerType={providerType}
+          />
+          <button
+            data-testid="switch-openinterpreter"
+            onClick={() => {
+              setProvider({ id: 'openinterpreter', config: {} });
+              setProviderType('openinterpreter');
+            }}
+          >
+            Switch Open Interpreter
+          </button>
+        </>
+      );
+    };
+
+    renderWithProviders(<TestComponent />);
+
+    act(() => {
+      screen.getByTestId('switch-openinterpreter').click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-raw-config')).toHaveTextContent('{}');
+    });
+    expect(screen.getByTestId('custom-raw-config')).not.toHaveTextContent('api.example.com');
+  });
+
   it('should update validation rules and rendered component when switching from agent framework to non-agent provider type', async () => {
     const mockSetProvider = vi.fn();
     const mockSetError = vi.fn();
@@ -860,6 +916,33 @@ describe('ProviderConfigEditor', () => {
       'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
     );
     expect(onValidate).toHaveBeenCalledWith(false);
+  });
+
+  it('should reject malformed Open Interpreter configuration when validation is requested', () => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+    let validateFn: (() => boolean) | null = null;
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        onValidationRequest={(validator) => {
+          validateFn = validator;
+        }}
+        providerType="openinterpreter"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(validateFn!()).toBe(false);
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(onValidate).toHaveBeenLastCalledWith(false);
   });
 
   it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
@@ -64,6 +64,17 @@ function ProviderConfigEditor({
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
+  const [customConfigError, setCustomConfigError] = useState<string | null>(null);
+  const previousProviderType = useRef(providerType);
+
+  useEffect(() => {
+    if (previousProviderType.current !== providerType) {
+      previousProviderType.current = providerType;
+      setRawConfigJson(JSON.stringify(provider.config, null, 2));
+      setCustomConfigError(null);
+      setBodyError(null);
+    }
+  }, [provider.config, providerType]);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -281,6 +292,9 @@ function ProviderConfigEditor({
           'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
         );
       }
+      if (customConfigError) {
+        errors.push(customConfigError);
+      }
       if (providerType === 'a2a') {
         if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {
           errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
@@ -340,6 +354,7 @@ function ProviderConfigEditor({
     bodyError,
     extensionErrors,
     a2aAdvancedConfigError,
+    customConfigError,
     setError,
     onValidate,
     validateUrl,
@@ -367,8 +382,9 @@ function ProviderConfigEditor({
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={setCustomConfigError}
         />
       )}
 

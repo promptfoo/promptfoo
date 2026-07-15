@@ -23,7 +23,35 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
 }));
 
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () => ({
-  default: () => <div>provider config editor</div>,
+  default: ({
+    provider,
+    providerType,
+    setProvider,
+    onValidationRequest,
+  }: {
+    provider: { id: string; config: Record<string, unknown> };
+    providerType?: string;
+    setProvider: (provider: { id: string; config: Record<string, unknown> }) => void;
+    onValidationRequest?: (validator: () => boolean) => void;
+  }) => {
+    onValidationRequest?.(
+      () =>
+        providerType !== 'openinterpreter' ||
+        provider.id === 'openinterpreter' ||
+        provider.id.startsWith('openinterpreter:'),
+    );
+    return (
+      <div>
+        provider config editor
+        <button
+          type="button"
+          onClick={() => setProvider({ ...provider, id: 'openai:chat:gpt-4o' })}
+        >
+          Set invalid Open Interpreter ID
+        </button>
+      </div>
+    );
+  },
 }));
 
 afterEach(() => {
@@ -49,6 +77,7 @@ describe('getProviderTypeFromId', () => {
     ['groq:model-id', 'groq'],
     ['deepseek:model-id', 'deepseek'],
     ['perplexity:model-id', 'perplexity'],
+    ['openinterpreter:model-id', 'openinterpreter'],
   ])('detects prefix-based provider %s as %s', (id, expected) => {
     expect(getProviderTypeFromId(id)).toBe(expected);
   });
@@ -58,6 +87,7 @@ describe('getProviderTypeFromId', () => {
     ['websocket', 'websocket'],
     ['browser', 'browser'],
     ['mcp', 'mcp'],
+    ['openinterpreter', 'openinterpreter'],
   ])('detects exact match provider %s as %s', (id, expected) => {
     expect(getProviderTypeFromId(id)).toBe(expected);
   });
@@ -136,5 +166,28 @@ describe('AddProviderDialog layout', () => {
     expect(nextScrollBody).toBeDefined();
     expect(nextScrollBody).not.toBe(scrollBody);
     expect(nextScrollBody).toHaveProperty('scrollTop', 0);
+  });
+
+  it('validates an edited Open Interpreter provider before saving', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={onClose}
+          onSave={onSave}
+          initialProvider={{ id: 'openinterpreter', config: {} }}
+        />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Set invalid Open Interpreter ID' }));
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
