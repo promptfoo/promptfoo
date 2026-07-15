@@ -354,6 +354,10 @@ export class AnthropicGenericProvider implements ApiProvider {
     return hashAnthropicCacheValue({ providerId: this.id(), providerLabel: this.label });
   }
 
+  protected hasCacheNamespace(): boolean {
+    return Boolean(this.label);
+  }
+
   /**
    * Base implementation - should be overridden by specific provider implementations
    */

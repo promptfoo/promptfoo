@@ -89,6 +89,7 @@ const createProvider = (
   ...args: ConstructorParameters<typeof AnthropicMessagesProvider>
 ): AnthropicMessagesProvider => {
   const created = new AnthropicMessagesProvider(...args);
+  created.label ||= `test:${args[0]}`;
   const lastInstance = mcpMocks.instances[mcpMocks.instances.length - 1] as
     | Mocked<MCPClient>
     | undefined;
@@ -104,7 +105,7 @@ const anthropicCacheIdentityHash = () =>
   });
 
 const anthropicMessagesCacheKey = (modelName: string, params: unknown) =>
-  `anthropic:messages:${modelName}:${anthropicCacheIdentityHash()}:${hashAnthropicCacheValue({ providerId: `anthropic:${modelName}`, providerLabel: undefined })}:${hashAnthropicCacheValue(params)}`;
+  `anthropic:messages:${modelName}:${anthropicCacheIdentityHash()}:${hashAnthropicCacheValue({ providerId: `anthropic:${modelName}`, providerLabel: `test:${modelName}` })}:${hashAnthropicCacheValue(params)}`;
 
 describe('AnthropicMessagesProvider', () => {
   let provider: AnthropicMessagesProvider;
@@ -571,6 +572,29 @@ describe('AnthropicMessagesProvider', () => {
         expect(cacheKey).not.toContain('sk-ant-tenant-a');
         expect(cacheKey).not.toContain('sk-ant-tenant-b');
       }
+    });
+
+    it('should bypass the response cache for unlabeled credentials', async () => {
+      const providerA = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const providerB = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-b' },
+      });
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      const resultA = await providerA.callApi('Shared sensitive prompt');
+      const resultB = await providerB.callApi('Shared sensitive prompt');
+
+      expect(resultA.output).toBe('Tenant A response');
+      expect(resultB.output).toBe('Tenant B response');
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
 
     it('should include beta request headers in hashed cache keys without leaking them', async () => {

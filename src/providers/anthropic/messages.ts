@@ -855,6 +855,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const shouldUseResponseCache =
       isCacheEnabled() &&
       config.mcp?.enabled !== true &&
+      this.hasCacheNamespace() &&
       !this.hasCustomHeaders() &&
       Object.keys(config.headers ?? {}).length === 0;
 

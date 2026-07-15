@@ -86,7 +86,8 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     const cache = await getCache();
     const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(params)}`;
-    const shouldUseResponseCache = isCacheEnabled() && !this.hasCustomHeaders();
+    const shouldUseResponseCache =
+      isCacheEnabled() && this.hasCacheNamespace() && !this.hasCustomHeaders();
 
     if (shouldUseResponseCache) {
       // Try to get the cached response

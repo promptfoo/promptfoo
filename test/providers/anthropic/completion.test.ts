@@ -50,7 +50,7 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('should return cached output with caching enabled', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1');
+      const provider = new AnthropicCompletionProvider('claude-1', { label: 'completion-test' });
       vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',
@@ -78,7 +78,7 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('should hash request params in cache keys', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1');
+      const provider = new AnthropicCompletionProvider('claude-1', { label: 'completion-test' });
       const cache = await getCache();
       const getSpy = vi.spyOn(cache, 'get');
       const setSpy = vi.spyOn(cache, 'set');
@@ -144,6 +144,37 @@ describe('AnthropicCompletionProvider', () => {
         expect(cacheKey).not.toContain('sk-ant-tenant-a');
         expect(cacheKey).not.toContain('sk-ant-tenant-b');
       }
+    });
+
+    it('should bypass the response cache for unlabeled credentials', async () => {
+      const providerA = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const providerB = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-b' },
+      });
+      vi.spyOn(providerA.anthropic.completions, 'create').mockResolvedValue({
+        id: 'msg-a',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Tenant A response',
+      });
+      vi.spyOn(providerB.anthropic.completions, 'create').mockResolvedValue({
+        id: 'msg-b',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Tenant B response',
+      });
+
+      const resultA = await providerA.callApi('Shared sensitive prompt');
+      const resultB = await providerB.callApi('Shared sensitive prompt');
+
+      expect(resultA.output).toBe('Tenant A response');
+      expect(resultB.output).toBe('Tenant B response');
+      expect(providerA.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.completions.create).toHaveBeenCalledTimes(1);
     });
 
     it('should bypass the response cache for scoped Anthropic custom headers', async () => {
