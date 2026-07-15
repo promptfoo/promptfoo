@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
+import {
+  clearCache,
+  disableCache,
+  enableCache,
+  getCache,
+  withCacheNamespace,
+} from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 import { mockProcessEnv } from '../../util/utils';
@@ -184,6 +190,29 @@ describe('AnthropicCompletionProvider', () => {
       expect(providerB.anthropic.completions.create).toHaveBeenCalledTimes(1);
       expect(getSpy).not.toHaveBeenCalled();
       expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('isolates unlabeled completion cache entries by repeat namespace and honors clearCache', async () => {
+      const provider = new AnthropicCompletionProvider('claude-1', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.completions, 'create')
+        .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
+        .mockResolvedValueOnce({ completion: 'fresh-2' } as any)
+        .mockResolvedValueOnce({ completion: 'fresh-3' } as any);
+
+      const repeat0 = await withCacheNamespace('repeat:0', () => provider.callApi('Same prompt'));
+      const repeat1 = await withCacheNamespace('repeat:1', () => provider.callApi('Same prompt'));
+      await clearCache();
+      const afterClear = await withCacheNamespace('repeat:0', () =>
+        provider.callApi('Same prompt'),
+      );
+
+      expect(repeat0).toMatchObject({ output: 'fresh-1' });
+      expect(repeat1).toMatchObject({ output: 'fresh-2' });
+      expect(afterClear).toMatchObject({ output: 'fresh-3' });
+      expect(create).toHaveBeenCalledTimes(3);
     });
 
     it('should bypass the response cache for scoped Anthropic custom headers', async () => {

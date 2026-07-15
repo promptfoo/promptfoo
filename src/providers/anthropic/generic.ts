@@ -190,6 +190,7 @@ export class AnthropicGenericProvider implements ApiProvider {
   private readonly clientHasCustomHeaders: boolean;
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<string, string>();
+  private ephemeralCacheClearGeneration = 0;
 
   constructor(
     modelName: string,
@@ -365,15 +366,25 @@ export class AnthropicGenericProvider implements ApiProvider {
     });
   }
 
-  protected async getCachedResponse(cache: Cache, cacheKey: string): Promise<string | undefined> {
-    return this.label
-      ? cache.get<string | undefined>(cacheKey)
-      : this.ephemeralResponseCache.get(cacheKey);
+  protected async getCachedResponse(
+    cache: Cache,
+    cacheKey: string,
+    ephemeralCacheKey: string,
+    clearGeneration: number,
+  ): Promise<string | undefined> {
+    if (this.label) {
+      return cache.get<string | undefined>(cacheKey);
+    }
+
+    this.syncEphemeralCache(clearGeneration);
+    return this.ephemeralResponseCache.get(ephemeralCacheKey);
   }
 
   protected async setCachedResponse(
     cache: Cache,
     cacheKey: string,
+    ephemeralCacheKey: string,
+    clearGeneration: number,
     response: string,
   ): Promise<void> {
     if (this.label) {
@@ -381,8 +392,10 @@ export class AnthropicGenericProvider implements ApiProvider {
       return;
     }
 
+    this.syncEphemeralCache(clearGeneration);
+
     if (
-      !this.ephemeralResponseCache.has(cacheKey) &&
+      !this.ephemeralResponseCache.has(ephemeralCacheKey) &&
       this.ephemeralResponseCache.size >= MAX_EPHEMERAL_RESPONSE_CACHE_ENTRIES
     ) {
       const oldestKey = this.ephemeralResponseCache.keys().next().value;
@@ -390,7 +403,14 @@ export class AnthropicGenericProvider implements ApiProvider {
         this.ephemeralResponseCache.delete(oldestKey);
       }
     }
-    this.ephemeralResponseCache.set(cacheKey, response);
+    this.ephemeralResponseCache.set(ephemeralCacheKey, response);
+  }
+
+  private syncEphemeralCache(clearGeneration: number): void {
+    if (this.ephemeralCacheClearGeneration !== clearGeneration) {
+      this.ephemeralResponseCache.clear();
+      this.ephemeralCacheClearGeneration = clearGeneration;
+    }
   }
 
   /**

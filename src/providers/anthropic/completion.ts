@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
+import { getCache, getCacheClearGeneration, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -86,11 +86,18 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     const cache = await getCache();
     const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(params)}`;
+    const ephemeralCacheKey = getScopedCacheKey(cacheKey);
+    const cacheClearGeneration = getCacheClearGeneration();
     const shouldUseResponseCache = isCacheEnabled() && !this.hasCustomHeaders();
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await this.getCachedResponse(cache, cacheKey);
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic completion response', { model: this.modelName });
         return {
@@ -112,7 +119,13 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     logger.debug('\tAnthropic API response', { response: getCompletionResponseMetadata(response) });
     if (shouldUseResponseCache) {
       try {
-        await this.setCachedResponse(cache, cacheKey, JSON.stringify(response.completion));
+        await this.setCachedResponse(
+          cache,
+          cacheKey,
+          ephemeralCacheKey,
+          cacheClearGeneration,
+          JSON.stringify(response.completion),
+        );
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }

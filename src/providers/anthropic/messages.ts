@@ -1,5 +1,5 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
+import { getCache, getCacheClearGeneration, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
@@ -852,6 +852,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
+    const ephemeralCacheKey = getScopedCacheKey(cacheKey);
+    const cacheClearGeneration = getCacheClearGeneration();
     const shouldUseResponseCache =
       isCacheEnabled() &&
       config.mcp?.enabled !== true &&
@@ -860,7 +862,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await this.getCachedResponse(cache, cacheKey);
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
@@ -941,7 +948,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       if (shouldUseResponseCache) {
         try {
-          await this.setCachedResponse(cache, cacheKey, JSON.stringify(resolvedMessage));
+          await this.setCachedResponse(
+            cache,
+            cacheKey,
+            ephemeralCacheKey,
+            cacheClearGeneration,
+            JSON.stringify(resolvedMessage),
+          );
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }

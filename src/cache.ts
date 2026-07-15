@@ -27,6 +27,7 @@ import type { CacheOptions } from './types/cache';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
+let cacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -177,6 +178,10 @@ function shouldApplyRepeatCacheSuffix(repeatIndex?: number) {
 
 export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
+}
+
+export function getCacheClearGeneration() {
+  return cacheClearGeneration;
 }
 
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
@@ -878,6 +883,7 @@ export function disableCache() {
 export async function clearCache() {
   inflightFetchResponses.clear();
   namespacedCacheInstances.clear();
+  cacheClearGeneration += 1;
   return getCacheInstance().clear();
 }
 

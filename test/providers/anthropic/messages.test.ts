@@ -1,7 +1,13 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
+import {
+  clearCache,
+  disableCache,
+  enableCache,
+  getCache,
+  withCacheNamespace,
+} from '../../../src/cache';
 import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
@@ -604,6 +610,29 @@ describe('AnthropicMessagesProvider', () => {
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(getSpy).not.toHaveBeenCalled();
       expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('isolates unlabeled message cache entries by repeat namespace and honors clearCache', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-3' }] } as any);
+
+      const repeat0 = await withCacheNamespace('repeat:0', () => provider.callApi('Same prompt'));
+      const repeat1 = await withCacheNamespace('repeat:1', () => provider.callApi('Same prompt'));
+      await clearCache();
+      const afterClear = await withCacheNamespace('repeat:0', () =>
+        provider.callApi('Same prompt'),
+      );
+
+      expect(repeat0).toMatchObject({ output: 'fresh-1' });
+      expect(repeat1).toMatchObject({ output: 'fresh-2' });
+      expect(afterClear).toMatchObject({ output: 'fresh-3' });
+      expect(create).toHaveBeenCalledTimes(3);
     });
 
     it('should include beta request headers in hashed cache keys without leaking them', async () => {
