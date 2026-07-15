@@ -10,7 +10,7 @@ import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
-import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
+import { fetchRemoteTestCases, getRemoteTestCaseSource } from '../integrations/remoteTestCases';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
@@ -71,6 +71,7 @@ export async function readTestFiles(
  *
  * Supports multiple input sources:
  * - Hugging Face datasets (huggingface://datasets/...)
+ * - Langfuse traces (langfuse://traces?...)
  * - Azure Blob Storage test sets (az://...)
  * - JavaScript/TypeScript files (.js, .ts, .mjs)
  * - Python files (.py) with optional function name
@@ -94,11 +95,12 @@ export async function readStandaloneTestsFile(
 ): Promise<TestCase[]> {
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
-  if (varsPath.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(varsPath);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return await fetchHuggingFaceDataset(varsPath);
+    return await fetchRemoteTestCases(varsPath, remoteSource);
   }
 
   if (varsPath.startsWith('az://')) {
@@ -460,7 +462,7 @@ export async function readTest(
     !testCase.options &&
     !testCase.metadata &&
     !testCase.provider &&
-    !testCase.providerOutput &&
+    testCase.providerOutput === undefined &&
     typeof testCase.threshold !== 'number'
   ) {
     // Validate the shape of the test case
@@ -487,11 +489,12 @@ export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(loadTestsGlob);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return await fetchHuggingFaceDataset(loadTestsGlob);
+    return await fetchRemoteTestCases(loadTestsGlob, remoteSource);
   }
 
   if (loadTestsGlob.startsWith('file://')) {
@@ -580,6 +583,10 @@ export async function loadTestsFromGlob(
   return ret;
 }
 
+function shouldLoadTestsFromGlob(tests: string): boolean {
+  return !tests.startsWith('az://') && (tests.endsWith('yaml') || tests.endsWith('yml'));
+}
+
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
@@ -587,11 +594,8 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   if (typeof tests === 'string') {
-    if (tests.startsWith('az://')) {
-      return readStandaloneTestsFile(tests, basePath);
-    }
     // Points to a tests file with multiple test cases
-    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
+    if (shouldLoadTestsFromGlob(tests)) {
       return loadTestsFromGlob(tests, basePath);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
