@@ -258,6 +258,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         total: 10,
         prompt: 5,
         completion: 5,
+        numRequests: 1,
       },
     };
 
@@ -270,6 +271,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       tokenUsage: {
         ...mockCachedResponse.tokenUsage,
         cached: mockCachedResponse.tokenUsage.total,
+        numRequests: 0,
       },
     });
   });
@@ -798,7 +800,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockCacheGet).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+    expect(result.tokenUsage).toEqual({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      cached: 15,
+      numRequests: 0,
+    });
     expect(result.cost).toBe(0.00045);
     expect(result.metadata).toEqual({
       groundingMetadata: {
@@ -893,7 +901,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const result = await provider.callApi('Call the error function');
 
     expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
-    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+    expect(result.tokenUsage).toEqual({
+      total: 5,
+      prompt: 2,
+      completion: 3,
+      cached: 5,
+      numRequests: 0,
+    });
   });
 
   describe('External Function Callbacks', () => {
@@ -960,7 +974,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
       expect(result.output).toBe('External function result');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+      expect(result.tokenUsage).toEqual({
+        total: 15,
+        prompt: 10,
+        completion: 5,
+        cached: 15,
+        numRequests: 0,
+      });
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
