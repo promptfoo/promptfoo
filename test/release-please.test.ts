@@ -128,6 +128,7 @@ describe('release-please automation', () => {
       (step) => step.name === 'Upload release payload for attestation',
     );
     assert(uploadStep?.with, 'build job must upload the code-scan release payload');
+    expect(uploadStep.uses).toMatch(/^actions\/upload-artifact@[0-9a-f]{40}$/);
     expect(uploadStep.with.name).toBe('code-scan-action-release-payload');
     expect(uploadStep.with['if-no-files-found']).toBe('error');
     expect(uploadStep.with['include-hidden-files']).toBe(true);
@@ -156,7 +157,9 @@ describe('release-please automation', () => {
     const attestStep = attestJob.steps?.find(
       (step) => step.name === 'Attest build provenance for mirrored artifacts',
     );
+    expect(attestDownload?.uses).toMatch(/^actions\/download-artifact@[0-9a-f]{40}$/);
     expect(attestDownload?.with?.name).toBe('code-scan-action-release-payload');
+    expect(attestStep?.uses).toMatch(/^actions\/attest-build-provenance@[0-9a-f]{40}$/);
     expect(
       String(attestStep?.with?.['subject-path'])
         .trim()
@@ -180,6 +183,9 @@ describe('release-please automation', () => {
     );
     assert(publishDownloadIndex !== undefined && publishDownloadIndex >= 0);
     assert(tokenStepIndex !== undefined && tokenStepIndex > publishDownloadIndex);
+    expect(publishJob.steps?.[publishDownloadIndex]?.uses).toMatch(
+      /^actions\/download-artifact@[0-9a-f]{40}$/,
+    );
     expect(publishJob.steps?.[publishDownloadIndex]?.with?.name).toBe(
       'code-scan-action-release-payload',
     );
