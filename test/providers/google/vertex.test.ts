@@ -2130,6 +2130,27 @@ describe('VertexChatProvider.callLlamaApi', () => {
     );
   });
 
+  it('should not count a cached Llama response as an upstream request', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: { region: 'us-central1' },
+    });
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: false,
+        output: 'cached Llama response',
+        tokenUsage: { total: 35, prompt: 15, completion: 20, numRequests: 1 },
+      }),
+    );
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response).toEqual({
+      cached: true,
+      output: 'cached Llama response',
+      tokenUsage: { total: 35, prompt: 15, completion: 20, cached: 35, numRequests: 0 },
+    });
+  });
+
   it('hashes Llama request body cache keys without leaking prompts', async () => {
     const prompt = 'llama-secret-prompt-value';
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {

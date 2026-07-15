@@ -499,8 +499,8 @@ describe('TrueFoundry', () => {
                 input_guardrails: [
                   {
                     guardrail_integration: 'demo/input',
-                    result: 'passed',
-                    data: { verdict: true },
+                    verdict: true,
+                    data: { score: 0.98 },
                   },
                 ],
                 output_guardrails: [

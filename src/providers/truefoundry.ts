@@ -66,7 +66,9 @@ function hasGuardrailCheck(value: unknown): boolean {
     if (result === 'failed') {
       return true;
     }
-    const verdict = isJsonRecord(value.data) ? value.data.verdict : value.verdict;
+    const verdict = isJsonRecord(value.data)
+      ? (value.data.verdict ?? value.verdict)
+      : value.verdict;
     if (typeof verdict === 'boolean') {
       return !verdict;
     }
