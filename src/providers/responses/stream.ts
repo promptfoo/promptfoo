@@ -44,6 +44,7 @@ const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
+const MAX_STREAM_INDEX_KEY_CHARS = 128;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -74,8 +75,24 @@ function getOutputTextKey(event: ResponsesStreamEvent): string | undefined {
   return `${event.output_index}:${contentIndex}`;
 }
 
+function compactStreamIndex(value: unknown, fallback: string): string {
+  const text = String(value ?? fallback);
+  if (text.length <= MAX_STREAM_INDEX_KEY_CHARS) {
+    return text;
+  }
+
+  let firstHash = 2166136261;
+  let secondHash = 2654435761;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    firstHash = Math.imul(firstHash ^ code, 16777619);
+    secondHash = Math.imul(secondHash ^ code, 2246822519);
+  }
+  return `oversized-${text.length}-${(firstHash >>> 0).toString(16)}-${(secondHash >>> 0).toString(16)}`;
+}
+
 function getInvalidOutputTextKey(event: ResponsesStreamEvent): string {
-  return `${String(event.output_index ?? 'missing')}:${String(event.content_index ?? 0)}`;
+  return `${compactStreamIndex(event.output_index, 'missing')}:${compactStreamIndex(event.content_index, '0')}`;
 }
 
 function getValidOutputIndex(event: ResponsesStreamEvent): number | undefined {
@@ -245,21 +262,9 @@ function mergeFinalizedStreamOutput(
   finalizedRefusalItems: FinalizedStreamOutputItem[],
   preferFinalizedNonMessageItems: boolean,
 ): any[] {
-  const refusalIndexes = new Set(
-    finalizedRefusalItems
-      .map(({ outputIndex }) => outputIndex)
-      .filter((outputIndex): outputIndex is number => outputIndex !== undefined),
-  );
-  const hasUnindexedRefusal = finalizedRefusalItems.some(
-    ({ outputIndex }) => outputIndex === undefined,
-  );
   const entries: FinalizedStreamOutputItem[] = (Array.isArray(output) ? output : [])
     .map((item, outputIndex) => ({ item, outputIndex }))
-    .filter(
-      ({ item, outputIndex }) =>
-        item !== undefined &&
-        !(item?.type === 'message' && (hasUnindexedRefusal || refusalIndexes.has(outputIndex))),
-    );
+    .filter(({ item }) => item !== undefined);
 
   for (const finalizedItem of finalizedNonMessageItems) {
     const identity = finalizedItem.item?.id ?? finalizedItem.item?.call_id;
@@ -287,7 +292,37 @@ function mergeFinalizedStreamOutput(
     }
   }
 
-  entries.push(...finalizedRefusalItems);
+  const mergedRefusalItems = new Set<FinalizedStreamOutputItem>();
+  for (const entry of entries) {
+    if (entry.item?.type !== 'message') {
+      continue;
+    }
+    const matchingRefusals = finalizedRefusalItems.filter(
+      (refusalItem) =>
+        refusalItem.outputIndex !== undefined && refusalItem.outputIndex === entry.outputIndex,
+    );
+    if (matchingRefusals.length === 0) {
+      continue;
+    }
+    const refusalContent = matchingRefusals.flatMap(({ item }) =>
+      Array.isArray(item.content)
+        ? item.content.filter((content: any) => content?.type === 'refusal')
+        : [],
+    );
+    entry.item = {
+      ...entry.item,
+      refusal: undefined,
+      content: [
+        ...(Array.isArray(entry.item.content)
+          ? entry.item.content.filter((content: any) => content?.type !== 'refusal')
+          : []),
+        ...refusalContent,
+      ],
+    };
+    matchingRefusals.forEach((refusalItem) => mergedRefusalItems.add(refusalItem));
+  }
+
+  entries.push(...finalizedRefusalItems.filter((item) => !mergedRefusalItems.has(item)));
   const indexedOutput: any[] = [];
   const appendedOutput: any[] = [];
   for (const { item, outputIndex } of entries.sort(
@@ -758,7 +793,7 @@ export async function readResponsesStream(
     ) {
       const outputIndex = getValidOutputIndex(event);
       const item = event.item as any;
-      const key = `${String(event.output_index ?? 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
+      const key = `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
     if (event.type === 'response.output_item.added' && event.item?.type === 'function_call') {
@@ -768,7 +803,7 @@ export async function readResponsesStream(
         call_id: event.item.call_id,
         name: event.item.name,
       };
-      const key = `${String(event.output_index ?? 'missing')}:function_call:${event.item.id ?? event.item.call_id ?? ''}`;
+      const key = `${compactStreamIndex(event.output_index, 'missing')}:function_call:${event.item.id ?? event.item.call_id ?? ''}`;
       if (
         JSON.stringify(metadata).length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
         (addedFunctionItems.has(key) || addedFunctionItems.size < MAX_STREAM_OUTPUT_KEYS)
@@ -781,7 +816,7 @@ export async function readResponsesStream(
       typeof event.arguments === 'string'
     ) {
       const outputIndex = getValidOutputIndex(event);
-      const key = `${String(event.output_index ?? 'missing')}:function_call:${event.item_id ?? ''}`;
+      const key = `${compactStreamIndex(event.output_index, 'missing')}:function_call:${event.item_id ?? ''}`;
       const item = {
         ...addedFunctionItems.get(key),
         type: 'function_call',
@@ -838,8 +873,26 @@ export async function readResponsesStream(
   }
 
   const useFinalizedItems = latestResponse?.status !== 'completed';
+  const finalizedOutputTextByContent = new Map(
+    Array.from(outputTextByContent).filter(([key]) => finalizedOutputTextKeys.has(key)),
+  );
+  const finalizedInvalidOutputTexts = Array.from(
+    invalidlyIndexedOutputTextByContent,
+    ([key, text]) => (finalizedInvalidOutputTextKeys.has(key) ? text : undefined),
+  ).filter((text): text is string => text !== undefined);
+  const outputWithFinalizedText =
+    useFinalizedItems && sawFinalizedRefusal && !hasTerminalSafetyDecision(latestResponse)
+      ? (recoverIncompleteOutput(
+          latestResponse?.output,
+          finalizedOutputTextByContent,
+          [...completedUnindexedOutputTexts, ...finalizedInvalidOutputTexts],
+          true,
+          finalizedOutputTextKeys,
+          completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
+        ) ?? latestResponse?.output)
+      : latestResponse?.output;
   const finalizedStreamOutput = mergeFinalizedStreamOutput(
-    latestResponse?.output,
+    outputWithFinalizedText,
     Array.from(finalizedNonMessageItems.values()),
     useFinalizedItems ? Array.from(finalizedRefusalItems.values()) : [],
     useFinalizedItems,

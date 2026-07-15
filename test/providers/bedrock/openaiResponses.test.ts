@@ -1659,6 +1659,38 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
+    it('preserves finalized assistant text when a refusal shares the same output message', async () => {
+      const body = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"id":"resp_mixed_refusal","status":"in_progress","output":[]}}',
+        '',
+        'event: response.output_text.delta',
+        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"Safe context. "}',
+        '',
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Safe context. "}',
+        '',
+        'event: response.refusal.delta',
+        'data: {"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"Cannot provide secrets."}',
+        '',
+        'event: response.content_part.done',
+        'data: {"type":"response.content_part.done","output_index":0,"content_index":1,"part":{"type":"refusal","refusal":"Cannot provide secrets."}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output).toEqual([
+        expect.objectContaining({
+          type: 'message',
+          content: [
+            expect.objectContaining({ type: 'output_text', text: 'Safe context. ' }),
+            expect.objectContaining({ type: 'refusal', refusal: 'Cannot provide secrets.' }),
+          ],
+        }),
+      ]);
+    });
+
     it('does not duplicate finalized refusal parts when the completed output item arrives', async () => {
       const body = [
         'event: response.content_part.done',
@@ -2679,6 +2711,36 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('safe fallback');
+    });
+
+    it('does not retain attacker-sized malformed stream-index keys', async () => {
+      const oversizedIndex = `OVERSIZED-INDEX-${'x'.repeat(512 * 1_024)}`;
+      const body = [
+        'event: response.output_text.delta',
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: oversizedIndex, content_index: 0, delta: 'safe' })}`,
+        '',
+      ].join('\n');
+      const retainedKeyLengths: number[] = [];
+      const originalSet = Map.prototype.set;
+      const setSpy = vi.spyOn(Map.prototype, 'set').mockImplementation(function (
+        this: Map<unknown, unknown>,
+        key,
+        value,
+      ) {
+        if (typeof key === 'string' && key.includes('OVERSIZED-INDEX')) {
+          retainedKeyLengths.push(key.length);
+        }
+        return originalSet.call(this, key, value);
+      });
+
+      try {
+        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+        expect(result.output[0].content[0].text).toBe('safe');
+        expect(Math.max(0, ...retainedKeyLengths)).toBeLessThan(256);
+      } finally {
+        setSpy.mockRestore();
+      }
     });
 
     it('bounds the number of distinct malformed streamed output indices', async () => {
