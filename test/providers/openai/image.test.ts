@@ -653,6 +653,38 @@ describe('OpenAiImageProvider', () => {
       expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
     });
 
+    it('should treat chatgpt-image-latest as a GPT Image model and price exact API usage', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockGptImage2Response,
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+            output_tokens_details: { text_tokens: 0, image_tokens: 34 },
+          },
+        },
+      });
+
+      const provider = new OpenAiImageProvider('chatgpt-image-latest', {
+        config: { apiKey: 'test-key', quality: 'high', output_format: 'webp' },
+      });
+      const result = await provider.callApi('test prompt');
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).toMatchObject({
+        model: 'chatgpt-image-latest',
+        quality: 'high',
+        output_format: 'webp',
+      });
+      expect(body).not.toHaveProperty('response_format');
+      expect(result.output).toBe('data:image/webp;base64,base64EncodedImageData');
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 32) / 1e6, 12);
+    });
+
     it('should handle gpt-image-2 parameters and custom sizes', async () => {
       const provider = new OpenAiImageProvider('gpt-image-2', {
         config: {

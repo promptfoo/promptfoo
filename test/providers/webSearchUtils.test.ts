@@ -158,6 +158,25 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
 
+    it('should return true for OpenAI responses provider with the current web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it.each([
+      'openai:gpt-5-search-api',
+      'openai:chat:gpt-5-search-api-2025-10-14',
+      'openai:gpt-4o-search-preview',
+      'openai:chat:gpt-4o-mini-search-preview-2025-03-11',
+    ])('should return true for built-in OpenAI Chat Completions search model %s', (id) => {
+      expect(hasWebSearchCapability({ id: () => id, config: {} } as ApiProvider)).toBe(true);
+    });
+
     it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
       const provider = new OpenAiResponsesProvider('gpt-5.5-2026-04-23', {
         config: {

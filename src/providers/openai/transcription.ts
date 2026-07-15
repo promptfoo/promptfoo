@@ -23,9 +23,16 @@ export interface OpenAiTranscriptionOptions {
   prompt?: string;
   temperature?: number;
   timestamp_granularities?: ('word' | 'segment')[];
-  // Diarization options (for gpt-4o-transcribe-diarize)
-  num_speakers?: number;
-  speaker_labels?: string[];
+  chunking_strategy?:
+    | 'auto'
+    | {
+        type: 'server_vad';
+        threshold?: number;
+        prefix_padding_ms?: number;
+        silence_duration_ms?: number;
+      };
+  known_speaker_names?: string[];
+  known_speaker_references?: string[];
 }
 
 export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
@@ -102,25 +109,37 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       if (config.language) {
         formData.append('language', config.language);
       }
-      if (config.prompt) {
+      if (config.prompt && !this.modelName.includes('diarize')) {
         formData.append('prompt', config.prompt);
       }
       if (config.temperature !== undefined) {
         formData.append('temperature', config.temperature.toString());
       }
-      if (config.timestamp_granularities && config.timestamp_granularities.length > 0) {
-        formData.append('timestamp_granularities', JSON.stringify(config.timestamp_granularities));
+      if (this.modelName === 'whisper-1' && config.timestamp_granularities) {
+        for (const granularity of config.timestamp_granularities) {
+          formData.append('timestamp_granularities[]', granularity);
+        }
       }
 
       // Diarization-specific options (for gpt-4o-transcribe-diarize)
       if (this.modelName.includes('diarize')) {
         formData.append('response_format', 'diarized_json');
-
-        if (config.num_speakers !== undefined) {
-          formData.append('num_speakers', config.num_speakers.toString());
+        const chunkingStrategy = config.chunking_strategy ?? 'auto';
+        if (typeof chunkingStrategy === 'string') {
+          formData.append('chunking_strategy', chunkingStrategy);
+        } else {
+          for (const [key, value] of Object.entries(chunkingStrategy)) {
+            if (value !== undefined) {
+              formData.append(`chunking_strategy[${key}]`, String(value));
+            }
+          }
         }
-        if (config.speaker_labels && config.speaker_labels.length > 0) {
-          formData.append('speaker_labels', JSON.stringify(config.speaker_labels));
+
+        for (const name of config.known_speaker_names || []) {
+          formData.append('known_speaker_names[]', name);
+        }
+        for (const reference of config.known_speaker_references || []) {
+          formData.append('known_speaker_references[]', reference);
         }
       } else {
         // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
@@ -224,7 +243,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             return `[${start}s - ${end}s] ${speaker}: ${text}`;
           })
           .join('\n');
-      } else if (data.text) {
+      } else if (typeof data.text === 'string') {
         // Standard transcription
         output = data.text;
       } else {

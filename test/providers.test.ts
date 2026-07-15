@@ -8,9 +8,11 @@ import { HttpProvider } from '../src/providers/http';
 import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
+import { OpenAiCompletionProvider } from '../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { OpenAiRealtimeProvider } from '../src/providers/openai/realtime';
 import { OpenAiResponsesProvider } from '../src/providers/openai/responses';
+import { OpenAiTtsProvider } from '../src/providers/openai/tts';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
@@ -26,9 +28,11 @@ vi.mock('../src/util/yamlLoad');
 vi.mock('../src/util/fetch/index.ts');
 vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
+vi.mock('../src/providers/openai/completion');
 vi.mock('../src/providers/openai/embedding');
 vi.mock('../src/providers/openai/realtime');
 vi.mock('../src/providers/openai/responses');
+vi.mock('../src/providers/openai/tts');
 vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
 vi.mock('../src/providers/websocket');
@@ -507,6 +511,124 @@ describe('loadApiProvider', () => {
     expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
     expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
     expect(provider).toBeDefined();
+  });
+
+  it.each([
+    'gpt-5-codex',
+    'gpt-5-pro',
+    'gpt-5-pro-2025-10-06',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2-codex',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    'gpt-5.3-codex',
+    'o1-pro',
+    'o1-pro-2025-03-19',
+    'o3-pro',
+    'o3-pro-2025-06-10',
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+  ])('should auto-route bare Responses-only model %s to Responses', async (model) => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = [model];
+    try {
+      const provider = await loadApiProvider(`openai:${model}`);
+
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
+    }
+  });
+
+  it.each([
+    'gpt-5-search-api',
+    'gpt-5-search-api-2025-10-14',
+  ])('should auto-route bare Chat Completions search model %s to Chat Completions', async (model) => {
+    const provider = await loadApiProvider(`openai:${model}`);
+
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it.each([
+    'babbage-002',
+    'davinci-002',
+    'gpt-3.5-turbo-instruct',
+    'gpt-3.5-turbo-instruct-0914',
+  ])('should auto-route bare legacy Completions model %s to Completions', async (model) => {
+    const originalModelNames = (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES;
+    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = [model];
+    try {
+      const provider = await loadApiProvider(`openai:${model}`);
+
+      expect(OpenAiCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it.each([
+    'gpt-4o-mini-tts',
+    'gpt-4o-mini-tts-2025-12-15',
+    'gpt-4o-mini-tts-2025-03-20',
+    'tts-1',
+    'tts-1-1106',
+    'tts-1-hd',
+    'tts-1-hd-1106',
+  ])('should auto-route bare speech model %s to the speech endpoint', async (model) => {
+    const originalModelNames = (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES;
+    (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = [model];
+    try {
+      const provider = await loadApiProvider(`openai:${model}`);
+
+      expect(OpenAiTtsProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it.each([
+    'tts',
+    'speech',
+  ])('should route explicit openai:%s providers to speech', async (type) => {
+    const provider = await loadApiProvider(`openai:${type}:gpt-4o-mini-tts`);
+
+    expect(OpenAiTtsProvider).toHaveBeenCalledWith('gpt-4o-mini-tts', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should default OpenAI speech to a current TTS model', async () => {
+    const provider = await loadApiProvider('openai:tts');
+
+    expect(OpenAiTtsProvider).toHaveBeenCalledWith('gpt-4o-mini-tts', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it.each([
+    'gpt-realtime-2.1',
+    'gpt-realtime-2.1-mini',
+  ])('should auto-route bare Realtime model %s to Realtime', async (model) => {
+    const originalModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
+    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = [model];
+    try {
+      const provider = await loadApiProvider(`openai:${model}`);
+
+      expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalModelNames;
+    }
   });
 
   it.each([

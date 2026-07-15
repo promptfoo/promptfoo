@@ -356,11 +356,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): number | undefined {
-    return calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+    const modelName = this.getBillingModelName(config);
+    const tokenCost = calculateOpenAIUsageCost(modelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
       serviceTier: data.service_tier ?? config.service_tier,
     });
+    const searchCost = cached
+      ? 0
+      : /^gpt-5-search-api(?:-|$)/.test(modelName)
+        ? 0.01
+        : /^gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)
+          ? 0.025
+          : 0;
+
+    return tokenCost === undefined ? searchCost || undefined : tokenCost + searchCost;
   }
 
   async callApi(
@@ -800,6 +810,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           // Include all choices for multi-response requests (n > 1)
           ...(data.choices.length > 1 && { choices: data.choices }),
+          ...(Array.isArray(message.annotations) &&
+            message.annotations.length > 0 && { annotations: message.annotations }),
         },
       };
     } catch (err) {

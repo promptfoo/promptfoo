@@ -94,7 +94,74 @@ describe('OpenAI billing helpers', () => {
     expect(cost).toBeCloseTo((600 * 0.25 + 400 * 0.025 + 100 * 2) / 1e6, 10);
   });
 
-  it('prices cached input for GPT-5.3 coding models', () => {
+  it.each([
+    'gpt-5-search-api',
+    'gpt-5-search-api-2025-10-14',
+  ])('prices cached input for Chat Completions search model %s', (model) => {
+    expect(
+      calculateOpenAIUsageCost(
+        model,
+        {},
+        {
+          prompt_tokens: 2_000,
+          completion_tokens: 1_000,
+          prompt_tokens_details: { cached_tokens: 500 },
+        },
+      ),
+    ).toBeCloseTo((1_500 * 1.25 + 500 * 0.125 + 1_000 * 10) / 1e6, 10);
+  });
+
+  it.each([
+    ['ft:babbage-002:company::model', 1.6, undefined, 1.6],
+    ['ft:davinci-002:company::model', 12, undefined, 12],
+    ['ft:gpt-3.5-turbo:company::model', 3, undefined, 6],
+    ['ft:gpt-3.5-turbo-0125:company::model', 3, undefined, 6],
+    ['ft:gpt-4-0613:company::model', 30, undefined, 60],
+    ['ft:gpt-4.1:company::model', 3, 0.75, 12],
+    ['ft:gpt-4.1-2025-04-14:company::model', 3, 0.75, 12],
+    ['ft:gpt-4.1-mini-2025-04-14:company::model', 0.8, 0.2, 3.2],
+    ['ft:gpt-4.1-nano-2025-04-14:company::model', 0.2, 0.05, 0.8],
+    ['ft:gpt-4o-2024-08-06:company::model', 3.75, 1.875, 15],
+    ['ft:gpt-4o-2024-11-20:company::model', 3.75, undefined, 15],
+    ['ft:gpt-4o-mini:company::model', 0.3, 0.15, 1.2],
+    ['ft:o4-mini-2025-04-16:company::model', 4, 1, 16],
+  ])('prices fine-tuned model %s using its inference rates', (model, inputRate, cachedRate, outputRate) => {
+    const cachedInput = cachedRate === undefined ? 0 : 500;
+    expect(
+      calculateOpenAIUsageCost(
+        model,
+        {},
+        {
+          prompt_tokens: 2_000,
+          completion_tokens: 1_000,
+          prompt_tokens_details: { cached_tokens: cachedInput },
+        },
+      ),
+    ).toBeCloseTo(
+      ((2_000 - cachedInput) * inputRate +
+        cachedInput * (cachedRate ?? inputRate) +
+        1_000 * outputRate) /
+        1e6,
+      10,
+    );
+  });
+
+  it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex unset', () => {
+    const model = 'ft:gpt-4.1-mini-2025-04-14:company::model';
+    const usage = {
+      prompt_tokens: 2_000,
+      completion_tokens: 1_000,
+      prompt_tokens_details: { cached_tokens: 500 },
+    };
+
+    expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'batch' })).toBeCloseTo(
+      ((1_500 * 0.8 + 500 * 0.2 + 1_000 * 3.2) / 1e6) * 0.5,
+      10,
+    );
+    expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'flex' })).toBeUndefined();
+  });
+
+  it('prices the public GPT-5.3 coding model and leaves Codex-only Spark unset', () => {
     expect(
       calculateOpenAIUsageCost(
         'gpt-5.3-codex',
@@ -117,7 +184,7 @@ describe('OpenAI billing helpers', () => {
           prompt_tokens_details: { cached_tokens: 500 },
         },
       ),
-    ).toBeCloseTo((1_500 * 0.5 + 500 * 0.05 + 1_000 * 4) / 1e6, 10);
+    ).toBeUndefined();
   });
 
   it.each([
@@ -561,6 +628,48 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
+  it.each([
+    ['gpt-realtime-2.1', 4, 0.4, 24, 32, 0.4, 64, 5, 0.5],
+    ['gpt-realtime-2.1-mini', 0.6, 0.06, 2.4, 10, 0.3, 20, 0.8, 0.08],
+  ])('uses current %s multimodal and cached rates', (model, textInput, cachedTextInput, textOutput, audioInput, cachedAudioInput, audioOutput, imageInput, cachedImageInput) => {
+    const cost = calculateOpenAIUsageCost(
+      model,
+      {},
+      {
+        input_tokens: 1_060,
+        output_tokens: 30,
+        input_token_details: {
+          text_tokens: 1_000,
+          audio_tokens: 40,
+          image_tokens: 20,
+          cached_tokens: 100,
+          cached_tokens_details: {
+            text_tokens: 70,
+            audio_tokens: 20,
+            image_tokens: 10,
+          },
+        },
+        output_token_details: {
+          text_tokens: 20,
+          audio_tokens: 10,
+        },
+      },
+    );
+
+    expect(cost).toBeCloseTo(
+      (930 * textInput +
+        70 * cachedTextInput +
+        20 * audioInput +
+        20 * cachedAudioInput +
+        10 * imageInput +
+        10 * cachedImageInput +
+        20 * textOutput +
+        10 * audioOutput) /
+        1e6,
+      10,
+    );
+  });
+
   it('uses explicit cached modality splits when realtime payloads provide them', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-realtime-mini',
@@ -635,6 +744,21 @@ describe('OpenAI billing helpers', () => {
     );
 
     expect(cost).toBeCloseTo((28 * 5 + 194 * 8 + 181 * 10 + 272 * 32) / 1e6, 10);
+  });
+
+  it('prices chatgpt-image-latest usage from the returned token ledger', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chatgpt-image-latest',
+        {},
+        {
+          input_tokens: 222,
+          output_tokens: 272,
+          input_tokens_details: { text_tokens: 28, image_tokens: 194 },
+          output_tokens_details: { text_tokens: 0, image_tokens: 272 },
+        },
+      ),
+    ).toBeCloseTo((28 * 5 + 194 * 8 + 272 * 32) / 1e6, 10);
   });
 
   it('does not claim exact GPT Image 1.5 cost without an output-token breakdown', () => {

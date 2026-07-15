@@ -1,11 +1,19 @@
 ---
+title: How to evaluate OpenAI Assistants
 sidebar_label: Evaluating OpenAI Assistants
 description: Compare OpenAI Assistant configurations and measure performance across different prompts, models, and tools to optimize your AI application's accuracy and reliability
 ---
 
 # How to evaluate OpenAI Assistants
 
-OpenAI recently released an [Assistants API](https://platform.openai.com/docs/assistants/overview) that offers simplified handling for message state and tool usage. It also enables code interpreter and knowledge retrieval features, abstracting away some of the dirty work for implementing RAG architecture.
+:::warning
+The Assistants API is deprecated and scheduled to shut down on August 26, 2026. Use the
+Responses API for new integrations and follow OpenAI's
+[Assistants migration guide](https://developers.openai.com/api/docs/guides/migrate-to-responses#assistants-api).
+:::
+
+The legacy Assistants API provides managed message state, code interpreter, and file search for
+existing integrations.
 
 [Test-driven development](/docs/intro#workflow-and-philosophy) allows you to compare prompts, models, and tools while measuring improvement and avoiding unexplained regressions. It's an example of [systematic iteration vs. trial and error](https://ianww.com/blog/2023/05/21/prompt-engineering-framework).
 
@@ -13,9 +21,9 @@ This guide walks you through using promptfoo to select the best prompt, model, a
 
 ## Step 1: Create an assistant
 
-Use the [OpenAI playground](https://platform.openai.com/playground) to an assistant. The eval will use this assistant with different instructions and models.
+Use the [OpenAI playground](https://platform.openai.com/playground) to create an assistant. The eval will use this assistant with different instructions and models.
 
-Add your desired functions and enable the code interpreter and retrieval as desired.
+Add your desired functions and enable code interpreter and file search as desired.
 
 After you create an assistant, record its ID. It will look similar to `asst_fEhNN3MClMamLfKLkIaoIpgB`.
 
@@ -51,7 +59,7 @@ Now that we've set up the config, run the eval on your command line:
 npx promptfoo@latest eval
 ```
 
-This will produce a simple view of assistant outputs. Note that it records the conversation, as well as code interpreter, function, and retrieval inputs and outputs:
+This will produce a simple view of assistant outputs. It records the conversation, as well as code interpreter, function, and file-search inputs and outputs:
 
 ![assistant eval](https://user-images.githubusercontent.com/310310/284090445-d6c52841-af6f-4ddd-b88f-4d58bf0d4ca2.png)
 
@@ -71,23 +79,17 @@ This will run the same tests on both assistants and allow you to compare their p
 
 ## Comparing different versions of the same assistant
 
-If you want to override the configuration of an assistant for a specific test, you can do so in the `options` section of a test. For example:
+To override the saved configuration of an assistant, use the provider's `config` section. For example:
 
 ```yaml
 providers:
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      model: gpt-5
+      modelName: gpt-5
       instructions: 'Enter a replacement for system-level instructions here'
       tools:
         - type: code_interpreter
-        - type: retrieval
-      thread:
-        messages:
-          - role: user
-            content: 'These messages are included in every test case before the prompt.'
-          - role: assistant
-            content: 'Okay'
+        - type: file_search
 ```
 
 In this example, the Assistant API is called with the above parameters.
@@ -102,7 +104,7 @@ providers:
   # Modified
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      model: gpt-5
+      modelName: gpt-5
       instructions: 'Always talk like a pirate'
 ```
 

@@ -70,10 +70,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.1 models
     'gpt-5.1',
     'gpt-5.1-2025-11-13',
-    'gpt-5.1-mini',
-    'gpt-5.1-nano',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
     'gpt-5.1-chat-latest',
     // GPT-5.2 models
     'gpt-5.2',
@@ -85,7 +84,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.3 models
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
-    'gpt-5.3-codex-spark',
     // GPT-5.6 models
     'gpt-5.6',
     'gpt-5.6-sol',

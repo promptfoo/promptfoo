@@ -54,6 +54,14 @@ describe('OpenAI Image Provider Functions', () => {
       expect(validateSizeForModel('any-size', 'unknown-model')).toEqual({ valid: true });
     });
 
+    it('should validate chatgpt-image-latest using GPT Image sizes', () => {
+      expect(validateSizeForModel('1024x1024', 'chatgpt-image-latest')).toEqual({ valid: true });
+      expect(validateSizeForModel('auto', 'chatgpt-image-latest')).toEqual({ valid: true });
+      expect(validateSizeForModel('512x512', 'chatgpt-image-latest')).toMatchObject({
+        valid: false,
+      });
+    });
+
     it('should validate GPT Image 2 sizes using dimensional constraints', () => {
       expect(validateSizeForModel('auto', 'gpt-image-2')).toEqual({ valid: true });
       expect(validateSizeForModel('1024x1024', 'gpt-image-2')).toEqual({ valid: true });
@@ -214,6 +222,22 @@ describe('OpenAI Image Provider Functions', () => {
         moderation: 'low',
       });
     });
+
+    it('should prepare chatgpt-image-latest request body without response_format', () => {
+      expect(
+        prepareRequestBody('chatgpt-image-latest', 'prompt', '1024x1024', 'url', {
+          quality: 'high',
+          output_format: 'webp',
+        }),
+      ).toEqual({
+        model: 'chatgpt-image-latest',
+        prompt: 'prompt',
+        size: '1024x1024',
+        n: 1,
+        quality: 'high',
+        output_format: 'webp',
+      });
+    });
   });
 
   describe('calculateImageCost', () => {
@@ -268,6 +292,10 @@ describe('OpenAI Image Provider Functions', () => {
       expect(calculateImageCost('gpt-image-2', '1536x1024', 'high', 2)).toBe(
         GPT_IMAGE2_COSTS['high_1536x1024'] * 2,
       );
+    });
+
+    it('should calculate GPT Image 1.5-compatible fallback cost for chatgpt-image-latest', () => {
+      expect(calculateImageCost('chatgpt-image-latest', '1024x1024', 'low')).toBe(0.009);
     });
 
     it('should not invent GPT Image 2 cost for auto quality or custom sizes', () => {

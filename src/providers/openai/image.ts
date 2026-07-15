@@ -22,6 +22,7 @@ type OpenAiImageModel =
   | 'gpt-image-2'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
+  | 'chatgpt-image-latest'
   | 'gpt-image-1.5';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
@@ -169,7 +170,11 @@ function isGptImage1Mini(model: string): boolean {
 }
 
 function isGptImage15(model: string): boolean {
-  return model === 'gpt-image-1.5' || model.startsWith('gpt-image-1.5-2025');
+  return (
+    model === 'gpt-image-1.5' ||
+    model === 'chatgpt-image-latest' ||
+    model.startsWith('gpt-image-1.5-2025')
+  );
 }
 
 function isGptImageModel(model: string): boolean {

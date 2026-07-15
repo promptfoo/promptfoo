@@ -61,14 +61,18 @@ class MockFile {
 }
 
 class MockFormData {
-  private data: Map<string, any> = new Map();
+  private data: Map<string, any[]> = new Map();
 
   append(key: string, value: any) {
-    this.data.set(key, value);
+    this.data.set(key, [...(this.data.get(key) || []), value]);
   }
 
   get(key: string) {
-    return this.data.get(key);
+    return this.data.get(key)?.[0];
+  }
+
+  getAll(key: string) {
+    return this.data.get(key) || [];
   }
 
   has(key: string) {
@@ -247,6 +251,16 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
     });
 
+    it('should calculate cost correctly for gpt-4o-mini-transcribe-2025-03-20', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-03-20', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBe(0.006);
+    });
+
     it('should calculate cost correctly for whisper-1', async () => {
       const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: { apiKey: 'test-key' },
@@ -349,28 +363,32 @@ describe('OpenAiTranscriptionProvider', () => {
       });
     });
 
-    it('should include num_speakers option for diarization', async () => {
+    it('should enable automatic chunking for diarization', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize', {
-        config: {
-          apiKey: 'test-key',
-          num_speakers: 2,
-        },
+        config: { apiKey: 'test-key' },
       });
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
 
       await provider.callApi('/path/to/audio.mp3');
 
-      // Since we're using FormData, we can't easily inspect the body
-      // Just verify the call was made
-      expect(fetchWithCache).toHaveBeenCalled();
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
+      expect(formData.get('response_format')).toBe('diarized_json');
+      expect(formData.get('chunking_strategy')).toBe('auto');
     });
 
-    it('should include speaker_labels option for diarization', async () => {
+    it('should include known speaker references for diarization', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize', {
         config: {
           apiKey: 'test-key',
-          speaker_labels: ['Alice', 'Bob'],
+          chunking_strategy: 'auto',
+          prompt: 'This field is unsupported for diarization.',
+          timestamp_granularities: ['word'],
+          known_speaker_names: ['agent', 'customer'],
+          known_speaker_references: [
+            'data:audio/wav;base64,YWdlbnQ=',
+            'data:audio/wav;base64,Y3VzdG9tZXI=',
+          ],
         },
       });
 
@@ -378,7 +396,40 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      expect(fetchWithCache).toHaveBeenCalled();
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
+      expect(formData.get('chunking_strategy')).toBe('auto');
+      expect(formData.has('prompt')).toBe(false);
+      expect(formData.has('timestamp_granularities[]')).toBe(false);
+      expect(formData.getAll('known_speaker_names[]')).toEqual(['agent', 'customer']);
+      expect(formData.getAll('known_speaker_references[]')).toEqual([
+        'data:audio/wav;base64,YWdlbnQ=',
+        'data:audio/wav;base64,Y3VzdG9tZXI=',
+      ]);
+    });
+
+    it('should encode a custom server VAD chunking strategy', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize', {
+        config: {
+          apiKey: 'test-key',
+          chunking_strategy: {
+            type: 'server_vad',
+            threshold: 0.6,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+          },
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
+      expect(formData.has('chunking_strategy')).toBe(false);
+      expect(formData.get('chunking_strategy[type]')).toBe('server_vad');
+      expect(formData.get('chunking_strategy[threshold]')).toBe('0.6');
+      expect(formData.get('chunking_strategy[prefix_padding_ms]')).toBe('300');
+      expect(formData.get('chunking_strategy[silence_duration_ms]')).toBe('500');
     });
   });
 
@@ -468,6 +519,24 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.error).toContain('No transcription returned from API');
     });
 
+    it('should accept an empty transcription returned for silent audio', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-12-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { text: '', duration: 1 },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('/path/to/silent.wav');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('');
+    });
+
     it('should handle transcription error in catch block', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },
@@ -525,7 +594,7 @@ describe('OpenAiTranscriptionProvider', () => {
     });
 
     it('should include timestamp_granularities option', async () => {
-      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+      const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: {
           apiKey: 'test-key',
           timestamp_granularities: ['word', 'segment'],
@@ -534,7 +603,10 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      expect(fetchWithCache).toHaveBeenCalled();
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
+      expect(formData.get('response_format')).toBe('verbose_json');
+      expect(formData.getAll('timestamp_granularities[]')).toEqual(['word', 'segment']);
+      expect(formData.has('timestamp_granularities')).toBe(false);
     });
 
     it('should include organization ID in headers when provided', async () => {
@@ -650,6 +722,7 @@ describe('OpenAiTranscriptionProvider', () => {
       const models = [
         'gpt-4o-transcribe',
         'gpt-4o-mini-transcribe',
+        'gpt-4o-mini-transcribe-2025-03-20',
         'gpt-4o-mini-transcribe-2025-12-15',
         'gpt-4o-transcribe-diarize',
         'gpt-4o-transcribe-diarize-2025-10-15',

@@ -126,12 +126,27 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSize('1024x1792')).toEqual({ valid: true });
     });
 
+    it.each(['1920x1080', '1080x1920'] as const)('should accept valid 1080p size %s', (size) => {
+      expect(validateVideoSize(size, 'sora-2-pro')).toEqual({ valid: true });
+    });
+
+    it.each([
+      '1792x1024',
+      '1024x1792',
+      '1920x1080',
+      '1080x1920',
+    ] as const)('should reject pro-only size %s for sora-2', (size) => {
+      const result = validateVideoSize(size, 'sora-2');
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('sora-2');
+    });
+
     it('should reject invalid size', () => {
       // Cast to test runtime validation with invalid values
-      const result = validateVideoSize('1920x1080' as '1280x720');
+      const result = validateVideoSize('1920x1079' as '1280x720');
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid video size');
-      expect(result.message).toContain('1920x1080');
+      expect(result.message).toContain('1920x1079');
     });
 
     it('should reject non-standard sizes', () => {
@@ -154,13 +169,17 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSeconds(12)).toEqual({ valid: true });
     });
 
+    it.each([16, 20] as const)('should accept %s seconds', (seconds) => {
+      expect(validateVideoSeconds(seconds)).toEqual({ valid: true });
+    });
+
     it('should reject invalid duration like 5 seconds', () => {
       // Cast to test runtime validation with invalid values
       const result = validateVideoSeconds(5 as 4);
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid video duration');
       expect(result.message).toContain('5');
-      expect(result.message).toContain('4, 8, 12');
+      expect(result.message).toContain('4, 8, 12, 16, 20');
     });
 
     it('should reject 10 seconds', () => {
@@ -187,6 +206,24 @@ describe('OpenAiVideoProvider', () => {
       expect(calculateVideoCost('sora-2-pro', 10)).toBe(3.0);
     });
 
+    it.each([
+      ['1792x1024', 0.5],
+      ['1024x1792', 0.5],
+      ['1920x1080', 0.7],
+      ['1080x1920', 0.7],
+    ] as const)('should calculate sora-2-pro cost for %s', (size, rate) => {
+      expect(calculateVideoCost('sora-2-pro', 20, false, size)).toBeCloseTo(20 * rate, 10);
+    });
+
+    it.each([
+      ['sora-2-2025-10-06', '1280x720', 0.1],
+      ['sora-2-2025-12-08', '720x1280', 0.1],
+      ['sora-2-pro-2025-10-06', '1280x720', 0.3],
+      ['sora-2-pro-2025-10-06', '1920x1080', 0.7],
+    ] as const)('should calculate cost for active Sora snapshot %s', (model, size, rate) => {
+      expect(calculateVideoCost(model, 8, false, size)).toBeCloseTo(8 * rate, 10);
+    });
+
     it('should return 0 for cached results', () => {
       expect(calculateVideoCost('sora-2', 10, true)).toBe(0);
       expect(calculateVideoCost('sora-2-pro', 10, true)).toBe(0);
@@ -205,6 +242,12 @@ describe('OpenAiVideoProvider', () => {
 
     it('should have correct cost for sora-2-pro', () => {
       expect(SORA_COSTS['sora-2-pro']).toBe(0.3);
+    });
+
+    it('should have correct base costs for active Sora snapshots', () => {
+      expect(SORA_COSTS['sora-2-2025-10-06']).toBe(0.1);
+      expect(SORA_COSTS['sora-2-2025-12-08']).toBe(0.1);
+      expect(SORA_COSTS['sora-2-pro-2025-10-06']).toBe(0.3);
     });
   });
 
@@ -503,8 +546,8 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should use specified size and seconds', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', size: '1792x1024', seconds: 12 },
+      const provider = new OpenAiVideoProvider('sora-2-pro', {
+        config: { apiKey: 'test-key', size: '1920x1080', seconds: 20 },
       });
 
       setupMocksForSuccess();
@@ -514,17 +557,67 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"size":"1792x1024"'),
+          body: expect.stringContaining('"size":"1920x1080"'),
         }),
       );
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"seconds":"12"'),
+          body: expect.stringContaining('"seconds":"20"'),
         }),
       );
-      expect(result.video?.size).toBe('1792x1024');
-      expect(result.video?.duration).toBe(12);
+      expect(result.video?.size).toBe('1920x1080');
+      expect(result.video?.duration).toBe(20);
+      expect(result.cost).toBeCloseTo(14, 10);
+    });
+
+    it('should include reusable characters in a Sora generation request', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          characters: [{ id: 'char_123' }, { id: 'char_456' }],
+        },
+      });
+
+      setupMocksForSuccess();
+      await provider.callApi('A cinematic shot of Mossy and Lantern');
+
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
+      expect(JSON.parse(request.body)).toMatchObject({
+        model: 'sora-2',
+        characters: [{ id: 'char_123' }, { id: 'char_456' }],
+      });
+    });
+
+    it('should reject more than two Sora characters before calling the API', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          characters: [{ id: 'char_1' }, { id: 'char_2' }, { id: 'char_3' }],
+        },
+      });
+
+      const result = await provider.callApi('A crowded scene');
+
+      expect(result.error).toContain('at most two characters');
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should honor a configured Sora model override in the API request', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', model: 'sora-2-pro', size: '1792x1024', seconds: 16 },
+      });
+
+      setupMocksForSuccess();
+      const result = await provider.callApi('test prompt');
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
+
+      expect(JSON.parse(request.body)).toMatchObject({
+        model: 'sora-2-pro',
+        size: '1792x1024',
+        seconds: '16',
+      });
+      expect(result.cost).toBeCloseTo(8, 10);
     });
 
     it('should skip thumbnail download when disabled', async () => {
@@ -800,6 +893,20 @@ describe('OpenAiVideoProvider', () => {
       expect(key1).not.toBe(key2);
     });
 
+    it('should generate different keys for different reusable characters', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'test prompt',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+
+      expect(generateVideoCacheKey({ ...base, characters: [{ id: 'char_1' }] })).not.toBe(
+        generateVideoCacheKey({ ...base, characters: [{ id: 'char_2' }] }),
+      );
+    });
+
     it('should generate different keys for different providers', () => {
       const key1 = generateVideoCacheKey({
         provider: 'openai',
@@ -1038,7 +1145,7 @@ describe('OpenAiVideoProvider', () => {
   });
 
   describe('input_reference (image-to-video)', () => {
-    it('should include input_reference in request body for base64 data', async () => {
+    it('should wrap base64 input_reference in the documented image_url object', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: 'base64EncodedImageData' },
       });
@@ -1083,12 +1190,14 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"input_reference":"base64EncodedImageData"'),
+          body: expect.stringContaining(
+            '"input_reference":{"image_url":"data:image/png;base64,base64EncodedImageData"}',
+          ),
         }),
       );
     });
 
-    it('should read and base64 encode file when input_reference starts with file://', async () => {
+    it('should read and wrap a file input_reference as a data URL', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: 'file:///path/to/image.png' },
       });
@@ -1144,9 +1253,57 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining(`"input_reference":"${expectedBase64}"`),
+          body: expect.stringContaining(
+            `"input_reference":{"image_url":"data:image/png;base64,${expectedBase64}"}`,
+          ),
         }),
       );
+    });
+
+    it.each([
+      [
+        'an image URL',
+        'https://example.com/start.png',
+        { image_url: 'https://example.com/start.png' },
+      ],
+      [
+        'a data URL',
+        'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
+        { image_url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==' },
+      ],
+      [
+        'raw JPEG data',
+        '/9j/4AAQSkZJRg==',
+        { image_url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==' },
+      ],
+      ['an uploaded file ID', { file_id: 'file_123' }, { file_id: 'file_123' }],
+    ])('should preserve %s input_reference in the documented JSON shape', async (_label, input, expected) => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', input_reference: input as any },
+      });
+
+      mockGetMediaStorage.mockReturnValue({ exists: vi.fn().mockResolvedValue(false) });
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'video_ref', status: 'queued' }),
+      });
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'video_ref', status: 'completed', progress: 100 }),
+      });
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(10),
+      });
+      mockStoreMedia.mockResolvedValue({
+        ref: { provider: 'local', key: 'video/ref.mp4', contentHash: 'ref', metadata: {} },
+        deduplicated: false,
+      });
+
+      await provider.callApi('Animate this image');
+
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
+      expect(JSON.parse(request.body).input_reference).toEqual(expected);
     });
 
     it('should return error if input_reference file does not exist', async () => {

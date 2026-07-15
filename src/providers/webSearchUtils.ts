@@ -70,11 +70,16 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for OpenAI responses API with web_search_preview tool
+  // Check for OpenAI Responses API with either supported web-search tool.
   if (
     isOpenAiResponsesProvider(provider, id) &&
-    hasTool(provider, (t) => t.type === 'web_search_preview')
+    hasTool(provider, (t) => t.type === 'web_search' || t.type === 'web_search_preview')
   ) {
+    return true;
+  }
+
+  // Chat Completions search models always retrieve from the web before responding.
+  if (/^openai:(?:chat:)?(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(id)) {
     return true;
   }
 

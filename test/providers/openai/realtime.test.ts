@@ -2952,6 +2952,33 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it.each([
+      'gpt-realtime-2.1',
+      'gpt-realtime-2.1-mini',
+    ])('uses the GA Realtime wire shape and endpoint for %s', async (model) => {
+      const provider = new OpenAiRealtimeProvider(model, {
+        config: { modalities: ['text'] },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((handler) => handler());
+      await vi.waitFor(() => expect(mockWs.send).toHaveBeenCalled());
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(constructedUrl).toBe(
+        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent(model),
+      );
+      expect(sessionUpdate.session).toMatchObject({
+        type: 'realtime',
+        model,
+        output_modalities: ['text'],
+      });
+
+      simulateGaFlow();
+      await expect(promise).resolves.toMatchObject({ output: 'ok' });
+    });
+
     it('rejects direct WebSocket requests if the socket closes before a tool follow-up completes', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {
