@@ -13,6 +13,7 @@ import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
+import deepEqual from 'fast-deep-equal';
 import {
   AlertCircle,
   AlignLeft,
@@ -34,6 +35,7 @@ interface CustomTargetConfigurationProps {
   bodyError: string | React.ReactNode | null;
   providerType?: string;
   onConfigErrorChange?: (error: string | null) => void;
+  preserveConfigErrorOnUnchangedConfig?: boolean;
 }
 
 interface ProviderConfig {
@@ -429,6 +431,7 @@ const CustomTargetConfiguration = ({
   bodyError,
   providerType,
   onConfigErrorChange,
+  preserveConfigErrorOnUnchangedConfig = false,
 }: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
@@ -469,6 +472,10 @@ const CustomTargetConfiguration = ({
         return;
       }
 
+      if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsedConfig, selectedTarget.config)) {
+        return;
+      }
+
       onConfigErrorChange?.(null);
       updateCustomTarget('config', parsedConfig);
     } catch {
@@ -482,6 +489,10 @@ const CustomTargetConfiguration = ({
         const parsed = JSON.parse(rawConfigJson);
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
           onConfigErrorChange?.('Configuration must be a JSON object');
+          return;
+        }
+
+        if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsed, selectedTarget.config)) {
           return;
         }
 

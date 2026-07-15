@@ -60,6 +60,7 @@ function ProviderConfigEditor({
   const { targetConfigError, setTargetConfigError, targetConfigDraft, setTargetConfigDraft } =
     useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
+  const preserveConfigErrorOnUnchangedConfig = isRedTeam && Boolean(targetConfigError);
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
@@ -432,6 +433,7 @@ function ProviderConfigEditor({
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -515,6 +517,7 @@ function ProviderConfigEditor({
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -530,6 +533,7 @@ function ProviderConfigEditor({
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -545,6 +549,7 @@ function ProviderConfigEditor({
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -567,6 +572,7 @@ function ProviderConfigEditor({
           bodyError={customConfigError ?? bodyError}
           providerType={providerType}
           onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 

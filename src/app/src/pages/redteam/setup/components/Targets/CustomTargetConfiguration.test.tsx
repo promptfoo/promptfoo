@@ -103,6 +103,33 @@ describe('CustomTargetConfiguration', () => {
     expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
   });
 
+  it('does not clear a restored validation error for a reordered but unchanged config', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+    const onConfigErrorChange = vi.fn();
+    const config = { sandbox_mode: 'danger-full-access', approval_policy: 'never' };
+    const reordered = '{"approval_policy":"never","sandbox_mode":"danger-full-access"}';
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson={reordered}
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
+        preserveConfigErrorOnUnchangedConfig
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('code-editor'), { target: { value: ` ${reordered}\n` } });
+    await user.click(screen.getByRole('button', { name: /Format/i }));
+
+    expect(updateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).not.toHaveBeenCalled();
+  });
+
   describe('file:// prefix handling', () => {
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();

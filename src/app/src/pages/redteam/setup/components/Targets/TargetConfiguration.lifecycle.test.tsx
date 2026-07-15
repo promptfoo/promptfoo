@@ -32,6 +32,7 @@ describe('TargetConfiguration lifecycle validation', () => {
     act(() => {
       useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
       useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
       useRedTeamConfig.setState({
         config: {
           ...useRedTeamConfig.getState().config,
@@ -125,5 +126,36 @@ describe('TargetConfiguration lifecycle validation', () => {
     expect(useRedTeamConfig.getState().config.target.config).toEqual({
       sandbox_mode: 'read-only',
     });
+  });
+
+  it('keeps a restored unsafe config blocked through whitespace and Format until it is changed', () => {
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+    render(<TargetConfigurationHarness />);
+
+    const editor = screen.getByTestId('code-editor');
+    const unchanged = JSON.stringify({ sandbox_mode: 'danger-full-access' }, null, 2);
+    expect(editor).toHaveValue(unchanged);
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+
+    fireEvent.change(editor, { target: { value: `${unchanged}\n ` } });
+    fireEvent.change(editor, { target: { value: ` ${unchanged}\n` } });
+    fireEvent.click(screen.getByRole('button', { name: /Format/i }));
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamConfig.getState().config.target.config).toEqual({
+      sandbox_mode: 'danger-full-access',
+    });
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+
+    fireEvent.change(editor, { target: { value: '{"sandbox_mode":"read-only"}' } });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamConfig.getState().config.target.config).toEqual({
+      sandbox_mode: 'read-only',
+    });
+    expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
   });
 });
