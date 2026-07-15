@@ -28,6 +28,9 @@ export async function handleSearchRubric({
 
   if (inverse) {
     result.pass = !result.pass;
+    // Clamp only on inversion so a NaN or out-of-range grader score cannot
+    // turn `1 - score` into a misleading negative/inflated value.
+    result.score = Math.min(1, Math.max(0, 1 - (Number.isFinite(result.score) ? result.score : 0)));
     result.reason = result.pass
       ? `Output does not require web search verification: ${result.reason}`
       : `Output requires web search verification: ${result.reason}`;

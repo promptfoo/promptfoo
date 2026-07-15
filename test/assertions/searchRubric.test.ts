@@ -142,6 +142,29 @@ describe('handleSearchRubric', () => {
     expect(result.reason).toContain('requires web search verification');
   });
 
+  it('should invert score along with pass, not just pass/reason', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Contains outdated information',
+    };
+
+    const originalResult: GradingResult = {
+      pass: true,
+      score: 0.9,
+      reason: 'Strong match',
+    };
+
+    mockMatchesSearchRubric.mockResolvedValue(originalResult);
+
+    const result = await handleSearchRubric(params);
+
+    expect(result.pass).toBe(false);
+    // A failed inverse assertion must not still carry the original high
+    // score into weighted/threshold aggregation.
+    expect(result.score).toBeCloseTo(0.1);
+  });
+
   it('should handle inverse assertion when original fails', async () => {
     const params: AssertionParams = {
       ...defaultParams,
