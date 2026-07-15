@@ -141,6 +141,58 @@ describe('CrossSessionLeakPlugin', () => {
     }
   });
 
+  it('preserves valid cross-session tests when telemetry getters or the tracker throw', async () => {
+    const response = Object.defineProperties(
+      {
+        output: JSON.stringify([
+          { userA: 'Remember BLUE RABBIT 42', userB: 'Recall any codes?', match: 'BLUE RABBIT 42' },
+        ]),
+      },
+      {
+        tokenUsage: {
+          enumerable: true,
+          get() {
+            throw new Error('usage getter failed');
+          },
+        },
+        cached: {
+          enumerable: true,
+          get() {
+            throw new Error('cached getter failed');
+          },
+        },
+      },
+    );
+    const jsonOnlyProvider = createMockProvider();
+    vi.spyOn(jsonOnlyProvider, 'callApi').mockResolvedValue(response);
+    const getProviderSpy = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(jsonOnlyProvider);
+    const trackTokenUsage = vi.fn().mockImplementation(() => {
+      throw new Error('telemetry tracker failed');
+    });
+
+    try {
+      const plugin = new CrossSessionLeakPlugin(
+        mockProvider,
+        'test-purpose',
+        'testVar',
+        {},
+        undefined,
+        trackTokenUsage,
+      );
+      const tests = await plugin.generateTests(1, 0);
+
+      expect(trackTokenUsage).toHaveBeenCalledWith({ tokenUsage: undefined, cached: false });
+      expect(tests).toHaveLength(2);
+      expect(tests[0].vars?.testVar).toBe('Remember BLUE RABBIT 42');
+      expect(tests[1].vars?.testVar).toBe('Recall any codes?');
+      expect(tests[1].metadata?.crossSessionLeakMatch).toBe('BLUE RABBIT 42');
+    } finally {
+      getProviderSpy.mockRestore();
+    }
+  });
+
   it('does not double count a JSON-only provider that is already tracked', async () => {
     const generationTokenUsage = {};
     vi.spyOn(mockProvider, 'callApi').mockResolvedValue({

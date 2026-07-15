@@ -111,10 +111,23 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 
     const response = await provider.callApi(finalTemplate);
     if (!isGenerationTokenUsageTracked(provider)) {
-      this.trackTokenUsage?.({
-        tokenUsage: response.tokenUsage,
-        cached: Boolean(response.cached),
-      });
+      let tokenUsage: unknown;
+      let cached = false;
+      try {
+        tokenUsage = response.tokenUsage;
+      } catch {
+        tokenUsage = undefined;
+      }
+      try {
+        cached = Boolean(response.cached);
+      } catch {
+        cached = false;
+      }
+      try {
+        this.trackTokenUsage?.({ tokenUsage, cached });
+      } catch (error) {
+        logger.debug('[cross-session-leak] Failed to track generation token usage', { error });
+      }
     }
     const { output, error } = response;
     if (error) {
