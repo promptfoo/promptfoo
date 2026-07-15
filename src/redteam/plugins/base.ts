@@ -29,6 +29,7 @@ import type {
   AssertionValue,
   AtomicTestCase,
   GradingResult,
+  PluginActionParams,
   PluginConfig,
   ResultSuggestion,
   TestCase,
@@ -63,6 +64,8 @@ export abstract class RedteamPluginBase {
     protected purpose: string,
     protected injectVar: string,
     protected config: PluginConfig = {},
+    _targetId?: string,
+    protected trackTokenUsage?: PluginActionParams['trackTokenUsage'],
   ) {
     logger.debug(`RedteamPluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
 

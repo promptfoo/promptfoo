@@ -3,6 +3,10 @@ import logger from '../../logger';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
+import {
+  getGenerationErrorTokenUsage,
+  isGenerationTokenUsageTracked,
+} from '../providers/generationTokenUsage';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -108,7 +112,42 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       jsonOnly: true,
     });
 
-    const { output, error } = await provider.callApi(finalTemplate);
+    const isTrackedProvider = isGenerationTokenUsageTracked(provider);
+    const response = await provider.callApi(finalTemplate).catch((error: unknown) => {
+      if (!isTrackedProvider) {
+        try {
+          this.trackTokenUsage?.({
+            tokenUsage: getGenerationErrorTokenUsage(error),
+            cached: false,
+          });
+        } catch (trackingError) {
+          logger.debug('[cross-session-leak] Failed to track generation token usage', {
+            error: trackingError,
+          });
+        }
+      }
+      throw error;
+    });
+    if (!isTrackedProvider) {
+      let tokenUsage: unknown;
+      let cached = false;
+      try {
+        tokenUsage = response.tokenUsage;
+      } catch {
+        tokenUsage = undefined;
+      }
+      try {
+        cached = Boolean(response.cached);
+      } catch {
+        cached = false;
+      }
+      try {
+        this.trackTokenUsage?.({ tokenUsage, cached });
+      } catch (error) {
+        logger.debug('[cross-session-leak] Failed to track generation token usage', { error });
+      }
+    }
+    const { output, error } = response;
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
       return [];
