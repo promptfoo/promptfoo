@@ -49,7 +49,9 @@ export function addUnicodeNormalization(
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/UnicodeNormalization-${form}`,
+        metric: assertion.metric
+          ? `${assertion.metric}/UnicodeNormalization-${form}`
+          : assertion.metric,
       })),
       vars: {
         ...testCase.vars,

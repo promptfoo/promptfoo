@@ -127,5 +127,20 @@ describe('unicode normalization strategy', () => {
 
       expect(result.assert).toBeUndefined();
     });
+
+    it('preserves assertions without metric names', () => {
+      const [result] = addUnicodeNormalization(
+        [
+          {
+            vars: { prompt: 'Cafe\u0301' },
+            assert: [{ type: 'equals', value: 'expected' }],
+          },
+        ],
+        'prompt',
+        { form: 'NFC' },
+      );
+
+      expect(result.assert).toEqual([{ type: 'equals', value: 'expected' }]);
+    });
   });
 });

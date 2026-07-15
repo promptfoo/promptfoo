@@ -174,6 +174,29 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
+  it('should apply Unicode normalization through the registered strategy', async () => {
+    const strategy = await loadStrategy('unicode-normalization');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { prompt: '\uff21dmin' }, metadata: { pluginId: 'test' } },
+    ];
+
+    const results = await strategy.action(testCases, 'prompt', { form: 'NFKC' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      vars: { prompt: 'Admin' },
+      metadata: {
+        pluginId: 'test',
+        strategyId: 'unicode-normalization',
+        originalText: '\uff21dmin',
+        normalizationForm: 'NFKC',
+        normalizationChanged: true,
+      },
+    });
+    expect(logger.debug).toHaveBeenCalledWith('Adding Unicode normalization to 1 test cases');
+    expect(logger.debug).toHaveBeenCalledWith('Added 1 Unicode-normalized test cases');
+  });
+
   it('should throw error for non-existent strategy', async () => {
     await expect(loadStrategy('non-existent')).rejects.toThrow('Strategy not found: non-existent');
   });
