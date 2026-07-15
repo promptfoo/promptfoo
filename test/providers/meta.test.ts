@@ -995,6 +995,39 @@ describe('MetaMessagesProvider', () => {
     }
   });
 
+  it.each([
+    ['provider', { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: provider-secret' }],
+    ['suite', undefined],
+  ] as const)('does not forward an inherited x-api-key for %s-scoped custom headers', async (scope, env) => {
+    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|messages-key' });
+    const previousConfig = cliState.config;
+    if (scope === 'suite') {
+      cliState.config = {
+        ...previousConfig,
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: suite-secret' },
+      } as any;
+    }
+
+    try {
+      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+        env,
+      }) as MetaMessagesProvider;
+      const { req } = await (provider.anthropic as any).buildRequest({
+        method: 'post',
+        path: '/v1/messages',
+        body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
+      });
+      const headers = new Headers(req.headers);
+
+      expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
+      expect(headers.has('x-proxy-secret')).toBe(false);
+      expect(headers.has('x-api-key')).toBe(false);
+    } finally {
+      cliState.config = previousConfig;
+      restore();
+    }
+  });
+
   it('throws the Meta-specific missing-key error from callApi', async () => {
     const restore = mockProcessEnv({ MODEL_API_KEY: undefined });
     try {

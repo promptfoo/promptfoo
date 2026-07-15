@@ -583,7 +583,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // gateway/proxy secrets) and must not be sent to Meta; a null value tells
   // the SDK to drop the header.
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
+    const suppressedEnvHeaders = {
+      ...getAnthropicEnvHeaderSuppressions(this.env),
+      'x-api-key': null,
+    };
     const suppressedNames = new Set(
       Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
     );
