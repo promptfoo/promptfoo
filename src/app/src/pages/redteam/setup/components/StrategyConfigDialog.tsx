@@ -27,9 +27,12 @@ import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
+  DEFAULT_UNICODE_NORMALIZATION_FORM,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
+  UNICODE_NORMALIZATION_FORMS,
+  type UnicodeNormalizationForm,
 } from '@promptfoo/redteam/constants/strategies';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
@@ -42,6 +45,18 @@ import type { StrategyCardData } from './strategies/types';
 // like 'default', 'multilingual' which aren't meant to be composed as layer steps.
 // We exclude 'layer' itself to prevent infinite recursion.
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+
+const UNICODE_NORMALIZATION_FORM_LABELS: Record<UnicodeNormalizationForm, string> = {
+  NFC: 'NFC — Canonical composition',
+  NFD: 'NFD — Canonical decomposition',
+  NFKC: 'NFKC — Compatibility composition',
+  NFKD: 'NFKD — Compatibility decomposition',
+};
+
+const getUnicodeNormalizationForm = (form: unknown): UnicodeNormalizationForm =>
+  typeof form === 'string' && UNICODE_NORMALIZATION_FORMS.includes(form as UnicodeNormalizationForm)
+    ? (form as UnicodeNormalizationForm)
+    : DEFAULT_UNICODE_NORMALIZATION_FORM;
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -423,6 +438,11 @@ export default function StrategyConfigDialog({
         ...config,
         enabled,
       });
+    } else if (strategy === 'unicode-normalization') {
+      onSave(strategy, {
+        ...localConfig,
+        form: getUnicodeNormalizationForm(localConfig.form),
+      });
     } else if (
       strategy === 'jailbreak' ||
       strategy === 'jailbreak:goblin' ||
@@ -496,6 +516,49 @@ export default function StrategyConfigDialog({
       </div>
     </>
   );
+
+  const renderUnicodeNormalizationStrategyConfig = () => {
+    const form = getUnicodeNormalizationForm(localConfig.form);
+
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Choose how Unicode characters are normalized before each test case is sent to the target.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="unicode-normalization-form">Normalization form</Label>
+          <Select
+            value={form}
+            onValueChange={(value) =>
+              setLocalConfig({
+                ...localConfig,
+                form: value as UnicodeNormalizationForm,
+              })
+            }
+          >
+            <SelectTrigger
+              id="unicode-normalization-form"
+              aria-label="Normalization form"
+              className="w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UNICODE_NORMALIZATION_FORMS.map((normalizationForm) => (
+                <SelectItem key={normalizationForm} value={normalizationForm}>
+                  {UNICODE_NORMALIZATION_FORM_LABELS[normalizationForm]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            NFC and NFD preserve canonical equivalence. NFKC and NFKD also fold compatibility
+            characters. NFKD is the default.
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   const renderJailbreakStrategyConfig = () => (
     <div className="flex flex-col gap-4">
@@ -1314,6 +1377,8 @@ export default function StrategyConfigDialog({
         return renderJailbreakStrategyConfig();
       case 'retry':
         return renderRetryStrategyConfig();
+      case 'unicode-normalization':
+        return renderUnicodeNormalizationStrategyConfig();
       case 'best-of-n':
         return renderBestOfNStrategyConfig();
       case 'custom':

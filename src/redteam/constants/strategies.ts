@@ -140,8 +140,13 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'unicode-normalization',
 ] as const;
 export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGURABLE_STRATEGIES);
+
+export const UNICODE_NORMALIZATION_FORMS = ['NFC', 'NFD', 'NFKC', 'NFKD'] as const;
+export type UnicodeNormalizationForm = (typeof UNICODE_NORMALIZATION_FORMS)[number];
+export const DEFAULT_UNICODE_NORMALIZATION_FORM: UnicodeNormalizationForm = 'NFKD';
 
 /**
  * Set of strategy IDs that represent encoding transformations where originalText should be shown

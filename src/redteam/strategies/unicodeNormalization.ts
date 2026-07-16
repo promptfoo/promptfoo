@@ -1,10 +1,17 @@
+import {
+  DEFAULT_UNICODE_NORMALIZATION_FORM,
+  UNICODE_NORMALIZATION_FORMS,
+} from '../constants/strategies';
+
+import type { UnicodeNormalizationForm } from '../constants/strategies';
 import type { TestCase } from './types';
 
-export const UNICODE_NORMALIZATION_FORMS = ['NFC', 'NFD', 'NFKC', 'NFKD'] as const;
+export {
+  DEFAULT_UNICODE_NORMALIZATION_FORM,
+  UNICODE_NORMALIZATION_FORMS,
+} from '../constants/strategies';
 
-export type UnicodeNormalizationForm = (typeof UNICODE_NORMALIZATION_FORMS)[number];
-
-export const DEFAULT_UNICODE_NORMALIZATION_FORM: UnicodeNormalizationForm = 'NFKD';
+export type { UnicodeNormalizationForm } from '../constants/strategies';
 
 export function resolveUnicodeNormalizationForm(
   config: Record<string, unknown> = {},
