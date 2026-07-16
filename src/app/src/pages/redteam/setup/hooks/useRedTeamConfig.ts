@@ -2,7 +2,10 @@ import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getProviderType } from '../components/Targets/helpers';
-import { useRedTeamTargetConfigValidation } from './useRedTeamTargetConfigValidation';
+import {
+  registerTargetConfigReconciler,
+  useRedTeamTargetConfigValidation,
+} from './useRedTeamTargetConfigValidation';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
@@ -315,7 +318,18 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       setFullConfig: (config) => {
         const providerType = getProviderType(config.target?.id);
         set({ config, providerType });
-        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+        const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
+        targetConfigValidation.clearTargetConfigValidation();
+        if (
+          typeof config.target?.config !== 'object' ||
+          config.target.config === null ||
+          Array.isArray(config.target.config)
+        ) {
+          targetConfigValidation.setTargetConfigDraft(
+            JSON.stringify(config.target?.config) ?? 'null',
+          );
+          targetConfigValidation.setTargetConfigError('Configuration must be a JSON object');
+        }
       },
       resetConfig: () => {
         set({
@@ -351,4 +365,12 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
 
 useRedTeamConfig.subscribe(() => {
   useRedTeamTargetConfigValidation.getState().reassertTargetConfigValidation();
+});
+
+registerTargetConfigReconciler((config) => {
+  useRedTeamConfig.setState({
+    config,
+    providerType: getProviderType(config.target?.id),
+  });
+  return true;
 });

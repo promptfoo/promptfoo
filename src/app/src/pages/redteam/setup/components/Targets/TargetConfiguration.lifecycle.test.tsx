@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
@@ -27,6 +28,16 @@ function TargetConfigurationHarness({ onNext = vi.fn() }: { onNext?: () => void 
   );
 }
 
+const replaceText = async (
+  user: ReturnType<typeof userEvent.setup>,
+  element: HTMLElement,
+  value: string,
+) => {
+  await user.click(element);
+  await user.keyboard('{Control>}a{/Control}');
+  await user.paste(value);
+};
+
 describe('TargetConfiguration lifecycle validation', () => {
   beforeEach(() => {
     act(() => {
@@ -47,13 +58,12 @@ describe('TargetConfiguration lifecycle validation', () => {
     });
   });
 
-  it('uses an imported target after malformed JSON instead of restoring the previous target', () => {
+  it('uses an imported target after malformed JSON instead of restoring the previous target', async () => {
+    const user = userEvent.setup();
     const onNext = vi.fn();
     render(<TargetConfigurationHarness onNext={onNext} />);
 
-    fireEvent.change(screen.getByTestId('code-editor'), {
-      target: { value: '{"sandbox_mode":"read-only",}' },
-    });
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only",}');
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
       'Invalid JSON configuration',
     );
@@ -75,9 +85,7 @@ describe('TargetConfiguration lifecycle validation', () => {
       JSON.stringify({ sandbox_mode: 'read-only' }, null, 2),
     );
 
-    fireEvent.change(screen.getByLabelText(/Target ID/i), {
-      target: { value: 'openinterpreter:local' },
-    });
+    await replaceText(user, screen.getByLabelText(/Target ID/i), 'openinterpreter:local');
 
     expect(useRedTeamConfig.getState().config.target).toEqual({
       id: 'openinterpreter:local',
@@ -85,16 +93,15 @@ describe('TargetConfiguration lifecycle validation', () => {
       config: { sandbox_mode: 'read-only' },
     });
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+    await user.click(screen.getByRole('button', { name: /Next/i }));
     expect(onNext).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps Next disabled when the target editor remounts with malformed JSON', () => {
+  it('keeps Next disabled when the target editor remounts with malformed JSON', async () => {
+    const user = userEvent.setup();
     const first = render(<TargetConfigurationHarness />);
 
-    fireEvent.change(screen.getByTestId('code-editor'), {
-      target: { value: '{"sandbox_mode":"read-only",}' },
-    });
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only",}');
     expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
     first.unmount();
 
@@ -128,7 +135,8 @@ describe('TargetConfiguration lifecycle validation', () => {
     });
   });
 
-  it('keeps a restored unsafe config blocked through whitespace and Format until it is changed', () => {
+  it('keeps a restored unsafe config blocked through whitespace and Format until it is changed', async () => {
+    const user = userEvent.setup();
     useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
     render(<TargetConfigurationHarness />);
@@ -138,9 +146,9 @@ describe('TargetConfiguration lifecycle validation', () => {
     expect(editor).toHaveValue(unchanged);
     expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
 
-    fireEvent.change(editor, { target: { value: `${unchanged}\n ` } });
-    fireEvent.change(editor, { target: { value: ` ${unchanged}\n` } });
-    fireEvent.click(screen.getByRole('button', { name: /Format/i }));
+    await replaceText(user, editor, `${unchanged}\n `);
+    await replaceText(user, editor, ` ${unchanged}\n`);
+    await user.click(screen.getByRole('button', { name: /Format/i }));
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
       'Invalid JSON configuration',
@@ -150,12 +158,31 @@ describe('TargetConfiguration lifecycle validation', () => {
     });
     expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
 
-    fireEvent.change(editor, { target: { value: '{"sandbox_mode":"read-only"}' } });
+    await replaceText(user, editor, '{"sandbox_mode":"read-only"}');
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamConfig.getState().config.target.config).toEqual({
       sandbox_mode: 'read-only',
     });
+    expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
+  });
+
+  it('clears a malformed draft when undo restores the last valid target configuration', async () => {
+    const user = userEvent.setup();
+    render(<TargetConfigurationHarness />);
+    const editor = screen.getByTestId('code-editor');
+    const original = JSON.stringify({ sandbox_mode: 'danger-full-access' }, null, 2);
+
+    await replaceText(user, editor, '{"sandbox_mode":"read-only",}');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+
+    await replaceText(user, editor, original);
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
     expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
   });
 });

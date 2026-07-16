@@ -1,8 +1,33 @@
+import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from './useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './useRedTeamTargetConfigValidation';
 
 import type { Config } from '../types';
+
+const dispatchStorageEvent = (key: string | null, newValue: string | null) => {
+  const event = new Event('storage');
+  Object.defineProperties(event, {
+    key: { value: key },
+    newValue: { value: newValue },
+  });
+  window.dispatchEvent(event);
+};
+
+const deferNextDigest = () => {
+  const originalDigest = crypto.subtle.digest.bind(crypto.subtle);
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const digest = vi
+    .spyOn(crypto.subtle, 'digest')
+    .mockImplementationOnce(async (algorithm, data) => {
+      await wait;
+      return originalDigest(algorithm, data);
+    });
+  return { digest, release };
+};
 
 describe('useRedTeamConfig', () => {
   beforeEach(() => {
@@ -30,6 +55,23 @@ describe('useRedTeamConfig', () => {
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
     expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBeNull();
     expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBeNull();
+  });
+
+  it('keeps an imported non-object target configuration blocked', () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openinterpreter',
+        label: 'Imported coding target',
+        config: [] as unknown as Config['target']['config'],
+      },
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe('non-object-json');
   });
 
   it('persists only a small validation marker for repeated malformed target edits', () => {
@@ -103,13 +145,20 @@ describe('useRedTeamConfig', () => {
   });
 
   it('falls back to session storage when the local validation marker cannot be written', async () => {
-    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      get: () => {
+    mockBrowserProperty(window, 'localStorage', {
+      getItem: () => {
         throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
       },
-    });
+      setItem: () => {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      },
+      removeItem: () => {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      },
+      clear: vi.fn(),
+      key: vi.fn(),
+      length: 0,
+    } as Storage);
 
     try {
       expect(() => {
@@ -129,9 +178,7 @@ describe('useRedTeamConfig', () => {
         'Configuration must be a JSON object',
       );
     } finally {
-      if (descriptor) {
-        Object.defineProperty(window, 'localStorage', descriptor);
-      }
+      restoreBrowserMocks();
       useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     }
   });
@@ -145,18 +192,11 @@ describe('useRedTeamConfig', () => {
     expect(existingTabValidation.getState().targetConfigError).toBeNull();
 
     window.localStorage.setItem('redTeamTargetConfigValidation', 'invalid-json');
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key: 'redTeamTargetConfigValidation',
-        newValue: 'invalid-json',
-      }),
-    );
+    dispatchStorageEvent('redTeamTargetConfigValidation', 'invalid-json');
 
     expect(existingTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
 
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: 'redTeamTargetConfigValidation', newValue: null }),
-    );
+    dispatchStorageEvent('redTeamTargetConfigValidation', null);
     expect(existingTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
   });
 
@@ -179,9 +219,7 @@ describe('useRedTeamConfig', () => {
     expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe('invalid-json');
 
     window.localStorage.removeItem('redTeamTargetConfigValidation');
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: 'redTeamTargetConfigValidation', newValue: null }),
-    );
+    dispatchStorageEvent('redTeamTargetConfigValidation', null);
     activeTabConfig.getState().updateApplicationDefinition('purpose', 'An unrelated edit');
 
     expect(window.localStorage.getItem('redTeamConfig')).toContain('danger-full-access');
@@ -213,7 +251,7 @@ describe('useRedTeamConfig', () => {
     activeTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
 
     window.localStorage.clear();
-    window.dispatchEvent(new StorageEvent('storage', { key: null, newValue: null }));
+    dispatchStorageEvent(null, null);
     activeTabConfig.getState().updateApplicationDefinition('purpose', 'An unrelated edit');
 
     expect(window.localStorage.getItem('redTeamConfig')).toContain('danger-full-access');
@@ -364,7 +402,6 @@ describe('useRedTeamConfig', () => {
   });
 
   it('broadcasts a validation marker to an already-open tab when local storage is full', async () => {
-    const localStorageDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
     const peers = new Set<MockBroadcastChannel>();
 
     class MockBroadcastChannel {
@@ -395,13 +432,25 @@ describe('useRedTeamConfig', () => {
       }
     }
 
-    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      get: () => {
+    mockBrowserProperty(
+      globalThis,
+      'BroadcastChannel',
+      MockBroadcastChannel as unknown as typeof BroadcastChannel,
+    );
+    mockBrowserProperty(window, 'localStorage', {
+      getItem: () => {
         throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
       },
-    });
+      setItem: () => {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      },
+      removeItem: () => {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      },
+      clear: vi.fn(),
+      key: vi.fn(),
+      length: 0,
+    } as Storage);
 
     try {
       vi.resetModules();
@@ -434,15 +483,184 @@ describe('useRedTeamConfig', () => {
 
       existingTab.postMessage(null);
       existingTab.postMessage('{"apiKey":"should-not-be-accepted"}');
+      existingTab.postMessage(`clear:1:${'0'.repeat(64)}`);
       expect(reloadedReceiverValidation.getState().targetConfigError).toBe(
         'Invalid JSON configuration',
       );
       existingTab.close();
     } finally {
-      vi.unstubAllGlobals();
-      if (localStorageDescriptor) {
-        Object.defineProperty(window, 'localStorage', localStorageDescriptor);
+      restoreBrowserMocks();
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+    }
+  });
+
+  it('broadcasts a credential-free clear marker and reconciles a stale target before unblocking', async () => {
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
       }
+      return originalSetItem.call(this, key, value);
+    });
+    const peers = new Set<MockBroadcastChannel>();
+
+    class MockBroadcastChannel {
+      readonly name: string;
+      private readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+      constructor(name: string) {
+        this.name = name;
+        peers.add(this);
+      }
+
+      addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
+        this.listeners.add(listener);
+      }
+
+      postMessage(data: unknown) {
+        for (const peer of peers) {
+          if (peer !== this && peer.name === this.name) {
+            for (const listener of peer.listeners) {
+              listener({ data } as MessageEvent<unknown>);
+            }
+          }
+        }
+      }
+
+      close() {
+        peers.delete(this);
+      }
+    }
+
+    mockBrowserProperty(
+      globalThis,
+      'BroadcastChannel',
+      MockBroadcastChannel as unknown as typeof BroadcastChannel,
+    );
+
+    try {
+      vi.resetModules();
+      const { useRedTeamConfig: staleTabConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: staleTabValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      staleTabConfig.getState().setFullConfig({
+        ...staleTabConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access', apiKey: 'should-not-be-broadcast' },
+        },
+      });
+      staleTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+
+      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+      persistedConfig.state.config.description = 'Corrected tab description';
+      persistedConfig.state.config.target.config = {
+        sandbox_mode: 'read-only',
+        apiKey: 'should-not-be-broadcast',
+      };
+      originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
+
+      const correctedTab = new MockBroadcastChannel('redTeamTargetConfigValidation');
+      const received: unknown[] = [];
+      correctedTab.addEventListener('message', (event) => received.push(event.data));
+
+      const senderDigest = deferNextDigest();
+      staleTabValidation.getState().clearTargetConfigValidation();
+      await vi.waitFor(() => expect(senderDigest.digest).toHaveBeenCalledTimes(1));
+      staleTabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+      staleTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      senderDigest.release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(received).toEqual(['invalid-json']);
+      senderDigest.digest.mockRestore();
+      received.length = 0;
+
+      staleTabValidation.getState().setTargetConfigDraft(null);
+      staleTabValidation.getState().setTargetConfigError(null);
+
+      await vi.waitFor(() =>
+        expect(received).toEqual([expect.stringMatching(/^clear:[a-z0-9]+:[a-f0-9]{64}$/)]),
+      );
+      expect(received[0]).not.toContain('should-not-be-broadcast');
+      expect(received[0]).not.toContain('sandbox_mode');
+
+      staleTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      persistedConfig.state.config.target.config = {
+        sandbox_mode: 'danger-full-access',
+        apiKey: 'should-not-be-broadcast',
+      };
+      originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
+      correctedTab.postMessage(received[0]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(staleTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(staleTabConfig.getState().config.target.config.sandbox_mode).toBe(
+        'danger-full-access',
+      );
+
+      persistedConfig.state.config.target.config = {
+        sandbox_mode: 'read-only',
+        apiKey: 'should-not-be-broadcast',
+      };
+      originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
+
+      const receiverDigest = deferNextDigest();
+      correctedTab.postMessage(received[0]);
+      await vi.waitFor(() => expect(receiverDigest.digest).toHaveBeenCalledTimes(1));
+      staleTabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+      staleTabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      receiverDigest.release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(staleTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(staleTabConfig.getState().config.target.config.sandbox_mode).toBe(
+        'danger-full-access',
+      );
+      receiverDigest.digest.mockRestore();
+
+      staleTabValidation.getState().setTargetConfigDraft(null);
+      const incomingChannelDigest = deferNextDigest();
+      correctedTab.postMessage(received[0]);
+      await vi.waitFor(() => expect(incomingChannelDigest.digest).toHaveBeenCalledTimes(1));
+      correctedTab.postMessage('invalid-json');
+      incomingChannelDigest.release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(staleTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(staleTabConfig.getState().config.target.config.sandbox_mode).toBe(
+        'danger-full-access',
+      );
+      incomingChannelDigest.digest.mockRestore();
+
+      const incomingStorageDigest = deferNextDigest();
+      correctedTab.postMessage(received[0]);
+      await vi.waitFor(() => expect(incomingStorageDigest.digest).toHaveBeenCalledTimes(1));
+      dispatchStorageEvent('redTeamTargetConfigValidation', 'invalid-json');
+      incomingStorageDigest.release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(staleTabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(staleTabConfig.getState().config.target.config.sandbox_mode).toBe(
+        'danger-full-access',
+      );
+      incomingStorageDigest.digest.mockRestore();
+
+      correctedTab.postMessage(received[0]);
+
+      await vi.waitFor(() => expect(staleTabValidation.getState().targetConfigError).toBeNull());
+      expect(staleTabValidation.getState().targetConfigDraft).toBeNull();
+      expect(staleTabConfig.getState().config.target.config).toEqual({
+        sandbox_mode: 'read-only',
+        apiKey: 'should-not-be-broadcast',
+      });
+      expect(staleTabConfig.getState().config.description).toBe('Corrected tab description');
+      correctedTab.close();
+    } finally {
+      setItem.mockRestore();
+      restoreBrowserMocks();
       useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     }
   });

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetConfiguration from './TargetConfiguration';
 
@@ -83,6 +84,16 @@ function Harness() {
   );
 }
 
+const replaceText = async (
+  user: ReturnType<typeof userEvent.setup>,
+  element: HTMLElement,
+  value: string,
+) => {
+  await user.click(element);
+  await user.keyboard('{Control>}a{/Control}');
+  await user.paste(value);
+};
+
 describe('TargetConfiguration custom configuration validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -98,10 +109,11 @@ describe('TargetConfiguration custom configuration validation', () => {
   it.each([
     ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
     ['non-object JSON', '[]', 'Configuration must be a JSON object'],
-  ])('keeps %s blocked after navigating directly to Review', (_case, value, error) => {
+  ])('keeps %s blocked after navigating directly to Review', async (_case, value, error) => {
+    const user = userEvent.setup();
     render(<Harness />);
 
-    fireEvent.change(screen.getByTestId('code-editor'), { target: { value } });
+    await replaceText(user, screen.getByTestId('code-editor'), value);
 
     expect(screen.getAllByText(error).length).toBeGreaterThan(0);
     expect(setTargetConfigError).toHaveBeenLastCalledWith(error);
@@ -110,26 +122,23 @@ describe('TargetConfiguration custom configuration validation', () => {
       name: /Next/i,
     });
     expect(footerNext).toBeDisabled();
-    fireEvent.click(footerNext);
+    await user.click(footerNext);
     expect(onNext).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review tab' }));
+    await user.click(screen.getByRole('button', { name: 'Review tab' }));
     expect(screen.getByTestId('review-state')).toHaveTextContent(error);
     expect(screen.getByTestId('review-state')).toHaveTextContent('danger-full-access');
   });
 
-  it('clears the durable validation error after the configuration is corrected', () => {
+  it('clears the durable validation error after the configuration is corrected', async () => {
+    const user = userEvent.setup();
     render(<Harness />);
 
-    fireEvent.change(screen.getByTestId('code-editor'), {
-      target: { value: '{"sandbox_mode":"read-only",}' },
-    });
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only",}');
     expect(setTargetConfigError).toHaveBeenLastCalledWith('Invalid JSON configuration');
     expect(state.targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
 
-    fireEvent.change(screen.getByTestId('code-editor'), {
-      target: { value: '{"sandbox_mode":"read-only"}' },
-    });
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only"}');
 
     expect(setTargetConfigError).toHaveBeenLastCalledWith(null);
     expect(state.targetConfigDraft).toBeNull();
@@ -137,27 +146,28 @@ describe('TargetConfiguration custom configuration validation', () => {
       name: /Next/i,
     });
     expect(footerNext).toBeEnabled();
-    fireEvent.click(footerNext);
+    await user.click(footerNext);
     expect(onNext).toHaveBeenCalledTimes(1);
     expect(state.target.config).toEqual({ sandbox_mode: 'read-only' });
   });
 
-  it('retains the malformed draft and validation guard after leaving and remounting the target tab', () => {
+  it('retains the malformed draft and validation guard after leaving and remounting the target tab', async () => {
+    const user = userEvent.setup();
     const malformedConfig = '{"sandbox_mode":"read-only",}';
     render(<Harness />);
 
-    fireEvent.change(screen.getByTestId('code-editor'), { target: { value: malformedConfig } });
+    await replaceText(user, screen.getByTestId('code-editor'), malformedConfig);
     expect(state.target.config).toEqual({ sandbox_mode: 'danger-full-access' });
     expect(state.targetConfigError).toBe('Invalid JSON configuration');
     expect(state.targetConfigDraft).toBe(malformedConfig);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review tab' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Target tab' }));
+    await user.click(screen.getByRole('button', { name: 'Review tab' }));
+    await user.click(screen.getByRole('button', { name: 'Target tab' }));
 
     const remountedEditor = screen.getByTestId('code-editor');
     expect(remountedEditor).toHaveValue(malformedConfig);
 
-    fireEvent.change(remountedEditor, { target: { value: `${malformedConfig} ` } });
+    await replaceText(user, remountedEditor, `${malformedConfig} `);
     expect(state.target.config).toEqual({ sandbox_mode: 'danger-full-access' });
     expect(state.targetConfigError).toBe('Invalid JSON configuration');
     expect(

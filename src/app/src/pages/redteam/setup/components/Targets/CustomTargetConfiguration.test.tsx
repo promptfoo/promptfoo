@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -20,6 +20,16 @@ vi.mock('react-simple-code-editor', () => ({
 
 const render = (ui: React.ReactElement) => {
   return rtlRender(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+};
+
+const replaceText = async (
+  user: ReturnType<typeof userEvent.setup>,
+  element: HTMLElement,
+  value: string,
+) => {
+  await user.click(element);
+  await user.keyboard('{Control>}a{/Control}');
+  await user.paste(value);
 };
 
 describe('CustomTargetConfiguration', () => {
@@ -56,6 +66,7 @@ describe('CustomTargetConfiguration', () => {
     ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
     ['non-object JSON', '[]', 'Configuration must be a JSON object'],
   ])('preserves the last valid Open Interpreter config for %s', async (_case, value, error) => {
+    const user = userEvent.setup();
     const updateCustomTarget = vi.fn();
     const onConfigErrorChange = vi.fn();
 
@@ -71,7 +82,7 @@ describe('CustomTargetConfiguration', () => {
       />,
     );
 
-    fireEvent.change(screen.getByTestId('code-editor'), { target: { value } });
+    await replaceText(user, screen.getByTestId('code-editor'), value);
 
     expect(updateCustomTarget).not.toHaveBeenCalled();
     expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
@@ -123,14 +134,15 @@ describe('CustomTargetConfiguration', () => {
       />,
     );
 
-    fireEvent.change(screen.getByTestId('code-editor'), { target: { value: ` ${reordered}\n` } });
+    await replaceText(user, screen.getByTestId('code-editor'), ` ${reordered}\n`);
     await user.click(screen.getByRole('button', { name: /Format/i }));
 
     expect(updateCustomTarget).not.toHaveBeenCalled();
     expect(onConfigErrorChange).not.toHaveBeenCalled();
   });
 
-  it('keeps the validation error when a valid correction cannot be persisted', () => {
+  it('keeps the validation error when a valid correction cannot be persisted', async () => {
+    const user = userEvent.setup();
     const updateCustomTarget = vi.fn(() => {
       throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
     });
@@ -148,9 +160,7 @@ describe('CustomTargetConfiguration', () => {
       />,
     );
 
-    fireEvent.change(screen.getByTestId('code-editor'), {
-      target: { value: '{"sandbox_mode":"read-only"}' },
-    });
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only"}');
 
     expect(updateCustomTarget).toHaveBeenCalledWith('config', { sandbox_mode: 'read-only' });
     expect(onConfigErrorChange).not.toHaveBeenCalledWith(null);

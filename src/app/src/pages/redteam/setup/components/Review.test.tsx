@@ -746,7 +746,12 @@ Application Details:
           config: { sandbox_mode: 'danger-full-access' },
         },
       };
-      let latestState = {
+      let latestState: {
+        config: typeof confirmedConfig | typeof replacementConfig;
+        updateConfig: typeof mockUpdateConfig;
+        targetConfigError: string | null;
+        targetConfigDraft: string | null;
+      } = {
         config: confirmedConfig,
         updateConfig: mockUpdateConfig,
         targetConfigError: null as string | null,
@@ -888,7 +893,12 @@ Application Details:
           config: { sandbox_mode: 'danger-full-access' },
         },
       };
-      let latestState = {
+      let latestState: {
+        config: typeof confirmedConfig | typeof replacementConfig;
+        updateConfig: typeof mockUpdateConfig;
+        targetConfigError: string | null;
+        targetConfigDraft: string | null;
+      } = {
         config: confirmedConfig,
         updateConfig: mockUpdateConfig,
         targetConfigError: null as string | null,
@@ -950,7 +960,12 @@ Application Details:
           config: { sandbox_mode: 'danger-full-access' },
         },
       };
-      let latestState = {
+      let latestState: {
+        config: typeof confirmedConfig | typeof replacementConfig;
+        updateConfig: typeof mockUpdateConfig;
+        targetConfigError: string | null;
+        targetConfigDraft: string | null;
+      } = {
         config: confirmedConfig,
         updateConfig: mockUpdateConfig,
         targetConfigError: null as string | null,

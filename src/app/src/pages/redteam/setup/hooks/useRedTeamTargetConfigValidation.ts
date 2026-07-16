@@ -1,8 +1,55 @@
 import { create } from 'zustand';
 
+import type { Config } from '../types';
+
 const TARGET_CONFIG_VALIDATION_STORAGE_KEY = 'redTeamTargetConfigValidation';
+const REDTEAM_CONFIG_STORAGE_KEY = 'redTeamConfig';
 const TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let targetConfigValidationChannel: BroadcastChannel | null = null;
+let reconcileTargetConfig: ((config: Config) => boolean) | null = null;
+let reconcilingTargetConfig = false;
+let targetConfigValidationEpoch = 0;
+
+const sha256 = async (value: string): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const getPersistedTargetSnapshot = (): {
+  config: Config;
+  serialized: string;
+} | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawConfig = window.localStorage.getItem(REDTEAM_CONFIG_STORAGE_KEY);
+    if (!rawConfig) {
+      return null;
+    }
+    const persisted = JSON.parse(rawConfig) as { state?: { config?: Config } };
+    const config = persisted.state?.config;
+    const target = config?.target;
+    if (
+      !target ||
+      typeof target.id !== 'string' ||
+      typeof target.config !== 'object' ||
+      target.config === null ||
+      Array.isArray(target.config)
+    ) {
+      return null;
+    }
+
+    return { config, serialized: JSON.stringify(target) };
+  } catch {
+    return null;
+  }
+};
+
+export const registerTargetConfigReconciler = (reconciler: (config: Config) => boolean) => {
+  reconcileTargetConfig = reconciler;
+};
 
 const getTargetConfigMarkerFromError = (error: string): string =>
   error === 'Configuration must be a JSON object' ? 'non-object-json' : 'invalid-json';
@@ -87,6 +134,28 @@ const persistTargetConfigError = (error: string | null, broadcast = true) => {
     try {
       document.cookie = `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
     } catch {}
+    if (broadcast) {
+      const snapshot = getPersistedTargetSnapshot();
+      if (snapshot) {
+        const clearEpoch = targetConfigValidationEpoch;
+        void sha256(snapshot.serialized).then(
+          (fingerprint) => {
+            if (
+              clearEpoch !== targetConfigValidationEpoch ||
+              getPersistedTargetSnapshot()?.serialized !== snapshot.serialized
+            ) {
+              return;
+            }
+            try {
+              targetConfigValidationChannel?.postMessage(
+                `clear:${snapshot.serialized.length.toString(36)}:${fingerprint}`,
+              );
+            } catch {}
+          },
+          () => {},
+        );
+      }
+    }
     return;
   }
 
@@ -128,13 +197,18 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
     targetConfigRevision: 0,
     setTargetConfigError: (targetConfigError) => {
       const previousError = get().targetConfigError;
+      targetConfigValidationEpoch++;
       set({ targetConfigError });
       if (previousError !== targetConfigError) {
         persistTargetConfigError(targetConfigError);
       }
     },
-    setTargetConfigDraft: (targetConfigDraft) => set({ targetConfigDraft }),
+    setTargetConfigDraft: (targetConfigDraft) => {
+      targetConfigValidationEpoch++;
+      set({ targetConfigDraft });
+    },
     clearTargetConfigValidation: () => {
+      targetConfigValidationEpoch++;
       persistTargetConfigError(null);
       set((state) => ({
         targetConfigError: null,
@@ -144,7 +218,7 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
     },
     reassertTargetConfigValidation: () => {
       const { targetConfigError } = get();
-      if (targetConfigError && !hasDurableTargetConfigMarker()) {
+      if (targetConfigError && !reconcilingTargetConfig && !hasDurableTargetConfigMarker()) {
         persistTargetConfigError(targetConfigError);
       }
     },
@@ -177,6 +251,7 @@ if (typeof window !== 'undefined') {
 
     const targetConfigError = getTargetConfigErrorFromMarker(event.newValue);
     if (targetConfigError) {
+      targetConfigValidationEpoch++;
       useRedTeamTargetConfigValidation.setState({ targetConfigError });
     }
   };
@@ -193,8 +268,55 @@ if (typeof window !== 'undefined') {
         return;
       }
 
+      if (/^clear:[a-z0-9]+:[a-f0-9]{64}$/.test(event.data)) {
+        const snapshot = getPersistedTargetSnapshot();
+        if (!snapshot || !reconcileTargetConfig) {
+          return;
+        }
+        const receivedEpoch = targetConfigValidationEpoch;
+
+        void sha256(snapshot.serialized).then(
+          (fingerprint) => {
+            const clearMessage = `clear:${snapshot.serialized.length.toString(36)}:${fingerprint}`;
+            const latestSnapshot = getPersistedTargetSnapshot();
+            if (
+              event.data !== clearMessage ||
+              receivedEpoch !== targetConfigValidationEpoch ||
+              latestSnapshot?.serialized !== snapshot.serialized ||
+              !reconcileTargetConfig
+            ) {
+              return;
+            }
+
+            let reconciled = false;
+            try {
+              reconcilingTargetConfig = true;
+              reconciled = reconcileTargetConfig(latestSnapshot.config);
+            } catch {
+              return;
+            } finally {
+              reconcilingTargetConfig = false;
+            }
+            if (!reconciled) {
+              return;
+            }
+
+            targetConfigValidationEpoch++;
+            persistTargetConfigError(null, false);
+            useRedTeamTargetConfigValidation.setState((state) => ({
+              targetConfigError: null,
+              targetConfigDraft: null,
+              targetConfigRevision: state.targetConfigRevision + 1,
+            }));
+          },
+          () => {},
+        );
+        return;
+      }
+
       const targetConfigError = getTargetConfigErrorFromMarker(event.data);
       if (targetConfigError) {
+        targetConfigValidationEpoch++;
         useRedTeamTargetConfigValidation.setState({ targetConfigError });
         persistTargetConfigError(targetConfigError, false);
       }

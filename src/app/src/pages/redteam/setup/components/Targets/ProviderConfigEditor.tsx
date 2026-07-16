@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import deepEqual from 'fast-deep-equal';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
@@ -42,6 +43,20 @@ const shouldRemoveMcpConfig = (
 const containsNunjucksTemplate = (value: string): boolean =>
   /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
 
+const isRestoredTargetConfigDraft = (
+  draft: string | null,
+  config: ProviderOptions['config'],
+): boolean => {
+  if (draft === null) {
+    return true;
+  }
+  try {
+    return deepEqual(JSON.parse(draft), config);
+  } catch {
+    return false;
+  }
+};
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -60,7 +75,10 @@ function ProviderConfigEditor({
   const { targetConfigError, setTargetConfigError, targetConfigDraft, setTargetConfigDraft } =
     useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
-  const preserveConfigErrorOnUnchangedConfig = isRedTeam && Boolean(targetConfigError);
+  const preserveConfigErrorOnUnchangedConfig =
+    isRedTeam &&
+    Boolean(targetConfigError) &&
+    isRestoredTargetConfigDraft(targetConfigDraft, provider.config);
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
@@ -79,10 +97,10 @@ function ProviderConfigEditor({
     setCustomConfigError(error);
     setError?.(error);
     if (isRedTeam) {
-      setTargetConfigError?.(error);
       if (!error) {
         setTargetConfigDraft?.(null);
       }
+      setTargetConfigError?.(error);
     }
   };
 
@@ -100,8 +118,8 @@ function ProviderConfigEditor({
       setCustomConfigError(null);
       setError?.(null);
       if (isRedTeam) {
-        setTargetConfigError?.(null);
         setTargetConfigDraft?.(null);
+        setTargetConfigError?.(null);
       }
       setBodyError(null);
     }
