@@ -61,6 +61,11 @@ const formatContentMessages = (
             'Google Live video input must be sent as individual image/jpeg or image/png frames (maximum 1 frame per second).',
           );
         }
+        if (mimeType.startsWith('audio/') && !mimeType.startsWith('audio/pcm')) {
+          throw new Error(
+            `Unsupported Google Live realtime input MIME type: ${mimeType}. Audio input must be raw 16-bit PCM (for example, audio/pcm;rate=16000).`,
+          );
+        }
         if (
           !mimeType.startsWith('audio/') &&
           mimeType !== 'image/jpeg' &&

@@ -190,6 +190,7 @@ describe('GoogleInteractionsProvider', () => {
             { type: 'text', text: 'Use this reference.' },
             { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,aW1hZ2U=' } },
             { type: 'input_image', image_url: 'https://image.example/reference.png' },
+            { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'mp3' } },
           ],
         },
         { role: 'assistant', content: 'I will create that scene.' },
@@ -211,6 +212,7 @@ describe('GoogleInteractionsProvider', () => {
           { type: 'text', text: 'Use this reference.' },
           { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' },
           { type: 'image', uri: 'https://image.example/reference.png' },
+          { type: 'audio', mime_type: 'audio/mpeg', data: 'YXVkaW8=' },
         ],
       },
       { type: 'model_output', content: [{ type: 'text', text: 'I will create that scene.' }] },
@@ -523,6 +525,100 @@ describe('GoogleInteractionsProvider', () => {
     await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
       error: 'Gemini interaction did not return video output',
     });
+  });
+
+  it('polls an in-progress Omni interaction until video output is ready', async () => {
+    mockFetchWithCache
+      .mockResolvedValueOnce({
+        data: { id: 'interaction-pending', status: 'in_progress' },
+        cached: false,
+      } as any)
+      .mockResolvedValueOnce({
+        data: {
+          id: 'interaction-pending',
+          status: 'completed',
+          steps: [
+            {
+              type: 'model_output',
+              content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+            },
+          ],
+        },
+        cached: false,
+      } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 1_000 },
+    });
+
+    const result = await provider.callApi('make it rainy');
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
+    expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      'https://generativelanguage.googleapis.com/v1beta/interactions/interaction-pending',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'Api-Revision': '2026-05-20',
+          'x-goog-api-key': 'test-key',
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it('surfaces a failed latest Omni model-output step instead of reusing old video', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'b2xk' }],
+          },
+          { type: 'user_input', content: [{ type: 'text', text: 'make it rainy' }] },
+          { type: 'model_output', error: { message: 'video generation failed' } },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('make it rainy');
+
+    expect(result.error).toBe('Gemini Interactions API error: video generation failed');
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
+  it('returns only the trailing text accompanying the latest Omni video output', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [
+              { type: 'text', text: 'intermediate narration' },
+              { type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' },
+              { type: 'text', text: 'final caption' },
+            ],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('make it rainy');
+
+    expect(result.output).toBe('final caption');
   });
 
   it('forwards native multimodal input and prompt-level interaction overrides', async () => {

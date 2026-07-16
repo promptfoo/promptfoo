@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
@@ -23,7 +24,7 @@ type InteractionResponse = {
   id?: string;
   status?: string;
   error?: { message?: string };
-  steps?: Array<{ type?: string; content?: InteractionContent[] }>;
+  steps?: Array<{ type?: string; content?: InteractionContent[]; error?: { message?: string } }>;
   usage?: {
     total_input_tokens?: number;
     total_output_tokens?: number;
@@ -93,6 +94,21 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             return part;
           }
           const imagePart = part as { type?: string; image_url?: string | { url?: string } };
+          if (imagePart.type === 'input_audio') {
+            const inputAudio = (part as { input_audio?: { data?: string; format?: string } })
+              .input_audio;
+            if (inputAudio?.data) {
+              const format = inputAudio.format?.toLowerCase();
+              const mimeType = format?.startsWith('audio/')
+                ? format
+                : format === 'mp3'
+                  ? 'audio/mpeg'
+                  : format === 'pcm16'
+                    ? 'audio/pcm'
+                    : `audio/${format || 'mpeg'}`;
+              return { type: 'audio', mime_type: mimeType, data: inputAudio.data };
+            }
+          }
           if (imagePart.type !== 'image_url' && imagePart.type !== 'input_image') {
             return part;
           }
@@ -420,12 +436,58 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (data.error?.message) {
       return { error: `Gemini Interactions API error: ${data.error.message}` };
     }
+
+    const pollTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
+    const pollStartedAt = Date.now();
+    let pollCount = 0;
+    while (data.status === 'in_progress' && data.id) {
+      const elapsed = Date.now() - pollStartedAt;
+      if (elapsed >= pollTimeoutMs) {
+        return {
+          error: `Gemini interaction timed out after ${pollTimeoutMs}ms (status: ${data.status})`,
+          raw: data,
+        };
+      }
+      if (pollCount > 0) {
+        await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
+      }
+      try {
+        ({ data } = (await fetchWithCache(
+          `${endpoint}/${encodeURIComponent(data.id)}`,
+          { method: 'GET', headers } as RequestInit,
+          Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
+          'json',
+          true,
+        )) as { data: InteractionResponse; cached: boolean });
+      } catch (err) {
+        return { error: `Gemini Interactions API polling error: ${String(err)}` };
+      }
+      pollCount++;
+      if (data.error?.message) {
+        return { error: `Gemini Interactions API error: ${data.error.message}`, raw: data };
+      }
+    }
     if (data.status && data.status !== 'completed') {
       return { error: `Gemini interaction did not complete (status: ${data.status})`, raw: data };
     }
 
+    const latestUserInput = (data.steps || []).map((step) => step.type).lastIndexOf('user_input');
+    const latestOutputError = (data.steps || [])
+      .slice(latestUserInput + 1)
+      .filter((step) => step.type === 'model_output')
+      .find((step) => step.error?.message)?.error?.message;
+    if (latestOutputError) {
+      return { error: `Gemini Interactions API error: ${latestOutputError}`, raw: data };
+    }
+
     const outputContent = getModelOutputContent(data);
+    const lastTextIndex = outputContent.map((part) => part.type === 'text').lastIndexOf(true);
+    const lastNonTextIndex = outputContent
+      .slice(0, lastTextIndex)
+      .map((part) => part.type !== 'text')
+      .lastIndexOf(true);
     const text = outputContent
+      .slice(lastNonTextIndex + 1, lastTextIndex + 1)
       .filter((part) => part.type === 'text' && part.text)
       .map((part) => part.text)
       .join('');

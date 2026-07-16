@@ -2702,9 +2702,9 @@ describe('util', () => {
 
     it.each([
       ['gemini-live-2.5-flash-preview-native-audio-09-2025', 0.3, 2.0, 3.0, 12.0],
-      ['gemini-2.5-flash-native-audio-latest', 0.3, 2.5, 1.0, 2.5],
+      ['gemini-2.5-flash-native-audio-latest', 0.5, 2.0, 3.0, 12.0],
       ['gemini-2.5-flash-native-audio-preview-09-2025', 0.3, 2.5, 1.0, 2.5],
-      ['gemini-2.5-flash-native-audio-preview-12-2025', 0.3, 2.5, 1.0, 2.5],
+      ['gemini-2.5-flash-native-audio-preview-12-2025', 0.5, 2.0, 3.0, 12.0],
     ])('should calculate mixed text and audio cost for %s', (id, input, output, audioInput, audioOutput) => {
       expect(calculateGoogleCost(id, {}, 1_000, 500, false, 200, 100)).toBeCloseTo(
         (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,

@@ -605,6 +605,33 @@ describe('GoogleLiveProvider', () => {
     );
   });
 
+  it.each([
+    'audio/wav',
+    'audio/mpeg',
+  ])('should reject unsupported Google Live audio encoding %s', async (mimeType) => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: { apiKey: 'test-api-key', timeoutMs: 500 },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data: 'YXVkaW8=' } }] },
+      ]),
+    );
+
+    expect(response.error).toContain(
+      `Unsupported Google Live realtime input MIME type: ${mimeType}`,
+    );
+    expect(response.error).toContain('Audio input must be raw 16-bit PCM');
+  });
+
   it('should pace multiple Live image frames in one user turn', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: { apiKey: 'test-api-key', timeoutMs: 2_500 },
