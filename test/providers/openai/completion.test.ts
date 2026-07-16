@@ -34,6 +34,17 @@ describe('OpenAI Provider', () => {
       severity: 'info',
     };
 
+    it('should reject a Codex-only completion passthrough model override before dispatch', async () => {
+      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+        config: { apiKey: 'test-key', passthrough: { model: 'gpt-5.3-codex-spark' } },
+      });
+
+      await expect(provider.callApi('Test prompt')).rejects.toThrow(
+        'only available through openai:codex-sdk',
+      );
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should call API successfully with text completion', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 

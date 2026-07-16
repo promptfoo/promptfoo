@@ -584,6 +584,16 @@ describe('loadApiProvider', () => {
     expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['openai:responses:gpt-4.1', { passthrough: { model: 'gpt-5.3-codex-spark' } }],
+    ['openai:tts:gpt-4o-mini-tts', { model: 'gpt-5.3-codex-spark' }],
+    ['openai:video:sora-2', { model: 'openai/gpt-5.3-codex-spark' }],
+  ])('should reject a configured Codex-only model override for %s', async (route, config) => {
+    await expect(loadApiProvider(route, { options: { config } })).rejects.toThrow(
+      'only available through openai:codex-sdk',
+    );
+  });
+
   it('should allow the documented gpt-5-codex-mini Responses replacement', async () => {
     const provider = await loadApiProvider('openai:responses:gpt-5-codex-mini');
 

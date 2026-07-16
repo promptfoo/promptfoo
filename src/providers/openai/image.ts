@@ -4,7 +4,7 @@ import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError } from './util';
+import { assertOpenAiApiModel, formatOpenAiError } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -819,6 +819,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     };
 
     const model = config.model || this.modelName;
+    assertOpenAiApiModel(model);
     const operation = ('operation' in config && config.operation) || 'generation';
     // GPT Image models always return b64_json, so we treat them as such regardless of config
     const responseFormat = isGptImageModel(model) ? 'b64_json' : config.response_format || 'url';

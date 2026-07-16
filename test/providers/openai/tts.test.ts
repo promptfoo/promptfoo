@@ -569,6 +569,51 @@ describe('OpenAiTtsProvider', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
+  it('does not share project-scoped custom voices across API keys in the same organization', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) =>
+      audioResponse(
+        new TextEncoder().encode(new Headers(options?.headers).get('authorization') ?? ''),
+      ),
+    );
+    const config = (apiKey: string) => ({
+      apiKey,
+      organization: 'org-shared',
+      voice: { id: 'voice-private' },
+      format: 'wav' as const,
+    });
+
+    const first = await new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: config('sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+    }).callApi('same input');
+    const second = await new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: config('sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
+    }).callApi('same input');
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(false);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('rejects a per-prompt Codex-only speech model override before dispatch', async () => {
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', { config: { apiKey: 'test-key' } });
+
+    await expect(
+      provider.callApi('hello', {
+        prompt: { config: { passthrough: { model: 'gpt-5.3-codex-spark' } } },
+      } as any),
+    ).rejects.toThrow('only available through openai:codex-sdk');
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
   it('does not share passthrough custom voices without a non-secret tenant discriminator', async () => {
     const values = new Map<string, string>();
     const cache = {

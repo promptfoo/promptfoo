@@ -10,7 +10,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { OPENAI_TTS_MODELS } from './util';
+import { assertOpenAiApiModel, OPENAI_TTS_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -250,6 +250,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
     const model = body.model;
+    assertOpenAiApiModel(model);
     const characterCount = Array.from(body.input).length;
     const validationError = getValidationError(characterCount, model, { ...config, ...body });
     if (validationError) {
@@ -286,7 +287,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     )}`;
     const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
       ([key, value]) =>
-        /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
+        /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key) &&
         typeof value === 'string' &&
         value.trim().length > 0,
     );

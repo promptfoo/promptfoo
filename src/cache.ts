@@ -296,6 +296,7 @@ type PreparedFetchResponse = {
 };
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
@@ -561,6 +562,39 @@ function getAbortSignalId(signal: AbortSignal) {
 function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+}
+
+/**
+ * Atomically claim a cache-scoped one-time action. Disk-backed claims use an exclusive file so
+ * separate eval processes cannot both attribute the same background response's usage.
+ */
+export function claimCacheKeyOnce(cacheKey: string): boolean {
+  const scopedCacheKey = getScopedCacheKey(cacheKey);
+  if (claimedCacheKeys.has(scopedCacheKey)) {
+    return false;
+  }
+
+  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const claimsPath = path.join(cachePath, 'claims');
+    try {
+      fs.mkdirSync(claimsPath, { recursive: true });
+      const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
+      fs.closeSync(handle);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        return false;
+      }
+      logger.warn(
+        `[Cache] Failed to persist a one-time cache claim: ${(error as Error).message}. ` +
+          'Using a process-local claim instead.',
+      );
+    }
+  }
+
+  claimedCacheKeys.add(scopedCacheKey);
+  return true;
 }
 
 function serializeFetchResponse(

@@ -1,4 +1,5 @@
 import {
+  claimCacheKeyOnce,
   type FetchWithCacheResult,
   fetchWithCache,
   getScopedCacheKey,
@@ -31,7 +32,7 @@ import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { assertOpenAiApiModel, formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -161,15 +162,16 @@ function hasSensitiveBackgroundCacheValue(value: unknown, fieldName?: string): b
   return false;
 }
 
-function canonicalizeBackgroundCacheValue(value: unknown): unknown {
+function canonicalizeBackgroundCacheValue(value: unknown, fieldName?: string): unknown {
   if (Array.isArray(value)) {
-    return value.map(canonicalizeBackgroundCacheValue);
+    return value.map((item) => canonicalizeBackgroundCacheValue(item, fieldName));
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, nestedValue]) => [key, canonicalizeBackgroundCacheValue(nestedValue)]),
+      (fieldName === 'properties'
+        ? Object.entries(value)
+        : Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+      ).map(([key, nestedValue]) => [key, canonicalizeBackgroundCacheValue(nestedValue, key)]),
     );
   }
   return value;
@@ -179,18 +181,24 @@ function getBackgroundCacheIdentity(
   url: string,
   request: BackgroundRequest,
   responseId?: string,
-): { key: string; cacheable: boolean } {
+): { key: string; cacheable: boolean; coalescable: boolean } {
   const cacheHeaders = Object.entries(request.headers)
-    .filter(([key]) => !isSensitiveBackgroundCacheHeader(key))
+    .filter(
+      ([key, value]) =>
+        !isSensitiveBackgroundCacheHeader(key) && !hasSensitiveBackgroundCacheValue(value),
+    )
     .map(([key, value]) => [key.toLowerCase(), value])
     .sort(([left], [right]) => left.localeCompare(right));
   const hasSensitiveHeader = Object.entries(request.headers).some(
     ([key, value]) => isSensitiveBackgroundCacheHeader(key) && value.trim().length > 0,
   );
+  const hasSensitiveHeaderValue = Object.entries(request.headers).some(
+    ([key, value]) =>
+      !isSensitiveBackgroundCacheHeader(key) && hasSensitiveBackgroundCacheValue(value),
+  );
   const hasTenantDiscriminator = cacheHeaders.some(
     ([key, value]) =>
-      /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
-      value.trim().length > 0,
+      /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key) && value.trim().length > 0,
   );
   const sanitizedUrl = sanitizeUrl(url);
   const hasSensitiveUrlCredentials = sanitizedUrl !== url;
@@ -230,7 +238,14 @@ function getBackgroundCacheIdentity(
       !hasSensitiveBody &&
       !hasSensitiveUrlCredentials &&
       !hasSensitiveUrlPath &&
-      !(!sendsToOpenAiApi && hasSensitiveHeader),
+      !hasSensitiveHeaderValue &&
+      (!hasSensitiveHeader || (sendsToOpenAiApi && hasTenantDiscriminator)),
+    coalescable:
+      !hasSensitiveBody &&
+      !hasSensitiveUrlCredentials &&
+      !hasSensitiveUrlPath &&
+      !hasSensitiveHeaderValue &&
+      (sendsToOpenAiApi || !hasSensitiveHeader),
   };
 }
 
@@ -364,7 +379,7 @@ async function createBackgroundResponseWithCancellation(
 ): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
   const signal = request.signal;
   const cacheIdentity = getBackgroundCacheIdentity(url, request);
-  const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.cacheable;
+  const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.coalescable;
   const effectiveBustCache = cacheIdentity.cacheable ? bustCache : true;
   const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
@@ -536,7 +551,7 @@ async function coalesceBackgroundResponse(
   cancelOnStop: boolean,
 ): Promise<BackgroundResponseResult> {
   const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.id);
-  if (!cacheIdentity.cacheable) {
+  if (!cacheIdentity.coalescable) {
     return resolveBackgroundResponse(
       initial,
       url,
@@ -975,6 +990,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
     };
+    assertOpenAiApiModel(body.model);
 
     // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
@@ -1347,7 +1363,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           (!polled.error &&
             (polled.data.status === 'completed' || polled.data.status === 'incomplete'))
         ) {
-          cached = false;
+          const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
+          cached =
+            billingIdentity.cacheable &&
+            isCacheEnabled() &&
+            !this.shouldBustCache(context) &&
+            !claimCacheKeyOnce(`openai:background-billing:${billingIdentity.key}`);
         }
         data = polled.data;
         status = polled.status;

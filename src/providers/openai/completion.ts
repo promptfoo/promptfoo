@@ -4,7 +4,12 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
+import {
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_COMPLETION_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -67,6 +72,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+    assertOpenAiApiModel(body.model);
 
     let data,
       cached = false,

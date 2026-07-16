@@ -67,6 +67,17 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('OpenAiVideoProvider', () => {
+  it('should reject a per-prompt Codex-only video model override before dispatch', async () => {
+    const provider = new OpenAiVideoProvider('sora-2', { config: { apiKey: 'test-key' } });
+
+    await expect(
+      provider.callApi('Generate a video', {
+        prompt: { config: { model: 'gpt-5.3-codex-spark' } },
+      } as any),
+    ).rejects.toThrow('only available through openai:codex-sdk');
+    expect(mockFetchWithProxy).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchWithProxy.mockReset();
@@ -1467,6 +1478,45 @@ describe('OpenAiVideoProvider', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
 
       const result = await provider.callApi('Animate a private reference');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['character', { characters: [{ id: 'char-private' }] }],
+      ['file reference', { input_reference: { file_id: 'file-private' } }],
+    ])('should bypass the persistent video cache for a project-scoped %s without a project discriminator', async (_label, asset) => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          organization: 'org-shared',
+          ...asset,
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_asset', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'video_private_asset',
+            status: 'completed',
+            progress: 100,
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(100),
+        });
+
+      const result = await provider.callApi('Animate a private asset');
 
       expect(result.error).toBeUndefined();
       expect(result.cached).toBe(false);

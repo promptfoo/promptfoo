@@ -1048,6 +1048,12 @@ Credential-bearing image URLs and authenticated custom video gateways always byp
 video cache. Promptfoo does not place authentication headers or their fingerprints in long-lived
 cache keys. Prompts, tenant headers, and gateway URL paths containing credentials also bypass
 persistent caching.
+
+Sora characters and `file_id` image references are project-scoped resources. Promptfoo only caches
+their generated videos when an explicit, non-secret project or tenant header such as
+`OpenAI-Project` or `X-Tenant-Id` is configured; `OpenAI-Organization` alone does not isolate
+projects.
+
 Provider and per-prompt headers are sent for video creation, status polling, and content downloads
 so routed gateways can authorize the full job lifecycle.
 
@@ -1873,6 +1879,10 @@ passthrough values, tenant headers, and gateway URL paths containing credentials
 persistent caching. Header credentials such as `authorization` or `x-api-key` satisfy the
 provider's authentication requirement; a separate OpenAI API key is not needed.
 
+Uploaded custom voices are project-scoped. To cache a custom-voice response, provide an explicit,
+non-secret project or tenant header such as `OpenAI-Project` or `X-Tenant-Id`;
+`OpenAI-Organization` alone does not isolate projects.
+
 ### Audio transcription
 
 OpenAI provides dedicated transcription models for converting speech to text. GPT-4o transcription
@@ -2535,6 +2545,10 @@ automatically use appropriate timeouts:
   when an eval stops, including jobs accepted immediately before a delayed creation response
   arrives. Queued jobs in the shared persistent cache can be resumed by another eval process and
   are not cancelled when one local subscriber stops; use `--no-cache` for exclusive cancellation.
+- Authenticated background requests are persisted only when an explicit, non-secret project or
+  tenant header such as `OpenAI-Project` or `X-Tenant-Id` isolates the request.
+  `OpenAI-Organization` alone does not isolate project API keys. When multiple eval processes
+  resume the same persisted job, its completed usage is attributed exactly once.
 - Background streams preserve `stream: true`; promptfoo captures the response ID and cancels
   upstream work when an eval stops
 

@@ -164,7 +164,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       600000,
       'json',
-      undefined,
+      true,
       undefined,
     );
   });
@@ -518,6 +518,166 @@ describe('OpenAiResponsesProvider request building', () => {
       'Canonical background result',
       'Canonical background result',
     ]);
+  });
+
+  it('should not coalesce background Structured Outputs with different property orders', async () => {
+    let creates = 0;
+    const orders = new Map<string, string[]>();
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_schema_${++creates}`;
+        const body = JSON.parse(String(options.body));
+        orders.set(id, Object.keys(body.text.format.schema.properties));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_schema_') && options?.method === 'GET') {
+        const id = String(url).split('/').at(-1)!;
+        const order = orders.get(id)!;
+        return {
+          data: {
+            id,
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: JSON.stringify(Object.fromEntries(order.map((key) => [key, key]))),
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const schema = (properties: Record<string, unknown>) => ({
+      type: 'json_schema' as const,
+      json_schema: {
+        name: 'Ordered',
+        strict: true,
+        schema: {
+          type: 'object' as const,
+          properties,
+          required: ['first', 'second'],
+          additionalProperties: false as const,
+        },
+      },
+    });
+    const first = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        response_format: schema({ first: { type: 'string' }, second: { type: 'string' } }),
+      },
+    });
+    const second = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        response_format: schema({ second: { type: 'string' }, first: { type: 'string' } }),
+      },
+    });
+
+    const results = await Promise.all([
+      first.callApi('Ordered task'),
+      second.callApi('Ordered task'),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(results.map((result) => Object.keys(result.output as object))).toEqual([
+      ['first', 'second'],
+      ['second', 'first'],
+    ]);
+  });
+
+  it('should bypass background persistence for credential-valued routing headers', async () => {
+    const credential = 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        return {
+          data: { id: `resp_secret_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': credential } },
+    });
+
+    await provider.callApi('Credential-dependent task');
+    await provider.callApi('Credential-dependent task');
+
+    expect(creates).toBe(2);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
+    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+  });
+
+  it('should not coalesce background requests from different OpenAI projects sharing an organization', async () => {
+    let creates = 0;
+    const authorizations: string[] = [];
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        authorizations.push(new Headers(options.headers).get('authorization')!);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          data: { id: `resp_project_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const first = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        organization: 'org-shared',
+        background: true,
+      },
+    });
+    const second = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        organization: 'org-shared',
+        background: true,
+      },
+    });
+
+    await Promise.all([
+      first.callApi('Project-dependent task'),
+      second.callApi('Project-dependent task'),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(authorizations).toEqual(
+      expect.arrayContaining([
+        'Bearer sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'Bearer sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      ]),
+    );
   });
 
   it('should keep credentials out of background coalescing keys and isolate credential-dependent requests', async () => {
@@ -1182,7 +1342,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
-      undefined,
+      true,
       undefined,
     );
     expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
@@ -1451,7 +1611,7 @@ describe('OpenAiResponsesProvider request building', () => {
         statusText: 'OK',
       });
     const provider = new OpenAiResponsesProvider('gpt-5.5', {
-      config: { apiKey: 'test-key', background: true },
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
     });
 
     const result = await provider.callApi('A long task');
@@ -1568,7 +1728,7 @@ describe('OpenAiResponsesProvider request building', () => {
       });
     });
     const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: { apiKey: 'test-key', background: true },
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
     });
     const pending = provider.callApi('Resume the shared job', undefined, {
       abortSignal: controller.signal,
@@ -1821,7 +1981,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
-      undefined,
+      true,
       0,
     );
   });
@@ -2555,6 +2715,17 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(body.text.format.schema).toBeDefined();
     expect(body.text.format.strict).toBe(true);
     expect(Object.keys(body.text.format.schema.properties)).toEqual(['z_last', 'a_first']);
+  });
+
+  it('should reject a per-prompt Codex-only Responses model override before dispatch', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', { config: { apiKey: 'test-key' } });
+
+    await expect(
+      provider.getOpenAiBody('Test prompt', {
+        prompt: { config: { passthrough: { model: 'openai/gpt-5.3-codex-spark' } } },
+      } as any),
+    ).rejects.toThrow('only available through openai:codex-sdk');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
   });
 
   it('should handle JSON object prompt correctly', async () => {

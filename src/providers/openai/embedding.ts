@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage } from './util';
+import { assertOpenAiApiModel, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderEmbeddingResponse } from '../../types/index';
@@ -47,6 +47,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       model: this.modelName,
       ...(this.config.passthrough || {}),
     };
+    assertOpenAiApiModel(body.model);
 
     let data: any;
     let status: number | undefined;

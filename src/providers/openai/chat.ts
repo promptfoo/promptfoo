@@ -30,7 +30,12 @@ import {
 } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
+import {
+  assertOpenAiApiModel,
+  getTokenUsage,
+  OPENAI_CHAT_MODELS,
+  validateFunctionCall,
+} from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -331,6 +336,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // GPT-5 only: attach verbosity if provided
       ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
+    assertOpenAiApiModel(body.model);
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
     if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {

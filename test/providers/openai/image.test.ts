@@ -44,6 +44,19 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Basic functionality', () => {
+    it('should reject a per-prompt Codex-only image model override before dispatch', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1.5', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await expect(
+        provider.callApi('Generate a cat', {
+          prompt: { config: { model: 'gpt-5.3-codex-spark' } },
+        } as any),
+      ).rejects.toThrow('only available through openai:codex-sdk');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should generate an image successfully', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },

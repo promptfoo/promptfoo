@@ -12,6 +12,7 @@ import {
   vi,
 } from 'vitest';
 import {
+  claimCacheKeyOnce,
   clearCache,
   disableCache,
   enableCache,
@@ -253,6 +254,18 @@ describe('cache configuration', () => {
     const expectedCachePath = path.join('/mock/config/path', 'cache');
     expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
+  });
+
+  it('should fall back to a process-local one-time claim when the disk cache is read-only', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    mkdirSyncMock.mockImplementationOnce(() => {
+      throw Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    });
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-read-only:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
   });
 
   it('should respect custom cache path', async () => {
@@ -1476,6 +1489,15 @@ describe('fetchWithCache', () => {
   });
 
   describe('cache utility functions', () => {
+    it('should claim a cache-scoped one-time action only once per namespace', async () => {
+      const key = `background-billing:${Date.now()}`;
+
+      expect(claimCacheKeyOnce(key)).toBe(true);
+      expect(claimCacheKeyOnce(key)).toBe(false);
+      expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(true);
+      expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(false);
+    });
+
     it('should track cache enabled state', () => {
       expect(isCacheEnabled()).toBe(true);
       disableCache();

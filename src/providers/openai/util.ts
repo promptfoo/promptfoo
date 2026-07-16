@@ -379,6 +379,19 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
 
 export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex-spark' }];
 
+export function assertOpenAiApiModel(model: unknown): void {
+  if (typeof model !== 'string') {
+    return;
+  }
+
+  const normalizedModel = model.split('/').at(-1) ?? model;
+  if (OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === normalizedModel)) {
+    throw new Error(
+      `OpenAI model ${model} is only available through openai:codex-sdk with eligible Codex authentication.`,
+    );
+  }
+}
+
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
   ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
     id: model,

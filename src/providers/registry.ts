@@ -80,7 +80,7 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
-import { OPENAI_CODEX_ONLY_MODELS } from './openai/util';
+import { assertOpenAiApiModel } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -955,14 +955,11 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      const normalizedApiModel = requestedApiModel.split('/').at(-1) ?? requestedApiModel;
-      if (
-        !['agents', 'chatkit', 'assistant'].includes(modelType) &&
-        OPENAI_CODEX_ONLY_MODELS.some((model) => model.id === normalizedApiModel)
-      ) {
-        throw new Error(
-          `OpenAI model ${requestedApiModel} is only available through openai:codex-sdk with eligible Codex authentication.`,
-        );
+      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
+        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
+          assertOpenAiApiModel(candidate);
+        }
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(

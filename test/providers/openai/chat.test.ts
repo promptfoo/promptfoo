@@ -66,6 +66,19 @@ describe('OpenAI Provider', () => {
       vi.clearAllMocks();
     });
 
+    it('should reject a per-prompt Codex-only chat model override before dispatch', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await expect(
+        provider.getOpenAiBody('Test prompt', {
+          prompt: { config: { passthrough: { model: 'gpt-5.3-codex-spark' } } },
+        } as any),
+      ).rejects.toThrow('only available through openai:codex-sdk');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should call API successfully', async () => {
       const mockResponse = {
         data: {

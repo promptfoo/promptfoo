@@ -17,6 +17,7 @@ import {
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
+import { assertOpenAiApiModel } from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -497,6 +498,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     const model = (config.model || this.modelName) as OpenAiVideoModel;
+    assertOpenAiApiModel(model);
     const size = (config.size || DEFAULT_SIZE) as OpenAiVideoCreateSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;
@@ -561,12 +563,23 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const usesAuthenticatedCustomEndpoint =
       !sendsToOpenAiApi &&
       (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
+    const hasProjectDiscriminator = Object.keys(safeCacheHeaders).some((key) =>
+      /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key),
+    );
+    const hasProjectScopedAsset =
+      Boolean(config.characters?.length) ||
+      Boolean(
+        config.input_reference &&
+          typeof config.input_reference === 'object' &&
+          'file_id' in config.input_reference,
+      );
     const canCacheVideo =
       !hasSensitiveCacheValue(prompt) &&
       !hasSensitiveHeaderValue &&
       !hasSensitiveUrlPath &&
       !hasAuthenticatedInputReference(config.input_reference) &&
-      !usesAuthenticatedCustomEndpoint;
+      !usesAuthenticatedCustomEndpoint &&
+      (!hasProjectScopedAsset || hasProjectDiscriminator);
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
       prompt: canCacheVideo ? prompt : randomUUID(),
