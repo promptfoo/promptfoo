@@ -386,6 +386,7 @@ export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [
       output: 2 / 1e6,
     },
   },
+  { id: 'gpt-5.3-codex-spark' },
 ];
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [

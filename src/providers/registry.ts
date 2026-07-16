@@ -80,6 +80,7 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
+import { OPENAI_CODEX_ONLY_MODELS } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -1004,6 +1005,11 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
+      if (OPENAI_CODEX_ONLY_MODELS.some((model) => model.id === modelType)) {
+        throw new Error(
+          `OpenAI model ${modelType} is only available through openai:codex-sdk with eligible Codex authentication.`,
+        );
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);

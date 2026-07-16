@@ -59,12 +59,14 @@ const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = [
   '720x1280',
   '1792x1024',
   '1024x1792',
+  '1920x1080',
+  '1080x1920',
 ] as const;
 
 /**
  * Valid video durations in seconds for OpenAI Sora
  */
-const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12] as const;
+const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12, 16, 20] as const;
 
 /**
  * Default configuration values
@@ -125,6 +127,18 @@ function hasValidInputReference(reference: OpenAiVideoOptions['input_reference']
   const hasImageUrl =
     typeof candidate.image_url === 'string' && candidate.image_url.trim().length > 0;
   return hasFileId !== hasImageUrl;
+}
+
+function hasValidCharacters(characters: OpenAiVideoOptions['characters']): boolean {
+  return (
+    !characters ||
+    (Array.isArray(characters) &&
+      characters.length <= 2 &&
+      characters.every(
+        (character) =>
+          character && typeof character.id === 'string' && character.id.trim().length > 0,
+      ))
+  );
 }
 
 // =============================================================================
@@ -245,29 +259,27 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const headers = this.getAuthHeaders(config.headers);
     let body: string | FormData;
 
+    for (const header of Object.keys(headers)) {
+      if (header.toLowerCase() === 'content-type') {
+        delete headers[header];
+      }
+    }
+
     if (config.remix_video_id) {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify({ prompt });
-    } else {
-      // The Videos API requires multipart form data for creation requests.
-      // Leave Content-Type unset so fetch can include the multipart boundary.
-      for (const header of Object.keys(headers)) {
-        if (header.toLowerCase() === 'content-type') {
-          delete headers[header];
-        }
-      }
-
-      const formData = new FormData();
-      formData.set('prompt', prompt);
-      formData.set('model', config.model || this.modelName);
-      formData.set('size', config.size || DEFAULT_SIZE);
-      formData.set('seconds', String(config.seconds || DEFAULT_SECONDS));
+    } else if (config.input_reference || config.characters?.length) {
+      const requestBody: Record<string, unknown> = {
+        model: config.model || this.modelName,
+        prompt,
+        size: config.size || DEFAULT_SIZE,
+        seconds: String(config.seconds || DEFAULT_SECONDS),
+        ...(config.characters?.length ? { characters: config.characters } : {}),
+      };
 
       if (config.input_reference) {
         try {
-          const reference = await normalizeInputReference(config.input_reference);
-          const [field, value] = Object.entries(reference)[0];
-          formData.set(`input_reference[${field}]`, value);
+          requestBody.input_reference = await normalizeInputReference(config.input_reference);
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw error;
@@ -278,6 +290,18 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
           };
         }
       }
+
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(requestBody);
+    } else {
+      // Match the OpenAI SDK's multipart form for basic creation requests.
+      // Leave Content-Type unset so fetch can include the multipart boundary.
+      const formData = new FormData();
+      formData.set('prompt', prompt);
+      formData.set('model', config.model || this.modelName);
+      formData.set('size', config.size || DEFAULT_SIZE);
+      formData.set('seconds', String(config.seconds || DEFAULT_SECONDS));
+
       body = formData;
     }
 
@@ -443,10 +467,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         return { error: secondsValidation.message };
       }
 
-      if ('characters' in config && config.characters !== undefined) {
-        return {
-          error: 'The Sora characters option is not supported by the Videos API creation endpoint.',
-        };
+      if (!hasValidCharacters(config.characters)) {
+        return { error: 'Sora generation accepts at most two characters with non-empty IDs.' };
       }
 
       if (!hasValidInputReference(config.input_reference)) {
@@ -463,6 +485,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       size,
       seconds,
       inputReference: config.remix_video_id ? null : config.input_reference,
+      characters: config.remix_video_id ? undefined : config.characters,
     });
 
     // Check for cached video (skip for remix operations)

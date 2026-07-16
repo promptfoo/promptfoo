@@ -549,6 +549,17 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
+    'gpt-5-codex-mini',
+    'gpt-5.3-codex-spark',
+  ])('should reject bare Codex-only model %s before Chat Completions fallback', async (model) => {
+    await expect(loadApiProvider(`openai:${model}`)).rejects.toThrow(
+      `OpenAI model ${model} is only available through openai:codex-sdk`,
+    );
+    expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+    expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
+  });
+
+  it.each([
     'gpt-5-search-api',
     'gpt-5-search-api-2025-10-14',
   ])('should auto-route bare Chat Completions search model %s to Chat Completions', async (model) => {

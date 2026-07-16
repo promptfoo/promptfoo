@@ -180,14 +180,13 @@ describe('calculateOpenAICost', () => {
     );
   });
 
-  it('does not classify the Codex-surface-only GPT-5 Codex mini model as an API model', () => {
-    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini')).toBe(false);
-    expect(
-      OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini'),
-    ).toBe(false);
-    expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini')).toBe(
-      true,
-    );
+  it.each([
+    'gpt-5-codex-mini',
+    'gpt-5.3-codex-spark',
+  ])('does not classify Codex-surface-only model %s as an API model', (model) => {
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
 
   it.each([

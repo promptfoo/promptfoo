@@ -57,6 +57,7 @@ export function generateVideoCacheKey(params: {
   size: string;
   seconds: number;
   inputReference?: string | { file_id: string } | { image_url: string } | null;
+  characters?: Array<{ id: string }>;
 }): string {
   const rawReference =
     typeof params.inputReference === 'string'
@@ -93,6 +94,7 @@ export function generateVideoCacheKey(params: {
     size: params.size,
     seconds: params.seconds,
     inputReference,
+    ...(params.characters?.length ? { characters: params.characters } : {}),
   });
 
   return crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 12);
