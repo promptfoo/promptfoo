@@ -32,6 +32,18 @@ const STRUCTURED_FOUNDATION_PROVIDER_TYPES = [
   'perplexity',
   'cerebras',
 ];
+const AGENTIC_PROVIDER_IDS = [
+  'anthropic:claude-agent-sdk',
+  'anthropic:claude-code',
+  'openai:codex',
+  'openai:codex-app-server',
+  'openai:codex-desktop',
+  'openai:codex-sdk',
+  'openai:agents',
+  'openinterpreter',
+  'opencode',
+  'opencode:sdk',
+];
 let recoverableNonObjectTargetMarker: string | null = null;
 let recoverableValidImportTargetMarker: string | null = null;
 
@@ -105,16 +117,646 @@ const isValidMultipartConfig = (multipart: unknown): boolean => {
   });
 };
 
+const isValidHttpUrlOrTemplate = (value: unknown): boolean => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+  if (/{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value)) {
+    return true;
+  }
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+const isSafeBrowserNavigateUrl = (value: unknown): boolean => {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};
+
+const isStringRecord = (value: unknown): value is Record<string, string> =>
+  isPlainObject(value) && Object.values(value).every((item) => typeof item === 'string');
+
+const isValidHeaderName = (value: unknown): value is string =>
+  typeof value === 'string' && /^[!#$%&'*+\-.^_\x60|~\dA-Za-z]+$/.test(value);
+
+const isValidHeaderValue = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  [...value].every((character) => {
+    const code = character.charCodeAt(0);
+    return code === 9 || (code >= 32 && code <= 255 && code !== 127);
+  });
+
+const isValidHeaders = (value: unknown): boolean =>
+  isStringRecord(value) &&
+  Object.entries(value).every(
+    ([name, headerValue]) => isValidHeaderName(name) && isValidHeaderValue(headerValue),
+  );
+
+const isValidRawHttpRequest = (value: unknown): boolean => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+  const lines = value.trim().split(/\r?\n/);
+  const requestLine = lines.shift() ?? '';
+  const requestLineMatch = requestLine.match(
+    /^([!#$%&'*+\-.^_\x60|~\dA-Za-z]+)\s+(\S+)\s+HTTP\/\d(?:\.\d)?$/i,
+  );
+  if (
+    !requestLineMatch ||
+    ['CONNECT', 'TRACE', 'TRACK'].includes(requestLineMatch[1].toUpperCase())
+  ) {
+    return false;
+  }
+  const requestTarget = requestLineMatch[2];
+  let host: string | null = null;
+  for (const line of lines) {
+    if (!line.trim()) {
+      break;
+    }
+    const separator = line.indexOf(':');
+    if (separator < 1) {
+      return false;
+    }
+    const name = line.slice(0, separator).trim();
+    const headerValue = line.slice(separator + 1).trim();
+    if (!isValidHeaderName(name) || !isValidHeaderValue(headerValue)) {
+      return false;
+    }
+    if (name.toLowerCase() === 'host' && headerValue) {
+      host = headerValue;
+    }
+  }
+  if (!host || !isValidHttpUrlOrTemplate(`http://${host}`)) {
+    return false;
+  }
+  return (
+    (requestTarget.startsWith('/') && !requestTarget.startsWith('//')) ||
+    isValidHttpUrlOrTemplate(requestTarget)
+  );
+};
+
+const isValidHttpAuth = (auth: unknown): boolean => {
+  if (auth === undefined) {
+    return true;
+  }
+  if (!isPlainObject(auth) || typeof auth.type !== 'string') {
+    return false;
+  }
+  if (auth.type === 'basic') {
+    return typeof auth.username === 'string' && typeof auth.password === 'string';
+  }
+  if (auth.type === 'bearer') {
+    return isValidHeaderValue(auth.token);
+  }
+  if (auth.type === 'api_key') {
+    return (
+      typeof auth.value === 'string' &&
+      typeof auth.keyName === 'string' &&
+      typeof auth.placement === 'string' &&
+      ['header', 'query'].includes(auth.placement) &&
+      (auth.placement === 'query' ||
+        (isValidHeaderName(auth.keyName) && isValidHeaderValue(auth.value)))
+    );
+  }
+  if (auth.type === 'file') {
+    return isNonEmptyString(auth.path);
+  }
+  if (auth.type !== 'oauth' || !isValidHttpUrlOrTemplate(auth.tokenUrl)) {
+    return false;
+  }
+  if (
+    auth.scopes !== undefined &&
+    (!Array.isArray(auth.scopes) || auth.scopes.some((scope) => typeof scope !== 'string'))
+  ) {
+    return false;
+  }
+  if (auth.grantType === 'password') {
+    return (
+      typeof auth.username === 'string' &&
+      typeof auth.password === 'string' &&
+      (auth.clientId === undefined || typeof auth.clientId === 'string') &&
+      (auth.clientSecret === undefined || typeof auth.clientSecret === 'string')
+    );
+  }
+  return (
+    auth.grantType === 'client_credentials' &&
+    typeof auth.clientId === 'string' &&
+    typeof auth.clientSecret === 'string'
+  );
+};
+
+const isValidHttpConfig = (config: Record<string, unknown>): boolean => {
+  const transformFields = [
+    'sessionParser',
+    'transformRequest',
+    'transformResponse',
+    'validateStatus',
+    'responseParser',
+  ];
+  if (
+    (config.body !== undefined &&
+      typeof config.body !== 'string' &&
+      !Array.isArray(config.body) &&
+      !isPlainObject(config.body)) ||
+    (config.headers !== undefined && !isValidHeaders(config.headers)) ||
+    (config.maxRetries !== undefined &&
+      (typeof config.maxRetries !== 'number' ||
+        !Number.isFinite(config.maxRetries) ||
+        config.maxRetries < 0)) ||
+    (config.method !== undefined &&
+      (typeof config.method !== 'string' ||
+        !/^[!#$%&'*+\-.^_\x60|~\dA-Za-z]+$/.test(config.method) ||
+        ['CONNECT', 'TRACE', 'TRACK'].includes(config.method.toUpperCase()))) ||
+    (config.queryParams !== undefined && !isStringRecord(config.queryParams)) ||
+    (config.request !== undefined && typeof config.request !== 'string') ||
+    (config.tools !== undefined && !Array.isArray(config.tools)) ||
+    (config.transformToolsFormat !== undefined &&
+      (typeof config.transformToolsFormat !== 'string' ||
+        !['openai', 'anthropic', 'bedrock', 'google'].includes(config.transformToolsFormat))) ||
+    (config.useHttps !== undefined && typeof config.useHttps !== 'boolean') ||
+    (config.sessionSource !== undefined &&
+      (typeof config.sessionSource !== 'string' ||
+        !['client', 'server', 'endpoint'].includes(config.sessionSource))) ||
+    (config.stateful !== undefined && typeof config.stateful !== 'boolean') ||
+    (config.url !== undefined && typeof config.url !== 'string') ||
+    !isValidHttpAuth(config.auth) ||
+    transformFields.some(
+      (field) =>
+        config[field] !== undefined &&
+        typeof config[field] !== 'string' &&
+        typeof config[field] !== 'function',
+    ) ||
+    (config.tokenEstimation !== undefined &&
+      (!isPlainObject(config.tokenEstimation) ||
+        (config.tokenEstimation.enabled !== undefined &&
+          typeof config.tokenEstimation.enabled !== 'boolean') ||
+        (config.tokenEstimation.multiplier !== undefined &&
+          (typeof config.tokenEstimation.multiplier !== 'number' ||
+            !Number.isFinite(config.tokenEstimation.multiplier) ||
+            config.tokenEstimation.multiplier < 0.01))))
+  ) {
+    return false;
+  }
+  if (config.session === undefined) {
+    return true;
+  }
+  if (!isPlainObject(config.session)) {
+    return false;
+  }
+  return (
+    isValidHttpUrlOrTemplate(config.session.url) &&
+    (config.session.method === undefined ||
+      (typeof config.session.method === 'string' &&
+        ['GET', 'POST'].includes(config.session.method))) &&
+    (config.session.headers === undefined || isValidHeaders(config.session.headers)) &&
+    (config.session.body === undefined ||
+      typeof config.session.body === 'string' ||
+      isPlainObject(config.session.body)) &&
+    (typeof config.session.responseParser === 'string' ||
+      typeof config.session.responseParser === 'function')
+  );
+};
+
+const isValidA2AAuth = (auth: unknown): boolean => {
+  if (auth === undefined) {
+    return true;
+  }
+  if (!isPlainObject(auth) || typeof auth.type !== 'string') {
+    return false;
+  }
+  if (['', 'none', 'no_auth'].includes(auth.type)) {
+    return true;
+  }
+  if (auth.type === 'bearer') {
+    return isValidHeaderValue(auth.token);
+  }
+  if (auth.type === 'basic') {
+    return typeof auth.username === 'string' && typeof auth.password === 'string';
+  }
+  if (auth.type === 'api_key') {
+    return (
+      (isNonEmptyString(auth.value) || isNonEmptyString(auth.api_key)) &&
+      (auth.keyName === undefined || typeof auth.keyName === 'string') &&
+      (auth.placement === undefined ||
+        (typeof auth.placement === 'string' && ['header', 'query'].includes(auth.placement))) &&
+      (auth.placement === 'query' ||
+        ((auth.keyName === undefined || isValidHeaderName(auth.keyName)) &&
+          (auth.value === undefined || isValidHeaderValue(auth.value)) &&
+          (auth.api_key === undefined || isValidHeaderValue(auth.api_key))))
+    );
+  }
+  if (auth.type !== 'oauth') {
+    return false;
+  }
+  const validScopes =
+    auth.scopes === undefined ||
+    typeof auth.scopes === 'string' ||
+    (Array.isArray(auth.scopes) && auth.scopes.every((scope) => typeof scope === 'string'));
+  if (!validScopes || (auth.tokenUrl !== undefined && !isValidHttpUrlOrTemplate(auth.tokenUrl))) {
+    return false;
+  }
+  if (auth.grantType === 'password') {
+    return typeof auth.username === 'string' && typeof auth.password === 'string';
+  }
+  return (
+    (auth.grantType === undefined || auth.grantType === 'client_credentials') &&
+    typeof auth.clientId === 'string' &&
+    typeof auth.clientSecret === 'string'
+  );
+};
+
+const isValidA2AConfig = (config: Record<string, unknown>): boolean => {
+  if (
+    (config.mode !== undefined &&
+      (typeof config.mode !== 'string' || !['auto', 'send', 'stream'].includes(config.mode))) ||
+    (config.timeoutMs !== undefined &&
+      (typeof config.timeoutMs !== 'number' ||
+        !Number.isFinite(config.timeoutMs) ||
+        config.timeoutMs < 1)) ||
+    (config.protocolVersion !== undefined && typeof config.protocolVersion !== 'string') ||
+    (config.tenant !== undefined && typeof config.tenant !== 'string') ||
+    (config.headers !== undefined && !isValidHeaders(config.headers)) ||
+    (config.configuration !== undefined && !isPlainObject(config.configuration)) ||
+    (config.message !== undefined && !isPlainObject(config.message)) ||
+    (config.transformResponse !== undefined &&
+      typeof config.transformResponse !== 'string' &&
+      typeof config.transformResponse !== 'function') ||
+    !isValidA2AAuth(config.auth) ||
+    (config.message !== undefined &&
+      (!isPlainObject(config.message) ||
+        (config.message.contextId !== undefined && typeof config.message.contextId !== 'string') ||
+        (config.message.messageId !== undefined && typeof config.message.messageId !== 'string') ||
+        (config.message.role !== undefined && typeof config.message.role !== 'string') ||
+        (config.message.parts !== undefined &&
+          (!Array.isArray(config.message.parts) ||
+            config.message.parts.some(
+              (part) =>
+                !isPlainObject(part) ||
+                (part.text !== undefined &&
+                  typeof part.text !== 'string' &&
+                  (!isPlainObject(part.text) ||
+                    (part.text.text !== undefined && typeof part.text.text !== 'string'))),
+            )))))
+  ) {
+    return false;
+  }
+  if (config.polling === undefined) {
+    return true;
+  }
+  if (!isPlainObject(config.polling)) {
+    return false;
+  }
+  return (
+    (config.polling.enabled === undefined || typeof config.polling.enabled === 'boolean') &&
+    (config.polling.intervalMs === undefined ||
+      (typeof config.polling.intervalMs === 'number' &&
+        Number.isFinite(config.polling.intervalMs) &&
+        config.polling.intervalMs >= 0)) &&
+    (config.polling.timeoutMs === undefined ||
+      (typeof config.polling.timeoutMs === 'number' &&
+        Number.isFinite(config.polling.timeoutMs) &&
+        config.polling.timeoutMs >= 1))
+  );
+};
+
+const isValidBrowserStep = (step: unknown): boolean => {
+  if (!isPlainObject(step) || typeof step.action !== 'string') {
+    return false;
+  }
+  if (step.args !== undefined && !isPlainObject(step.args)) {
+    return false;
+  }
+  const args = step.args ?? {};
+  const isValidSelector = (selector: unknown): boolean => {
+    if (!isNonEmptyString(selector)) {
+      return false;
+    }
+    const stack: string[] = [];
+    const selectorSegments: string[] = [];
+    let quote: string | null = null;
+    let escaped = false;
+    let segmentStart = 0;
+    for (let index = 0; index < selector.length; index++) {
+      const character = selector[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (quote !== null) {
+        if (character === quote) {
+          quote = null;
+        }
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        quote = character;
+        continue;
+      }
+      if (character === '[' || character === '(') {
+        stack.push(character);
+        continue;
+      }
+      if (
+        (character === ']' && stack.pop() !== '[') ||
+        (character === ')' && stack.pop() !== '(')
+      ) {
+        return false;
+      }
+      if (character === '>' && selector[index + 1] === '>' && stack.length === 0) {
+        selectorSegments.push(selector.slice(segmentStart, index));
+        segmentStart = index + 2;
+        index++;
+      }
+    }
+    if (quote !== null || escaped || stack.length !== 0) {
+      return false;
+    }
+    if (typeof document === 'undefined') {
+      return true;
+    }
+    selectorSegments.push(selector.slice(segmentStart));
+    for (const rawSegment of selectorSegments) {
+      const segment = rawSegment.trim();
+      if (!segment) {
+        return false;
+      }
+      const engineMatch = segment.match(/^([\w:-]+)=(.*)$/s);
+      if (engineMatch) {
+        const supportedEngines = new Set([
+          'css',
+          'css:light',
+          'xpath',
+          'xpath:light',
+          'text',
+          'text:light',
+          'id',
+          'id:light',
+          'data-testid',
+          'data-testid:light',
+          'data-test-id',
+          'data-test-id:light',
+          'data-test',
+          'data-test:light',
+          '_react',
+          '_vue',
+          'role',
+          'nth',
+          'visible',
+        ]);
+        if (!supportedEngines.has(engineMatch[1])) {
+          return false;
+        }
+        if (!engineMatch[1].startsWith('css')) {
+          continue;
+        }
+      }
+      const cssSelector = engineMatch ? engineMatch[2].trim() : segment;
+      if (
+        /:(?:has-text|text|text-is|text-matches|visible|nth-match|right-of|left-of|above|below|near)(?:\(|\b)/.test(
+          cssSelector,
+        )
+      ) {
+        continue;
+      }
+      try {
+        document.createDocumentFragment().querySelector(cssSelector);
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  switch (step.action) {
+    case 'navigate':
+      return isSafeBrowserNavigateUrl(args.url);
+    case 'click':
+      return isValidSelector(args.selector);
+    case 'type':
+      return isValidSelector(args.selector) && isNonEmptyString(args.text);
+    case 'extract':
+      return (
+        isNonEmptyString(step.name) &&
+        (isValidSelector(args.selector) || isNonEmptyString(args.script))
+      );
+    case 'screenshot':
+      return isNonEmptyString(args.path);
+    case 'wait':
+      return typeof args.ms === 'number' && Number.isFinite(args.ms) && args.ms >= 0;
+    case 'waitForNewChildren':
+      return (
+        isValidSelector(args.parentSelector) &&
+        (args.delay === undefined ||
+          (typeof args.delay === 'number' && Number.isFinite(args.delay) && args.delay >= 0)) &&
+        (args.timeout === undefined ||
+          (typeof args.timeout === 'number' && Number.isFinite(args.timeout) && args.timeout >= 0))
+      );
+    default:
+      return false;
+  }
+};
+
+const containsLocalFileReference = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return /file:\/\//i.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsLocalFileReference);
+  }
+  return isPlainObject(value) && Object.values(value).some(containsLocalFileReference);
+};
+
+const containsExecutableCallback = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.some(containsExecutableCallback);
+  }
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  return Object.entries(value).some(
+    ([key, child]) =>
+      (key === 'callback' && (typeof child === 'function' || isNonEmptyString(child))) ||
+      containsExecutableCallback(child),
+  );
+};
+
+const containsNunjucksTemplate = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsNunjucksTemplate);
+  }
+  return isPlainObject(value) && Object.values(value).some(containsNunjucksTemplate);
+};
+
+const containsUnsafeNunjucksTemplate = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    if (/{%[\s\S]*?%}|{#[\s\S]*?#}/.test(value)) {
+      return true;
+    }
+    const expressions = [...value.matchAll(/{{([\s\S]*?)}}/g)];
+    const withoutExpressions = value.replace(/{{[\s\S]*?}}/g, '');
+    if (/(?:{{|}}|{%|%}|{#|#})/.test(withoutExpressions)) {
+      return true;
+    }
+    return expressions.some((match) => {
+      const expression = match[1].trim();
+      return !/^[A-Za-z_][\w-]*$/.test(expression) || expression.toLowerCase() === 'env';
+    });
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsUnsafeNunjucksTemplate);
+  }
+  return isPlainObject(value) && Object.values(value).some(containsUnsafeNunjucksTemplate);
+};
+
+const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolean => {
+  if (!target || !isPlainObject(target.config)) {
+    return true;
+  }
+  const executableFields = [
+    'transform',
+    'transformResponse',
+    'responseParser',
+    'requestTransform',
+    'transformRequest',
+    'sessionParser',
+    'validateStatus',
+    'streamResponse',
+  ];
+  if (
+    AGENTIC_PROVIDER_IDS.some(
+      (agenticId) =>
+        target.id === agenticId ||
+        target.id.startsWith(`${agenticId}:`) ||
+        (agenticId.startsWith('anthropic:claude-') && target.id.startsWith(agenticId)),
+    ) ||
+    target.transform !== undefined ||
+    executableFields.some((field) => target.config[field] !== undefined)
+  ) {
+    return true;
+  }
+  if (
+    containsLocalFileReference(target.id) ||
+    containsLocalFileReference(target.config) ||
+    containsExecutableCallback(target.config) ||
+    containsUnsafeNunjucksTemplate(target.id) ||
+    containsUnsafeNunjucksTemplate(target.config) ||
+    target.config.functionToolCallbacks !== undefined ||
+    containsNunjucksTemplate(target.config.responseSchema) ||
+    containsNunjucksTemplate(target.config.tools) ||
+    target.config.mcp !== undefined ||
+    target.config.functionToolStatefulApi !== undefined ||
+    target.config.keyFilename !== undefined ||
+    target.config.googleAuthOptions !== undefined ||
+    target.config.credentials !== undefined ||
+    (STRUCTURED_FOUNDATION_PROVIDER_TYPES.includes(getProviderType(target.id) ?? '') &&
+      (target.id.startsWith('openai:transcription') ||
+        (target.env !== undefined && Object.keys(target.env).length > 0) ||
+        ['apiBaseUrl', 'apiHost', 'baseURL', 'baseUrl', 'base_url', 'endpoint', 'projectUrl'].some(
+          (field) => target.config[field] !== undefined,
+        ) ||
+        Object.keys(target.config).some((field) => field.toLowerCase().endsWith('envar')))) ||
+    (isPlainObject(target.config.auth) && target.config.auth.type === 'file') ||
+    target.config.tls !== undefined ||
+    target.config.signatureAuth !== undefined ||
+    (isPlainObject(target.config.responseFormat) &&
+      (typeof target.config.responseFormat.path === 'function' ||
+        isNonEmptyString(target.config.responseFormat.path))) ||
+    (isPlainObject(target.config.session) &&
+      (typeof target.config.session.responseParser === 'function' ||
+        isNonEmptyString(target.config.session.responseParser))) ||
+    (isPlainObject(target.config.multipart) &&
+      Array.isArray(target.config.multipart.parts) &&
+      target.config.multipart.parts.some(
+        (part: unknown) =>
+          isPlainObject(part) &&
+          isPlainObject(part.source) &&
+          part.source.type === 'path' &&
+          isNonEmptyString(part.source.path),
+      ))
+  ) {
+    return true;
+  }
+  if (getProviderType(target.id) !== 'browser' || !Array.isArray(target.config.steps)) {
+    return false;
+  }
+  return (
+    target.config.cookies !== undefined ||
+    Boolean(target.config.persistSession) ||
+    target.config.connectOptions !== undefined ||
+    target.config.steps.some(
+      (step: unknown) =>
+        isPlainObject(step) &&
+        (step.action === 'screenshot' ||
+          (step.action === 'navigate' &&
+            isPlainObject(step.args) &&
+            !isSafeBrowserNavigateUrl(step.args.url)) ||
+          (step.action === 'extract' &&
+            isPlainObject(step.args) &&
+            isNonEmptyString(step.args.script))),
+    )
+  );
+};
+
 const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolean => {
   const providerType = getProviderType(target?.id);
   const isHttpTarget = providerType === 'http' || providerType === 'https';
   const isWebSocketTarget =
     providerType === 'websocket' || providerType === 'ws' || providerType === 'wss';
-  if (!isHttpTarget && !isWebSocketTarget) {
+  const isA2ATarget = providerType === 'a2a';
+  const isBrowserTarget = providerType === 'browser';
+  if (!isHttpTarget && !isWebSocketTarget && !isA2ATarget && !isBrowserTarget) {
     return true;
   }
   if (!target || !isPlainObject(target.config)) {
     return false;
+  }
+
+  if (isBrowserTarget) {
+    return (
+      (target.config.headless === undefined || typeof target.config.headless === 'boolean') &&
+      (target.config.timeoutMs === undefined ||
+        (typeof target.config.timeoutMs === 'number' &&
+          Number.isFinite(target.config.timeoutMs) &&
+          target.config.timeoutMs >= 0)) &&
+      Array.isArray(target.config.steps) &&
+      target.config.steps.every(isValidBrowserStep)
+    );
+  }
+
+  if (isA2ATarget) {
+    if (target.id !== 'a2a' && !target.id.startsWith('a2a:')) {
+      return false;
+    }
+    const shorthandUrl = target.id.startsWith('a2a:') ? target.id.slice('a2a:'.length) : '';
+    const configuredUrls = [target.config.url, target.config.agentCardUrl, shorthandUrl].filter(
+      (value) => value !== undefined && value !== '',
+    );
+    return (
+      configuredUrls.length > 0 &&
+      configuredUrls.every(isValidHttpUrlOrTemplate) &&
+      isValidA2AConfig(target.config)
+    );
   }
 
   if (isHttpTarget && target.config.multipart) {
@@ -130,8 +772,12 @@ const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolea
     }
   }
 
+  if (isHttpTarget && !isValidHttpConfig(target.config)) {
+    return false;
+  }
+
   if (isHttpTarget && target.config.request !== undefined) {
-    return typeof target.config.request === 'string' && target.config.request.trim().length > 0;
+    return isValidRawHttpRequest(target.config.request);
   }
 
   const url = target.config.url || target.id;
@@ -140,20 +786,63 @@ const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolea
   }
   const isTemplatedHttpUrl = isHttpTarget && /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(url);
   let protocol: string | undefined;
+  let hasUrlCredentials = false;
   try {
-    protocol = new URL(url).protocol;
+    const parsedUrl = new URL(url);
+    protocol = parsedUrl.protocol;
+    hasUrlCredentials = Boolean(parsedUrl.username || parsedUrl.password);
   } catch {}
 
   if (isHttpTarget) {
     return (
-      (isTemplatedHttpUrl || ['http:', 'https:'].includes(protocol ?? '')) &&
+      (isTemplatedHttpUrl ||
+        (['http:', 'https:'].includes(protocol ?? '') && !hasUrlCredentials)) &&
       Boolean(target.config.body || target.config.multipart || target.config.method === 'GET')
     );
+  }
+  let protocols: string[] = [];
+  const webSocketTransformFields = ['transformResponse', 'streamResponse', 'responseParser'];
+  if (
+    webSocketTransformFields.some(
+      (field) =>
+        target.config[field] !== undefined &&
+        typeof target.config[field] !== 'string' &&
+        typeof target.config[field] !== 'function',
+    )
+  ) {
+    return false;
+  }
+  if (target.config.protocols !== undefined) {
+    if (
+      typeof target.config.protocols !== 'string' &&
+      (!Array.isArray(target.config.protocols) ||
+        target.config.protocols.some((value) => typeof value !== 'string'))
+    ) {
+      return false;
+    }
+    const values = Array.isArray(target.config.protocols)
+      ? target.config.protocols
+      : [target.config.protocols];
+    protocols = values
+      .flatMap((value) => value.split(','))
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (
+      protocols.some((value) => !value || !/^[!#$%&'*+\-.^_\x60|~\dA-Za-z]+$/.test(value)) ||
+      new Set(protocols).size !== protocols.length
+    ) {
+      return false;
+    }
   }
   return (
     ['ws:', 'wss:'].includes(protocol ?? '') &&
     typeof target.config.messageTemplate === 'string' &&
-    target.config.messageTemplate.trim().length > 0
+    target.config.messageTemplate.trim().length > 0 &&
+    (target.config.headers === undefined || isValidHeaders(target.config.headers)) &&
+    (target.config.timeoutMs === undefined ||
+      (typeof target.config.timeoutMs === 'number' &&
+        Number.isFinite(target.config.timeoutMs) &&
+        target.config.timeoutMs >= 0))
   );
 };
 
@@ -200,7 +889,9 @@ const prepareNonObjectTargetRecovery = (
     providerType ?? '',
   );
   const isRecoverableStructuredTarget =
-    isStructuredEndpointTarget || STRUCTURED_FOUNDATION_PROVIDER_TYPES.includes(providerType ?? '');
+    isStructuredEndpointTarget ||
+    ['a2a', 'browser'].includes(providerType ?? '') ||
+    STRUCTURED_FOUNDATION_PROVIDER_TYPES.includes(providerType ?? '');
   const isNonObjectTargetError =
     targetConfigValidation.targetConfigError === 'Configuration must be a JSON object';
   let matchesValidImportDraft = false;
@@ -250,6 +941,7 @@ const prepareNonObjectTargetRecovery = (
     replacedTargetConfig !== undefined &&
     targetConfigChanged &&
     isRecoverableStructuredTarget &&
+    !hasExecutableTargetConfig(effectiveTarget) &&
     targetConfigValidation.targetConfigError === 'Invalid JSON configuration' &&
     targetConfigValidation.targetConfigDraft === null &&
     targetConfigInvalidMarker?.startsWith('invalid-import-json:') === true;
@@ -257,6 +949,7 @@ const prepareNonObjectTargetRecovery = (
     replacedTargetConfig !== undefined &&
     targetConfigChanged &&
     isRecoverableStructuredTarget &&
+    !hasExecutableTargetConfig(effectiveTarget) &&
     isNonObjectTargetError &&
     targetConfigValidation.targetConfigDraft === null &&
     targetConfigInvalidMarker?.startsWith('non-object-json:') === true;

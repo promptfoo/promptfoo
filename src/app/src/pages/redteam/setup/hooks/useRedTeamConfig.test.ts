@@ -659,7 +659,7 @@ describe('useRedTeamConfig', () => {
 
     useRedTeamConfig.getState().updateConfig('target', {
       ...useRedTeamConfig.getState().config.target,
-      config: invalidConfig,
+      config: invalidConfig as Config['target']['config'],
     });
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
@@ -722,6 +722,467 @@ describe('useRedTeamConfig', () => {
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamConfig.getState().config.target.config.multipart).toEqual(multipart);
+  });
+
+  it.each([
+    ['A2A without endpoint', 'a2a', {}],
+    ['A2A with malformed endpoint', 'a2a', { url: 'invalid-url' }],
+    ['A2A with credentialed endpoint', 'a2a', { url: 'https://user:pass@agent.example/a2a' }],
+    ['A2A with malformed agent card', 'a2a', { agentCardUrl: 'invalid-url' }],
+    ['A2A with invalid timeout', 'a2a:https://agent.example/a2a', { timeoutMs: 0 }],
+    ['A2A with invalid mode', 'a2a:https://agent.example/a2a', { mode: 'invalid' }],
+    ['A2A with invalid headers', 'a2a:https://agent.example/a2a', { headers: 'token' }],
+    [
+      'A2A with malformed header name',
+      'a2a:https://agent.example/a2a',
+      { headers: { 'bad name': 'token' } },
+    ],
+    [
+      'A2A with malformed header value',
+      'a2a:https://agent.example/a2a',
+      { headers: { Authorization: 'Bearer\nsecret' } },
+    ],
+    ['A2A with invalid polling', 'a2a:https://agent.example/a2a', { polling: { timeoutMs: 0 } }],
+    ['A2A with invalid auth', 'a2a:https://agent.example/a2a', { auth: { type: 'api_key' } }],
+    [
+      'A2A with malformed bearer auth',
+      'a2a:https://agent.example/a2a',
+      { auth: { type: 'bearer', token: 'secret\nvalue' } },
+    ],
+    [
+      'A2A with malformed API-key header',
+      'a2a:https://agent.example/a2a',
+      { auth: { type: 'api_key', value: 'secret', placement: 'header', keyName: 'bad name' } },
+    ],
+    [
+      'A2A with invalid OAuth endpoint',
+      'a2a:https://agent.example/a2a',
+      {
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          clientId: 'client',
+          clientSecret: 'secret',
+          tokenUrl: 'invalid-url',
+        },
+      },
+    ],
+    [
+      'A2A with invalid message parts',
+      'a2a:https://agent.example/a2a',
+      { message: { parts: 'bad' } },
+    ],
+    [
+      'A2A with invalid message part text',
+      'a2a:https://agent.example/a2a',
+      { message: { parts: [{ text: 1 }] } },
+    ],
+    [
+      'A2A with invalid message and polling',
+      'a2a:https://agent.example/a2a',
+      { polling: {}, message: { parts: 'bad' } },
+    ],
+    ['browser without steps', 'browser', { headless: true }],
+    ['browser with malformed step', 'browser', { steps: [{ action: 'run-script' }] }],
+    ['browser navigate without URL', 'browser', { steps: [{ action: 'navigate', args: {} }] }],
+    [
+      'browser navigate with credentialed URL',
+      'browser',
+      { steps: [{ action: 'navigate', args: { url: 'https://user:pass@example.test' } }] },
+    ],
+    ['browser click without selector', 'browser', { steps: [{ action: 'click', args: {} }] }],
+    [
+      'browser click with malformed selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: '[' } }] },
+    ],
+    [
+      'browser click with invalid balanced selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'div:' } }] },
+    ],
+    [
+      'browser click with invalid prefixed selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'css=div:' } }] },
+    ],
+    [
+      'browser click with invalid chained selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'div >> css=div:' } }] },
+    ],
+    [
+      'browser click with unknown selector engine',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'madeup=button' } }] },
+    ],
+    [
+      'browser type without text',
+      'browser',
+      { steps: [{ action: 'type', args: { selector: '#prompt' } }] },
+    ],
+    [
+      'browser type with malformed selector',
+      'browser',
+      { steps: [{ action: 'type', args: { selector: '[', text: '{{prompt}}' } }] },
+    ],
+    [
+      'browser extract without name',
+      'browser',
+      { steps: [{ action: 'extract', args: { selector: '#response' } }] },
+    ],
+    [
+      'browser extract with malformed selector',
+      'browser',
+      { steps: [{ action: 'extract', name: 'response', args: { selector: '[' } }] },
+    ],
+    ['browser screenshot without path', 'browser', { steps: [{ action: 'screenshot', args: {} }] }],
+    ['browser wait without duration', 'browser', { steps: [{ action: 'wait', args: {} }] }],
+    [
+      'browser wait with negative duration',
+      'browser',
+      { steps: [{ action: 'wait', args: { ms: -1 } }] },
+    ],
+    [
+      'browser waitForNewChildren without parent',
+      'browser',
+      { steps: [{ action: 'waitForNewChildren', args: {} }] },
+    ],
+    [
+      'browser waitForNewChildren with malformed selector',
+      'browser',
+      { steps: [{ action: 'waitForNewChildren', args: { parentSelector: '[' } }] },
+    ],
+    [
+      'browser waitForNewChildren with invalid timing',
+      'browser',
+      {
+        steps: [
+          {
+            action: 'waitForNewChildren',
+            args: { parentSelector: '#x', delay: 'oops', timeout: -1 },
+          },
+        ],
+      },
+    ],
+    [
+      'browser with invalid headless option',
+      'browser',
+      { steps: [{ action: 'navigate', args: { url: 'https://example.test' } }], headless: 'true' },
+    ],
+    [
+      'browser with invalid timeout',
+      'browser',
+      { steps: [{ action: 'navigate', args: { url: 'https://example.test' } }], timeoutMs: 'oops' },
+    ],
+    [
+      'HTTP with invalid headers',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'POST', headers: 'token' },
+    ],
+    [
+      'HTTP with malformed header name',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        headers: { 'bad name': 'token' },
+      },
+    ],
+    [
+      'HTTP with malformed header value',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        headers: { Authorization: 'Bearer\nsecret' },
+      },
+    ],
+    [
+      'HTTP with non-byte header value',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        headers: { Authorization: 'Bearer €' },
+      },
+    ],
+    [
+      'HTTP with invalid method',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'BAD METHOD' },
+    ],
+    [
+      'HTTP with unsupported method',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'TRACE' },
+    ],
+    [
+      'HTTP with credentialed endpoint',
+      'http',
+      { url: 'https://user:pass@example.test/chat', body: '{{prompt}}', method: 'POST' },
+    ],
+    ['HTTP with invalid raw request', 'http', { request: 'not an HTTP request' }],
+    ['HTTP with raw request missing host', 'http', { request: 'POST /chat HTTP/1.1' }],
+    [
+      'HTTP with unsupported raw method',
+      'http',
+      { request: 'TRACE /chat HTTP/1.1\nHost: example.test' },
+    ],
+    ['HTTP with invalid raw host', 'http', { request: 'POST /chat HTTP/1.1\nHost: bad host' }],
+    [
+      'HTTP with credentialed raw host',
+      'http',
+      { request: 'POST /chat HTTP/1.1\nHost: user:pass@example.test' },
+    ],
+    [
+      'HTTP with credentialed raw target',
+      'http',
+      { request: 'POST https://user:pass@example.test/chat HTTP/1.1\nHost: example.test' },
+    ],
+    [
+      'HTTP with protocol-relative raw target',
+      'http',
+      { request: 'POST //attacker.test/chat HTTP/1.1\nHost: example.test' },
+    ],
+    [
+      'HTTP with credentialed protocol-relative raw target',
+      'http',
+      { request: 'POST //user:pass@attacker.test/chat HTTP/1.1\nHost: example.test' },
+    ],
+    [
+      'HTTP with invalid retry count',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'POST', maxRetries: -1 },
+    ],
+    [
+      'HTTP with invalid session',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'POST', session: 'token' },
+    ],
+    [
+      'HTTP with invalid auth',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'POST', auth: 'token' },
+    ],
+    [
+      'HTTP with malformed bearer auth',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        auth: { type: 'bearer', token: 'secret\nvalue' },
+      },
+    ],
+    [
+      'HTTP with malformed API-key header',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        auth: { type: 'api_key', value: 'secret', placement: 'header', keyName: 'bad name' },
+      },
+    ],
+    [
+      'HTTP with credentialed OAuth endpoint',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          clientId: 'client',
+          clientSecret: 'secret',
+          tokenUrl: 'https://user:pass@example.test/token',
+        },
+      },
+    ],
+    [
+      'HTTP with invalid token estimation',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        tokenEstimation: { enabled: 'true', multiplier: 0 },
+      },
+    ],
+    [
+      'HTTP with invalid token estimation and session',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        tokenEstimation: { enabled: 'true', multiplier: 0 },
+        session: { url: 'https://example.test/session', responseParser: 'data.body.sessionId' },
+      },
+    ],
+    [
+      'HTTP with malformed session headers',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        session: {
+          url: 'https://example.test/session',
+          responseParser: 'data.body.sessionId',
+          headers: { 'bad name': 'token' },
+        },
+      },
+    ],
+    [
+      'HTTP with invalid session endpoint',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        session: { url: 'invalid-url', responseParser: 'data.body.sessionId' },
+      },
+    ],
+    [
+      'HTTP with invalid status validator',
+      'http',
+      { url: 'https://example.test/chat', body: '{{prompt}}', method: 'POST', validateStatus: 1 },
+    ],
+    [
+      'HTTP with invalid response transform',
+      'http',
+      {
+        url: 'https://example.test/chat',
+        body: '{{prompt}}',
+        method: 'POST',
+        transformResponse: {},
+      },
+    ],
+    [
+      'WebSocket with invalid protocols',
+      'websocket',
+      { url: 'wss://socket.example/chat', messageTemplate: '{{prompt}}', protocols: [1] },
+    ],
+    [
+      'WebSocket with duplicate protocols',
+      'websocket',
+      {
+        url: 'wss://socket.example/chat',
+        messageTemplate: '{{prompt}}',
+        protocols: ['chat', 'chat'],
+      },
+    ],
+    [
+      'WebSocket with malformed protocol token',
+      'websocket',
+      { url: 'wss://socket.example/chat', messageTemplate: '{{prompt}}', protocols: ['bad token'] },
+    ],
+    [
+      'WebSocket with invalid headers',
+      'websocket',
+      { url: 'wss://socket.example/chat', messageTemplate: '{{prompt}}', headers: 'token' },
+    ],
+    [
+      'WebSocket with malformed header name',
+      'websocket',
+      {
+        url: 'wss://socket.example/chat',
+        messageTemplate: '{{prompt}}',
+        headers: { 'bad name': 'token' },
+      },
+    ],
+    [
+      'WebSocket with malformed header value',
+      'websocket',
+      {
+        url: 'wss://socket.example/chat',
+        messageTemplate: '{{prompt}}',
+        headers: { Authorization: 'Bearer\nsecret' },
+      },
+    ],
+    [
+      'WebSocket with invalid timeout',
+      'websocket',
+      { url: 'wss://socket.example/chat', messageTemplate: '{{prompt}}', timeoutMs: 'oops' },
+    ],
+    [
+      'WebSocket with invalid stream parser',
+      'websocket',
+      { url: 'wss://socket.example/chat', messageTemplate: '{{prompt}}', streamResponse: {} },
+    ],
+  ])('keeps an imported %s target blocked', (_case, id, invalidConfig) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id,
+        label: 'Imported target',
+        config: null as unknown as Config['target']['config'],
+      },
+    });
+
+    useRedTeamConfig.getState().updateConfig('target', {
+      ...useRedTeamConfig.getState().config.target,
+      config: invalidConfig as Config['target']['config'],
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+  });
+
+  it('recovers an imported WebSocket target with a legacy trailing protocol separator', () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'websocket',
+        label: 'Imported target',
+        config: null as unknown as Config['target']['config'],
+      },
+    });
+
+    useRedTeamConfig.getState().updateConfig('target', {
+      ...useRedTeamConfig.getState().config.target,
+      config: {
+        url: 'wss://socket.example/chat',
+        messageTemplate: '{{prompt}}',
+        protocols: 'chat,',
+      },
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+  });
+
+  it('recovers an imported browser target with valid Playwright selector extensions', () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'browser',
+        label: 'Imported target',
+        config: null as unknown as Config['target']['config'],
+      },
+    });
+
+    useRedTeamConfig.getState().updateConfig('target', {
+      ...useRedTeamConfig.getState().config.target,
+      config: {
+        steps: [
+          { action: 'navigate', args: { url: 'https://example.test' } },
+          { action: 'click', args: { selector: 'button:has-text("Submit")' } },
+          { action: 'click', args: { selector: 'button:visible' } },
+          { action: 'click', args: { selector: 'css:light=button' } },
+          { action: 'click', args: { selector: 'role=button[name="Submit"]' } },
+          { action: 'click', args: { selector: 'css=[data-label="a >> b"]' } },
+        ],
+      },
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
   });
 
   it.each([
