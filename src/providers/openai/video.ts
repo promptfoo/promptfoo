@@ -103,14 +103,10 @@ async function normalizeInputReference(
   if (typeof reference !== 'string') {
     return reference;
   }
-  if (
-    reference.startsWith('http://') ||
-    reference.startsWith('https://') ||
-    reference.startsWith('data:')
-  ) {
+  if (/^(?:https?:\/\/|data:)/i.test(reference)) {
     return { image_url: reference };
   }
-  if (reference.startsWith('file://')) {
+  if (/^file:\/\//i.test(reference)) {
     const filePath = reference.slice(7);
     const buffer = await fs.readFile(filePath);
     return {
@@ -130,6 +126,18 @@ function hasValidCharacters(characters: OpenAiVideoOptions['characters']): boole
           character && typeof character.id === 'string' && character.id.trim().length > 0,
       ))
   );
+}
+
+function hasValidInputReference(reference: OpenAiVideoOptions['input_reference']): boolean {
+  if (!reference || typeof reference === 'string') {
+    return true;
+  }
+
+  const candidate = reference as { file_id?: unknown; image_url?: unknown };
+  const hasFileId = typeof candidate.file_id === 'string' && candidate.file_id.trim().length > 0;
+  const hasImageUrl =
+    typeof candidate.image_url === 'string' && candidate.image_url.trim().length > 0;
+  return hasFileId !== hasImageUrl;
 }
 
 // =============================================================================
@@ -447,6 +455,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     if (!hasValidCharacters(config.characters)) {
       return { error: 'Sora generation accepts at most two characters with non-empty IDs.' };
+    }
+
+    if (!hasValidInputReference(config.input_reference)) {
+      return { error: 'Sora input_reference must provide exactly one of image_url or file_id.' };
     }
 
     // Generate deterministic cache key from inputs

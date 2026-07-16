@@ -945,6 +945,53 @@ describe('OpenAiVideoProvider', () => {
       expect(first).toBe(rotated);
     });
 
+    it('should ignore rotating CloudFront signature parameters', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+      const first = generateVideoCacheKey({
+        ...base,
+        inputReference:
+          'https://cdn.example.com/start.png?Policy=policy-one&Signature=signature-one&Key-Pair-Id=key-one',
+      });
+      const rotated = generateVideoCacheKey({
+        ...base,
+        inputReference:
+          'https://cdn.example.com/start.png?Policy=policy-two&Signature=signature-two&Key-Pair-Id=key-two',
+      });
+
+      expect(first).toBe(rotated);
+    });
+
+    it('should tolerate malformed URLs and canonicalize the URL scheme case', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+
+      expect(() =>
+        generateVideoCacheKey({ ...base, inputReference: 'http://[bad?sig=secret' }),
+      ).not.toThrow();
+      expect(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'HTTPS://example.com/start.png',
+        }),
+      ).toBe(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://example.com/start.png',
+        }),
+      );
+    });
+
     it('should generate different keys for different reusable characters', () => {
       const base = {
         provider: 'openai',
@@ -1249,9 +1296,12 @@ describe('OpenAiVideoProvider', () => {
       );
     });
 
-    it('should read and wrap a file input_reference as a data URL', async () => {
+    it.each([
+      'file:///path/to/image.png',
+      'FILE:///path/to/image.png',
+    ])('should read and wrap %s as a data URL', async (inputReference) => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', input_reference: 'file:///path/to/image.png' },
+        config: { apiKey: 'test-key', input_reference: inputReference },
       });
 
       // Mock storage
@@ -1319,9 +1369,19 @@ describe('OpenAiVideoProvider', () => {
         { image_url: 'https://example.com/start.png' },
       ],
       [
+        'an uppercase image URL',
+        'HTTPS://example.com/start.png',
+        { image_url: 'HTTPS://example.com/start.png' },
+      ],
+      [
         'a data URL',
         'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
         { image_url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==' },
+      ],
+      [
+        'an uppercase data URL',
+        'DATA:image/jpeg;base64,/9j/4AAQSkZJRg==',
+        { image_url: 'DATA:image/jpeg;base64,/9j/4AAQSkZJRg==' },
       ],
       [
         'raw JPEG data',
@@ -1356,6 +1416,24 @@ describe('OpenAiVideoProvider', () => {
 
       const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
       expect(JSON.parse(request.body).input_reference).toEqual(expected);
+    });
+
+    it.each([
+      [
+        'both image_url and file_id',
+        { image_url: 'https://example.com/start.png', file_id: 'file_123' },
+      ],
+      ['neither image_url nor file_id', {}],
+      ['an empty file_id', { file_id: '   ' }],
+    ])('should reject %s before calling the Videos API', async (_label, inputReference) => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', input_reference: inputReference as any },
+      });
+
+      const result = await provider.callApi('Animate this image');
+
+      expect(result.error).toContain('exactly one of image_url or file_id');
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
 
     it('should return error if input_reference file does not exist', async () => {

@@ -134,12 +134,12 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName();
+    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
   protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName();
+    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
     return (
       model.startsWith('o1') ||
       model.startsWith('o3') ||

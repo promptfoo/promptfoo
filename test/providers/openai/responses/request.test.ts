@@ -72,6 +72,110 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.tokenUsage?.total).toBe(30);
   });
 
+  it('should poll a queued background response until it is ready to grade', async () => {
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Background result');
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      'https://api.openai.com/v1/responses/resp_background',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_expired', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response not found' } },
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_retried', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_retried',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Recovered background result');
+    expect(result.cached).toBe(false);
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
   it('should handle system prompts correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

@@ -45,6 +45,17 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect('max_output_tokens' in body).toBe(false);
   });
 
+  it('should treat fine-tuned o-series models as reasoning models', async () => {
+    const provider = new OpenAiResponsesProvider('ft:o4-mini-2025-04-16:company::model', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body).not.toHaveProperty('max_output_tokens');
+    expect(body).not.toHaveProperty('temperature');
+  });
+
   it('should handle reasoning models correctly', async () => {
     // Mock API response for o1-pro model
     const mockApiResponse = {

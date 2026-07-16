@@ -5,7 +5,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { OPENAI_TRANSCRIPTION_MODELS } from './util';
+import { getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -203,14 +203,27 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         };
       }
 
-      // Calculate cost based on audio duration
+      // Prefer the billed duration ledger when the API returns both values.
       const durationSeconds =
-        typeof data.duration === 'number'
-          ? data.duration
-          : data.usage?.type === 'duration' && typeof data.usage.seconds === 'number'
-            ? data.usage.seconds
+        data.usage?.type === 'duration' && typeof data.usage.seconds === 'number'
+          ? data.usage.seconds
+          : typeof data.duration === 'number'
+            ? data.duration
             : undefined;
       const cost = cached ? 0 : this.calculateTranscriptionCost(durationSeconds, data.usage);
+      const tokenUsage =
+        data.usage?.type === 'tokens'
+          ? getTokenUsage(
+              {
+                usage: {
+                  total_tokens: data.usage.total_tokens,
+                  prompt_tokens: data.usage.input_tokens,
+                  completion_tokens: data.usage.output_tokens,
+                },
+              },
+              cached,
+            )
+          : undefined;
 
       // Calculate average quality metrics from segments
       const segments = data.segments || [];
@@ -278,6 +291,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         output,
         cached,
         cost,
+        ...(tokenUsage ? { tokenUsage } : {}),
         metadata: {
           task: data.task,
           ...(durationSeconds === undefined ? {} : { duration: durationSeconds }),

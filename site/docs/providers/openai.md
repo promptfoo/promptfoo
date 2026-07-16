@@ -1035,7 +1035,8 @@ prompts:
 
 The `input_reference` accepts a `file://` path, image URL, base64-encoded image data, data URL,
 or an uploaded-file reference such as `{ file_id: file_123 }`. Promptfoo sends the documented
-`{ image_url: ... }` or `{ file_id: ... }` JSON shape to OpenAI.
+`{ image_url: ... }` or `{ file_id: ... }` JSON shape to OpenAI; object references must provide
+exactly one of `image_url` or `file_id`.
 
 Reusable Sora characters can be supplied with `characters: [{ id: char_123 }]`; at most two
 characters can be used in one generation.
@@ -1217,6 +1218,7 @@ prompts:
   - file://prompt.txt
 providers:
   - id: openai:chat:gpt-5.4-mini
+    // highlight-start
     config:
       tools:
         - type: function
@@ -1234,6 +1236,7 @@ providers:
                   enum: [celsius, fahrenheit]
               required: [location]
       tool_choice: 'auto'
+    // highlight-end
 
 tests:
   - vars:

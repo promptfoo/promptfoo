@@ -1963,6 +1963,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(gpt54NanoProvider['supportsTemperature']()).toBe(false);
     });
 
+    it('should treat fine-tuned o-series models as reasoning models', async () => {
+      const provider = new OpenAiChatCompletionProvider('ft:o4-mini-2025-04-16:company::model');
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('temperature');
+    });
+
     it('should respect temperature settings based on model type', async () => {
       const mockResponse = {
         data: {

@@ -11,6 +11,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { readResponsesStream } from '../responses/stream';
@@ -35,6 +36,156 @@ interface OpenAIErrorResponse {
     message: string;
     type?: string;
     code?: string;
+  };
+}
+
+interface OpenAIResponsesResponse {
+  id?: string;
+  status?: string;
+  output?: Array<{
+    content?: Array<{
+      type: string;
+      text?: string;
+      thinking?: { reasoning_text?: string };
+      refusal?: string;
+    }>;
+    tool_calls?: Array<{
+      id: string;
+      type: string;
+      function: { name: string; arguments: string };
+    }>;
+  }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+interface BackgroundResponseResult {
+  data: OpenAIResponsesResponse;
+  status: number;
+  statusText: string;
+  headers?: Record<string, string>;
+  error?: string;
+  retried?: boolean;
+}
+
+async function pollBackgroundResponse(
+  initial: OpenAIResponsesResponse,
+  url: string,
+  headers: Record<string, string>,
+  timeout: number,
+  maxRetries?: number,
+): Promise<BackgroundResponseResult> {
+  if (!initial.id) {
+    return {
+      data: initial,
+      status: 0,
+      statusText: 'Error',
+      error: 'Background response is missing its response ID.',
+    };
+  }
+
+  let data = initial;
+  let status = 200;
+  let statusText = 'OK';
+  let responseHeaders: Record<string, string> | undefined;
+  const deadline = Date.now() + timeout;
+  let firstPoll = true;
+
+  while (data.status === 'queued' || data.status === 'in_progress') {
+    if (!firstPoll) {
+      await sleep(1000);
+    }
+    firstPoll = false;
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      return {
+        data,
+        status: 0,
+        statusText: 'Error',
+        error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+      };
+    }
+
+    const polled = await fetchWithCache<OpenAIResponsesResponse>(
+      `${url}/${encodeURIComponent(initial.id)}`,
+      { method: 'GET', headers },
+      remainingMs,
+      'json',
+      true,
+      maxRetries,
+    );
+    data = polled.data;
+    status = polled.status;
+    statusText = polled.statusText;
+    responseHeaders = polled.headers;
+    if (status < 200 || status >= 300) {
+      return {
+        data,
+        status,
+        statusText,
+        headers: responseHeaders,
+        error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
+      };
+    }
+  }
+
+  return { data, status, statusText, headers: responseHeaders };
+}
+
+async function resolveBackgroundResponse(
+  initial: OpenAIResponsesResponse,
+  url: string,
+  request: { method: string; headers: Record<string, string>; body: string },
+  timeout: number,
+  maxRetries: number | undefined,
+  cached: boolean,
+  deleteFromCache: (() => Promise<void>) | undefined,
+): Promise<BackgroundResponseResult> {
+  const polled = await pollBackgroundResponse(initial, url, request.headers, timeout, maxRetries);
+  if (!cached || !polled.error || (polled.status !== 404 && polled.status !== 410)) {
+    return polled;
+  }
+
+  await deleteFromCache?.();
+  const retried = await fetchWithCache<OpenAIResponsesResponse>(
+    url,
+    request,
+    timeout,
+    'json',
+    true,
+    maxRetries,
+  );
+  if (retried.status < 200 || retried.status >= 300) {
+    return {
+      data: retried.data,
+      status: retried.status,
+      statusText: retried.statusText,
+      headers: retried.headers,
+      error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
+      retried: true,
+    };
+  }
+
+  if (retried.data.status === 'queued' || retried.data.status === 'in_progress') {
+    return {
+      ...(await pollBackgroundResponse(retried.data, url, request.headers, timeout, maxRetries)),
+      retried: true,
+    };
+  }
+
+  return {
+    data: retried.data,
+    status: retried.status,
+    statusText: retried.statusText,
+    headers: retried.headers,
+    retried: true,
   };
 }
 
@@ -508,32 +659,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
-    // The OpenAI SDK doesn't export a type for the /responses endpoint (it's a newer API).
-    // This interface matches the actual response structure from that endpoint.
-    interface OpenAIResponsesResponse {
-      output?: Array<{
-        content?: Array<{
-          type: string;
-          text?: string;
-          thinking?: { reasoning_text?: string };
-          refusal?: string;
-        }>;
-        tool_calls?: Array<{
-          id: string;
-          type: string;
-          function: { name: string; arguments: string };
-        }>;
-      }>;
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-      };
-      error?: {
-        code?: string;
-        message?: string;
-      };
-    }
-
     let data: OpenAIResponsesResponse;
     let status: number;
     let statusText: string;
@@ -633,6 +758,33 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             },
           },
         };
+      }
+
+      if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
+        const polled = await resolveBackgroundResponse(
+          data,
+          url,
+          request,
+          timeout,
+          config.maxRetries,
+          cached,
+          deleteFromCache,
+        );
+        if (polled.retried) {
+          cached = false;
+          deleteFromCache = undefined;
+        }
+        data = polled.data;
+        status = polled.status;
+        statusText = polled.statusText;
+        responseHeaders = polled.headers;
+        if (polled.error) {
+          await deleteFromCache?.();
+          return {
+            error: polled.error,
+            metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
+          };
+        }
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);

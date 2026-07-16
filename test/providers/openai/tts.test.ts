@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCache, isCacheEnabled } from '../../../src/cache';
+import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -10,6 +10,7 @@ vi.mock('../../../src/util/fetch/index.ts');
 const mockedFetch = vi.mocked(fetchWithRetries);
 const mockedGetCache = vi.mocked(getCache);
 const mockedIsCacheEnabled = vi.mocked(isCacheEnabled);
+const mockedGetScopedCacheKey = vi.mocked(getScopedCacheKey);
 
 function audioResponse(bytes = new Uint8Array([1, 2, 3, 4])) {
   return {
@@ -24,6 +25,7 @@ describe('OpenAiTtsProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedIsCacheEnabled.mockReturnValue(false);
+    mockedGetScopedCacheKey.mockImplementation((cacheKey) => cacheKey);
   });
 
   it.each([
@@ -185,6 +187,140 @@ describe('OpenAiTtsProvider', () => {
     expect(busted.cached).toBe(false);
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(cache.set).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps custom-header tenants isolated without using secret auth headers in the cache key', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      const tenant = (options?.headers as Record<string, string>)['X-Tenant-Id'];
+      return audioResponse(new TextEncoder().encode(`audio-for-${tenant}`));
+    });
+
+    const firstTenant = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'test-key',
+        headers: { 'X-Tenant-Id': 'tenant-a', Authorization: 'Bearer secret-a' },
+      },
+    });
+    const secondTenant = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'test-key',
+        headers: { 'X-Tenant-Id': 'tenant-b', Authorization: 'Bearer secret-b' },
+      },
+    });
+    const rotatedSecret = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'test-key',
+        headers: { 'X-Tenant-Id': 'tenant-a', Authorization: 'Bearer secret-c' },
+      },
+    });
+
+    const first = await firstTenant.callApi('same input');
+    const second = await secondTenant.callApi('same input');
+    const rotated = await rotatedSecret.callApi('same input');
+
+    expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe('audio-for-tenant-a');
+    expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe('audio-for-tenant-b');
+    expect(second.cached).toBe(false);
+    expect(rotated.cached).toBe(true);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces concurrent identical speech requests into one paid call', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return audioResponse();
+    });
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    const results = await Promise.all([
+      provider.callApi('same input'),
+      provider.callApi('same input'),
+      provider.callApi('same input'),
+    ]);
+
+    expect(mockedFetch).toHaveBeenCalledOnce();
+    expect(results.filter((result) => result.cached === false)).toHaveLength(1);
+    expect(results.filter((result) => result.cached === true)).toHaveLength(2);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(2);
+  });
+
+  it('does not coalesce concurrent speech requests across repeat cache namespaces', async () => {
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
+    let namespaceIndex = 0;
+    mockedGetScopedCacheKey.mockImplementation(
+      (cacheKey) => `${namespaceIndex++ === 0 ? 'repeat:0' : 'repeat:1'}:${cacheKey}`,
+    );
+    mockedFetch.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return audioResponse();
+    });
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    const results = await Promise.all([
+      provider.callApi('same input'),
+      provider.callApi('same input'),
+    ]);
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(results.every((result) => result.cached === false)).toBe(true);
+  });
+
+  it('does not share tenant-scoped custom voices without a non-secret tenant discriminator', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      const authorization = (options?.headers as Record<string, string>).Authorization;
+      return audioResponse(new TextEncoder().encode(`audio-for-${authorization}`));
+    });
+
+    const firstTenant = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'tenant-a',
+        voice: { id: 'voice-private' },
+        headers: { 'X-Tenant-Id': '' },
+      },
+    });
+    const secondTenant = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'tenant-b',
+        voice: { id: 'voice-private' },
+        headers: { 'X-Tenant-Id': '' },
+      },
+    });
+
+    const first = await firstTenant.callApi('same input');
+    const second = await secondTenant.callApi('same input');
+
+    expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer tenant-a',
+    );
+    expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer tenant-b',
+    );
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(false);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   const invalidCases: Array<

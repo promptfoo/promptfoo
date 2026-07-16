@@ -67,19 +67,24 @@ export function generateVideoCacheKey(params: {
         : undefined;
   let inputReference: typeof params.inputReference = params.inputReference || null;
 
-  if (rawReference?.startsWith('http://') || rawReference?.startsWith('https://')) {
-    const safeUrl = new URL(sanitizeUrl(rawReference));
-    for (const key of Array.from(safeUrl.searchParams.keys())) {
-      if (
-        /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i.test(
-          key,
-        )
-      ) {
-        safeUrl.searchParams.set(key, '[REDACTED]');
+  if (rawReference && /^https?:\/\//i.test(rawReference)) {
+    const safeReference = sanitizeUrl(rawReference);
+    try {
+      const safeUrl = new URL(safeReference);
+      for (const key of Array.from(safeUrl.searchParams.keys())) {
+        if (
+          /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|policy$|key-pair-id$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i.test(
+            key,
+          )
+        ) {
+          safeUrl.searchParams.set(key, '[REDACTED]');
+        }
       }
+      safeUrl.searchParams.sort();
+      inputReference = safeUrl.toString();
+    } catch {
+      inputReference = safeReference;
     }
-    safeUrl.searchParams.sort();
-    inputReference = safeUrl.toString();
   }
 
   const hashInput = JSON.stringify({

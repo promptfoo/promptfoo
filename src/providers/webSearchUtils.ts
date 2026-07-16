@@ -80,7 +80,8 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 
   // Chat Completions search models always retrieve from the web before responding.
   const isOpenAiChat =
-    id.startsWith('openai:') || provider.constructor?.name === 'OpenAiChatCompletionProvider';
+    !isOpenAiResponsesProvider(provider, id) &&
+    (id.startsWith('openai:') || provider.constructor?.name === 'OpenAiChatCompletionProvider');
   const chatModelId =
     'modelName' in provider && typeof provider.modelName === 'string' ? provider.modelName : id;
   if (

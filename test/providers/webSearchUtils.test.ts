@@ -207,6 +207,14 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
+    it('should not treat a Responses provider using a Chat-only search model as search-capable', () => {
+      const provider = new OpenAiResponsesProvider('gpt-5-search-api', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(false);
+    });
+
     it('should return false for a generic OpenAI provider whose id omits the responses prefix', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'openai:gpt-4.1',

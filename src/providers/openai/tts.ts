@@ -1,8 +1,8 @@
-import { getCache, isCacheEnabled } from '../../cache';
+import { getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TTS_MODELS } from './util';
@@ -17,6 +17,7 @@ import type { OpenAiSharedOptions } from './types';
 
 const VALID_RESPONSE_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
 const MAX_INPUT_CHARACTERS = 4096;
+const inFlightRequests = new Map<string, Promise<ProviderResponse>>();
 
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
@@ -96,6 +97,25 @@ function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000): Buffer {
   return Buffer.concat([header, pcmData]);
 }
 
+async function coalesceRequest(
+  cacheKey: string,
+  request: () => Promise<ProviderResponse>,
+): Promise<ProviderResponse> {
+  const inFlight = inFlightRequests.get(cacheKey);
+  if (inFlight) {
+    const result = await inFlight;
+    return result.error ? result : { ...result, cached: true, cost: 0 };
+  }
+
+  const pending = request();
+  inFlightRequests.set(cacheKey, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlightRequests.delete(cacheKey);
+  }
+}
+
 export class OpenAiTtsProvider extends OpenAiGenericProvider {
   static OPENAI_TTS_MODEL_NAMES = OPENAI_TTS_MODELS.map((model) => model.id);
 
@@ -147,8 +167,34 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
     const startedAt = Date.now();
     const url = `${this.getApiUrl()}/audio/speech`;
-    const cacheKey = `openai:tts:${sha256(JSON.stringify({ url: sanitizeUrl(url), body }))}`;
-    const cacheEnabled = isCacheEnabled();
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...this.getOpenAiRequestHeaders(config.headers),
+    };
+    const cacheHeaders = Object.fromEntries(
+      Object.entries(requestHeaders)
+        .filter(
+          ([key]) =>
+            !isSecretField(key) &&
+            !/(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(
+              key,
+            ),
+        )
+        .sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const cacheKey = `openai:tts:${sha256(
+      JSON.stringify({ url: sanitizeUrl(url), body, headers: cacheHeaders }),
+    )}`;
+    const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
+      ([key, value]) =>
+        /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
+        typeof value === 'string' &&
+        value.trim().length > 0,
+    );
+    const cacheEnabled =
+      isCacheEnabled() &&
+      !(typeof config.voice === 'object' && config.voice !== null && !hasTenantDiscriminator);
 
     if (cacheEnabled && !this.shouldBustCache(context)) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);
@@ -157,54 +203,56 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       }
     }
 
-    try {
-      const response = await fetchWithRetries(
-        url,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
+    const requestSpeech = async (): Promise<ProviderResponse> => {
+      try {
+        const response = await fetchWithRetries(
+          url,
+          {
+            method: 'POST',
+            headers: requestHeaders,
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-        config.maxRetries,
-      );
+          getRequestTimeoutMs(),
+          config.maxRetries,
+        );
 
-      if (!response.ok) {
-        const rawError = await response.text();
-        let message = response.statusText;
-        try {
-          message = JSON.parse(rawError)?.error?.message || message;
-        } catch {
-          message = rawError || message;
+        if (!response.ok) {
+          const rawError = await response.text();
+          let message = response.statusText;
+          try {
+            message = JSON.parse(rawError)?.error?.message || message;
+          } catch {
+            message = rawError || message;
+          }
+          return { error: `API error ${response.status}: ${message}` };
         }
-        return { error: `API error ${response.status}: ${message}` };
+
+        const audioBytes = Buffer.from(await response.arrayBuffer());
+        const isPcm = config.response_format === 'pcm';
+        const audio = (isPcm ? convertPcm16ToWav(audioBytes) : audioBytes).toString('base64');
+        const isHd = model === 'tts-1-hd' || model === 'tts-1-hd-1106';
+        const isLegacy = model === 'tts-1' || model === 'tts-1-1106' || isHd;
+
+        const result: ProviderResponse = {
+          output: `Generated ${characterCount} characters of speech`,
+          audio: { data: audio, format: isPcm ? 'wav' : config.response_format || 'mp3' },
+          ...(isLegacy ? { cost: (characterCount * (isHd ? 30 : 15)) / 1e6 } : {}),
+          cached: false,
+          latencyMs: Date.now() - startedAt,
+        };
+
+        if (cacheEnabled) {
+          await cacheResponse(cacheKey, result);
+        }
+
+        return result;
+      } catch (error) {
+        return { error: `API call error: ${String(error)}` };
       }
+    };
 
-      const audioBytes = Buffer.from(await response.arrayBuffer());
-      const isPcm = config.response_format === 'pcm';
-      const audio = (isPcm ? convertPcm16ToWav(audioBytes) : audioBytes).toString('base64');
-      const isHd = model === 'tts-1-hd' || model === 'tts-1-hd-1106';
-      const isLegacy = model === 'tts-1' || model === 'tts-1-1106' || isHd;
-
-      const result: ProviderResponse = {
-        output: `Generated ${characterCount} characters of speech`,
-        audio: { data: audio, format: isPcm ? 'wav' : config.response_format || 'mp3' },
-        ...(isLegacy ? { cost: (characterCount * (isHd ? 30 : 15)) / 1e6 } : {}),
-        cached: false,
-        latencyMs: Date.now() - startedAt,
-      };
-
-      if (cacheEnabled) {
-        await cacheResponse(cacheKey, result);
-      }
-
-      return result;
-    } catch (error) {
-      return { error: `API call error: ${String(error)}` };
-    }
+    return cacheEnabled && !this.shouldBustCache(context)
+      ? coalesceRequest(getScopedCacheKey(cacheKey), requestSpeech)
+      : requestSpeech();
   }
 }
