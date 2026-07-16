@@ -378,15 +378,17 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
                 },
               }
             : config;
-        set({ config: normalizedConfig, providerType });
         const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
-        targetConfigValidation.clearTargetConfigValidation();
         if (!isPlainObject(normalizedConfig.target?.config)) {
-          targetConfigValidation.setTargetConfigDraft(
-            JSON.stringify(normalizedConfig.target?.config) ?? 'null',
-          );
+          const targetConfigDraft = JSON.stringify(normalizedConfig.target?.config) ?? 'null';
+          targetConfigValidation.clearTargetConfigValidation();
+          targetConfigValidation.setTargetConfigDraft(targetConfigDraft);
           targetConfigValidation.setTargetConfigError('Configuration must be a JSON object');
+          set({ config: normalizedConfig, providerType });
+          return;
         }
+        set({ config: normalizedConfig, providerType });
+        targetConfigValidation.clearTargetConfigValidation();
       },
       resetConfig: () => {
         set({

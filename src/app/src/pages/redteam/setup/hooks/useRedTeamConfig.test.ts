@@ -91,6 +91,191 @@ describe('useRedTeamConfig', () => {
     );
   });
 
+  it('blocks an imported non-object foundation target before its config persist can fail', async () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: { temperature: 0.3 },
+      },
+    });
+    const persisted = window.localStorage.getItem('redTeamConfig');
+    const clearMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'openai:gpt-5',
+            label: 'Imported foundation target',
+            config: [] as unknown as Config['target']['config'],
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+
+      expect(useRedTeamConfig.getState().config.target.config).toEqual([]);
+      expect(window.localStorage.getItem('redTeamConfig')).toBe(persisted);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(invalidMarker).toMatch(/^non-object-json:[a-z0-9-]+$/);
+      expect(invalidMarker).not.toBe(clearMarker);
+    } finally {
+      setItem.mockRestore();
+    }
+
+    vi.resetModules();
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    expect(reloadedValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+  });
+
+  it('rotates the durable marker for repeated non-object target imports', () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: [] as unknown as Config['target']['config'],
+      },
+    });
+    const firstMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+    expect(firstMarker).toMatch(/^non-object-json:[a-z0-9-]+$/);
+
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Second foundation target',
+        config: null as unknown as Config['target']['config'],
+      },
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('null');
+    const secondMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+    expect(secondMarker).toMatch(/^non-object-json:[a-z0-9-]+$/);
+    expect(secondMarker).not.toBe(firstMarker);
+  });
+
+  it.each([
+    'BigInt',
+    'cyclic array',
+  ] as const)('keeps an existing invalid target blocked when a new %s import cannot be serialized', (invalidType) => {
+    const cyclicConfig: unknown[] = [];
+    cyclicConfig.push(cyclicConfig);
+    const invalidConfig = invalidType === 'BigInt' ? BigInt(1) : cyclicConfig;
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: [] as unknown as Config['target']['config'],
+      },
+    });
+    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+
+    expect(() =>
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Unserializable foundation target',
+          config: invalidConfig as unknown as Config['target']['config'],
+        },
+      }),
+    ).toThrow(TypeError);
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+  });
+
+  it('only clears a blocked target after a valid full import successfully persists', () => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: [] as unknown as Config['target']['config'],
+      },
+    });
+    const persisted = window.localStorage.getItem('redTeamConfig');
+    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'openai:gpt-5',
+            label: 'Valid foundation target',
+            config: { temperature: 0.3 },
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+      expect(window.localStorage.getItem('redTeamConfig')).toBe(persisted);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+    } finally {
+      setItem.mockRestore();
+    }
+
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Valid foundation target',
+        config: { temperature: 0.4 },
+      },
+    });
+
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual({ temperature: 0.4 });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/,
+    );
+  });
+
   it('clears an imported non-object foundation target only after a valid structured replacement persists', () => {
     useRedTeamConfig.getState().setFullConfig({
       ...useRedTeamConfig.getState().config,
