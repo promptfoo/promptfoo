@@ -452,8 +452,8 @@ describe('calculateAzureCost', () => {
       id: 'gpt-realtime-mini-2025-10-06',
       input: 0.6,
       cachedText: 0.06,
-      cachedAudio: 0.3,
-      cachedImage: 0.08,
+      cachedAudio: 0.06,
+      cachedImage: 0.06,
       output: 2.4,
       audioOutput: 20,
     },
@@ -462,7 +462,7 @@ describe('calculateAzureCost', () => {
       input: 4,
       cachedText: 4,
       cachedAudio: 4,
-      cachedImage: 0.5,
+      cachedImage: 4,
       output: 16,
       audioOutput: 64,
     },
@@ -500,7 +500,7 @@ describe('calculateAzureCost', () => {
   it('does not misclassify cached realtime audio as cached text', () => {
     expect(
       calculateAzureCost('gpt-realtime-mini-2025-10-06', {}, 1_000, 0, 500, 800, 0, 0, 500),
-    ).toBeCloseTo((200 * 0.6 + 300 * 10 + 500 * 0.3) / 1e6, 12);
+    ).toBeCloseTo((200 * 0.6 + 300 * 10 + 500 * 0.06) / 1e6, 12);
   });
 
   it('calculates cost for Claude Fable 5', () => {

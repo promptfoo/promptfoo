@@ -87,7 +87,13 @@ const formatContentMessages = (
     ) {
       contentMessages.push({ client_content: { turn_complete: true } } as any);
     }
-    contentMessages.push(...textMessages);
+    if (textMessages.length > 0) {
+      contentMessages.push({
+        realtime_input: {
+          text: textMessages.map((message) => message.realtime_input.text).join('\n'),
+        },
+      } as any);
+    }
     return contentMessages;
   }
 
@@ -373,14 +379,17 @@ export class GoogleLiveProvider implements ApiProvider {
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
-      const requestedText = config.generationConfig?.response_modalities?.includes('text') ?? false;
+      const configuredResponseModalities = config.generationConfig?.response_modalities?.map(
+        (modality) => modality.toUpperCase(),
+      );
+      const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities = usesRealtimeTextInput
-        ? config.generationConfig?.response_modalities?.filter((modality) => modality !== 'text')
-        : config.generationConfig?.response_modalities;
+        ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')
+        : configuredResponseModalities;
       const effectiveResponseModalities =
-        usesRealtimeTextInput && !responseModalities?.length ? ['audio'] : responseModalities;
-      const isTextExpected = effectiveResponseModalities?.includes('text') ?? false;
-      const isAudioExpected = effectiveResponseModalities?.includes('audio') ?? false;
+        usesRealtimeTextInput && !responseModalities?.length ? ['AUDIO'] : responseModalities;
+      const isTextExpected = effectiveResponseModalities?.includes('TEXT') ?? false;
+      const isAudioExpected = effectiveResponseModalities?.includes('AUDIO') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;

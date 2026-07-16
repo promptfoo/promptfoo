@@ -239,7 +239,7 @@ describe('GoogleLiveProvider', () => {
     );
     expect(sentMessages[0]).toMatchObject({
       setup: {
-        generation_config: { response_modalities: ['audio'] },
+        generation_config: { response_modalities: ['AUDIO'] },
         output_audio_transcription: {},
       },
     });
@@ -314,6 +314,42 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessages.slice(1)).toEqual([
       { realtime_input: { audio: { mime_type: 'audio/pcm', data: 'YXVkaW8=' } } },
       { realtime_input: { audio_stream_end: true } },
+    ]);
+  });
+
+  it('should combine multiple Gemini 3.1 Live text parts into one turn-ending input', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['TEXT'] },
+        timeoutMs: 500,
+        apiKey: 'key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'combined');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        { role: 'user', parts: [{ text: 'First clause.' }, { text: 'Second clause.' }] },
+      ]),
+    );
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        generation_config: { response_modalities: ['AUDIO'] },
+        output_audio_transcription: {},
+      },
+    });
+    expect(sentMessages.slice(1)).toEqual([
+      { realtime_input: { text: 'First clause.\nSecond clause.' } },
     ]);
   });
 

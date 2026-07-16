@@ -510,6 +510,7 @@ describe('AzureResponsesProvider', () => {
       const result = await provider.callApi('What is 2+2?');
 
       expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
     });
 
     it('applies priority pricing after Responses flattens passthrough fields', async () => {

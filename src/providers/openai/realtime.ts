@@ -1316,21 +1316,55 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         );
       }
 
-      const cost = calculateOpenAIUsageCost(
-        this.modelName,
-        this.config,
-        result.metadata?.usage ?? {
-          prompt_tokens: result.tokenUsage?.prompt,
-          completion_tokens: result.tokenUsage?.completion,
-          total_tokens: result.tokenUsage?.total,
-        },
-        {
+      const usageEvents: any[] = Array.isArray(result.metadata?.usageEvents)
+        ? result.metadata.usageEvents
+        : [];
+      const tokenUsage =
+        usageEvents.length > 0
+          ? {
+              ...result.tokenUsage,
+              total: usageEvents.reduce((total, usage) => total + (usage?.total_tokens ?? 0), 0),
+              prompt: usageEvents.reduce(
+                (total, usage) => total + (usage?.input_tokens ?? usage?.prompt_tokens ?? 0),
+                0,
+              ),
+              completion: usageEvents.reduce(
+                (total, usage) => total + (usage?.output_tokens ?? usage?.completion_tokens ?? 0),
+                0,
+              ),
+              cached: usageEvents.reduce(
+                (total, usage) =>
+                  total +
+                  (usage?.input_tokens_details?.cached_tokens ??
+                    usage?.input_token_details?.cached_tokens ??
+                    usage?.prompt_tokens_details?.cached_tokens ??
+                    0),
+                0,
+              ),
+              numRequests: usageEvents.length,
+            }
+          : result.tokenUsage;
+      const billingUsages: any[] =
+        usageEvents.length > 0
+          ? usageEvents
+          : [
+              result.metadata?.usage ?? {
+                prompt_tokens: tokenUsage?.prompt,
+                completion_tokens: tokenUsage?.completion,
+                total_tokens: tokenUsage?.total,
+              },
+            ];
+      const cost = billingUsages.reduce<number | undefined>((total, usage) => {
+        const usageCost = calculateOpenAIUsageCost(this.modelName, this.config, usage, {
           cachedResponse: result.cached,
-        },
-      );
+        });
+        return typeof total === 'number' && typeof usageCost === 'number'
+          ? total + usageCost
+          : undefined;
+      }, 0);
       return {
         output: finalOutput,
-        tokenUsage: result.tokenUsage,
+        tokenUsage,
         cached: result.cached,
         cost,
         metadata,

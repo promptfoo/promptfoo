@@ -826,7 +826,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: promptTokenCount || 0,
+          prompt: (promptTokenCount || 0) + (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
           completion: completionTokenCount || 0,
           ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
             cached: lastData.usageMetadata.cachedContentTokenCount,

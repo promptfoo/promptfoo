@@ -47,6 +47,9 @@ function hasSameRealtimeConnection(
 function countRealtimeInputImages(prompt: string): number {
   try {
     const parsed = JSON.parse(prompt) as unknown;
+    const lastUserMessage = Array.isArray(parsed)
+      ? [...parsed].reverse().find((message) => message?.role === 'user')
+      : parsed;
     const count = (value: unknown): number => {
       if (Array.isArray(value)) {
         return value.reduce<number>((total, item) => total + count(item), 0);
@@ -60,7 +63,7 @@ function countRealtimeInputImages(prompt: string): number {
         Object.values(record).reduce<number>((total, item) => total + count(item), 0)
       );
     };
-    return count(parsed);
+    return count(lastUserMessage);
   } catch {
     return 0;
   }
@@ -68,6 +71,7 @@ function countRealtimeInputImages(prompt: string): number {
 
 export class AzureRealtimeProvider extends AzureGenericProvider {
   private readonly realtimeProviders = new Map<string, OpenAiRealtimeProvider>();
+  private nextStatelessProviderId = 0;
   private registeredForShutdown = false;
 
   constructor(deploymentName: string, options: ProviderOptions = {}) {
@@ -151,7 +155,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const promptId = context?.prompt ? generateIdFromPrompt(context.prompt) : 'default';
     const realtimeProviderKey = hasConversationId
       ? `prompt:${promptId}:conversation:${conversationId}`
-      : 'stateless';
+      : `stateless:${++this.nextStatelessProviderId}`;
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
 
     if (realtimeProvider && !hasSameRealtimeConnection(realtimeProvider.config, realtimeConfig)) {

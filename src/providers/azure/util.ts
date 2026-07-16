@@ -196,10 +196,10 @@ export function calculateAzureCost(
     ((textInputTokens - cachedTextTokens) * inputCost +
       cachedTextTokens * cacheReadCost +
       (audioInputTokens - cachedAudioTokens) * (model.cost.audioInput ?? inputCost) +
-      cachedAudioTokens * (model.cost.cacheReadAudio ?? cacheReadCost) +
+      cachedAudioTokens * cacheReadCost +
       (imageInputTokens - cachedImageTokens) *
         (model.cost.imageInputPerImage === undefined ? (model.cost.imageInput ?? inputCost) : 0) +
-      cachedImageTokens * (model.cost.cacheReadImage ?? cacheReadCost) +
+      cachedImageTokens * cacheReadCost +
       inputImages * (model.cost.imageInputPerImage ?? 0) +
       (completionTokens - audioOutputTokens - imageOutputTokens) * outputCost +
       audioOutputTokens * (model.cost.audioOutput ?? outputCost) +

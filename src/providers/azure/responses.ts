@@ -334,6 +334,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
-    return this.processor.processResponseOutput(data, body, cached);
+    const result = await this.processor.processResponseOutput(data, body, cached);
+    const responseUsage = (data as any)?.usage;
+    const cachedInputTokens =
+      responseUsage?.prompt_tokens_details?.cached_tokens ??
+      responseUsage?.input_tokens_details?.cached_tokens;
+    if (result.tokenUsage && cachedInputTokens !== undefined) {
+      result.tokenUsage.cached = cachedInputTokens;
+    }
+    return result;
   }
 }

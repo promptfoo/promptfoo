@@ -1305,11 +1305,11 @@ describe('OpenAI Realtime Provider', () => {
         { total_tokens: 11, input_tokens: 7, output_tokens: 4 },
       ]);
       expect(response.tokenUsage).toEqual({
-        total: 11,
-        prompt: 7,
-        completion: 4,
+        total: 19,
+        prompt: 12,
+        completion: 7,
         cached: 0,
-        numRequests: 1,
+        numRequests: 2,
       });
     });
 

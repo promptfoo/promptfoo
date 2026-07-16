@@ -619,7 +619,11 @@ export class GoogleProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: lastData.usageMetadata?.promptTokenCount,
+            prompt:
+              lastData.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : lastData.usageMetadata.promptTokenCount +
+                  (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,

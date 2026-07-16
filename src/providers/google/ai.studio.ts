@@ -248,7 +248,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: data.usageMetadata?.promptTokenCount,
+            prompt:
+              data.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : data.usageMetadata.promptTokenCount +
+                  (data.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
@@ -460,7 +464,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: lastData.usageMetadata?.promptTokenCount,
+            prompt:
+              lastData.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : lastData.usageMetadata.promptTokenCount +
+                  (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,

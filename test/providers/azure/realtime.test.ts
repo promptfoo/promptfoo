@@ -174,7 +174,7 @@ describe('AzureRealtimeProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.cost).toBeCloseTo(
-      (930 * 0.6 + 70 * 0.06 + 20 * 0.3 + 10 * 0.08 + 20 * 2.4 + 10 * 20) / 1e6,
+      (930 * 0.6 + 70 * 0.06 + 20 * 0.06 + 10 * 0.06 + 20 * 2.4 + 10 * 20) / 1e6,
       12,
     );
     expect(result.tokenUsage).toEqual({
@@ -268,7 +268,7 @@ describe('AzureRealtimeProvider', () => {
 
     await provider.shutdown();
 
-    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockCleanup).toHaveBeenCalledTimes(2);
     expect(mockUnregister).toHaveBeenCalledWith(provider);
   });
 
@@ -326,6 +326,30 @@ describe('AzureRealtimeProvider', () => {
     );
 
     expect(result.cost).toBeCloseTo(5 / 1e6, 12);
+  });
+
+  it('does not charge a historical realtime image that is not sent on the final user turn', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      output: 'text only',
+      tokenUsage: { prompt: 10, completion: 0, total: 10 },
+      metadata: { usage: { input_tokens: 10, output_tokens: 0 } },
+    });
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    const result = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [{ type: 'input_image', image_url: 'data:image/jpeg;base64,aQ==' }],
+        },
+        { role: 'assistant', content: 'An image.' },
+        { role: 'user', content: 'Thanks.' },
+      ]),
+    );
+
+    expect(result.cost).toBeCloseTo((10 * 4) / 1e6, 12);
   });
 
   it('isolates persistent realtime delegates by conversation ID', async () => {
