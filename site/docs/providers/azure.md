@@ -148,7 +148,7 @@ The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their date
 
 ### Azure Realtime API
 
-Use `azure:realtime:<deployment name>` for current GA Realtime deployments. Promptfoo connects to the Azure GA WebSocket endpoint (`/openai/v1/realtime?model=<deployment name>`), forwards API-key or Microsoft Entra authentication, and reports separate text, audio, image, and cached-input token costs. Explicit HTTP proxy base URLs are also supported.
+Use `azure:realtime:<deployment name>` for current GA Realtime deployments. Promptfoo connects to the Azure GA WebSocket endpoint (`/openai/v1/realtime?model=<deployment name>`), forwards API-key or Microsoft Entra authentication, isolates persistent sessions by `conversationId`, and reports separate text, audio, image, and cached-input token costs. Explicit HTTP proxy base URLs are also supported.
 
 ```yaml
 providers:

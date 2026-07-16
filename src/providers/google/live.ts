@@ -54,7 +54,7 @@ const formatContentMessages = (
       );
     }
 
-    return parts.map((part) => {
+    const contentMessages = parts.map((part) => {
       const userPart = part as {
         text?: string;
         inlineData?: { mimeType: string; data: string };
@@ -87,6 +87,10 @@ const formatContentMessages = (
       }
       throw new Error('Unsupported part in Google Live realtime input.');
     });
+    if (contentMessages.some((message) => 'audio' in message.realtime_input)) {
+      contentMessages.push({ realtime_input: { audio_stream_end: true } } as any);
+    }
+    return contentMessages;
   }
 
   if (parts.length !== 1) {

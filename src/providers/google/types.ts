@@ -133,6 +133,10 @@ export interface CompletionOptions {
   /** Custom per-token image input cost override. */
   imageInputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
+  /** Gemini inference service tier. */
+  service_tier?: 'standard' | 'priority' | 'flex';
+  /** Additional top-level Gemini request fields. */
+  passthrough?: Record<string, unknown>;
   projectId?: string;
   region?: string;
   publisher?: string;

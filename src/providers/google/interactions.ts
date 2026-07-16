@@ -141,6 +141,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(config.passthrough || {}),
       background: false,
       stream: false,
     };

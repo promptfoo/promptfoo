@@ -241,7 +241,7 @@ describe('calculateAzureCost', () => {
       audioInput: 10,
       audioOutput: 20,
     },
-    { id: 'gpt-audio', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-audio', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-audio-2025-08-28', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
     { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
     { id: 'gpt-audio-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
@@ -290,7 +290,7 @@ describe('calculateAzureCost', () => {
       audioInput: 40,
       audioOutput: 80,
     },
-    { id: 'gpt-4o-mini-audio-preview', input: 0.15, output: 0.6, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-4o-mini-audio-preview', input: 0.15, output: 0.6, audioInput: 10, audioOutput: 20 },
     {
       id: 'gpt-4o-mini-audio-preview-2024-12-17',
       input: 2.5,
@@ -317,11 +317,69 @@ describe('calculateAzureCost', () => {
     ).toBeCloseTo((1_000 * 40 + 500 * 80) / 1e6, 12);
   });
 
+  it('uses the discounted cached-text rate for the dated gpt-realtime-mini snapshot', () => {
+    expect(calculateAzureCost('gpt-realtime-mini-2025-10-06', {}, 1_000, 0, 1_000)).toBeCloseTo(
+      1_000 * (0.06 / 1e6),
+      12,
+    );
+  });
+
+  it('does not apply the dated cached-text discount to the undated gpt-realtime-mini alias', () => {
+    expect(calculateAzureCost('gpt-realtime-mini', {}, 1_000, 0, 1_000)).toBeCloseTo(
+      1_000 * (0.6 / 1e6),
+      12,
+    );
+  });
+
+  it('uses the discounted cached-text rate for the undated gpt-realtime alias', () => {
+    expect(calculateAzureCost('gpt-realtime', {}, 1_000, 0, 1_000)).toBeCloseTo(
+      1_000 * (0.4 / 1e6),
+      12,
+    );
+  });
+
   it.each([
-    'gpt-realtime-mini',
-    'gpt-realtime-mini-2025-10-06',
-  ])('uses the discounted cached-text rate for %s', (id) => {
-    expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(1_000 * (0.06 / 1e6), 12);
+    ['gpt-5', 0.125],
+    ['gpt-5.5', 0.5],
+    ['gpt-5.4', 0.25],
+    ['gpt-5.2-2025-12-11', 0.175],
+    ['gpt-5.1-codex-mini-2025-11-13', 0.025],
+    ['gpt-4.1', 0.5],
+    ['gpt-4.1-mini', 0.1],
+    ['gpt-4.1-nano', 0.025],
+    ['gpt-4o', 1.25],
+    ['o4-mini', 0.275],
+    ['o3-mini', 0.55],
+    ['claude-opus-4-6-20260205', 0.5],
+  ])('uses the catalog cached-input rate for %s', (id, cachedInput) => {
+    expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(
+      (1_000 * cachedInput) / 1e6,
+      12,
+    );
+  });
+
+  it('uses cached and priority pricing for existing GPT-5 models', () => {
+    expect(
+      calculateAzureCost(
+        'gpt-5.5',
+        { passthrough: { service_tier: 'priority' } },
+        2_000,
+        1_000,
+        500,
+      ),
+    ).toBeCloseTo(0.0755, 12);
+    expect(
+      calculateAzureCost('gpt-5.4', { service_tier: 'priority' } as any, 272_001, 1_000, 1_000),
+    ).toBeCloseTo((2 * (271_001 * 5 + 1_000 * 0.5 + 1_000 * 22.5)) / 1e6, 12);
+    expect(
+      calculateAzureCost(
+        'gpt-5.1-codex-mini-2025-11-13',
+        { passthrough: { service_tier: 'priority' } },
+        2_000,
+        1_000,
+        500,
+      ),
+    ).toBeCloseTo((1.8 * (1_500 * 0.25 + 500 * 0.025 + 1_000 * 2)) / 1e6, 12);
   });
 
   it.each([

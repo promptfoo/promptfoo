@@ -1036,6 +1036,42 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.0007655, 10);
     });
 
+    it('should price cached and audio usage for the standard Gemini provider', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash', {
+        config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_500,
+            cachedContentTokenCount: 500,
+            promptTokensDetails: [
+              { modality: 'TEXT', tokenCount: 600 },
+              { modality: 'AUDIO', tokenCount: 400 },
+            ],
+            cacheTokensDetails: [
+              { modality: 'TEXT', tokenCount: 200 },
+              { modality: 'AUDIO', tokenCount: 300 },
+            ],
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
+      expect(result.cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+    });
+
     it('should not double-count when thoughtsTokenCount is zero', async () => {
       const provider = new GoogleProvider('gemini-2.5-flash', {
         config: { apiKey: 'test-key' },

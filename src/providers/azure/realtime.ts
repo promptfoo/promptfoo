@@ -23,7 +23,7 @@ function getAzureRealtimeBaseUrl(baseUrl: string): string {
 }
 
 export class AzureRealtimeProvider extends AzureGenericProvider {
-  private realtimeProvider?: OpenAiRealtimeProvider;
+  private readonly realtimeProviders = new Map<string, OpenAiRealtimeProvider>();
   private registeredForShutdown = false;
 
   constructor(deploymentName: string, options: ProviderOptions = {}) {
@@ -60,13 +60,21 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       },
     };
 
-    if (this.realtimeProvider) {
-      this.realtimeProvider.config = realtimeConfig;
+    const conversationId = context?.test?.metadata?.conversationId;
+    const realtimeProviderKey =
+      typeof conversationId === 'string' || typeof conversationId === 'number'
+        ? `conversation:${conversationId}`
+        : 'stateless';
+    let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
+
+    if (realtimeProvider) {
+      realtimeProvider.config = realtimeConfig;
     } else {
-      this.realtimeProvider = new OpenAiRealtimeProvider(this.deploymentName, {
+      realtimeProvider = new OpenAiRealtimeProvider(this.deploymentName, {
         config: realtimeConfig,
         env: this.env,
       });
+      this.realtimeProviders.set(realtimeProviderKey, realtimeProvider);
     }
 
     if (!this.registeredForShutdown) {
@@ -74,7 +82,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       this.registeredForShutdown = true;
     }
 
-    const result = await this.realtimeProvider.callApi(prompt, context, callApiOptions);
+    const result = await realtimeProvider.callApi(prompt, context, callApiOptions);
     const reportedUsageEvents = result.metadata?.usageEvents;
     const usageEvents: any[] =
       Array.isArray(reportedUsageEvents) && reportedUsageEvents.length > 0
@@ -154,7 +162,10 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
   }
 
   cleanup(): void {
-    this.realtimeProvider?.cleanup();
+    for (const realtimeProvider of this.realtimeProviders.values()) {
+      realtimeProvider.cleanup();
+    }
+    this.realtimeProviders.clear();
     if (this.registeredForShutdown) {
       providerRegistry.unregister(this);
       this.registeredForShutdown = false;

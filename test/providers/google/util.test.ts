@@ -16,6 +16,7 @@ import logger from '../../../src/logger';
 import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   clearCachedAuth,
   collectGroundingMetadata,
   geminiFormatAndSystemInstructions,
@@ -2727,6 +2728,92 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
+    });
+
+    it('should apply cached, audio, and priority pricing for Gemini 3.5 Flash', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { passthrough: { service_tier: 'priority' } },
+        1_000,
+        500,
+        false,
+        400,
+        0,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+    });
+
+    it('should apply long-context cached and priority pricing for Gemini 3.1 Pro', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-pro-preview',
+        { service_tier: 'priority' } as any,
+        250_001,
+        1_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000,
+      );
+
+      expect(cost).toBeCloseTo((1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6, 12);
+    });
+
+    it('should use the Gemini 3.1 Flash-Lite priority audio-input rate', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        false,
+        200,
+        0,
+        undefined,
+        0,
+        500,
+        100,
+      );
+
+      expect(cost).toBeCloseTo(
+        (400 * 0.45 + 400 * 0.045 + 100 * 0.45 + 100 * 0.045 + 100 * 2.7) / 1e6,
+        12,
+      );
+    });
+
+    it('should forward standard Gemini usage metadata into modality-aware billing', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash',
+        { passthrough: { service_tier: 'priority' } },
+        1_000,
+        500,
+        false,
+        {
+          promptTokensDetails: [
+            { modality: 'TEXT', tokenCount: 600 },
+            { modality: 'AUDIO', tokenCount: 400 },
+          ],
+          cacheTokensDetails: [
+            { modality: 'TEXT', tokenCount: 200 },
+            { modality: 'AUDIO', tokenCount: 300 },
+          ],
+          cachedContentTokenCount: 500,
+          candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 500 }],
+        },
+      );
+
+      expect(cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
     });
 
     it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {

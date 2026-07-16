@@ -304,17 +304,91 @@ export function calculateGoogleCost(
   const cachedAudioInputCost =
     config.audioInputCost ?? config.audioCost ?? modelCost.cacheRead ?? audioInputCost;
   const cachedImageInputCost = config.imageInputCost ?? modelCost.cacheRead ?? imageInputCost;
+  const serviceTier =
+    (config as ProviderConfig & { service_tier?: unknown }).service_tier ??
+    (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
+  const priorityMultiplier = serviceTier === 'priority' ? (modelCost.priorityMultiplier ?? 1) : 1;
+  const priorityAdjustedAudioInputCost =
+    serviceTier === 'priority' &&
+    config.audioInputCost === undefined &&
+    config.audioCost === undefined &&
+    modelCost.priorityAudioInput !== undefined
+      ? modelCost.priorityAudioInput / priorityMultiplier
+      : audioInputCost;
 
   return (
-    (textInputTokens - cachedTextTokens) * inputCost +
-    cachedTextTokens * cachedInputCost +
-    (audioInputTokens - cachedAudioTokens) * audioInputCost +
-    cachedAudioTokens * cachedAudioInputCost +
-    (imageInputTokens - cachedImageTokens) * imageInputCost +
-    cachedImageTokens * cachedImageInputCost +
-    (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
-    audioOutputTokens * audioOutputCost +
-    videoOutputTokens * videoOutputCost
+    ((textInputTokens - cachedTextTokens) * inputCost +
+      cachedTextTokens * cachedInputCost +
+      (audioInputTokens - cachedAudioTokens) * priorityAdjustedAudioInputCost +
+      cachedAudioTokens * cachedAudioInputCost +
+      (imageInputTokens - cachedImageTokens) * imageInputCost +
+      cachedImageTokens * cachedImageInputCost +
+      (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
+      audioOutputTokens * audioOutputCost +
+      videoOutputTokens * videoOutputCost) *
+    priorityMultiplier
+  );
+}
+
+const getGoogleModalityTokenCount = (details: unknown, modalities: string[]): number => {
+  if (!Array.isArray(details)) {
+    return 0;
+  }
+  return details.reduce((total, detail) => {
+    const tokenCount = detail?.tokenCount ?? detail?.token_count;
+    return modalities.includes(detail?.modality) &&
+      typeof tokenCount === 'number' &&
+      Number.isFinite(tokenCount)
+      ? total + Math.max(tokenCount, 0)
+      : total;
+  }, 0);
+};
+
+export function calculateGoogleCostFromUsage(
+  modelName: string,
+  config: ProviderConfig,
+  promptTokens: number | undefined,
+  completionTokens: number | undefined,
+  isVertexMode: boolean,
+  usageMetadata: any,
+): number | undefined {
+  const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
+  const toolPromptDetails =
+    usageMetadata?.toolUsePromptTokensDetails ?? usageMetadata?.tool_use_prompt_tokens_details;
+  const responseDetails =
+    usageMetadata?.candidatesTokensDetails ??
+    usageMetadata?.responseTokensDetails ??
+    usageMetadata?.candidates_tokens_details ??
+    usageMetadata?.response_tokens_details;
+  const cacheDetails = usageMetadata?.cacheTokensDetails ?? usageMetadata?.cache_tokens_details;
+  const toolPromptTokens =
+    usageMetadata?.toolUsePromptTokenCount ?? usageMetadata?.tool_use_prompt_token_count ?? 0;
+  const promptTokensForCost =
+    typeof promptTokens === 'number' &&
+    typeof toolPromptTokens === 'number' &&
+    Number.isFinite(toolPromptTokens)
+      ? promptTokens + Math.max(toolPromptTokens, 0)
+      : promptTokens;
+  const audioPromptTokens =
+    getGoogleModalityTokenCount(promptDetails, ['AUDIO']) +
+    getGoogleModalityTokenCount(toolPromptDetails, ['AUDIO']);
+  const imagePromptTokens =
+    getGoogleModalityTokenCount(promptDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']) +
+    getGoogleModalityTokenCount(toolPromptDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']);
+
+  return calculateGoogleCost(
+    modelName,
+    config,
+    promptTokensForCost,
+    completionTokens,
+    isVertexMode,
+    audioPromptTokens,
+    getGoogleModalityTokenCount(responseDetails, ['AUDIO']),
+    getGoogleModalityTokenCount(responseDetails, ['VIDEO']),
+    imagePromptTokens,
+    usageMetadata?.cachedContentTokenCount ?? usageMetadata?.cached_content_token_count,
+    getGoogleModalityTokenCount(cacheDetails, ['AUDIO']),
+    getGoogleModalityTokenCount(cacheDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']),
   );
 }
 
@@ -361,6 +435,13 @@ interface GeminiUsageMetadata {
   candidatesTokenCount?: number;
   totalTokenCount: number;
   thoughtsTokenCount?: number;
+  cachedContentTokenCount?: number;
+  toolUsePromptTokenCount?: number;
+  promptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  toolUsePromptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  candidatesTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  responseTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  cacheTokensDetails?: Array<{ modality: string; tokenCount: number }>;
 }
 
 export interface GeminiErrorResponse {

@@ -9,6 +9,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
@@ -251,6 +252,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: data.usageMetadata.cachedContentTokenCount,
+            }),
             ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
@@ -268,11 +272,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
             config,
             data.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            data.usageMetadata,
           );
 
       return {
@@ -338,6 +344,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(config.passthrough || {}),
     };
 
     if (config.responseSchema) {
@@ -454,6 +462,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: lastData.usageMetadata.cachedContentTokenCount,
+            }),
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -472,11 +483,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
             config,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            lastData.usageMetadata,
           );
 
       return {

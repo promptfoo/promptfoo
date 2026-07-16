@@ -42,6 +42,8 @@ export interface ProviderConfig {
   audioOutputCost?: number;
   videoOutputCost?: number;
   imageInputCost?: number;
+  service_tier?: string | null;
+  passthrough?: object;
 }
 
 /**

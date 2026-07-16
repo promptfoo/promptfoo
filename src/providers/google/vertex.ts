@@ -27,7 +27,7 @@ import {
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
-  calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -573,6 +573,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(config.passthrough || {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
       ...(config.modelArmor &&
@@ -824,6 +826,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: promptTokenCount || 0,
           completion: completionTokenCount || 0,
+          ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+            cached: lastData.usageMetadata.cachedContentTokenCount,
+          }),
           ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
               reasoning: thoughtsTokenCount,
@@ -837,12 +842,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionTokenCount == null
             ? undefined
             : completionTokenCount + (thoughtsTokenCount ?? 0);
-        const cost = calculateGoogleCost(
+        const cost = calculateGoogleCostFromUsage(
           this.modelName,
           config,
           promptTokenCount,
           completionForCost,
           true,
+          lastData.usageMetadata,
         );
 
         response = {

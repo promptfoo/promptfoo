@@ -23,7 +23,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
-  calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
@@ -371,6 +371,8 @@ export class GoogleProvider extends GoogleGenericProvider {
           ? { systemInstruction }
           : { system_instruction: systemInstruction }
         : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(config.passthrough || {}),
     };
 
     // Handle response schema
@@ -619,6 +621,9 @@ export class GoogleProvider extends GoogleGenericProvider {
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: lastData.usageMetadata.cachedContentTokenCount,
+            }),
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -649,12 +654,13 @@ export class GoogleProvider extends GoogleGenericProvider {
           : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
             config,
             tokenUsage.prompt,
             completionForCost,
             this.isVertexMode,
+            lastData.usageMetadata,
           );
 
       const response: ProviderResponse = {
