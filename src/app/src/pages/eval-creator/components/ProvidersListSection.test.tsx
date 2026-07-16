@@ -19,6 +19,14 @@ describe('ProvidersListSection', () => {
     vi.clearAllMocks();
   });
 
+  it('disables provider creation until the server catalog is ready', () => {
+    render(
+      <ProvidersListSection providers={[]} onChange={onChange} isProviderCatalogReady={false} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
+  });
+
   it('asks for confirmation before deleting a provider', async () => {
     const user = userEvent.setup();
     render(<ProvidersListSection providers={providers} onChange={onChange} />);

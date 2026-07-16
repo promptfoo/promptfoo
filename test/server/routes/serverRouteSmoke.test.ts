@@ -592,6 +592,12 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'get',
+    openApiPath: '/api/providers',
+    path: '/api/providers',
+    expectedStatus: 200,
+  },
+  {
+    method: 'get',
     openApiPath: '/api/providers/config-status',
     path: '/api/providers/config-status',
     expectedStatus: 200,

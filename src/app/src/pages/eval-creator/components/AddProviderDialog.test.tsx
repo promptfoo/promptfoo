@@ -116,6 +116,37 @@ describe('AddProviderDialog layout', () => {
     expect(footer).toHaveClass('shrink-0');
   });
 
+  it('restricts new providers to the configured server catalog', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    const configuredProvider = {
+      id: 'http://llm-gateway.internal/v1',
+      label: 'Internal Gateway',
+      config: { method: 'POST', headers: { Authorization: 'Bearer {{ env.GATEWAY_KEY }}' } },
+    };
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={onClose}
+          onSave={onSave}
+          availableProviders={[configuredProvider, { id: 'openai:gpt-5.1-mini' }]}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.queryByText('provider type selector')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Internal Gateway/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /openai:gpt-5.1-mini/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Internal Gateway/ }));
+
+    expect(onSave).toHaveBeenCalledWith(configuredProvider);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('resets the scroll position when moving into provider configuration', async () => {
     const user = userEvent.setup();
     render(

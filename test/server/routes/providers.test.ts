@@ -74,6 +74,51 @@ describe('Providers Routes', () => {
     vi.resetAllMocks();
   });
 
+  describe('GET /providers', () => {
+    it('returns the configured provider catalog', async () => {
+      const customProviders = [
+        { id: 'openai:gpt-5.1-mini' },
+        {
+          id: 'http://llm-gateway.internal/v1',
+          label: 'Internal Gateway',
+          config: { method: 'POST' },
+        },
+      ];
+      mockedGetAvailableProviders.mockReturnValue(customProviders);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: customProviders, hasCustomConfig: true },
+      });
+    });
+
+    it('returns an empty catalog when no custom config exists', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: [], hasCustomConfig: false },
+      });
+    });
+
+    it('returns a standardized error when the catalog cannot be loaded', async () => {
+      mockedGetAvailableProviders.mockImplementation(() => {
+        throw new Error('config unavailable');
+      });
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load providers' });
+    });
+  });
+
   describe('GET /providers/config-status', () => {
     it('should return hasCustomConfig: false when no custom config exists', async () => {
       // getAvailableProviders returns empty array when no config

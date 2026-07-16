@@ -21,6 +21,22 @@ import type { ProviderOptions } from '../../types/providers';
 
 export const providersRouter = Router();
 
+/** Returns the administrator-configured provider catalog for the eval creator. */
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    const providers = getAvailableProviders();
+
+    res.json(
+      ProviderSchemas.Catalog.Response.parse({
+        success: true,
+        data: { providers, hasCustomConfig: providers.length > 0 },
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to load providers', error);
+  }
+});
+
 /**
  * GET /api/providers/config-status
  *

@@ -24,6 +24,7 @@ interface AddProviderDialogProps {
   onClose: () => void;
   onSave: (provider: ProviderOptions) => void;
   initialProvider?: ProviderOptions;
+  availableProviders?: ProviderOptions[] | null;
 }
 
 export default function AddProviderDialog({
@@ -31,6 +32,7 @@ export default function AddProviderDialog({
   onClose,
   onSave,
   initialProvider,
+  availableProviders = null,
 }: AddProviderDialogProps) {
   const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderOptions | undefined>(initialProvider);
@@ -55,6 +57,11 @@ export default function AddProviderDialog({
       setError(null);
     }
   }, [open, initialProvider]);
+
+  const handleConfiguredProviderSelect = (newProvider: ProviderOptions) => {
+    onSave(newProvider);
+    onClose();
+  };
 
   const handleProviderTypeSelect = (newProvider: ProviderOptions, type: string) => {
     // Only move to configure step if user has made an explicit selection
@@ -110,12 +117,16 @@ export default function AddProviderDialog({
               {initialProvider
                 ? 'Edit Provider'
                 : step === 'select'
-                  ? 'Select Provider Type'
+                  ? availableProviders
+                    ? 'Select Provider'
+                    : 'Select Provider Type'
                   : 'Configure Provider'}
             </DialogTitle>
             <DialogDescription>
               {step === 'select'
-                ? 'Choose the type of provider you want to evaluate'
+                ? availableProviders
+                  ? 'Choose an administrator-configured provider'
+                  : 'Choose the type of provider you want to evaluate'
                 : 'Configure the settings for your provider'}
             </DialogDescription>
           </DialogHeader>
@@ -127,15 +138,37 @@ export default function AddProviderDialog({
           >
             {step === 'select' ? (
               <div className="w-full">
-                <ProviderTypeSelector
-                  provider={provider as RedteamProviderOptions | undefined}
-                  setProvider={
-                    handleProviderTypeSelect as (
-                      provider: RedteamProviderOptions | undefined,
-                    ) => void
-                  }
-                  providerType={providerType}
-                />
+                {availableProviders ? (
+                  <div className="divide-y rounded-md border">
+                    {availableProviders.map((availableProvider) => {
+                      const id = availableProvider.id ?? '';
+                      const label = availableProvider.label || id;
+                      return (
+                        <button
+                          key={`${id}-${availableProvider.label ?? ''}`}
+                          type="button"
+                          className="flex w-full flex-col items-start gap-1 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                          onClick={() => handleConfiguredProviderSelect(availableProvider)}
+                        >
+                          <span className="font-medium">{label}</span>
+                          {label !== id && (
+                            <span className="font-mono text-xs text-muted-foreground">{id}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <ProviderTypeSelector
+                    provider={provider as RedteamProviderOptions | undefined}
+                    setProvider={
+                      handleProviderTypeSelect as (
+                        provider: RedteamProviderOptions | undefined,
+                      ) => void
+                    }
+                    providerType={providerType}
+                  />
+                )}
               </div>
             ) : (
               provider && (

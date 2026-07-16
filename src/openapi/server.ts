@@ -49,6 +49,17 @@ const OpenApiProviderOptionsWithIdSchema = z
   })
   .passthrough();
 
+const OpenApiProviderCatalogResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    data: z.object({
+      providers: z.array(OpenApiProviderOptionsWithIdSchema),
+      hasCustomConfig: z.boolean(),
+    }),
+  }),
+  ErrorResponseSchema,
+]);
+
 const OpenApiTestProviderRequestSchema = z.object({
   prompt: z.string().optional(),
   providerOptions: OpenApiProviderOptionsWithIdSchema,
@@ -70,7 +81,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -840,6 +851,18 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('DeleteScanResponse', ModelAuditSchemas.DeleteScan.Response),
       400: validationError(),
       404: notFound('Model scan not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/providers',
+    operationId: 'getProviderCatalog',
+    tags: ['Providers'],
+    summary: 'Get the configured provider catalog',
+    responses: {
+      200: jsonResponse('ProviderCatalogResponse', OpenApiProviderCatalogResponseSchema),
       500: serverError(),
     },
   });

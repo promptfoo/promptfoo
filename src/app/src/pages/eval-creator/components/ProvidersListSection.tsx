@@ -18,6 +18,8 @@ import type { ProviderOptions } from '@promptfoo/types';
 interface ProvidersListSectionProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
+  availableProviders?: ProviderOptions[] | null;
+  isProviderCatalogReady?: boolean;
 }
 
 function getProviderLabel(provider: ProviderOptions): string {
@@ -70,7 +72,12 @@ function getProviderType(provider: ProviderOptions): string {
   return 'Custom';
 }
 
-export function ProvidersListSection({ providers, onChange }: ProvidersListSectionProps) {
+export function ProvidersListSection({
+  providers,
+  onChange,
+  availableProviders = null,
+  isProviderCatalogReady = true,
+}: ProvidersListSectionProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
@@ -152,7 +159,12 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         </div>
       ) : (
         <div className="space-y-4">
-          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
+          <Button
+            onClick={() => setIsAddDialogOpen(true)}
+            className="w-full"
+            variant="outline"
+            disabled={!isProviderCatalogReady}
+          >
             <Plus className="size-4 mr-2" />
             Add Provider
           </Button>
@@ -167,7 +179,12 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
 
       {/* Add provider button */}
       {providers.length > 0 && (
-        <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
+        <Button
+          onClick={() => setIsAddDialogOpen(true)}
+          className="w-full"
+          variant="outline"
+          disabled={!isProviderCatalogReady}
+        >
           <Plus className="size-4 mr-2" />
           Add Provider
         </Button>
@@ -178,6 +195,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         open={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}
         onSave={handleAddProvider}
+        availableProviders={availableProviders}
       />
 
       {/* Edit provider dialog */}

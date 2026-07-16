@@ -28,7 +28,8 @@ import { StepSection } from './StepSection';
 import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { UnifiedConfig } from '@promptfoo/types';
+import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+import type { ProviderCatalogResponse } from '@promptfoo/types/api/providers';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -80,7 +81,8 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator = () => {
   const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [hasCustomConfig, setHasCustomConfig] = useState(false);
+  const [hasCustomConfig, setHasCustomConfig] = useState<boolean | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<ProviderOptions[] | null>(null);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [resetKey, setResetKey] = useState(0);
@@ -95,31 +97,32 @@ const EvaluateTestSuiteCreator = () => {
     useStore.persist.rehydrate();
   }, []);
 
-  // Fetch config status to determine if ConfigureEnvButton should be shown
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     let isMounted = true;
 
-    const fetchConfigStatus = async () => {
+    const fetchProviderCatalog = async () => {
       try {
-        const response = await callApi('/providers/config-status');
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) {
-            setHasCustomConfig(data.hasCustomConfig || false);
-          }
+        const response = await callApi('/providers');
+        if (!response.ok) {
+          throw new Error('Failed to load providers from server');
+        }
+        const result = (await response.json()) as ProviderCatalogResponse;
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+        if (isMounted) {
+          setHasCustomConfig(result.data.hasCustomConfig);
+          setAvailableProviders(result.data.hasCustomConfig ? result.data.providers : null);
         }
       } catch (err) {
-        console.error('Failed to fetch provider config status:', err);
+        console.error('Failed to fetch provider catalog:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
-        if (isMounted) {
-          setHasCustomConfig(false);
-        }
+        showToast(`Failed to load provider configuration: ${errorMessage}`, 'error');
       }
     };
 
-    fetchConfigStatus();
+    fetchProviderCatalog();
 
     return () => {
       isMounted = false;
@@ -241,7 +244,7 @@ const EvaluateTestSuiteCreator = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {!hasCustomConfig && <ConfigureEnvButton />}
+                {hasCustomConfig === false && <ConfigureEnvButton />}
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="size-4 mr-2" />
                   Upload YAML
@@ -477,6 +480,8 @@ const EvaluateTestSuiteCreator = () => {
                       <ProvidersListSection
                         providers={normalizedProviders}
                         onChange={(p) => updateConfig({ providers: p })}
+                        availableProviders={availableProviders}
+                        isProviderCatalogReady={hasCustomConfig !== null}
                       />
                     </ErrorBoundary>
                   </StepSection>
