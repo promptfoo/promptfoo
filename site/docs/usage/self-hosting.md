@@ -472,8 +472,8 @@ spec:
 
 When `ui-providers.yaml` exists:
 
-- Only configured providers shown (replaces default ~600 providers)
-- "Reference Local Provider" button hidden in eval creator
+- The Add Provider dialog shows only configured providers instead of the built-in provider type catalog
+- The "API keys" button is hidden in the eval creator
 - Configuration is cached - restart required after changes: `docker restart promptfoo_container`
 
 :::
