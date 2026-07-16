@@ -28,6 +28,8 @@ Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content
 
 **Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
 
+Code Scan is best-effort analysis, not a guarantee that every vulnerability will be found. Routine false negatives and transient failures are out of scope; PR-controlled scan evasion, checkout escapes, runner-credential exposure, and tenant-isolation bypasses remain in scope.
+
 Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction or disable/opt-out control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account.
 
 ### Cloud Services

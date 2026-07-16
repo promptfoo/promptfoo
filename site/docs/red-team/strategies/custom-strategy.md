@@ -189,7 +189,7 @@ strategies:
 
 :::note
 
-The global `excludeTargetOutputFromAgenticAttackGeneration` option reduces target-response data sent during follow-up attack generation across strategies, not just custom. It is a best-effort privacy option and may not apply to every derived or diagnostic request, so do not treat it as a data-loss-prevention boundary.
+The global `excludeTargetOutputFromAgenticAttackGeneration` option prevents target responses from being sent during follow-up attack generation across strategies, not just custom. It applies to the documented attack-generation path, not unrelated diagnostics or hosted features.
 
 :::
 

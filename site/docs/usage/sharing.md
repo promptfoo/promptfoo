@@ -8,7 +8,7 @@ keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team s
 
 Share your eval results with others using the `share` command or the web interface.
 
-Sharing uploads the eval/report snapshot needed to view the result. This can include prompts, vars, outputs, traces, metadata, provider configuration fields, errors, media/blob references, scan artifacts, and derived artifacts. Strip, exclusion, sanitization, and redaction options are best-effort privacy features and may not cover every field or derived artifact. Do not put secrets in content that may be shared. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for what counts as a configured sharing destination.
+Sharing uploads the eval/report snapshot needed to view the result. This can include prompts, vars, outputs, traces, metadata, provider configuration fields, errors, media/blob references, scan artifacts, and derived artifacts. Strip, exclusion, sanitization, and redaction options apply only to their documented paths and may not cover every field or derived artifact. Do not put secrets in other content that may be shared. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for what counts as a configured sharing destination.
 
 ## Quick Start (Cloud)
 

@@ -332,7 +332,7 @@ keys (`authorization`, `api_key`, `token`, `password`, `cookie`, …) when trace
 but custom keys you add to `redactAttributes` are only enforced on the HTTP ingest path.
 Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
 
-Trace redaction is a best-effort privacy feature, not a data-loss-prevention boundary. It may not cover every diagnostic, derived field, or sharing/export path.
+Trace redaction applies to the paths described above. It does not cover unrelated diagnostics, derived fields, or sharing/export paths unless their documentation says otherwise.
 
 :::
 
