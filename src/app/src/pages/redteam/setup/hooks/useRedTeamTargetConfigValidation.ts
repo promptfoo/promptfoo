@@ -207,8 +207,18 @@ const hasDurableTargetConfigMarker = (): boolean => {
   return Boolean(getTargetConfigErrorFromMarker(getTargetConfigCookieMarker()));
 };
 
-const persistTargetConfigClear = (broadcast: boolean, existingMarker?: string | null) => {
+const persistTargetConfigClear = (
+  broadcast: boolean,
+  existingMarker?: string | null,
+  expectedSerializedTarget?: string,
+): boolean => {
   const snapshot = getPersistedTargetSnapshot();
+  if (
+    expectedSerializedTarget !== undefined &&
+    (!snapshot || snapshot.serialized !== expectedSerializedTarget)
+  ) {
+    return false;
+  }
   const clearMessage = snapshot
     ? getClearMessage(
         snapshot.serialized,
@@ -243,6 +253,7 @@ const persistTargetConfigClear = (broadcast: boolean, existingMarker?: string | 
       targetConfigValidationChannel?.postMessage(clearMessage);
     } catch {}
   }
+  return true;
 };
 
 const persistTargetConfigError = (
@@ -287,7 +298,8 @@ interface RedTeamTargetConfigValidationState {
   targetConfigRevision: number;
   setTargetConfigError: (error: string | null) => void;
   setTargetConfigDraft: (draft: string | null) => void;
-  clearTargetConfigValidation: () => void;
+  replaceTargetConfigValidation: (error: string, draft: string) => void;
+  clearTargetConfigValidation: (expectedSerializedTarget?: string) => boolean;
   reassertTargetConfigValidation: () => void;
 }
 
@@ -297,6 +309,9 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
     targetConfigDraft: null,
     targetConfigRevision: 0,
     setTargetConfigError: (targetConfigError) => {
+      if (!targetConfigError) {
+        return;
+      }
       const previousError = get().targetConfigError;
       set({ targetConfigError });
       if (previousError !== targetConfigError) {
@@ -311,13 +326,41 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
         persistTargetConfigError(targetConfigError);
       }
     },
-    clearTargetConfigValidation: () => {
-      persistTargetConfigError(null);
+    replaceTargetConfigValidation: (targetConfigError, targetConfigDraft) => {
+      persistTargetConfigError(targetConfigError);
+      set((state) => ({
+        targetConfigError,
+        targetConfigDraft,
+        targetConfigRevision: state.targetConfigRevision + 1,
+      }));
+    },
+    clearTargetConfigValidation: (expectedSerializedTarget) => {
+      if (!persistTargetConfigClear(true, undefined, expectedSerializedTarget)) {
+        const state = get();
+        const targetConfigError = state.targetConfigError ?? 'Invalid JSON configuration';
+        let targetConfigDraft = state.targetConfigDraft;
+        if (targetConfigDraft === null && expectedSerializedTarget) {
+          try {
+            const expectedTarget = JSON.parse(expectedSerializedTarget) as { config?: unknown };
+            targetConfigDraft = JSON.stringify(expectedTarget.config, null, 2) ?? 'null';
+          } catch {
+            targetConfigDraft = expectedSerializedTarget;
+          }
+        }
+        persistTargetConfigError(
+          targetConfigError,
+          true,
+          currentTargetConfigInvalidMarker ?? undefined,
+        );
+        set({ targetConfigError, targetConfigDraft });
+        return false;
+      }
       set((state) => ({
         targetConfigError: null,
         targetConfigDraft: null,
         targetConfigRevision: state.targetConfigRevision + 1,
       }));
+      return true;
     },
     reassertTargetConfigValidation: () => {
       const { targetConfigError } = get();
@@ -358,7 +401,25 @@ const reconcileTargetConfigClear = (clearMessage: string): boolean => {
     return false;
   }
 
-  persistTargetConfigError(null, false, `invalid-json:${token}`);
+  if (!persistTargetConfigClear(false, `invalid-json:${token}`, snapshot.serialized)) {
+    const state = useRedTeamTargetConfigValidation.getState();
+    const targetConfigError = state.targetConfigError ?? 'Invalid JSON configuration';
+    let targetConfigDraft = state.targetConfigDraft;
+    if (targetConfigDraft === null) {
+      try {
+        targetConfigDraft = JSON.stringify(snapshot.config.target?.config, null, 2) ?? 'null';
+      } catch {
+        targetConfigDraft = snapshot.serialized;
+      }
+    }
+    persistTargetConfigError(
+      targetConfigError,
+      false,
+      currentTargetConfigInvalidMarker ?? undefined,
+    );
+    useRedTeamTargetConfigValidation.setState({ targetConfigError, targetConfigDraft });
+    return false;
+  }
   useRedTeamTargetConfigValidation.setState((state) => ({
     targetConfigError: null,
     targetConfigDraft: null,

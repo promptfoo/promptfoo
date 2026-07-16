@@ -34,7 +34,7 @@ interface CustomTargetConfigurationProps {
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
   providerType?: string;
-  onConfigErrorChange?: (error: string | null) => void;
+  onConfigErrorChange?: (error: string | null, expectedTarget?: ProviderOptions) => void;
   preserveConfigErrorOnUnchangedConfig?: boolean;
 }
 
@@ -477,7 +477,7 @@ const CustomTargetConfiguration = ({
       }
 
       updateCustomTarget('config', parsedConfig);
-      onConfigErrorChange?.(null);
+      onConfigErrorChange?.(null, { ...selectedTarget, config: parsedConfig });
     } catch {
       onConfigErrorChange?.('Invalid JSON configuration');
     }
@@ -499,7 +499,7 @@ const CustomTargetConfiguration = ({
         const formatted = JSON.stringify(parsed, null, 2);
         setRawConfigJson(formatted);
         updateCustomTarget('config', parsed);
-        onConfigErrorChange?.(null);
+        onConfigErrorChange?.(null, { ...selectedTarget, config: parsed });
       } catch {
         onConfigErrorChange?.('Invalid JSON configuration');
       }

@@ -35,7 +35,7 @@ describe('TestCaseGenerateButton', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useRedTeamTargetConfigValidation.getState().setTargetConfigError(null);
+    useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     mockUseApiHealth.mockReturnValue({
       data: { status: 'connected', message: null },
       refetch: vi.fn(),

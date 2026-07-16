@@ -9,8 +9,7 @@ import type { ProviderOptions } from '../../types';
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
 const mockTargetConfigValidation = vi.hoisted(() => ({
-  setTargetConfigError: vi.fn(),
-  setTargetConfigDraft: vi.fn(),
+  clearTargetConfigValidation: vi.fn(() => true),
 }));
 vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
@@ -245,11 +244,9 @@ describe('TargetTypeSelection', () => {
     const openAICard = await screen.findByText('OpenAI');
     await user.click(openAICard.closest('.cursor-pointer') as HTMLElement);
 
-    expect(mockTargetConfigValidation.setTargetConfigDraft).toHaveBeenCalledWith(null);
-    expect(mockTargetConfigValidation.setTargetConfigError).toHaveBeenCalledWith(null);
-    expect(
-      mockTargetConfigValidation.setTargetConfigDraft.mock.invocationCallOrder[0],
-    ).toBeLessThan(mockTargetConfigValidation.setTargetConfigError.mock.invocationCallOrder[0]);
+    expect(mockTargetConfigValidation.clearTargetConfigValidation).toHaveBeenCalledWith(
+      expect.stringContaining('"id":"openai'),
+    );
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalledWith(

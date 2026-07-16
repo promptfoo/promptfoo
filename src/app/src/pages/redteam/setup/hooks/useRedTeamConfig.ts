@@ -48,9 +48,15 @@ const isPersistedNonObjectTargetDraft = (draft: string | null): boolean => {
   }
 };
 
-const prepareTargetConfigValidationClear = (): (() => void) => {
+const prepareTargetConfigValidationClear = (
+  expectedTarget: Config['target'] | undefined,
+): (() => void) => {
   const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
   const targetConfigInvalidMarker = getCurrentTargetConfigInvalidMarker();
+  let expectedSerializedTarget: string | null = null;
+  try {
+    expectedSerializedTarget = expectedTarget ? JSON.stringify(expectedTarget) : null;
+  } catch {}
   return () => {
     const currentTargetConfigValidation = useRedTeamTargetConfigValidation.getState();
     if (
@@ -58,15 +64,16 @@ const prepareTargetConfigValidationClear = (): (() => void) => {
         targetConfigValidation.targetConfigError &&
       currentTargetConfigValidation.targetConfigDraft ===
         targetConfigValidation.targetConfigDraft &&
-      getCurrentTargetConfigInvalidMarker() === targetConfigInvalidMarker
+      getCurrentTargetConfigInvalidMarker() === targetConfigInvalidMarker &&
+      expectedSerializedTarget !== null
     ) {
-      currentTargetConfigValidation.clearTargetConfigValidation();
+      currentTargetConfigValidation.clearTargetConfigValidation(expectedSerializedTarget);
     }
   };
 };
 
 const prepareNonObjectTargetRecovery = (
-  effectiveTargetConfig: unknown,
+  effectiveTarget: Config['target'] | undefined,
   replacedTargetConfig?: unknown,
 ): (() => void) | null => {
   const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
@@ -80,7 +87,7 @@ const prepareNonObjectTargetRecovery = (
     } catch {}
   }
   if (
-    !isPlainObject(effectiveTargetConfig) ||
+    !isPlainObject(effectiveTarget?.config) ||
     targetConfigValidation.targetConfigError !== 'Configuration must be a JSON object' ||
     !targetConfigInvalidMarker ||
     (!replacedMatchingNonObjectTarget &&
@@ -89,7 +96,7 @@ const prepareNonObjectTargetRecovery = (
     return null;
   }
 
-  return prepareTargetConfigValidationClear();
+  return prepareTargetConfigValidationClear(effectiveTarget);
 };
 export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
   persist(
@@ -344,12 +351,10 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       config: defaultConfig,
       providerType: undefined,
       updateConfig: (section, value) => {
-        const effectiveTargetConfig =
-          section === 'target'
-            ? (value as Config['target'] | undefined)?.config
-            : get().config.target?.config;
+        const effectiveTarget =
+          section === 'target' ? (value as Config['target'] | undefined) : get().config.target;
         const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
-          effectiveTargetConfig,
+          effectiveTarget,
           section === 'target' ? get().config.target?.config : undefined,
         );
         set((state) => {
@@ -363,9 +368,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         finishNonObjectTargetRecovery?.();
       },
       updatePlugins: (plugins) => {
-        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
-          get().config.target?.config,
-        );
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(get().config.target);
         set((state) => {
           // First compute the merged plugins
           const newPlugins = plugins.map((plugin) => {
@@ -422,18 +425,23 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
         if (!isPlainObject(normalizedConfig.target?.config)) {
           const targetConfigDraft = JSON.stringify(normalizedConfig.target?.config) ?? 'null';
-          targetConfigValidation.clearTargetConfigValidation();
-          targetConfigValidation.setTargetConfigDraft(targetConfigDraft);
-          targetConfigValidation.setTargetConfigError('Configuration must be a JSON object');
+          targetConfigValidation.replaceTargetConfigValidation(
+            'Configuration must be a JSON object',
+            targetConfigDraft,
+          );
           set({ config: normalizedConfig, providerType });
           return;
         }
-        const finishTargetConfigValidationClear = prepareTargetConfigValidationClear();
+        const finishTargetConfigValidationClear = prepareTargetConfigValidationClear(
+          normalizedConfig.target,
+        );
         set({ config: normalizedConfig, providerType });
         finishTargetConfigValidationClear();
       },
       resetConfig: () => {
-        const finishTargetConfigValidationClear = prepareTargetConfigValidationClear();
+        const finishTargetConfigValidationClear = prepareTargetConfigValidationClear(
+          defaultConfig.target,
+        );
         set({
           config: defaultConfig,
           providerType: undefined,
@@ -443,9 +451,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         window.location.reload();
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => {
-        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
-          get().config.target?.config,
-        );
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(get().config.target);
         set((state) => {
           const newApplicationDefinition = {
             ...(state.config.applicationDefinition ?? {}),
@@ -463,9 +469,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         finishNonObjectTargetRecovery?.();
       },
       setProviderType: (providerType) => {
-        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
-          get().config.target?.config,
-        );
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(get().config.target);
         set({ providerType });
         finishNonObjectTargetRecovery?.();
       },

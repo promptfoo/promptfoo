@@ -83,8 +83,13 @@ function ProviderConfigEditor({
   mode = 'redteam',
 }: ProviderConfigEditorProps) {
   const { config, updateConfig } = useRedTeamConfig();
-  const { targetConfigError, setTargetConfigError, targetConfigDraft, setTargetConfigDraft } =
-    useRedTeamTargetConfigValidation();
+  const {
+    targetConfigError,
+    setTargetConfigError,
+    targetConfigDraft,
+    setTargetConfigDraft,
+    clearTargetConfigValidation,
+  } = useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
   const structuredProvider = useMemo(() => getStructuredProvider(provider), [provider]);
   const preserveConfigErrorOnUnchangedConfig =
@@ -105,14 +110,31 @@ function ProviderConfigEditor({
   );
   const previousProviderType = useRef(providerType);
 
-  const handleCustomConfigErrorChange = (error: string | null) => {
+  const handleCustomConfigErrorChange = (
+    error: string | null,
+    expectedTarget?: ProviderOptions,
+  ) => {
+    if (isRedTeam && !error) {
+      let cleared = false;
+      try {
+        cleared =
+          clearTargetConfigValidation?.(JSON.stringify(expectedTarget ?? provider)) ?? false;
+      } catch {}
+      if (!cleared) {
+        const retainedError =
+          useRedTeamTargetConfigValidation.getState().targetConfigError ??
+          'Invalid JSON configuration';
+        setCustomConfigError(retainedError);
+        setError?.(retainedError);
+        return;
+      }
+    }
     setCustomConfigError(error);
     setError?.(error);
     if (isRedTeam) {
-      if (!error) {
-        setTargetConfigDraft?.(null);
+      if (error) {
+        setTargetConfigError?.(error);
       }
-      setTargetConfigError?.(error);
     }
   };
 
@@ -127,22 +149,25 @@ function ProviderConfigEditor({
     if (previousProviderType.current !== providerType) {
       previousProviderType.current = providerType;
       setRawConfigJson(JSON.stringify(provider.config, null, 2));
+      if (isRedTeam) {
+        let cleared = false;
+        try {
+          cleared = clearTargetConfigValidation?.(JSON.stringify(provider)) ?? false;
+        } catch {}
+        if (!cleared) {
+          const retainedError =
+            useRedTeamTargetConfigValidation.getState().targetConfigError ??
+            'Invalid JSON configuration';
+          setCustomConfigError(retainedError);
+          setError?.(retainedError);
+          return;
+        }
+      }
       setCustomConfigError(null);
       setError?.(null);
-      if (isRedTeam) {
-        setTargetConfigDraft?.(null);
-        setTargetConfigError?.(null);
-      }
       setBodyError(null);
     }
-  }, [
-    isRedTeam,
-    provider.config,
-    providerType,
-    setError,
-    setTargetConfigDraft,
-    setTargetConfigError,
-  ]);
+  }, [isRedTeam, provider, providerType, setError, clearTargetConfigValidation]);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     if (type === 'http' && containsNunjucksTemplate(url)) {

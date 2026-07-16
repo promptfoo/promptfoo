@@ -19,7 +19,7 @@ interface TargetTypeSelectionProps {
 
 export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
-  const { setTargetConfigError, setTargetConfigDraft, targetConfigRevision } =
+  const { clearTargetConfigValidation, targetConfigError, targetConfigRevision } =
     useRedTeamTargetConfigValidation();
 
   // Keep configured imports even when their optional label is missing. The default HTTP
@@ -75,8 +75,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     setSelectedTarget(updatedProvider);
     setProviderType(providerType);
     updateConfig('target', updatedProvider);
-    setTargetConfigDraft?.(null);
-    setTargetConfigError?.(null);
+    clearTargetConfigValidation?.(JSON.stringify(updatedProvider));
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
@@ -84,7 +83,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   };
 
   const handleNext = () => {
-    if (hasTargetName && isValidSelection()) {
+    if (!targetConfigError && hasTargetName && isValidSelection()) {
       // Track provider type selection when moving to next step
       recordEvent('feature_used', {
         feature: 'redteam_config_provider_selected',
@@ -113,10 +112,13 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   };
 
   const isNextButtonDisabled = () => {
-    return !hasTargetName || !isValidSelection();
+    return Boolean(targetConfigError) || !hasTargetName || !isValidSelection();
   };
 
   const getNextButtonTooltip = () => {
+    if (targetConfigError) {
+      return targetConfigError;
+    }
     if (!hasTargetName) {
       return 'Please enter a target name';
     }

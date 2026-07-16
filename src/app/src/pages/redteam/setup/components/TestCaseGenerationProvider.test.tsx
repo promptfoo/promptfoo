@@ -166,7 +166,7 @@ describe('TestCaseGenerationProvider', () => {
   beforeEach(() => {
     callApiMock.mockReset();
     callApiMock.mockImplementation(defaultCallApiImplementation);
-    useRedTeamTargetConfigValidation.getState().setTargetConfigError(null);
+    useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
   it('should render', () => {

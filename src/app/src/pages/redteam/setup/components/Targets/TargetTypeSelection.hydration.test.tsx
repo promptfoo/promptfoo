@@ -47,10 +47,12 @@ describe('TargetTypeSelection hydration', () => {
         },
         providerType: undefined,
       });
-      useRedTeamTargetConfigValidation.setState({
-        targetConfigError: 'Invalid JSON configuration',
-        targetConfigDraft: '{"sandbox_mode":"read-only",}',
-      });
+      useRedTeamTargetConfigValidation
+        .getState()
+        .replaceTargetConfigValidation(
+          'Invalid JSON configuration',
+          '{"sandbox_mode":"read-only",}',
+        );
     });
   });
 
@@ -94,6 +96,65 @@ describe('TargetTypeSelection hydration', () => {
     });
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+  });
+
+  it('keeps an explicit target replacement blocked when the persisted target is overwritten before its clear', async () => {
+    const user = userEvent.setup();
+    const onNext = vi.fn();
+    useRedTeamTargetConfigValidation
+      .getState()
+      .replaceTargetConfigValidation('Invalid JSON configuration', '{"sandbox_mode":"read-only",}');
+    const staleTarget = {
+      id: 'openinterpreter',
+      label: 'Unsafe target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    const originalSetItem = Storage.prototype.setItem;
+    let targetWrites = 0;
+    let raced = false;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      const result = originalSetItem.call(this, key, value);
+      if (this === window.localStorage && key === 'redTeamConfig' && ++targetWrites >= 2) {
+        raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    });
+    try {
+      render(
+        <TooltipProvider>
+          <TargetTypeSelection onNext={onNext} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Replace target' }));
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(raced).toBe(true);
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^invalid-json:[a-z0-9-]+$/,
+    );
+    const nextButton = screen.getByRole('button', { name: 'Next' });
+    expect(nextButton).toBeDisabled();
+    await user.click(nextButton);
+    expect(onNext).not.toHaveBeenCalled();
   });
 
   it('does not restore an unsafe target after a full config is loaded while mounted', async () => {
@@ -177,6 +238,9 @@ describe('TargetTypeSelection hydration', () => {
       });
     });
 
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+
     render(
       <TooltipProvider>
         <TargetTypeSelection onNext={vi.fn()} />
@@ -194,6 +258,8 @@ describe('TargetTypeSelection hydration', () => {
       label: 'Imported coding target',
       config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
     });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
     expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
   });
 

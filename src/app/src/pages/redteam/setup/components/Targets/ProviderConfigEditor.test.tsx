@@ -21,16 +21,23 @@ vi.mock('./WebSocketEndpointConfiguration', () => ({
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
   default: ({
+    selectedTarget,
+    updateCustomTarget,
     onConfigErrorChange,
     rawConfigJson,
     setRawConfigJson,
+    bodyError,
   }: {
-    onConfigErrorChange?: (error: string | null) => void;
+    selectedTarget?: { id: string; label?: string; config: Record<string, unknown> };
+    updateCustomTarget?: (field: string, value: unknown) => void;
+    onConfigErrorChange?: (error: string | null, expectedTarget?: unknown) => void;
     rawConfigJson?: string;
     setRawConfigJson?: (value: string) => void;
+    bodyError?: React.ReactNode;
   }) => (
     <div data-testid="custom-config">
       <pre data-testid="custom-raw-config">{rawConfigJson}</pre>
+      <div data-testid="custom-body-error">{bodyError}</div>
       <button
         data-testid="invalidate-custom-config"
         onClick={() => {
@@ -39,6 +46,17 @@ vi.mock('./CustomTargetConfiguration', () => ({
         }}
       >
         Invalidate custom config
+      </button>
+      <button
+        data-testid="correct-custom-config"
+        onClick={() => {
+          const config = { sandbox_mode: 'read-only' };
+          setRawConfigJson?.(JSON.stringify(config));
+          updateCustomTarget?.('config', config);
+          onConfigErrorChange?.(null, { ...selectedTarget, config });
+        }}
+      >
+        Correct custom config
       </button>
     </div>
   ),
@@ -635,6 +653,10 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', validGoProvider);
+    });
+
     const { rerender } = renderWithProviders(
       <ProviderConfigEditor
         provider={validGoProvider}
@@ -677,6 +699,10 @@ describe('ProviderConfigEditor', () => {
       id: 'initial',
       config: {},
     };
+
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', initialProvider);
+    });
 
     const TestComponent = () => {
       const [providerType, setProviderType] = React.useState('custom');
@@ -763,6 +789,10 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', initialProvider);
+    });
+
     const TestComponent = () => {
       const [providerType, setProviderType] = React.useState('langchain');
       const [provider, setProvider] = React.useState(initialProvider);
@@ -806,6 +836,10 @@ describe('ProviderConfigEditor', () => {
         },
       },
     };
+
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', updatedProvider);
+    });
 
     renderWithProviders(
       <ProviderConfigEditor
@@ -950,6 +984,7 @@ describe('ProviderConfigEditor', () => {
 
     expect(validateFn!()).toBe(false);
     expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(screen.getByTestId('custom-body-error')).toHaveTextContent('Invalid JSON configuration');
     expect(onValidate).toHaveBeenLastCalledWith(false);
   });
 
@@ -1023,6 +1058,137 @@ describe('ProviderConfigEditor', () => {
     }
   });
 
+  it('keeps a corrected Open Interpreter edit blocked when its persisted target is overwritten before the clear', () => {
+    const staleTarget = {
+      id: 'openinterpreter',
+      label: 'Coding target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: staleTarget,
+    });
+    const setError = vi.fn();
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={staleTarget}
+        setProvider={(provider) => useRedTeamConfig.getState().updateConfig('target', provider)}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    let raced = false;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      const result = originalSetItem.call(this, key, value);
+      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
+        raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    });
+    try {
+      act(() => {
+        screen.getByTestId('correct-custom-config').click();
+      });
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(raced).toBe(true);
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only"}',
+    );
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(screen.getByTestId('custom-body-error')).toHaveTextContent('Invalid JSON configuration');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^invalid-json:[a-z0-9-]+$/,
+    );
+  });
+
+  it('keeps a provider-type replacement blocked when its persisted target is overwritten before the clear', () => {
+    const staleTarget = {
+      id: 'openinterpreter',
+      label: 'Coding target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    const correctedTarget = { id: 'openai:gpt-4o', label: 'Foundation target', config: {} };
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: staleTarget,
+    });
+    const setError = vi.fn();
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={staleTarget}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    let raced = false;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      const result = originalSetItem.call(this, key, value);
+      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
+        raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    });
+    try {
+      act(() => {
+        useRedTeamConfig.getState().updateConfig('target', correctedTarget);
+      });
+      rerender(
+        <ProviderConfigEditor
+          provider={correctedTarget}
+          setProvider={vi.fn()}
+          setError={setError}
+          providerType="openai"
+        />,
+      );
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(raced).toBe(true);
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^invalid-json:[a-z0-9-]+$/,
+    );
+  });
+
   it('does not rewrite the persisted red-team configuration on malformed edits', () => {
     const previousStorage = useRedTeamConfig.persist.getOptions().storage;
     const setItem = vi.fn();
@@ -1091,6 +1257,10 @@ describe('ProviderConfigEditor', () => {
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
       '{"sandbox_mode":"read-only",}',
     );
+
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', { id: 'openai:gpt-4o', config: {} });
+    });
 
     rerender(
       <ProviderConfigEditor

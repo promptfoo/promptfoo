@@ -32,6 +32,13 @@ const setTargetConfigDraft = vi.hoisted(() =>
     state.targetConfigDraft = draft;
   }),
 );
+const clearTargetConfigValidation = vi.hoisted(() =>
+  vi.fn(() => {
+    state.targetConfigError = null;
+    state.targetConfigDraft = null;
+    return true;
+  }),
+);
 const onNext = vi.fn();
 
 vi.mock('../../hooks/useRedTeamConfig', () => ({
@@ -48,6 +55,7 @@ vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
     targetConfigDraft: state.targetConfigDraft,
     setTargetConfigError,
     setTargetConfigDraft,
+    clearTargetConfigValidation,
   }),
 }));
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));
@@ -140,7 +148,13 @@ describe('TargetConfiguration custom configuration validation', () => {
 
     await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only"}');
 
-    expect(setTargetConfigError).toHaveBeenLastCalledWith(null);
+    expect(clearTargetConfigValidation).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        id: 'openinterpreter',
+        label: 'Coding target',
+        config: { sandbox_mode: 'read-only' },
+      }),
+    );
     expect(state.targetConfigDraft).toBeNull();
     const footerNext = within(screen.getByTestId('page-navigation')).getByRole('button', {
       name: /Next/i,
