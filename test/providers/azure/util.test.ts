@@ -488,11 +488,11 @@ describe('calculateAzureCost', () => {
   });
 
   it.each([
-    ['gpt-realtime-mini-2025-10-06', 0.8],
-    ['gpt-realtime-1.5-2026-02-23', 5],
-  ])('prices uncached realtime input images per image for %s', (id, imageInput) => {
+    ['gpt-realtime-mini-2025-10-06', 0.6, 0.8],
+    ['gpt-realtime-1.5-2026-02-23', 4, 5],
+  ])('prices uncached realtime image tokens and image count for %s', (id, input, imageInput) => {
     expect(calculateAzureCost(id, {}, 100, 0, 0, 0, 0, 100, 0, 0, 0, 1)).toBeCloseTo(
-      imageInput / 1e6,
+      (100 * input + imageInput) / 1e6,
       12,
     );
   });

@@ -79,6 +79,13 @@ const formatContentMessages = (
     });
     const textMessages = mappedMessages.filter((message) => 'text' in message.realtime_input);
     const contentMessages = mappedMessages.filter((message) => !('text' in message.realtime_input));
+    if (textMessages.length > 0) {
+      contentMessages.push({
+        realtime_input: {
+          text: textMessages.map((message) => message.realtime_input.text).join('\n'),
+        },
+      } as any);
+    }
     if (contentMessages.some((message) => 'audio' in message.realtime_input)) {
       contentMessages.push({ realtime_input: { audio_stream_end: true } } as any);
     } else if (
@@ -86,13 +93,6 @@ const formatContentMessages = (
       textMessages.length === 0
     ) {
       contentMessages.push({ client_content: { turn_complete: true } } as any);
-    }
-    if (textMessages.length > 0) {
-      contentMessages.push({
-        realtime_input: {
-          text: textMessages.map((message) => message.realtime_input.text).join('\n'),
-        },
-      } as any);
     }
     return contentMessages;
   }

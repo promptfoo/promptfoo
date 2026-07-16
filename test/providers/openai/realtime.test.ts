@@ -743,6 +743,27 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.persistentConnection).not.toBeNull();
     });
 
+    it('should preserve persistent context for a numeric-zero conversation ID', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'test-key', modalities: ['text'], maintainContext: true },
+      });
+      const response = {
+        output: 'hello',
+        tokenUsage: { prompt: 1, completion: 1, total: 2 },
+        metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+      };
+      const persistentRequest = vi
+        .spyOn(provider as any, 'persistentWebSocketRequest')
+        .mockResolvedValue(response);
+      const directRequest = vi.spyOn(provider as any, 'directWebSocketRequest');
+
+      await provider.callApi('hello', { test: { metadata: { conversationId: 0 } } } as any);
+
+      expect(persistentRequest).toHaveBeenCalledOnce();
+      expect(directRequest).not.toHaveBeenCalled();
+      expect(provider.config.maintainContext).toBe(true);
+    });
+
     it('should maintain conversation context across multiple messages', async () => {
       const config = {
         modalities: ['text'],

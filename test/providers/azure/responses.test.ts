@@ -513,6 +513,34 @@ describe('AzureResponsesProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
     });
 
+    it('preserves full cached usage when the Responses result comes from disk cache', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage).toMatchObject({ cached: 3_000, total: 3_000 });
+    });
+
     it('applies priority pricing after Responses flattens passthrough fields', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

@@ -339,7 +339,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const cachedInputTokens =
       responseUsage?.prompt_tokens_details?.cached_tokens ??
       responseUsage?.input_tokens_details?.cached_tokens;
-    if (result.tokenUsage && cachedInputTokens !== undefined) {
+    if (!cached && result.tokenUsage && cachedInputTokens !== undefined) {
       result.tokenUsage.cached = cachedInputTokens;
     }
     return result;

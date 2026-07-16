@@ -314,7 +314,7 @@ describe('AzureRealtimeProvider', () => {
     expect(mockCleanup).toHaveBeenCalledOnce();
   });
 
-  it('prices a realtime input image once instead of once per image token', async () => {
+  it('prices realtime image tokens and charges the per-image rate once', async () => {
     mockCallApi.mockResolvedValueOnce({
       output: 'an image',
       tokenUsage: { prompt: 100, completion: 0, total: 100 },
@@ -339,7 +339,7 @@ describe('AzureRealtimeProvider', () => {
       ]),
     );
 
-    expect(result.cost).toBeCloseTo(5 / 1e6, 12);
+    expect(result.cost).toBeCloseTo((100 * 4 + 5) / 1e6, 12);
   });
 
   it('does not charge a historical realtime image that is not sent on the final user turn', async () => {

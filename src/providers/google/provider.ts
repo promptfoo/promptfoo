@@ -35,6 +35,7 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -362,6 +363,16 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
         ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
@@ -668,9 +679,11 @@ export class GoogleProvider extends GoogleGenericProvider {
             this.isVertexMode,
             lastData.usageMetadata,
           );
+      const audio = normalizeGeminiAudio(output);
 
       const response: ProviderResponse = {
         output,
+        ...(audio && { audio }),
         tokenUsage,
         cost,
         raw: data,

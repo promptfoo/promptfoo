@@ -36,6 +36,7 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
   removeGoogleFunctionDeclarations,
@@ -567,6 +568,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
         topP: config.topP,
         topK: config.topK,
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       ...(config.safetySettings
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
@@ -852,10 +863,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
           true,
           lastData.usageMetadata,
         );
+        const audio = normalizeGeminiAudio(output);
 
         response = {
           cached: false,
           output,
+          ...(audio && { audio }),
           tokenUsage,
           cost,
           metadata: {},

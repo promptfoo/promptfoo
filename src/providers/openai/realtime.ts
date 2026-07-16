@@ -1223,7 +1223,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         ? (context.test.metadata as Record<string, any>)?.conversationId
         : undefined;
 
-    if (!conversationId) {
+    if (typeof conversationId !== 'string' && typeof conversationId !== 'number') {
       this.config.maintainContext = false;
     }
 

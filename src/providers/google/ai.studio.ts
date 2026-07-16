@@ -19,6 +19,7 @@ import {
   isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -344,6 +345,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           maxOutputTokens: config.maxOutputTokens,
         }),
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
@@ -501,9 +512,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             false,
             lastData.usageMetadata,
           );
+      const audio = normalizeGeminiAudio(output);
 
       return {
         output,
+        ...(audio && { audio }),
         tokenUsage,
         cost,
         raw: data,

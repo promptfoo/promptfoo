@@ -313,6 +313,47 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it('should normalize Gemini TTS audio and default its generation config', async () => {
+      const ttsProvider = new GoogleProvider('gemini-2.5-pro-preview-tts', {
+        config: { apiKey: 'test-key' },
+      });
+      const pcm = Buffer.from([1, 2, 3, 4]);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/L16;codec=pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await ttsProvider.callApi('Say hello.');
+
+      expect(result.audio).toMatchObject({ format: 'wav', sampleRate: 24_000, channels: 1 });
+      expect(Buffer.from(result.audio?.data ?? '', 'base64').subarray(44)).toEqual(pcm);
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.generationConfig).toMatchObject({
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+      });
+    });
+
     it('should handle safety blocked response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {

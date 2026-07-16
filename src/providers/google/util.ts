@@ -962,6 +962,51 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
   return array1;
 }
 
+export function normalizeGeminiAudio(output: Part[] | string | undefined) {
+  if (!Array.isArray(output)) {
+    return undefined;
+  }
+
+  const audioParts = output.filter((part) => part.inlineData?.mimeType?.startsWith('audio/'));
+  if (audioParts.length === 0) {
+    return undefined;
+  }
+
+  const mimeType = audioParts[0].inlineData!.mimeType;
+  const audioData = Buffer.concat(
+    audioParts.map((part) => Buffer.from(part.inlineData!.data, 'base64')),
+  );
+  if (!/^audio\/(?:L16|pcm)(?:;|$)/i.test(mimeType)) {
+    return {
+      data: audioData.toString('base64'),
+      format: mimeType.split(/[;/]/)[1],
+    };
+  }
+
+  const sampleRate = Number(mimeType.match(/(?:^|;)\s*rate=(\d+)/i)?.[1] ?? 24_000);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + audioData.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(audioData.length, 40);
+
+  return {
+    data: Buffer.concat([header, audioData]).toString('base64'),
+    format: 'wav',
+    sampleRate,
+    channels: 1,
+  };
+}
+
 /**
  * Normalizes and sanitizes tools configuration for Gemini API compatibility.
  * - Handles snake_case to camelCase conversion for backwards compatibility

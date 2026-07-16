@@ -221,6 +221,9 @@ export interface CompletionOptions {
     // Live API
     response_modalities?: string[];
 
+    // GenerateContent API
+    responseModalities?: string[];
+
     // Speech configuration
     speechConfig?: {
       voiceConfig?: {

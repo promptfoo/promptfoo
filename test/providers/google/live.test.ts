@@ -317,6 +317,43 @@ describe('GoogleLiveProvider', () => {
     ]);
   });
 
+  it('should send mixed Gemini 3.1 Live text before ending the audio stream', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            { text: 'Transcribe this audio.' },
+            { inline_data: { mime_type: 'audio/pcm', data: 'YXVkaW8=' } },
+          ],
+        },
+      ]),
+    );
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages.slice(1)).toEqual([
+      { realtime_input: { audio: { mime_type: 'audio/pcm', data: 'YXVkaW8=' } } },
+      { realtime_input: { text: 'Transcribe this audio.' } },
+      { realtime_input: { audio_stream_end: true } },
+    ]);
+  });
+
   it('should combine multiple Gemini 3.1 Live text parts into one turn-ending input', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
