@@ -128,11 +128,17 @@ export interface CompletionOptions {
   inputCost?: number;
   /** Custom per-token output cost override. Takes precedence over cost. */
   outputCost?: number;
+  /** Custom per-token video output cost override. */
+  videoOutputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
+  apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
+  /** Previous Gemini Interactions API ID for conversational video editing. */
+  previousInteractionId?: string;
+  /** Keep a Gemini interaction available for subsequent editing turns. */
+  store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
   /**

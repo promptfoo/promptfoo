@@ -1324,6 +1324,11 @@ describe('Provider Registry', () => {
       ],
       // Bare google:<model> default chat route (no service-type segment).
       [
+        'google:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
         'google:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],

@@ -226,6 +226,7 @@ export function stripExecutableToolFileReferences(
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
  * @param audioPromptTokens - Number of audio tokens included in the prompt token count
  * @param audioCompletionTokens - Number of audio tokens included in the completion token count
+ * @param videoCompletionTokens - Number of video tokens included in the completion token count
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -236,6 +237,7 @@ export function calculateGoogleCost(
   isVertexMode?: boolean,
   audioPromptTokens?: number,
   audioCompletionTokens?: number,
+  videoCompletionTokens?: number,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
@@ -262,16 +264,22 @@ export function calculateGoogleCost(
   const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const videoOutputTokens = clampCachedTokens(
+    videoCompletionTokens,
+    Math.max(completionTokens - audioOutputTokens, 0),
+  );
   const audioInputCost =
     config.audioInputCost ?? config.audioCost ?? modelCost.audioInput ?? inputCost;
   const audioOutputCost =
     config.audioOutputCost ?? config.audioCost ?? modelCost.audioOutput ?? outputCost;
+  const videoOutputCost = config.videoOutputCost ?? modelCost.videoOutput ?? outputCost;
 
   return (
     (promptTokens - audioInputTokens) * inputCost +
     audioInputTokens * audioInputCost +
-    (completionTokens - audioOutputTokens) * outputCost +
-    audioOutputTokens * audioOutputCost
+    (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
+    audioOutputTokens * audioOutputCost +
+    videoOutputTokens * videoOutputCost
   );
 }
 

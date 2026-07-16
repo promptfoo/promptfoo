@@ -2667,6 +2667,20 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it('should use the video-output rate for gemini-omni-flash-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-omni-flash-preview',
+        {},
+        1_000,
+        600,
+        false,
+        undefined,
+        undefined,
+        500,
+      );
+      expect(cost).toBeCloseTo((1_000 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6, 12);
+    });
+
     it('should calculate cost for gemini-3.1-flash-live-preview', () => {
       const cost = calculateGoogleCost('gemini-3.1-flash-live-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.003, 10);

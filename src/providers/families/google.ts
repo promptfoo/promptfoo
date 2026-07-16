@@ -69,6 +69,11 @@ export const googleProviderFactories: ProviderFactory[] = [
       // Default to regular Google API
       const modelName = splits[1];
 
+      if (modelName === 'gemini-omni-flash-preview') {
+        const { GoogleInteractionsProvider } = await import('../google/interactions');
+        return new GoogleInteractionsProvider(modelName, providerOptions);
+      }
+
       // Check if this is a Gemini native image generation model. Dispatch is on
       // the '-image' substring (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image,
       // gemini-3.1-flash-lite-image, gemini-3-pro-image).

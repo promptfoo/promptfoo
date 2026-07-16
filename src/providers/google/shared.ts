@@ -7,6 +7,7 @@ export interface GoogleModelCost {
   output: number;
   audioInput?: number;
   audioOutput?: number;
+  videoOutput?: number;
 }
 
 export interface GoogleModelTieredCost {
@@ -49,7 +50,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   })),
   {
     id: 'gemini-omni-flash-preview',
-    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6 },
+    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6, videoOutput: 17.5 / 1e6 },
   },
 
   // Gemini 3.1 models. gemini-pro-latest is a Google-maintained alias that currently
