@@ -245,9 +245,15 @@ export type OpenAiVideoSize =
   | '1080x1920';
 
 /**
+ * Sizes accepted when creating a new Sora video. 1080p may appear on returned jobs,
+ * but is not accepted by the current Videos API creation schema.
+ */
+export type OpenAiVideoCreateSize = Exclude<OpenAiVideoSize, '1920x1080' | '1080x1920'>;
+
+/**
  * Valid video duration in seconds (Sora API only accepts these values)
  */
-export type OpenAiVideoDuration = 4 | 8 | 12 | 16 | 20;
+export type OpenAiVideoDuration = 4 | 8 | 12;
 
 /**
  * Video generation job status
@@ -267,9 +273,8 @@ export interface OpenAiVideoOptions extends OpenAiSharedOptions {
   model?: OpenAiVideoModel;
 
   // Video parameters
-  size?: OpenAiVideoSize;
+  size?: OpenAiVideoCreateSize;
   seconds?: OpenAiVideoDuration;
-  characters?: Array<{ id: string }>;
 
   // Image-to-video: URL, base64 image data, file path, or an uploaded file ID
   input_reference?: string | { file_id: string } | { image_url: string };

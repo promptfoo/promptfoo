@@ -981,22 +981,21 @@ providers:
   - id: openai:video:sora-2
     config:
       size: 1280x720 # Standard supports 1280x720 and 720x1280
-      seconds: 8 # Duration: 4, 8, 12, 16, or 20 seconds
+      seconds: 8 # Duration: 4, 8, or 12 seconds
 ```
 
 ### Configuration Options
 
-| Parameter              | Description                                                                                            | Default    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| `size`                 | Standard: `1280x720`, `720x1280`; Pro also supports `1792x1024`, `1024x1792`, `1920x1080`, `1080x1920` | `1280x720` |
-| `seconds`              | Duration in seconds (4, 8, 12, 16, or 20)                                                              | `8`        |
-| `input_reference`      | Image URL, base64 data, `file://` path, or `{ file_id: ... }`                                          | -          |
-| `characters`           | Up to two reusable Sora character IDs                                                                  | -          |
-| `remix_video_id`       | ID of a previous Sora video to remix                                                                   | -          |
-| `poll_interval_ms`     | Polling interval for job status                                                                        | `10000`    |
-| `max_poll_time_ms`     | Maximum time to wait for video generation                                                              | `600000`   |
-| `download_thumbnail`   | Download thumbnail preview                                                                             | `true`     |
-| `download_spritesheet` | Download spritesheet preview                                                                           | `true`     |
+| Parameter              | Description                                                                  | Default    |
+| ---------------------- | ---------------------------------------------------------------------------- | ---------- |
+| `size`                 | Standard: `1280x720`, `720x1280`; Pro also supports `1792x1024`, `1024x1792` | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)                                            | `8`        |
+| `input_reference`      | Image URL, base64 data, `file://` path, or `{ file_id: ... }`                | -          |
+| `remix_video_id`       | ID of a previous Sora video to remix                                         | -          |
+| `poll_interval_ms`     | Polling interval for job status                                              | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation                                    | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                                                   | `true`     |
+| `download_spritesheet` | Download spritesheet preview                                                 | `true`     |
 
 ### Example Configuration
 
@@ -1041,9 +1040,6 @@ or an uploaded-file reference such as `{ file_id: file_123 }`. Promptfoo sends t
 `{ image_url: ... }` or `{ file_id: ... }` JSON shape to OpenAI; object references must provide
 exactly one of `image_url` or `file_id`.
 
-Reusable Sora characters can be supplied with `characters: [{ id: char_123 }]`; at most two
-characters can be used in one generation.
-
 ### Video Remixing
 
 Remix an existing Sora video with a new prompt using `remix_video_id`:
@@ -1060,7 +1056,7 @@ prompts:
 
 The `remix_video_id` is the video ID returned from a previous Sora generation (found in `response.video.id`).
 Remixes inherit the source video's model, size, and duration; creation-only options such as
-`size`, `seconds`, `input_reference`, and `characters` are ignored. Promptfoo reports cost and
+`size`, `seconds`, and `input_reference` are ignored. Promptfoo reports cost and
 metadata using the completed remix job returned by OpenAI.
 
 :::note
@@ -1088,6 +1084,10 @@ Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and serve
 | sora-2-pro (720p)                        | $0.30           |
 | sora-2-pro (1024p: `1792x1024`/portrait) | $0.50           |
 | sora-2-pro (1080p: `1920x1080`/portrait) | $0.70           |
+
+OpenAI lists a 1080p pricing tier, but the current Videos API creation schema only accepts the
+720p and 1024p resolutions above. Promptfoo still reports the correct 1080p rate when a completed
+or remixed video returns that resolution.
 
 ## Web Search Support
 

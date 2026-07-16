@@ -126,15 +126,16 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSize('1024x1792')).toEqual({ valid: true });
     });
 
-    it.each(['1920x1080', '1080x1920'] as const)('should accept valid 1080p size %s', (size) => {
-      expect(validateVideoSize(size, 'sora-2-pro')).toEqual({ valid: true });
+    it.each([
+      '1920x1080',
+      '1080x1920',
+    ] as const)('should reject 1080p creation size %s for sora-2-pro', (size) => {
+      expect(validateVideoSize(size, 'sora-2-pro').valid).toBe(false);
     });
 
     it.each([
       '1792x1024',
       '1024x1792',
-      '1920x1080',
-      '1080x1920',
     ] as const)('should reject pro-only size %s for sora-2', (size) => {
       const result = validateVideoSize(size, 'sora-2');
       expect(result.valid).toBe(false);
@@ -169,8 +170,8 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSeconds(12)).toEqual({ valid: true });
     });
 
-    it.each([16, 20] as const)('should accept %s seconds', (seconds) => {
-      expect(validateVideoSeconds(seconds)).toEqual({ valid: true });
+    it.each([16, 20] as const)('should reject %s seconds for new Sora videos', (seconds) => {
+      expect(validateVideoSeconds(seconds as 4).valid).toBe(false);
     });
 
     it('should reject invalid duration like 5 seconds', () => {
@@ -179,7 +180,7 @@ describe('OpenAiVideoProvider', () => {
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid video duration');
       expect(result.message).toContain('5');
-      expect(result.message).toContain('4, 8, 12, 16, 20');
+      expect(result.message).toContain('4, 8, 12');
     });
 
     it('should reject 10 seconds', () => {
@@ -547,7 +548,7 @@ describe('OpenAiVideoProvider', () => {
 
     it('should use specified size and seconds', async () => {
       const provider = new OpenAiVideoProvider('sora-2-pro', {
-        config: { apiKey: 'test-key', size: '1920x1080', seconds: 20 },
+        config: { apiKey: 'test-key', size: '1792x1024', seconds: 12 },
       });
 
       setupMocksForSuccess();
@@ -557,55 +558,37 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"size":"1920x1080"'),
+          body: expect.stringContaining('"size":"1792x1024"'),
         }),
       );
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"seconds":"20"'),
+          body: expect.stringContaining('"seconds":"12"'),
         }),
       );
-      expect(result.video?.size).toBe('1920x1080');
-      expect(result.video?.duration).toBe(20);
-      expect(result.cost).toBeCloseTo(14, 10);
+      expect(result.video?.size).toBe('1792x1024');
+      expect(result.video?.duration).toBe(12);
+      expect(result.cost).toBeCloseTo(6, 10);
     });
 
-    it('should include reusable characters in a Sora generation request', async () => {
+    it('should reject unsupported reusable characters before calling the API', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
           apiKey: 'test-key',
           characters: [{ id: 'char_123' }, { id: 'char_456' }],
-        },
+        } as any,
       });
 
-      setupMocksForSuccess();
-      await provider.callApi('A cinematic shot of Mossy and Lantern');
+      const result = await provider.callApi('A cinematic shot of Mossy and Lantern');
 
-      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
-      expect(JSON.parse(request.body)).toMatchObject({
-        model: 'sora-2',
-        characters: [{ id: 'char_123' }, { id: 'char_456' }],
-      });
-    });
-
-    it('should reject more than two Sora characters before calling the API', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: {
-          apiKey: 'test-key',
-          characters: [{ id: 'char_1' }, { id: 'char_2' }, { id: 'char_3' }],
-        },
-      });
-
-      const result = await provider.callApi('A crowded scene');
-
-      expect(result.error).toContain('at most two characters');
+      expect(result.error).toContain('characters option is not supported');
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
 
     it('should honor a configured Sora model override in the API request', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', model: 'sora-2-pro', size: '1792x1024', seconds: 16 },
+        config: { apiKey: 'test-key', model: 'sora-2-pro', size: '1792x1024', seconds: 12 },
       });
 
       setupMocksForSuccess();
@@ -615,9 +598,9 @@ describe('OpenAiVideoProvider', () => {
       expect(JSON.parse(request.body)).toMatchObject({
         model: 'sora-2-pro',
         size: '1792x1024',
-        seconds: '16',
+        seconds: '12',
       });
-      expect(result.cost).toBeCloseTo(8, 10);
+      expect(result.cost).toBeCloseTo(6, 10);
     });
 
     it('should skip thumbnail download when disabled', async () => {
@@ -992,7 +975,7 @@ describe('OpenAiVideoProvider', () => {
       );
     });
 
-    it('should generate different keys for different reusable characters', () => {
+    it('should generate different keys for different uploaded input references', () => {
       const base = {
         provider: 'openai',
         prompt: 'test prompt',
@@ -1001,8 +984,8 @@ describe('OpenAiVideoProvider', () => {
         seconds: 8,
       };
 
-      expect(generateVideoCacheKey({ ...base, characters: [{ id: 'char_1' }] })).not.toBe(
-        generateVideoCacheKey({ ...base, characters: [{ id: 'char_2' }] }),
+      expect(generateVideoCacheKey({ ...base, inputReference: { file_id: 'file_1' } })).not.toBe(
+        generateVideoCacheKey({ ...base, inputReference: { file_id: 'file_2' } }),
       );
     });
 
@@ -1533,9 +1516,8 @@ describe('OpenAiVideoProvider', () => {
           apiKey: 'test-key',
           remix_video_id: 'original_video_789',
           size: '1792x1024',
-          seconds: 20,
+          seconds: 12,
           input_reference: { file_id: 'file_unused' },
-          characters: [{ id: 'character_unused' }],
         },
       });
 

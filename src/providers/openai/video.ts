@@ -24,6 +24,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type {
+  OpenAiVideoCreateSize,
   OpenAiVideoDuration,
   OpenAiVideoJob,
   OpenAiVideoModel,
@@ -58,19 +59,17 @@ const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = [
   '720x1280',
   '1792x1024',
   '1024x1792',
-  '1920x1080',
-  '1080x1920',
 ] as const;
 
 /**
  * Valid video durations in seconds for OpenAI Sora
  */
-const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12, 16, 20] as const;
+const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12] as const;
 
 /**
  * Default configuration values
  */
-const DEFAULT_SIZE: OpenAiVideoSize = '1280x720';
+const DEFAULT_SIZE: OpenAiVideoCreateSize = '1280x720';
 const DEFAULT_SECONDS: OpenAiVideoDuration = 8;
 const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 const DEFAULT_MAX_POLL_TIME_MS = 600000; // 10 minutes
@@ -114,18 +113,6 @@ async function normalizeInputReference(
     };
   }
   return { image_url: `data:${getImageMimeType(reference)};base64,${reference}` };
-}
-
-function hasValidCharacters(characters: OpenAiVideoOptions['characters']): boolean {
-  return (
-    !characters ||
-    (Array.isArray(characters) &&
-      characters.length <= 2 &&
-      characters.every(
-        (character) =>
-          character && typeof character.id === 'string' && character.id.trim().length > 0,
-      ))
-  );
 }
 
 function hasValidInputReference(reference: OpenAiVideoOptions['input_reference']): boolean {
@@ -261,11 +248,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     if (!config.remix_video_id) {
       body.model = config.model || this.modelName;
       body.size = config.size || DEFAULT_SIZE;
-      // API requires seconds as a string ("4", "8", "12", "16", or "20")
+      // API requires seconds as a string ("4", "8", or "12")
       body.seconds = String(config.seconds || DEFAULT_SECONDS);
-      if (config.characters?.length) {
-        body.characters = config.characters;
-      }
     }
 
     // Handle input_reference (image-to-video)
@@ -435,7 +419,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     const model = (config.model || this.modelName) as OpenAiVideoModel;
-    const size = (config.size || DEFAULT_SIZE) as OpenAiVideoSize;
+    const size = (config.size || DEFAULT_SIZE) as OpenAiVideoCreateSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;
 
@@ -450,8 +434,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         return { error: secondsValidation.message };
       }
 
-      if (!hasValidCharacters(config.characters)) {
-        return { error: 'Sora generation accepts at most two characters with non-empty IDs.' };
+      if ('characters' in config && config.characters !== undefined) {
+        return {
+          error: 'The Sora characters option is not supported by the Videos API creation endpoint.',
+        };
       }
 
       if (!hasValidInputReference(config.input_reference)) {
@@ -468,7 +454,6 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       size,
       seconds,
       inputReference: config.remix_video_id ? null : config.input_reference,
-      characters: config.remix_video_id ? undefined : config.characters,
     });
 
     // Check for cached video (skip for remix operations)
