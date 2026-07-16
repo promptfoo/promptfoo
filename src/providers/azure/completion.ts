@@ -149,6 +149,9 @@ export class AzureCompletionProvider extends AzureGenericProvider {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
+              ...(data.usage.prompt_tokens_details?.cached_tokens !== undefined && {
+                cached: data.usage.prompt_tokens_details.cached_tokens,
+              }),
             },
         ...(finishReason && { finishReason }),
         cost: calculateAzureCost(
@@ -159,6 +162,9 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           data.usage?.prompt_tokens_details?.cached_tokens,
           data.usage?.prompt_tokens_details?.audio_tokens,
           data.usage?.completion_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.image_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
         ),
         ...(guardrailsTriggered
           ? {

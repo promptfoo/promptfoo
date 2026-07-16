@@ -2418,6 +2418,11 @@ describe('AIStudioChatProvider', () => {
           (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
           12,
         );
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.serviceTier).toBe('priority');
+        expect(requestBody.service_tier).toBeUndefined();
       });
 
       it('should not include thinking tokens in cost when response is cached', async () => {

@@ -2768,6 +2768,33 @@ describe('util', () => {
       expect(cost).toBeCloseTo((1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6, 12);
     });
 
+    it('should apply standard and long-context priority pricing for Gemini 3.1 Pro custom tools', () => {
+      const standardCost = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        { passthrough: { serviceTier: 'priority' } },
+        1_000,
+        100,
+      );
+      const longContextCost = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        { passthrough: { service_tier: 'priority' } },
+        250_001,
+        1_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000,
+      );
+
+      expect(standardCost).toBeCloseTo((1.8 * (1_000 * 2 + 100 * 12)) / 1e6, 12);
+      expect(longContextCost).toBeCloseTo(
+        (1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6,
+        12,
+      );
+    });
+
     it('should use the Gemini 3.1 Flash-Lite priority audio-input rate', () => {
       const cost = calculateGoogleCost(
         'gemini-3.1-flash-lite',
@@ -2852,17 +2879,12 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.002, 10);
     });
 
-    it('should apply Gemini 3 Pro tiered pricing for the gemini-pro-latest alias', () => {
-      // gemini-pro-latest resolves to the current Gemini Pro snapshot
-      // (gemini-3.1-pro-preview): base input=2.0/1M, output=12.0/1M;
-      // tiered (>200k): input=4.0/1M, output=18.0/1M.
+    it('should apply catalog tiered pricing for the gemini-pro-latest alias', () => {
       const costBelowThreshold = calculateGoogleCost('gemini-pro-latest', {}, 100000, 50000);
-      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
-      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+      expect(costBelowThreshold).toBeCloseTo(0.625, 10);
 
       const costAboveThreshold = calculateGoogleCost('gemini-pro-latest', {}, 250000, 50000);
-      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
-      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+      expect(costAboveThreshold).toBeCloseTo(1.375, 10);
     });
 
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
@@ -2926,16 +2948,14 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
-    it('should calculate cost for gemini-flash-latest using the tier it currently resolves to', () => {
-      // gemini-flash-latest resolves server-side to gemini-3.5-flash: input=1.5/1M, output=9/1M
+    it('should calculate catalog cost for gemini-flash-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.006, 10);
+      expect(cost).toBeCloseTo(0.00155, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using the tier it currently resolves to', () => {
-      // gemini-flash-lite-latest resolves server-side to gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
+    it('should calculate catalog cost for gemini-flash-lite-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.001, 10);
+      expect(cost).toBeCloseTo(0.0003, 10);
     });
 
     it('should return undefined for shutdown models', () => {

@@ -306,7 +306,9 @@ export function calculateGoogleCost(
   const cachedImageInputCost = config.imageInputCost ?? modelCost.cacheRead ?? imageInputCost;
   const serviceTier =
     (config as ProviderConfig & { service_tier?: unknown }).service_tier ??
-    (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
+    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
+      ?.service_tier ??
+    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier;
   const priorityMultiplier = serviceTier === 'priority' ? (modelCost.priorityMultiplier ?? 1) : 1;
   const priorityAdjustedAudioInputCost =
     serviceTier === 'priority' &&

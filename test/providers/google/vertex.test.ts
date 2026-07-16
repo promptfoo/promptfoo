@@ -848,6 +848,32 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
+  it('should normalize Gemini priority service tier for Vertex requests', async () => {
+    const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
+      config: { passthrough: { service_tier: 'priority' } },
+    });
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        usageMetadata: {
+          promptTokenCount: 1_000,
+          candidatesTokenCount: 100,
+          totalTokenCount: 1_100,
+        },
+      },
+    ]);
+
+    const response = await priorityProvider.callGeminiApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ serviceTier: 'priority' }),
+      }),
+    );
+    expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
+    expect(response.cost).toBeCloseTo((1.8 * (1_000 * 2 + 100 * 12)) / 1e6, 12);
+  });
+
   it('should handle errors in function tool callbacks', async () => {
     const mockCachedResponse = {
       cached: true,

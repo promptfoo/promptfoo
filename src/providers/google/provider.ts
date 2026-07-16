@@ -351,6 +351,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const { service_tier: passthroughServiceTier, ...passthrough } = config.passthrough || {};
 
     const body: Record<string, any> = {
       contents,
@@ -371,8 +372,9 @@ export class GoogleProvider extends GoogleGenericProvider {
           ? { systemInstruction }
           : { system_instruction: systemInstruction }
         : {}),
-      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
-      ...(config.passthrough || {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
 
     // Handle response schema

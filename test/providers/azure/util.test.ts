@@ -383,6 +383,17 @@ describe('calculateAzureCost', () => {
   });
 
   it.each([
+    ['gpt-image-1', 5, 1.25, 10, 40],
+    ['gpt-image-1-mini', 2, 0.2, 2.5, 8],
+    ['gpt-image-1.5', 5, 1.25, 8, 32],
+  ])('prices Azure image-token usage for %s', (id, input, cached, imageInput, output) => {
+    expect(calculateAzureCost(id, {}, 1_000, 100, 100, 0, 0, 400, 0, 100)).toBeCloseTo(
+      (600 * input + 300 * imageInput + 100 * cached + 100 * output) / 1e6,
+      12,
+    );
+  });
+
+  it.each([
     {
       id: 'gpt-realtime-mini-2025-10-06',
       input: 0.6,

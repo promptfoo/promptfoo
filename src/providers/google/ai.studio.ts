@@ -325,6 +325,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const { service_tier: passthroughServiceTier, ...passthrough } = config.passthrough || {};
 
     const body: Record<string, any> = {
       contents,
@@ -344,8 +345,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
-      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
-      ...(config.passthrough || {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
 
     if (config.responseSchema) {

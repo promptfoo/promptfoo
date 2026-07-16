@@ -45,25 +45,31 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const bearerToken = this.authHeaders?.Authorization?.replace(/^Bearer\s+/i, '');
     const realtimeBaseUrl = getAzureRealtimeBaseUrl(baseUrl);
     const realtimeUrl = new URL(realtimeBaseUrl);
+    const effectiveConfig = {
+      ...this.config,
+      ...context?.prompt?.config,
+    } as OpenAiRealtimeOptions;
     const realtimeConfig: OpenAiRealtimeOptions = {
-      ...(this.config as OpenAiRealtimeOptions),
+      ...effectiveConfig,
       apiHost:
         realtimeUrl.protocol === 'https:'
           ? `${realtimeUrl.host}${realtimeUrl.pathname.replace(/\/v1$/i, '')}`
           : undefined,
       apiBaseUrl: realtimeBaseUrl,
       apiKey: this.getApiKey() ?? bearerToken,
-      maintainContext: (this.config as OpenAiRealtimeOptions).maintainContext ?? true,
+      maintainContext: effectiveConfig.maintainContext ?? true,
       headers: {
         ...this.authHeaders,
         ...this.config.headers,
+        ...effectiveConfig.headers,
       },
     };
 
     const conversationId = context?.test?.metadata?.conversationId;
+    const promptId = context?.prompt?.id;
     const realtimeProviderKey =
       typeof conversationId === 'string' || typeof conversationId === 'number'
-        ? `conversation:${conversationId}`
+        ? `prompt:${promptId ?? 'default'}:conversation:${conversationId}`
         : 'stateless';
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
 
@@ -99,7 +105,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         usage?.output_token_details;
       const usageCost = calculateAzureCost(
         this.deploymentName,
-        this.config,
+        effectiveConfig,
         usage?.prompt_tokens ?? usage?.input_tokens,
         usage?.completion_tokens ?? usage?.output_tokens,
         inputDetails?.cached_tokens,
@@ -119,7 +125,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         ? costForUsageEvents
         : calculateAzureCost(
             this.deploymentName,
-            this.config,
+            effectiveConfig,
             result.tokenUsage?.prompt,
             result.tokenUsage?.completion,
           );

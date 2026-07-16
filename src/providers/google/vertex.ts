@@ -554,6 +554,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const { service_tier: passthroughServiceTier, ...passthrough } = config.passthrough || {};
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -573,8 +574,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
-      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
-      ...(config.passthrough || {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
       ...(config.modelArmor &&

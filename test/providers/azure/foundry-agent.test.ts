@@ -254,6 +254,26 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
     });
 
+    it('prices image-token usage from the Foundry agent Responses details', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue({
+        ...createMessageResponse('priced image'),
+        model: 'gpt-image-1',
+        usage: {
+          input_tokens: 1_000,
+          input_tokens_details: { image_tokens: 400 },
+          output_tokens: 0,
+        },
+      });
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, modelName: 'gpt-image-1' } as any,
+      });
+
+      const result = await provider.callApi('describe image');
+
+      expect(result.cost).toBeCloseTo((600 * 5 + 400 * 10) / 1e6, 12);
+    });
+
     it('should fall back to listing agents for legacy ids', async () => {
       mockGetAgent.mockRejectedValue(new Error('not found'));
       mockListAgents.mockReturnValue(

@@ -305,4 +305,46 @@ describe('AzureRealtimeProvider', () => {
 
     expect(mockCleanup).toHaveBeenCalledTimes(2);
   });
+
+  it('isolates persistent realtime delegates by prompt identity within one conversation', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+    const contextA = {
+      prompt: { id: 'prompt-a', config: {} },
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any;
+    const contextB = {
+      prompt: { id: 'prompt-b', config: {} },
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any;
+
+    await provider.callApi('hello a', contextA);
+    await provider.callApi('hello b', contextB);
+    await provider.callApi('follow up a', contextA);
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('applies prompt-level realtime configuration overrides', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key', modalities: ['audio'] },
+    });
+
+    await provider.callApi('hello', {
+      prompt: {
+        id: 'prompt-a',
+        config: { modalities: ['text'], instructions: 'Be concise', websocketTimeout: 12_345 },
+      },
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any);
+
+    const delegatedProvider = vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value;
+    expect(delegatedProvider.config).toMatchObject({
+      modalities: ['text'],
+      instructions: 'Be concise',
+      websocketTimeout: 12_345,
+    });
+  });
 });

@@ -46,18 +46,21 @@ const GEMINI_2_5_PRO_TIERED_COST = {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
-  // Gemini 3.5 models. gemini-flash-latest is a Google-maintained alias that currently
-  // resolves server-side to gemini-3.5-flash (verified via response modelVersion).
-  ...['gemini-3.5-flash', 'gemini-flash-latest'].map((id) => ({
-    id,
+  // Gemini 3.5 models.
+  {
+    id: 'gemini-3.5-flash',
     cost: {
       input: 1.5 / 1e6,
       output: 9.0 / 1e6,
       cacheRead: 0.15 / 1e6,
       audioInput: 1.0 / 1e6,
-      ...(id === 'gemini-3.5-flash' ? { priorityMultiplier: 1.8 } : {}),
+      priorityMultiplier: 1.8,
     },
-  })),
+  },
+  {
+    id: 'gemini-flash-latest',
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6, cacheRead: 0.03 / 1e6, audioInput: 1.0 / 1e6 },
+  },
   {
     id: 'gemini-omni-flash-preview',
     cost: {
@@ -68,41 +71,43 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     },
   },
 
-  // Gemini 3.1 models. gemini-pro-latest is a Google-maintained alias that currently
-  // resolves server-side to gemini-3.1-pro-preview, so it tracks the Gemini 3 Pro tier.
-  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-pro-latest'].map(
-    (id) => ({
-      id,
-      cost: {
-        ...GEMINI_3_PRO_COST,
-        ...(id === 'gemini-3.1-pro-preview' ? { priorityMultiplier: 1.8 } : {}),
+  // Gemini 3.1 models.
+  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'].map((id) => ({
+    id,
+    cost: {
+      ...GEMINI_3_PRO_COST,
+      priorityMultiplier: 1.8,
+    },
+    tieredCost: {
+      ...GEMINI_3_PRO_TIERED_COST,
+      above: {
+        ...GEMINI_3_PRO_TIERED_COST.above,
+        priorityMultiplier: 1.8,
       },
-      tieredCost: {
-        ...GEMINI_3_PRO_TIERED_COST,
-        above: {
-          ...GEMINI_3_PRO_TIERED_COST.above,
-          ...(id === 'gemini-3.1-pro-preview' ? { priorityMultiplier: 1.8 } : {}),
-        },
-      },
-    }),
-  ),
+    },
+  })),
+  {
+    id: 'gemini-pro-latest',
+    cost: GEMINI_2_5_PRO_COST,
+    tieredCost: GEMINI_2_5_PRO_TIERED_COST,
+  },
   // gemini-3.1-flash-lite (GA) and its preview alias share Flash-Lite pricing.
-  // gemini-flash-lite-latest currently resolves server-side to gemini-3.1-flash-lite
-  // (verified via response modelVersion).
-  ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview', 'gemini-flash-lite-latest'].map(
-    (id) => ({
-      id,
-      cost: {
-        input: 0.25 / 1e6,
-        output: 1.5 / 1e6,
-        cacheRead: 0.025 / 1e6,
-        audioInput: 0.5 / 1e6,
-        ...(id === 'gemini-3.1-flash-lite'
-          ? { priorityMultiplier: 1.8, priorityAudioInput: 0.45 / 1e6 }
-          : {}),
-      },
-    }),
-  ),
+  ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview'].map((id) => ({
+    id,
+    cost: {
+      input: 0.25 / 1e6,
+      output: 1.5 / 1e6,
+      cacheRead: 0.025 / 1e6,
+      audioInput: 0.5 / 1e6,
+      ...(id === 'gemini-3.1-flash-lite'
+        ? { priorityMultiplier: 1.8, priorityAudioInput: 0.45 / 1e6 }
+        : {}),
+    },
+  })),
+  {
+    id: 'gemini-flash-lite-latest',
+    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: 0.01 / 1e6, audioInput: 0.3 / 1e6 },
+  },
   {
     id: 'gemini-3.1-flash-live-preview',
     cost: {

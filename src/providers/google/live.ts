@@ -372,6 +372,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let pendingUsageMetadata: any;
       let completedGenerations = 0;
       let completedTurns = 0;
+      let pendingGenerationTurnCompletions = 0;
       let hasFinalized = false;
 
       const requestedText = config.generationConfig?.response_modalities?.includes('text') ?? false;
@@ -479,6 +480,34 @@ export class GoogleLiveProvider implements ApiProvider {
               total + getTokenCount(usage.thoughtsTokenCount, usage.thoughts_token_count),
             0,
           );
+          const billableCompletionTokens = usageMetadata.reduce((total, usage) => {
+            const promptTokenCount = getTokenCount(
+              usage.promptTokenCount,
+              usage.prompt_token_count,
+            );
+            const toolUsePromptTokenCount = getTokenCount(
+              usage.toolUsePromptTokenCount,
+              usage.tool_use_prompt_token_count,
+            );
+            const responseTokenCount = getTokenCount(
+              usage.responseTokenCount,
+              usage.candidatesTokenCount,
+              usage.response_token_count,
+              usage.candidates_token_count,
+            );
+            const totalTokenCount = getTokenCount(usage.totalTokenCount, usage.total_token_count);
+            const thoughtsTokenCount = getTokenCount(
+              usage.thoughtsTokenCount,
+              usage.thoughts_token_count,
+            );
+            const thoughtsIncluded =
+              totalTokenCount > 0 &&
+              (totalTokenCount === promptTokenCount + responseTokenCount ||
+                totalTokenCount ===
+                  promptTokenCount + toolUsePromptTokenCount + responseTokenCount);
+
+            return total + responseTokenCount + (thoughtsIncluded ? 0 : thoughtsTokenCount);
+          }, 0);
           const audioPromptTokens = usageMetadata.reduce(
             (total, usage) =>
               total +
@@ -582,7 +611,7 @@ export class GoogleLiveProvider implements ApiProvider {
             this.modelName,
             config,
             promptTokens,
-            responseTokens + thoughtTokens,
+            billableCompletionTokens,
             false,
             audioPromptTokens,
             audioCompletionTokens,
@@ -790,6 +819,9 @@ export class GoogleLiveProvider implements ApiProvider {
             } else if (serverContent.outputTranscription?.text) {
               // Handle transcription-only messages when transcription arrives separately.
               response_audio_transcript += serverContent.outputTranscription.text;
+              if (isAudioExpected) {
+                hasAudioContent = true;
+              }
               clearTimeout(timeout);
             }
 
@@ -811,6 +843,7 @@ export class GoogleLiveProvider implements ApiProvider {
                   usesRealtimeTextInput,
                 );
                 contentIndex += 1;
+                pendingGenerationTurnCompletions += 1;
                 logger.debug(
                   `WebSocket sent after generation complete: ${JSON.stringify(contentMessages)}`,
                 );
@@ -825,6 +858,10 @@ export class GoogleLiveProvider implements ApiProvider {
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
               completedTurns += 1;
+              if (pendingGenerationTurnCompletions > 0) {
+                pendingGenerationTurnCompletions -= 1;
+                return;
+              }
               const contentMessages = formatContentMessages(
                 contents,
                 contentIndex,

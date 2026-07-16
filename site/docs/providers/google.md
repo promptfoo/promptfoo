@@ -287,9 +287,9 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently resolves to `gemini-3.1-pro-preview`, same pricing)
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently resolves to `gemini-3.5-flash`, same pricing)
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently resolves to `gemini-3.1-flash-lite`, same pricing)
+- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (priced with the catalog's Gemini 2.5 Pro tier)
+- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (priced with the catalog's Gemini 2.5 Flash tier)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (priced with the catalog's Gemini 2.5 Flash-Lite tier)
 
 ### Embedding Models
 

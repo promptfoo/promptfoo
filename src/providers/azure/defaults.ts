@@ -775,27 +775,57 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   {
     id: 'gpt-image-1',
-    cost: { input: 5 / 1000000, output: 40 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 40 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 10 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1-2025-04-15',
-    cost: { input: 5 / 1000000, output: 40 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 40 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 10 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1-mini',
-    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+      cacheRead: 0.2 / 1000000,
+      imageInput: 2.5 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1-mini-2025-10-06',
-    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+      cacheRead: 0.2 / 1000000,
+      imageInput: 2.5 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1.5',
-    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 32 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 8 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1.5-2025-12-16',
-    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 32 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 8 / 1000000,
+    },
   },
   {
     id: 'dall-e-3',

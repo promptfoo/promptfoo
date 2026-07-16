@@ -540,6 +540,32 @@ describe('AzureResponsesProvider', () => {
       expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
     });
 
+    it('prices image-token usage from Azure Responses details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+          usage: {
+            input_tokens: 1_000,
+            input_tokens_details: { image_tokens: 400 },
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-image-1');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('Describe the image');
+
+      expect(result.cost).toBeCloseTo((600 * 5 + 400 * 10) / 1e6, 12);
+    });
+
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { response_format: 'file://missing.json' as any },
