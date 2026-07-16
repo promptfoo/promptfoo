@@ -422,6 +422,39 @@ describe('OpenAiTtsProvider', () => {
     expect(second.signal.aborted).toBe(false);
   });
 
+  it('normalizes a custom abort reason while reading the speech response body', async () => {
+    let notifyRead: (() => void) | undefined;
+    const reading = new Promise<void>((resolve) => {
+      notifyRead = resolve;
+    });
+    mockedFetch.mockImplementation(
+      async (_url, options) =>
+        ({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          arrayBuffer: () =>
+            new Promise<ArrayBuffer>((_resolve, reject) => {
+              notifyRead?.();
+              options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+            }),
+        }) as Response,
+    );
+    const controller = new AbortController();
+    const pending = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } }).callApi(
+      'Cancel while reading audio',
+      undefined,
+      { abortSignal: controller.signal },
+    );
+    await reading;
+    controller.abort(new Error('caller cancelled speech body'));
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'caller cancelled speech body',
+    });
+  });
+
   it('does not coalesce concurrent speech requests across repeat cache namespaces', async () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
@@ -796,6 +829,27 @@ describe('OpenAiTtsProvider', () => {
       }),
       expect.any(Number),
       undefined,
+    );
+  });
+
+  it('allows header-authenticated speech gateways without an OpenAI API key', async () => {
+    const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockedFetch.mockResolvedValue(audioResponse());
+    try {
+      const provider = new OpenAiTtsProvider('tts-1', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          headers: { authorization: 'Bearer gateway-token', 'X-Tenant-Id': 'tenant-a' },
+        },
+      });
+
+      await expect(provider.callApi('Hello')).resolves.toMatchObject({ audio: { format: 'mp3' } });
+    } finally {
+      restoreEnv();
+    }
+
+    expect(new Headers(mockedFetch.mock.calls[0][1]?.headers).get('authorization')).toBe(
+      'Bearer gateway-token',
     );
   });
 });

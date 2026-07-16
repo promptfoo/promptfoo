@@ -23,6 +23,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
@@ -89,6 +90,15 @@ interface BackgroundResponseResult {
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
+let nextBackgroundProviderScope = 0;
+
+type BackgroundRequest = {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  cacheScope: string;
+  signal?: AbortSignal;
+};
 const inFlightBackgroundCreations = new Map<
   string,
   {
@@ -115,6 +125,107 @@ function getAbortError(signal: AbortSignal): Error {
   const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
   error.name = 'AbortError';
   return error;
+}
+
+function isSensitiveBackgroundCacheHeader(key: string): boolean {
+  return (
+    isSecretField(key) ||
+    /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)(?:[-_]|$)/i.test(
+      key,
+    )
+  );
+}
+
+function hasSensitiveBackgroundCacheValue(value: unknown, fieldName?: string): boolean {
+  if (fieldName && isSensitiveBackgroundCacheHeader(fieldName)) {
+    return value !== undefined && value !== null && value !== '';
+  }
+  if (typeof value === 'string') {
+    const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
+    return (
+      urls.some((url) => sanitizeUrl(url) !== url) ||
+      looksLikeSecret(value) ||
+      /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
+        value,
+      )
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSensitiveBackgroundCacheValue(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, nestedValue]) =>
+      hasSensitiveBackgroundCacheValue(nestedValue, key),
+    );
+  }
+  return false;
+}
+
+function canonicalizeBackgroundCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeBackgroundCacheValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, canonicalizeBackgroundCacheValue(nestedValue)]),
+    );
+  }
+  return value;
+}
+
+function getBackgroundCacheIdentity(
+  url: string,
+  request: BackgroundRequest,
+  responseId?: string,
+): { key: string; cacheable: boolean } {
+  const cacheHeaders = Object.entries(request.headers)
+    .filter(([key]) => !isSensitiveBackgroundCacheHeader(key))
+    .map(([key, value]) => [key.toLowerCase(), value])
+    .sort(([left], [right]) => left.localeCompare(right));
+  const hasSensitiveHeader = Object.entries(request.headers).some(
+    ([key, value]) => isSensitiveBackgroundCacheHeader(key) && value.trim().length > 0,
+  );
+  const hasTenantDiscriminator = cacheHeaders.some(
+    ([key, value]) =>
+      /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
+      value.trim().length > 0,
+  );
+  const sanitizedUrl = sanitizeUrl(url);
+  const hasSensitiveUrlCredentials = sanitizedUrl !== url;
+  let hasSensitiveUrlPath = false;
+  try {
+    hasSensitiveUrlPath = hasSensitiveBackgroundCacheValue(
+      decodeURIComponent(new URL(url).pathname),
+    );
+  } catch {
+    hasSensitiveUrlPath = true;
+  }
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(request.body);
+  } catch {
+    parsedBody = request.body;
+  }
+  const hasSensitiveBody = hasSensitiveBackgroundCacheValue(parsedBody);
+  const key = sha256(
+    JSON.stringify({
+      url: sanitizedUrl,
+      method: request.method,
+      headers: cacheHeaders,
+      ...(responseId
+        ? { id: responseId }
+        : {
+            body: hasSensitiveBody ? '[sensitive]' : canonicalizeBackgroundCacheValue(parsedBody),
+          }),
+      ...(hasSensitiveHeader && !hasTenantDiscriminator ? { scope: request.cacheScope } : {}),
+    }),
+  );
+  return {
+    key,
+    cacheable: !hasSensitiveBody && !hasSensitiveUrlCredentials && !hasSensitiveUrlPath,
+  };
 }
 
 async function cancelBackgroundResponse(
@@ -233,25 +344,15 @@ async function pollBackgroundResponse(
 
 async function createBackgroundResponseWithCancellation(
   url: string,
-  request: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
+  request: BackgroundRequest,
   timeout: number,
   bustCache: boolean | undefined,
   maxRetries: number | undefined,
 ): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
   const signal = request.signal;
-  const canCoalesce = isCacheEnabled() && !bustCache;
-  const cacheKey = getScopedCacheKey(
-    sha256(
-      JSON.stringify({
-        url,
-        method: request.method,
-        headers: Object.entries(request.headers)
-          .map(([key, value]) => [key.toLowerCase(), value])
-          .sort(([left], [right]) => left.localeCompare(right)),
-        body: request.body,
-      }),
-    ),
-  );
+  const cacheIdentity = getBackgroundCacheIdentity(url, request);
+  const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.cacheable;
+  const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
   if (!inFlight) {
     const promise = fetchWithCache<OpenAIResponsesResponse>(
@@ -343,7 +444,7 @@ async function createBackgroundResponseWithCancellation(
 async function resolveBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
-  request: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
+  request: BackgroundRequest,
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
@@ -406,21 +507,13 @@ async function resolveBackgroundResponse(
 async function coalesceBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
-  request: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
+  request: BackgroundRequest,
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
 ): Promise<BackgroundResponseResult> {
-  const cacheKey = sha256(
-    JSON.stringify({
-      url,
-      id: initial.id,
-      headers: Object.entries(request.headers)
-        .map(([key, value]) => [key.toLowerCase(), value])
-        .sort(([left], [right]) => left.localeCompare(right)),
-    }),
-  );
+  const cacheKey = getBackgroundCacheIdentity(url, request, initial.id).key;
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
   if (!inFlight) {
     const controller = new AbortController();
@@ -495,6 +588,7 @@ async function coalesceBackgroundResponse(
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
+  private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
@@ -1007,7 +1101,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             : {}),
           ...customHeaders,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(canonicalizeBackgroundCacheValue(body)),
+        cacheScope: this.backgroundCacheScope,
         ...(abortSignal ? { signal: abortSignal } : {}),
       };
 
@@ -1038,7 +1133,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           try {
             const response = await fetchWithRetries(
               url,
-              { ...request, signal: controller.signal },
+              {
+                method: request.method,
+                headers: request.headers,
+                body: request.body,
+                signal: controller.signal,
+              },
               timeout,
               config.maxRetries,
             );

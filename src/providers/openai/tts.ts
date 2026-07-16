@@ -70,6 +70,16 @@ function canonicalizeCacheValue(value: unknown): unknown {
   return value;
 }
 
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
   voice?: string | { id: string };
@@ -214,20 +224,18 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const abortSignal = callApiOptions?.abortSignal;
     if (abortSignal?.aborted) {
-      const reason = abortSignal.reason;
-      if (reason instanceof Error && reason.name === 'AbortError') {
-        throw reason;
-      }
-      const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-      error.name = 'AbortError';
-      throw error;
+      throw getAbortError(abortSignal);
     }
+    const config = { ...this.config, ...context?.prompt?.config } as OpenAiTtsOptions;
+    const customHeaders = this.getOpenAiRequestHeaders(config.headers);
     const apiKey = this.getApiKey();
-    if (!apiKey && this.requiresApiKey()) {
+    const hasHeaderCredential = Object.entries(customHeaders).some(
+      ([key, value]) => isSensitiveCacheHeader(key) && value.trim().length > 0,
+    );
+    if (!apiKey && this.requiresApiKey() && !hasHeaderCredential) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    const config = { ...this.config, ...context?.prompt?.config } as OpenAiTtsOptions;
     const body = {
       model: config.model || this.modelName,
       input: prompt,
@@ -248,7 +256,6 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
     const startedAt = Date.now();
     const url = `${this.getApiUrl()}/audio/speech`;
-    const customHeaders = this.getOpenAiRequestHeaders(config.headers);
     const hasCustomHeader = (name: string) =>
       Object.keys(customHeaders).some((key) => key.toLowerCase() === name);
     const requestHeaders = {
@@ -360,7 +367,10 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
         return result;
       } catch (error) {
-        if (isAbortError(error) || callApiOptions?.abortSignal?.aborted) {
+        if (callApiOptions?.abortSignal?.aborted) {
+          throw getAbortError(callApiOptions.abortSignal);
+        }
+        if (isAbortError(error)) {
           throw error;
         }
         if (error instanceof HttpRateLimitError) {

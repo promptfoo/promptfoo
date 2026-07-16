@@ -1871,7 +1871,8 @@ tenant discriminator such as
 `headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
 the speech cache to prevent responses from being shared across gateway tenants. Speech inputs,
 instructions, passthrough values, tenant headers, and gateway URL paths containing credentials
-always bypass persistent caching.
+always bypass persistent caching. Header credentials such as `authorization` or `x-api-key` satisfy
+the provider's authentication requirement; a separate OpenAI API key is not needed.
 
 ### Audio transcription
 

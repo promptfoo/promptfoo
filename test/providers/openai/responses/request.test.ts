@@ -5,6 +5,7 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import * as createHash from '../../../../src/util/createHash';
 import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../../src/util/fetch/index';
 import { setOpenAiEnv } from './setup';
@@ -426,10 +427,18 @@ describe('OpenAiResponsesProvider request building', () => {
       throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
     });
     const upper = new OpenAiResponsesProvider('gpt-4.1', {
-      config: { apiKey: 'test-key', background: true, headers: { 'X-Route': 'alpha' } },
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Route': 'alpha', 'X-Tenant-Id': 'tenant-a' },
+      },
     });
     const lower = new OpenAiResponsesProvider('gpt-4.1', {
-      config: { apiKey: 'test-key', background: true, headers: { 'x-route': 'alpha' } },
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'x-route': 'alpha', 'x-tenant-id': 'tenant-a' },
+      },
     });
 
     const results = await Promise.all([
@@ -445,6 +454,130 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(polls).toBe(1);
     expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
     expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
+  it('should coalesce semantically identical background request bodies with reordered keys', async () => {
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_canonical_${++creates}`;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_canonical_') && options?.method === 'GET') {
+        return {
+          data: {
+            id: String(url).split('/').at(-1),
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Canonical background result' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const first = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        passthrough: { metadata: { alpha: '1', beta: '2' } },
+      },
+    });
+    const second = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        passthrough: { metadata: { beta: '2', alpha: '1' } },
+      },
+    });
+
+    const results = await Promise.all([
+      first.callApi('Canonical task'),
+      second.callApi('Canonical task'),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(results.map((result) => result.output)).toEqual([
+      'Canonical background result',
+      'Canonical background result',
+    ]);
+  });
+
+  it('should keep credentials out of background coalescing keys and isolate credential-dependent requests', async () => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_private_${++creates}`;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_private_') && options?.method === 'GET') {
+        return {
+          data: {
+            id: String(url).split('/').at(-1),
+            status: 'completed',
+            output: [],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = (authorization: string, mcpToken: string) =>
+      new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          apiKeyRequired: false,
+          background: true,
+          headers: { authorization, 'X-Tenant-Id': 'tenant-a' },
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'private',
+              server_url: `https://mcp.example?token=url-${mcpToken}`,
+              headers: { Authorization: `Bearer ${mcpToken}` },
+              require_approval: 'never',
+            },
+          ],
+        },
+      });
+
+    await Promise.all([
+      provider('Bearer gateway-secret-a', 'mcp-secret-a').callApi('Private task'),
+      provider('Bearer gateway-secret-b', 'mcp-secret-b').callApi('Private task'),
+    ]);
+
+    expect(creates).toBe(2);
+    const hashedInputs = hashSpy.mock.calls.map(([value]) => String(value)).join('\n');
+    expect(hashedInputs).not.toContain('gateway-secret-a');
+    expect(hashedInputs).not.toContain('gateway-secret-b');
+    expect(hashedInputs).not.toContain('mcp-secret-a');
+    expect(hashedInputs).not.toContain('mcp-secret-b');
   });
 
   it('should keep a shared background job alive when only one subscriber aborts', async () => {
