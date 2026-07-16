@@ -788,7 +788,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         status = polled.status;
         statusText = polled.statusText;
         responseHeaders = polled.headers;
-        if (!polled.error && data.status === 'completed') {
+        if (!polled.error && (data.status === 'completed' || data.status === 'incomplete')) {
           await updateCache?.(data, status, statusText, responseHeaders);
         }
         if (polled.error) {

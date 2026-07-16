@@ -148,6 +148,51 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should persist a usable incomplete background response in the cache', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              status: 'incomplete',
+              content: [{ type: 'output_text', text: 'Partial but usable output' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Partial but usable output');
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'incomplete' }),
+      200,
+      'OK',
+      undefined,
+    );
+  });
+
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);

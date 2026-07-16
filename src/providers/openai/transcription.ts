@@ -13,12 +13,9 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { OpenAiSharedOptions } from './types';
 
-export interface OpenAiTranscriptionOptions {
-  apiKey?: string;
-  apiKeyEnvar?: string;
-  apiBaseUrl?: string;
-  organization?: string;
+export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;
   prompt?: string;
   temperature?: number;
@@ -90,7 +87,8 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    const apiKey = this.getApiKey();
+    if (!apiKey && this.requiresApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
@@ -167,8 +165,8 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       }
 
       const headers = {
-        Authorization: `Bearer ${this.getApiKey()}`,
-        ...this.getOpenAiRequestHeaders(),
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...this.getOpenAiRequestHeaders(config.headers),
       };
 
       let data: any, status: number, statusText: string;

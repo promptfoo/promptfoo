@@ -406,6 +406,40 @@ describe('OpenAiTranscriptionProvider', () => {
         restoreEnv();
       }
     });
+
+    it('should allow an unauthenticated transcription endpoint with custom headers', async () => {
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+
+      try {
+        const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+          config: {
+            apiBaseUrl: 'https://gateway.example/v1',
+            apiKeyRequired: false,
+            headers: { 'X-Gateway-Token': 'gateway-token' },
+          },
+          env: { OPENAI_API_KEY: undefined },
+        });
+
+        await provider.callApi('/path/to/audio.mp3');
+
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          'https://gateway.example/v1/audio/transcriptions',
+          expect.objectContaining({
+            headers: expect.objectContaining({ 'X-Gateway-Token': 'gateway-token' }),
+          }),
+          expect.any(Number),
+          'json',
+          undefined,
+        );
+        const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<
+          string,
+          string
+        >;
+        expect(headers).not.toHaveProperty('Authorization');
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('Diarization support', () => {

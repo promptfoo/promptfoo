@@ -85,7 +85,7 @@ To override the saved configuration of an assistant, use the provider's `config`
 providers:
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      modelName: gpt-5
+      modelName: gpt-4.1
       instructions: 'Enter a replacement for system-level instructions here'
       tools:
         - type: code_interpreter
@@ -104,7 +104,7 @@ providers:
   # Modified
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      modelName: gpt-5
+      modelName: gpt-4.1
       instructions: 'Always talk like a pirate'
 ```
 

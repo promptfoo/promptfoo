@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 
 import type { ApiProvider } from '../../src/types/index';
@@ -170,9 +173,9 @@ describe('webSearchUtils', () => {
     });
 
     it.each([
-      'openai:gpt-5-search-api',
+      'openai:chat:gpt-5-search-api',
       'openai:chat:gpt-5-search-api-2025-10-14',
-      'openai:gpt-4o-search-preview',
+      'openai:chat:gpt-4o-search-preview',
       'openai:chat:gpt-4o-mini-search-preview-2025-03-11',
     ])('should return true for built-in OpenAI Chat Completions search model %s', (id) => {
       expect(hasWebSearchCapability({ id: () => id, config: {} } as ApiProvider)).toBe(true);
@@ -212,6 +215,14 @@ describe('webSearchUtils', () => {
         config: { apiKey: 'test-key' },
       });
 
+      expect(hasWebSearchCapability(provider)).toBe(false);
+    });
+
+    it.each([
+      new OpenAiCompletionProvider('gpt-5-search-api'),
+      new OpenAiEmbeddingProvider('gpt-4o-search-preview'),
+      new OpenAiTtsProvider('gpt-4o-mini-search-preview-2025-03-11'),
+    ])('should not treat non-Chat OpenAI providers as built-in search models', (provider) => {
       expect(hasWebSearchCapability(provider)).toBe(false);
     });
 

@@ -1689,7 +1689,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
     {
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config: {
-        modelName: 'gpt-5',
+        modelName: 'gpt-4.1',
         instructions: 'You can add two numbers together using the `addNumbers` tool',
         tools: [
           {
