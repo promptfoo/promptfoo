@@ -46,11 +46,26 @@ service:
 # ignored once ingress.hosts is set.
 domainName: 'promptfoo.example.com'
 
+# While ingress.hosts is empty, the chart renders the legacy Ingress derived from
+# domainName above: ingressClassName defaults to traefik (only when className is
+# empty), the cert-manager.io/cluster-issuer: letsencrypt-cloudflare annotation is
+# merged into annotations (your keys win on conflict), and tls defaults to the
+# <release>-certificate-tls secret for domainName. Setting ingress.hosts disables
+# all of these legacy defaults; set ingress.enabled: false to render no Ingress.
 ingress:
   enabled: true
-  className: ""
+  className: ''
   annotations: {}
+  # hosts:
+  #   - host: promptfoo.example.com
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
   hosts: []
+  # tls:
+  #   - secretName: promptfoo-tls
+  #     hosts:
+  #       - promptfoo.example.com
   tls: []
 
 resources:

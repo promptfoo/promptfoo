@@ -217,7 +217,10 @@ service:
   type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
 
 
-# Optional: Configure ingress if you have an ingress controller
+# The chart renders an Ingress by default. When ingress.hosts is unset, it falls
+# back to a legacy config derived from the deprecated domainName value
+# (ingressClassName traefik plus a cert-manager letsencrypt-cloudflare annotation).
+# Set ingress.hosts to take full control, or ingress.enabled: false for no Ingress.
 # ingress:
 #   enabled: true
 #   className: "nginx" # Or your ingress controller class
