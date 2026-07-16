@@ -24,6 +24,28 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 };
+
+const isPersistedNonObjectTargetDraft = (draft: string | null): boolean => {
+  if (typeof window === 'undefined' || draft === null) {
+    return false;
+  }
+
+  try {
+    const persisted = window.localStorage.getItem('redTeamConfig');
+    if (!persisted) {
+      return false;
+    }
+    const target = (
+      JSON.parse(persisted) as { state?: { config?: { target?: { config?: unknown } } } }
+    ).state?.config?.target;
+    if (!target || !('config' in target) || isPlainObject(target.config)) {
+      return false;
+    }
+    return (JSON.stringify(target.config) ?? 'null') === draft;
+  } catch {
+    return false;
+  }
+};
 export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
   persist(
     (set) => ({
@@ -278,6 +300,12 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       providerType: undefined,
       updateConfig: (section, value) => {
         let replacedNonObjectTarget = false;
+        const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
+        const replacedPersistedNonObjectTarget =
+          section === 'target' &&
+          isPlainObject((value as Config['target'] | undefined)?.config) &&
+          targetConfigValidation.targetConfigError === 'Configuration must be a JSON object' &&
+          isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft);
         set((state) => {
           replacedNonObjectTarget =
             section === 'target' &&
@@ -291,7 +319,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           };
         });
         if (
-          replacedNonObjectTarget &&
+          (replacedNonObjectTarget || replacedPersistedNonObjectTarget) &&
           useRedTeamTargetConfigValidation.getState().targetConfigError ===
             'Configuration must be a JSON object'
         ) {
