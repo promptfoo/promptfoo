@@ -126,6 +126,24 @@ deleted file mode 100644
       { start: 10, end: 12 },
     ]);
   });
+
+  it('should still count a bare empty line inside a hunk as a context line', () => {
+    // Some diff producers emit '' instead of the strict single-space ' ' for empty
+    // context lines. Only the final split artifact from a trailing newline is
+    // skipped; a bare empty line mid-hunk must still advance the line counter.
+    const diff = [
+      'diff --git a/src/foo.ts b/src/foo.ts',
+      '--- a/src/foo.ts',
+      '+++ b/src/foo.ts',
+      '@@ -1,3 +1,3 @@',
+      ' line 1',
+      '', // bare empty context line mid-hunk: must be counted
+      '+line 3',
+      '', // trailing artifact from the terminating newline: must not be counted
+    ].join('\n');
+
+    expect(extractValidLineRanges(diff).get('src/foo.ts')).toEqual([{ start: 1, end: 3 }]);
+  });
 });
 
 describe('clampCommentLines', () => {

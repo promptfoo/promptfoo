@@ -65,15 +65,17 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   }
 
   const lines = unifiedDiff.split('\n');
+  // GitHub's diff media type is trailing-newline-terminated, so split('\n')
+  // yields a final empty-string element that must not be counted as content.
+  if (lines[lines.length - 1] === '') {
+    lines.pop();
+  }
   let currentFile: string | null = null;
   let currentRanges: LineRange[] = [];
   let currentNewLine = 0;
   let hunkStartLine = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isLastLine = i === lines.length - 1;
-
+  for (const line of lines) {
     // Match file header: diff --git a/path b/path
     // or +++ b/path (for new file path)
     const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
@@ -124,9 +126,6 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
     if (currentFile && hunkStartLine > 0) {
       if (line.startsWith('-')) {
         // Removed line - doesn't exist in new file
-        continue;
-      } else if (line === '' && isLastLine) {
-        // Trailing empty line (from string split on a trailing newline) - not real content
         continue;
       } else if (line.startsWith('+') || line.startsWith(' ') || line === '') {
         // Added line, context line, or empty line within hunk
