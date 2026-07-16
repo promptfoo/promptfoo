@@ -634,6 +634,82 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
   });
 
+  it.each([
+    'Bearer short-lived-token',
+    'Basic dXNlcjpwdw==',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+  ])('should bypass background persistence for the credential-valued routing header %s', async (credential) => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        return {
+          data: {
+            id: `resp_route_secret_${creates}`,
+            status: 'completed',
+            output: [],
+            usage: null,
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
+      },
+    });
+
+    await provider.callApi('Credential-dependent task');
+    await provider.callApi('Credential-dependent task');
+
+    expect(creates).toBe(2);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
+    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+  });
+
+  it.each([
+    '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+    'token_2e163f4d28e24f84b6d205e13058d6aa',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+  ])('should bypass background persistence for the opaque gateway path credential %s', async (credential) => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        return {
+          data: { id: `resp_path_secret_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKeyRequired: false,
+        apiBaseUrl: `https://gateway.example/v1/${credential}`,
+        background: true,
+      },
+      env: { OPENAI_API_KEY: undefined },
+    });
+
+    await provider.callApi('Credential-dependent task');
+    await provider.callApi('Credential-dependent task');
+
+    expect(creates).toBe(2);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
+    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+  });
+
   it('should not coalesce background requests from different OpenAI projects sharing an organization', async () => {
     let creates = 0;
     const authorizations: string[] = [];
@@ -2424,6 +2500,83 @@ describe('OpenAiResponsesProvider request building', () => {
         0,
       ),
     );
+  });
+
+  it('should abort an unaccepted background stream immediately when the eval stops', async () => {
+    const controller = new AbortController();
+    let upstreamSignal: AbortSignal | undefined;
+    let notifyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      upstreamSignal = options?.signal ?? undefined;
+      notifyStarted?.();
+      return new Promise<Response>((_resolve, reject) => {
+        upstreamSignal?.addEventListener('abort', () => reject(upstreamSignal?.reason), {
+          once: true,
+        });
+      });
+    });
+
+    const pending = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    }).callApi('Cancel before stream headers', undefined, { abortSignal: controller.signal });
+    await started;
+    controller.abort(new Error('eval stopped before headers'));
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'eval stopped before headers',
+    });
+    expect(upstreamSignal?.aborted).toBe(true);
+  });
+
+  it('should bound cleanup of an accepted background stream that never emits a response ID', async () => {
+    vi.useFakeTimers();
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '600000' });
+    const controller = new AbortController();
+    let upstreamSignal: AbortSignal | undefined;
+    let notifyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      upstreamSignal = options?.signal ?? undefined;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            upstreamSignal?.addEventListener(
+              'abort',
+              () => streamController.error(upstreamSignal?.reason),
+              {
+                once: true,
+              },
+            );
+            notifyStarted?.();
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+
+    try {
+      const pending = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true, stream: true },
+      }).callApi('Cancel an accepted stream', undefined, { abortSignal: controller.signal });
+      await started;
+      controller.abort(new Error('eval stopped before stream ID'));
+
+      await expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'eval stopped before stream ID',
+      });
+      expect(upstreamSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(upstreamSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should handle system prompts correctly', async () => {

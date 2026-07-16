@@ -1743,6 +1743,76 @@ describe('OpenAiVideoProvider', () => {
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
     });
 
+    it.each([
+      'Bearer short-lived-token',
+      'Basic dXNlcjpwdw==',
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+    ])('should not persist videos with the credential-valued routing header %s', async (credential) => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_route', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_route', status: 'completed' }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Routed video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      expect(generateVideoCacheKey).toHaveBeenCalledWith(
+        expect.objectContaining({ inputReference: null, cacheScope: undefined }),
+      );
+    });
+
+    it.each([
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      'token_2e163f4d28e24f84b6d205e13058d6aa',
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+    ])('should not persist videos with the opaque image path credential %s', async (credential) => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          input_reference: `https://assets.example/private/${credential}/frame.png`,
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_path', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_path', status: 'completed' }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Image path video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      expect(generateVideoCacheKey).toHaveBeenCalledWith(
+        expect.objectContaining({ inputReference: null, cacheScope: undefined }),
+      );
+    });
+
     it('should not persist videos from authenticated routed gateways', async () => {
       const config = {
         apiKey: 'gateway-secret',

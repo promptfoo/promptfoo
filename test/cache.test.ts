@@ -268,6 +268,27 @@ describe('cache configuration', () => {
     expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
   });
 
+  it('should clear persistent one-time claims with the disk cache', async () => {
+    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-clear:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+    await cacheModule.clearCache();
+    expect(rmSync).toHaveBeenCalledWith('/custom/cache/path/claims', {
+      force: true,
+      recursive: true,
+    });
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+
+    openSync.mockRestore();
+    closeSync.mockRestore();
+    rmSync.mockRestore();
+  });
+
   it('should respect custom cache path', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
     mockProcessEnv({ NODE_ENV: 'production' });

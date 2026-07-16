@@ -7,10 +7,15 @@ import {
   isAbortError,
 } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { assertOpenAiApiModel, OPENAI_TTS_MODELS } from './util';
+import {
+  assertOpenAiApiModel,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+  OPENAI_TTS_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -38,14 +43,7 @@ function hasSensitiveCacheValue(value: unknown, fieldName?: string): boolean {
     return value !== undefined && value !== null && value !== '';
   }
   if (typeof value === 'string') {
-    const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
-    return (
-      urls.some((url) => sanitizeUrl(url) !== url) ||
-      looksLikeSecret(value) ||
-      /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
-        value,
-      )
-    );
+    return hasSensitiveOpenAiCacheString(value);
   }
   if (Array.isArray(value)) {
     return value.some((item) => hasSensitiveCacheValue(item, fieldName));
@@ -268,7 +266,9 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     };
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
-        .filter(([key]) => !isSensitiveCacheHeader(key))
+        .filter(
+          ([key, value]) => !isSensitiveCacheHeader(key) && !hasSensitiveCacheValue(value, key),
+        )
         .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
@@ -276,15 +276,6 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ([key, value]) => !isSensitiveCacheHeader(key) && hasSensitiveCacheValue(value, key),
     );
     const hasSensitiveBody = hasSensitiveCacheValue(body);
-    const cacheKey = `openai:tts:${sha256(
-      JSON.stringify(
-        canonicalizeCacheValue({
-          url: sanitizeUrl(url),
-          body: hasSensitiveBody ? '[sensitive]' : body,
-          headers: cacheHeaders,
-        }),
-      ),
-    )}`;
     const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
       ([key, value]) =>
         /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key) &&
@@ -303,7 +294,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       const parsedUrl = new URL(url);
       const normalizedUrl = parsedUrl.toString();
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedUrl) !== normalizedUrl;
-      hasSensitiveUrlPath = hasSensitiveCacheValue(decodeURIComponent(parsedUrl.pathname));
+      hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname));
     } catch {
       hasSensitiveUrlCredentials = true;
       hasSensitiveUrlPath = true;
@@ -318,6 +309,15 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       !hasSensitiveUrlPath &&
       !usesAuthenticatedCustomEndpoint &&
       !(typeof body.voice === 'object' && body.voice !== null && !hasTenantDiscriminator);
+    const cacheKey = `openai:tts:${sha256(
+      JSON.stringify(
+        canonicalizeCacheValue({
+          url: hasSensitiveUrlPath ? '[sensitive]' : sanitizeUrl(url),
+          body: hasSensitiveBody ? '[sensitive]' : body,
+          headers: cacheHeaders,
+        }),
+      ),
+    )}`;
 
     if (cacheEnabled && !this.shouldBustCache(context)) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);

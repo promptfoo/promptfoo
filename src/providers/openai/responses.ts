@@ -24,7 +24,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
-import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
@@ -32,7 +32,13 @@ import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { assertOpenAiApiModel, formatOpenAiError, getTokenUsage } from './util';
+import {
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  getTokenUsage,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -144,14 +150,7 @@ function hasSensitiveBackgroundCacheValue(value: unknown, fieldName?: string): b
     return value !== undefined && value !== null && value !== '';
   }
   if (typeof value === 'string') {
-    const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
-    return (
-      urls.some((url) => sanitizeUrl(url) !== url) ||
-      looksLikeSecret(value) ||
-      /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
-        value,
-      )
-    );
+    return hasSensitiveOpenAiCacheString(value);
   }
   if (Array.isArray(value)) {
     return value.some((item) => hasSensitiveBackgroundCacheValue(item, fieldName));
@@ -207,9 +206,7 @@ function getBackgroundCacheIdentity(
   let sendsToOpenAiApi = false;
   let hasSensitiveUrlPath = false;
   try {
-    hasSensitiveUrlPath = hasSensitiveBackgroundCacheValue(
-      decodeURIComponent(new URL(url).pathname),
-    );
+    hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(new URL(url).pathname));
     sendsToOpenAiApi = new URL(url).hostname.toLowerCase() === 'api.openai.com';
   } catch {
     hasSensitiveUrlPath = true;
@@ -223,7 +220,7 @@ function getBackgroundCacheIdentity(
   const hasSensitiveBody = hasSensitiveBackgroundCacheValue(parsedBody);
   const key = sha256(
     JSON.stringify({
-      url: sanitizedUrl,
+      url: hasSensitiveUrlPath ? '[sensitive]' : sanitizedUrl,
       method: request.method,
       headers: cacheHeaders,
       ...(responseId
@@ -1170,19 +1167,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         const pendingCreationCancellation = new Promise<never>((_resolve, reject) => {
           rejectPendingCreation = reject;
         });
+        const startStreamCreationGrace = () => {
+          if (streamCreationGraceHandle) {
+            return;
+          }
+          streamCreationGraceHandle = setTimeout(
+            () => controller.abort(),
+            Math.min(
+              Math.max(timeout, BACKGROUND_STREAM_CREATION_GRACE_MIN_MS),
+              BACKGROUND_STREAM_CREATION_GRACE_MAX_MS,
+            ),
+          );
+        };
         const timeoutHandle = setTimeout(() => {
           streamTimedOut = true;
           if (streamAccepted && !backgroundResponseId) {
             rejectPendingCreation?.(
               new Error(`OpenAI streaming response timed out after ${timeout}ms`),
             );
-            streamCreationGraceHandle = setTimeout(
-              () => controller.abort(),
-              Math.min(
-                Math.max(timeout, BACKGROUND_STREAM_CREATION_GRACE_MIN_MS),
-                BACKGROUND_STREAM_CREATION_GRACE_MAX_MS,
-              ),
-            );
+            startStreamCreationGrace();
             return;
           }
           controller.abort();
@@ -1192,8 +1195,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             controller.abort(abortSignal?.reason);
             return;
           }
-          if (abortSignal) {
-            rejectPendingCreation?.(getAbortError(abortSignal));
+          const stopStreamCreation = () => {
+            if (backgroundResponseId || !streamAccepted) {
+              controller.abort(abortSignal?.reason);
+              return;
+            }
+            if (abortSignal) {
+              startStreamCreationGrace();
+              rejectPendingCreation?.(getAbortError(abortSignal));
+            }
+          };
+          if (streamAccepted) {
+            stopStreamCreation();
+          } else {
+            queueMicrotask(stopStreamCreation);
           }
         };
         abortSignal?.addEventListener('abort', abortStream, { once: true });

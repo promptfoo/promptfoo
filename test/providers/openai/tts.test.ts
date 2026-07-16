@@ -785,6 +785,52 @@ describe('OpenAiTtsProvider', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'Bearer short-lived-token',
+    'Basic dXNlcjpwdw==',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+  ])('does not persist speech with the credential-valued routing header %s', async (credential) => {
+    const cache = { get: vi.fn(), set: vi.fn() };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'test-key',
+        headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
+      },
+    });
+
+    await provider.callApi('same input');
+    await provider.callApi('same input');
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+    'token_2e163f4d28e24f84b6d205e13058d6aa',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+  ])('does not persist speech with the opaque gateway path credential %s', async (credential) => {
+    const cache = { get: vi.fn(), set: vi.fn() };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: { apiKeyRequired: false, apiBaseUrl: `https://gateway.example/v1/${credential}` },
+      env: { OPENAI_API_KEY: undefined },
+    });
+
+    await provider.callApi('same input');
+    await provider.callApi('same input');
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('canonicalizes case-insensitive speech headers for the persistent cache key', async () => {
     const values = new Map<string, string>();
     const cache = {

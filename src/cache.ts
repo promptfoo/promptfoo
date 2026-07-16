@@ -930,7 +930,14 @@ export function disableCache() {
 export async function clearCache() {
   inflightFetchResponses.clear();
   namespacedCacheInstances.clear();
-  return getCacheInstance().clear();
+  const result = await getCacheInstance().clear();
+  claimedCacheKeys.clear();
+  if (cacheType === 'disk') {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    fs.rmSync(path.join(cachePath, 'claims'), { force: true, recursive: true });
+  }
+  return result;
 }
 
 /**

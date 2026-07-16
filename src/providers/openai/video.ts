@@ -5,7 +5,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import {
   buildStorageRefUrl,
@@ -17,7 +17,11 @@ import {
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
-import { assertOpenAiApiModel } from './util';
+import {
+  assertOpenAiApiModel,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -159,7 +163,7 @@ function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_ref
     const normalizedUrl = parsedUrl.toString();
     return (
       sanitizeUrl(normalizedUrl) !== normalizedUrl ||
-      hasSensitiveCacheValue(decodeURIComponent(parsedUrl.pathname))
+      hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname))
     );
   } catch {
     return true;
@@ -174,14 +178,7 @@ function isSensitiveCacheHeader(key: string): boolean {
 }
 
 function hasSensitiveCacheValue(value: string): boolean {
-  const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
-  return (
-    urls.some((url) => sanitizeUrl(url) !== url) ||
-    looksLikeSecret(value) ||
-    /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
-      value,
-    )
-  );
+  return hasSensitiveOpenAiCacheString(value);
 }
 
 // =============================================================================
@@ -539,7 +536,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       const normalizedApiUrl = parsedApiUrl.toString();
       sendsToOpenAiApi = parsedApiUrl.hostname.toLowerCase() === 'api.openai.com';
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedApiUrl) !== normalizedApiUrl;
-      hasSensitiveUrlPath = hasSensitiveCacheValue(decodeURIComponent(parsedApiUrl.pathname));
+      hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedApiUrl.pathname));
     } catch {
       hasSensitiveUrlCredentials = true;
       hasSensitiveUrlPath = true;

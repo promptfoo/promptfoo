@@ -2548,7 +2548,8 @@ automatically use appropriate timeouts:
 - Authenticated background requests are persisted only when an explicit, non-secret project or
   tenant header such as `OpenAI-Project` or `X-Tenant-Id` isolates the request.
   `OpenAI-Organization` alone does not isolate project API keys. When multiple eval processes
-  resume the same persisted job, its completed usage is attributed exactly once.
+  resume the same persisted job, its completed usage is attributed exactly once. Running
+  `promptfoo cache clear` also clears the associated billing-claim markers.
 - Background streams preserve `stream: true`; promptfoo captures the response ID and cancels
   upstream work when an eval stops, including IDs that arrive shortly after the eval timeout
 
