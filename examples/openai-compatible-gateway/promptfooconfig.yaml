@@ -10,6 +10,8 @@ providers:
     config:
       # Any OpenAI-compatible endpoint: vLLM, llamafile, LiteLLM, a hosted gateway, ...
       apiBaseUrl: https://gateway.example.com/v1
+      # Prefer a dedicated env var so a real OPENAI_API_KEY is not sent to the gateway.
+      apiKeyEnvar: GATEWAY_API_KEY
       temperature: 0.2
 
 tests:
