@@ -1430,6 +1430,64 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should wrap primitive Gemini Live tool responses in objects', async () => {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [
+          {
+            functionDeclarations: [
+              { name: 'as_text' },
+              { name: 'as_number' },
+              { name: 'as_array' },
+              { name: 'as_null' },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          as_text: vi.fn().mockResolvedValue('done'),
+          as_number: vi.fn().mockResolvedValue(11),
+          as_array: vi.fn().mockResolvedValue(['a', 'b']),
+          as_null: vi.fn().mockResolvedValue(null),
+        },
+      },
+    });
+    const responsePromise = provider.callApi('Run the tools');
+    await vi.waitFor(() => expect(WebSocket).toHaveBeenCalled());
+    mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+    const emit = async (data: any) => {
+      await (mockWs.onmessage as any)({ data: JSON.stringify(data) });
+    };
+
+    await emit({ setupComplete: {} });
+    await emit({
+      toolCall: {
+        functionCalls: [
+          { id: 'text-1', name: 'as_text', args: {} },
+          { id: 'number-1', name: 'as_number', args: {} },
+          { id: 'array-1', name: 'as_array', args: {} },
+          { id: 'null-1', name: 'as_null', args: {} },
+        ],
+      },
+    });
+    await emit({ serverContent: { modelTurn: { parts: [{ text: 'Done.' }] } } });
+    await emit({ serverContent: { turnComplete: true } });
+    await responsePromise;
+
+    const toolResponses = mockWs.send.mock.calls
+      .map(([message]) => JSON.parse(message as string))
+      .filter((message) => message.toolResponse)
+      .flatMap((message) => message.toolResponse.functionResponses);
+    expect(toolResponses).toEqual([
+      { id: 'text-1', name: 'as_text', response: { result: 'done' } },
+      { id: 'number-1', name: 'as_number', response: { result: 11 } },
+      { id: 'array-1', name: 'as_array', response: { result: ['a', 'b'] } },
+      { id: 'null-1', name: 'as_null', response: { result: null } },
+    ]);
+  });
+
   it('should send message and handle in-built google search tool', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {

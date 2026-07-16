@@ -555,6 +555,7 @@ describe('GoogleInteractionsProvider', () => {
     const unsupportedToolConfigs = [
       { tools: [{ googleSearch: {} }] },
       { passthrough: { tools: [{ type: 'google_search' }] } },
+      { mcp: { enabled: true } },
     ];
     for (const toolConfig of unsupportedToolConfigs) {
       const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {

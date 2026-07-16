@@ -203,7 +203,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
     if (
       (Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools)) ||
-      Boolean(config.passthrough?.tools)
+      Boolean(config.passthrough?.tools) ||
+      Boolean(config.mcp?.enabled)
     ) {
       return {
         error:

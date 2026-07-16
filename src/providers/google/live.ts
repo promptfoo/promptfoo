@@ -1059,7 +1059,12 @@ export class GoogleLiveProvider implements ApiProvider {
                         {
                           id: functionCall.id,
                           name: functionName,
-                          response: callbackResponse,
+                          response:
+                            callbackResponse !== null &&
+                            typeof callbackResponse === 'object' &&
+                            !Array.isArray(callbackResponse)
+                              ? callbackResponse
+                              : { result: callbackResponse },
                         },
                       ],
                     },
