@@ -219,13 +219,10 @@ const persistTargetConfigClear = (
   ) {
     return false;
   }
+  const invalidMarker = existingMarker ?? currentTargetConfigInvalidMarker;
   const clearMessage = snapshot
-    ? getClearMessage(
-        snapshot.serialized,
-        getTargetConfigMarkerToken(existingMarker ?? currentTargetConfigInvalidMarker) ?? 'none',
-      )
+    ? getClearMessage(snapshot.serialized, getTargetConfigMarkerToken(invalidMarker) ?? 'none')
     : null;
-  currentTargetConfigInvalidMarker = null;
   let persistedLocally = false;
   try {
     if (clearMessage) {
@@ -248,6 +245,10 @@ const persistTargetConfigClear = (
         ? `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=${clearMessage}; Max-Age=${TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE}; Path=/; SameSite=Lax`
         : `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
   } catch {}
+  if (getPersistedTargetSnapshot()?.serialized !== snapshot?.serialized) {
+    return false;
+  }
+  currentTargetConfigInvalidMarker = null;
   if (broadcast && clearMessage) {
     try {
       targetConfigValidationChannel?.postMessage(clearMessage);

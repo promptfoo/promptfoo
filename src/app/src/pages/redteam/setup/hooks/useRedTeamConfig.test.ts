@@ -1,7 +1,10 @@
 import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from './useRedTeamConfig';
-import { useRedTeamTargetConfigValidation } from './useRedTeamTargetConfigValidation';
+import {
+  getCurrentTargetConfigInvalidMarker,
+  useRedTeamTargetConfigValidation,
+} from './useRedTeamTargetConfigValidation';
 
 import type { Config } from '../types';
 
@@ -1257,6 +1260,94 @@ describe('useRedTeamConfig', () => {
       '{"sandbox_mode":"read-only",}',
     );
     expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+  });
+
+  it.each([
+    'local',
+    'quota-fallback',
+  ] as const)('refuses to clear an invalid target when the persisted target changes during a %s clear write', (storage) => {
+    const staleTarget = {
+      id: 'openinterpreter',
+      label: 'Coding target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    const correctedTarget = {
+      ...staleTarget,
+      config: { sandbox_mode: 'read-only' },
+    };
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: staleTarget,
+    });
+    useRedTeamTargetConfigValidation
+      .getState()
+      .replaceTargetConfigValidation('Invalid JSON configuration', '{"sandbox_mode":"read-only",}');
+    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+
+    const originalSetItem = Storage.prototype.setItem;
+    const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+    persistedConfig.state.config.target = correctedTarget;
+    originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
+
+    let raced = false;
+    let activeMarkerDuringWrite: string | null = null;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (
+        storage === 'quota-fallback' &&
+        this === window.localStorage &&
+        key === 'redTeamTargetConfigValidation'
+      ) {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      if (
+        !raced &&
+        this === (storage === 'local' ? window.localStorage : window.sessionStorage) &&
+        key === 'redTeamTargetConfigValidation' &&
+        value.startsWith('clear:')
+      ) {
+        raced = true;
+        activeMarkerDuringWrite = getCurrentTargetConfigInvalidMarker();
+        const overwrittenConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(
+          window.localStorage,
+          'redTeamConfig',
+          JSON.stringify(overwrittenConfig),
+        );
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    let cleared: boolean;
+    try {
+      cleared = useRedTeamTargetConfigValidation
+        .getState()
+        .clearTargetConfigValidation(JSON.stringify(correctedTarget));
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(raced).toBe(true);
+    expect(activeMarkerDuringWrite).toBe(invalidMarker);
+    expect(cleared).toBe(false);
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+    expect(
+      storage === 'local'
+        ? window.localStorage.getItem('redTeamTargetConfigValidation')
+        : window.sessionStorage.getItem('redTeamTargetConfigValidation'),
+    ).toMatch(/^invalid-json:[a-z0-9-]+$/);
   });
 
   it('does not clear a newer raw non-object draft when a structured replacement persists after quota recovers', () => {

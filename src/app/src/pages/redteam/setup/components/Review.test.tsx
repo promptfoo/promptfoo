@@ -637,6 +637,32 @@ Application Details:
       expect(screen.getByRole('button', { name: 'View YAML' })).toBeDisabled();
     });
 
+    it('renders a blocked imported stateful target with a null config', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          target: {
+            id: 'openinterpreter',
+            label: 'Coding target',
+            config: null as unknown as typeof defaultConfig.target.config,
+          },
+        },
+        updateConfig: mockUpdateConfig,
+        targetConfigError: 'Configuration must be a JSON object',
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /run now/i })).toBeDisabled();
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+    });
+
     it.each([
       'email',
       'job status',

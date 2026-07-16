@@ -625,7 +625,7 @@ export default function Review({
 
     if (
       latestConfig.target.id === 'http' &&
-      latestConfig.target.config.url?.includes('promptfoo.app')
+      latestConfig.target.config?.url?.includes('promptfoo.app')
     ) {
       // Track report export
       recordEvent('webui_action', {
@@ -655,9 +655,9 @@ export default function Review({
         body: JSON.stringify({
           config: getUnifiedConfig(latestConfig),
           force: forceRegeneration,
-          verbose: latestConfig.target.config.verbose,
+          verbose: latestConfig.target.config?.verbose,
           maxConcurrency,
-          delay: latestConfig.target.config.delay,
+          delay: latestConfig.target.config?.delay,
         }),
       });
 
@@ -1192,8 +1192,8 @@ export default function Review({
                   maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
-                    delay: config.target.config.delay,
-                    verbose: config.target.config.verbose,
+                    delay: config.target.config?.delay,
+                    verbose: config.target.config?.verbose,
                   }}
                   updateConfig={updateConfig}
                   updateRunOption={(
