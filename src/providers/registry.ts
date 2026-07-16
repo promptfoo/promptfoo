@@ -954,6 +954,15 @@ export const providerMap: ProviderFactory[] = [
           env: context.env,
         });
       }
+      const requestedApiModel =
+        modelType === 'chat' || modelType === 'responses'
+          ? modelName || configuredModel
+          : modelType;
+      if (OPENAI_CODEX_ONLY_MODELS.some((model) => model.id === requestedApiModel)) {
+        throw new Error(
+          `OpenAI model ${requestedApiModel} is only available through openai:codex-sdk with eligible Codex authentication.`,
+        );
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
           modelName || configuredModel || 'gpt-4.1-2025-04-14',
@@ -1005,11 +1014,6 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
-      }
-      if (OPENAI_CODEX_ONLY_MODELS.some((model) => model.id === modelType)) {
-        throw new Error(
-          `OpenAI model ${modelType} is only available through openai:codex-sdk with eligible Codex authentication.`,
-        );
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);

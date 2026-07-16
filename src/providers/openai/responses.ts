@@ -6,6 +6,7 @@ import {
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { isAbortError } from '../../util/fetch/errors';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -80,6 +81,7 @@ async function pollBackgroundResponse(
   headers: Record<string, string>,
   timeout: number,
   maxRetries?: number,
+  signal?: AbortSignal,
 ): Promise<BackgroundResponseResult> {
   if (!initial.id) {
     return {
@@ -98,8 +100,10 @@ async function pollBackgroundResponse(
   let firstPoll = true;
 
   while (data.status === 'queued' || data.status === 'in_progress') {
+    signal?.throwIfAborted();
     if (!firstPoll) {
       await sleep(1000);
+      signal?.throwIfAborted();
     }
     firstPoll = false;
 
@@ -115,7 +119,7 @@ async function pollBackgroundResponse(
 
     const polled = await fetchWithCache<OpenAIResponsesResponse>(
       `${url}/${encodeURIComponent(initial.id)}`,
-      { method: 'GET', headers },
+      { method: 'GET', headers, ...(signal ? { signal } : {}) },
       remainingMs,
       'json',
       true,
@@ -142,13 +146,20 @@ async function pollBackgroundResponse(
 async function resolveBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
-  request: { method: string; headers: Record<string, string>; body: string },
+  request: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
 ): Promise<BackgroundResponseResult> {
-  const polled = await pollBackgroundResponse(initial, url, request.headers, timeout, maxRetries);
+  const polled = await pollBackgroundResponse(
+    initial,
+    url,
+    request.headers,
+    timeout,
+    maxRetries,
+    request.signal,
+  );
   if (!cached || !polled.error || (polled.status !== 404 && polled.status !== 410)) {
     return polled;
   }
@@ -175,7 +186,14 @@ async function resolveBackgroundResponse(
 
   if (retried.data.status === 'queued' || retried.data.status === 'in_progress') {
     return {
-      ...(await pollBackgroundResponse(retried.data, url, request.headers, timeout, maxRetries)),
+      ...(await pollBackgroundResponse(
+        retried.data,
+        url,
+        request.headers,
+        timeout,
+        maxRetries,
+        request.signal,
+      )),
       retried: true,
     };
   }
@@ -578,6 +596,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -609,7 +628,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(context, resolved),
+      () =>
+        this.callApiInternal(context, {
+          ...resolved,
+          abortSignal: callApiOptions?.abortSignal,
+        }),
       extractProviderResponseAttributes,
     );
   }
@@ -619,9 +642,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // `callApi` always resolves the body once (so spanContext reflects what we
     // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
     // is already baked into `prepared.body`, so it is not needed here.
-    prepared: { body: any; config: any },
+    prepared: { body: any; config: any; abortSignal?: AbortSignal },
   ): Promise<ProviderResponse> {
-    const { body, config } = prepared;
+    const { body, config, abortSignal } = prepared;
 
     // Validate deep research models have required tools. Use the capability model name so
     // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
@@ -683,15 +706,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ...this.getOpenAiRequestHeaders(config.headers),
         },
         body: JSON.stringify(body),
+        ...(abortSignal ? { signal: abortSignal } : {}),
       };
 
       if (body.stream) {
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+        const signal = abortSignal
+          ? AbortSignal.any([controller.signal, abortSignal])
+          : controller.signal;
         try {
           const response = await fetchWithCache<string>(
             url,
-            { ...request, signal: controller.signal },
+            { ...request, signal },
             timeout,
             'text',
             true,
@@ -809,6 +836,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       logger.error(`API call error: ${String(err)}`);
       if (!pollingBackground) {
         await deleteFromCache?.();

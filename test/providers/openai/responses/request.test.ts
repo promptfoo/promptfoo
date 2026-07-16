@@ -244,6 +244,74 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(updateCache).not.toHaveBeenCalled();
   });
 
+  it('should not create a background response for an already-aborted eval', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await expect(
+      provider.callApi('Cancelled task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should forward the eval abort signal to background creation and polling', async () => {
+    const controller = new AbortController();
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancellable', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_cancellable',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Completed before cancellation' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Cancellable task', undefined, {
+      abortSignal: controller.signal,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST', signal: controller.signal }),
+      expect.any(Number),
+      'json',
+      undefined,
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/responses/resp_cancellable'),
+      expect.objectContaining({ method: 'GET', signal: controller.signal }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);

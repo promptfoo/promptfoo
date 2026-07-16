@@ -165,6 +165,23 @@ describe('OpenAiTranscriptionProvider', () => {
   });
 
   describe('Basic functionality', () => {
+    it('should pass the configured retry limit to the shared fetch helper', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key', maxRetries: 0 },
+      });
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/audio/transcriptions'),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        undefined,
+        0,
+      );
+    });
+
     it('should transcribe audio successfully', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },
@@ -184,6 +201,7 @@ describe('OpenAiTranscriptionProvider', () => {
         }),
         expect.any(Number),
         'json',
+        undefined,
         undefined,
       );
 
@@ -429,6 +447,7 @@ describe('OpenAiTranscriptionProvider', () => {
           }),
           expect.any(Number),
           'json',
+          undefined,
           undefined,
         );
         const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<
@@ -759,6 +778,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Number),
         'json',
         undefined,
+        undefined,
       );
     });
 
@@ -799,6 +819,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Number),
         'json',
         undefined,
+        undefined,
       );
     });
 
@@ -821,6 +842,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Number),
         'json',
         true,
+        undefined,
       );
     });
 
@@ -843,6 +865,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Number),
         'json',
         true,
+        undefined,
       );
     });
   });

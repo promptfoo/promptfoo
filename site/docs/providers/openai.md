@@ -1089,9 +1089,8 @@ Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and serve
 | sora-2-pro (1024p: `1792x1024`/portrait) | $0.50           |
 | sora-2-pro (1080p: `1920x1080`/portrait) | $0.70           |
 
-OpenAI lists a 1080p pricing tier, but the current Videos API creation schema only accepts the
-720p and 1024p resolutions above. Promptfoo still reports the correct 1080p rate when a completed
-or remixed video returns that resolution.
+Sora Pro supports 1080p creation and remixes at the published $0.70-per-second rate. Promptfoo
+reports the rate using the completed video's returned resolution.
 
 ## Web Search Support
 

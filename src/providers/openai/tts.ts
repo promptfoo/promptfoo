@@ -1,7 +1,11 @@
 import { getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isAbortError,
+} from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
@@ -148,8 +152,9 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey && this.requiresApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -225,6 +230,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
             method: 'POST',
             headers: requestHeaders,
             body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           config.maxRetries,
@@ -261,6 +267,9 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
         return result;
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         if (error instanceof HttpRateLimitError) {
           return {
             error: formatRateLimitErrorMessage(error),

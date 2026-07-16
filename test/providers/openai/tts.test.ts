@@ -101,6 +101,36 @@ describe('OpenAiTtsProvider', () => {
     );
   });
 
+  it('does not create speech for an already-aborted eval', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(
+      provider.callApi('Cancelled speech', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it('forwards the eval abort signal to speech requests', async () => {
+    const controller = new AbortController();
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('Cancellable speech', undefined, { abortSignal: controller.signal });
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: controller.signal }),
+      expect.any(Number),
+      undefined,
+    );
+  });
+
   it('preserves rate-limit metadata so the scheduler honors Retry-After', async () => {
     mockedFetch.mockRejectedValue(
       new HttpRateLimitError({

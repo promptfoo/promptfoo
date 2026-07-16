@@ -183,6 +183,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          config.maxRetries,
         ));
 
         if (status < 200 || status >= 300) {
