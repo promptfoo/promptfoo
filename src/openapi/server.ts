@@ -49,11 +49,15 @@ const OpenApiProviderOptionsWithIdSchema = z
   })
   .passthrough();
 
+const OpenApiProviderCatalogEntrySchema = OpenApiProviderOptionsWithIdSchema.extend({
+  label: z.string().optional(),
+});
+
 const OpenApiProviderCatalogResponseSchema = z.union([
   z.object({
     success: z.literal(true),
     data: z.object({
-      providers: z.array(OpenApiProviderOptionsWithIdSchema),
+      providers: z.array(OpenApiProviderCatalogEntrySchema),
       hasCustomConfig: z.boolean(),
     }),
   }),

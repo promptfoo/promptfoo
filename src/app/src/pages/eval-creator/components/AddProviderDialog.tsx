@@ -43,7 +43,7 @@ export default function AddProviderDialog({
 
   useEffect(() => {
     if (open) {
-      if (initialProvider) {
+      if (initialProvider && !availableProviders) {
         setProvider(initialProvider);
         setProviderType(getProviderTypeFromId(initialProvider.id));
         setStep('configure');
@@ -56,7 +56,7 @@ export default function AddProviderDialog({
       }
       setError(null);
     }
-  }, [open, initialProvider]);
+  }, [open, initialProvider, availableProviders]);
 
   const handleConfiguredProviderSelect = (newProvider: ProviderOptions) => {
     onSave(newProvider);

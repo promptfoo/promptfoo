@@ -54,4 +54,14 @@ describe('getAvailableProviders', () => {
 
     expect(providers).toEqual([expect.objectContaining({ id: 'openai:chat:gpt-5.6' })]);
   });
+
+  it('drops non-string labels so catalog entries remain safe to render', async () => {
+    const providers = await getProvidersForConfig(
+      ['providers:', '  - id: openai:chat:gpt-5.6', '    label:', '      name: Internal'].join(
+        '\n',
+      ),
+    );
+
+    expect(providers).toEqual([{ id: 'openai:chat:gpt-5.6' }]);
+  });
 });

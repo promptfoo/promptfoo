@@ -165,7 +165,12 @@ export function getAvailableProviders(): ProviderOptions[] {
       continue;
     }
 
-    validatedProviders.push(result.data);
+    const validatedProvider = { ...result.data };
+    if (typeof validatedProvider.label !== 'string') {
+      delete validatedProvider.label;
+    }
+
+    validatedProviders.push(validatedProvider);
   }
 
   if (validatedProviders.length < config.providers.length) {

@@ -10,6 +10,10 @@ const ProviderOptionsWithIdSchema = ProviderOptionsSchema.extend({
   id: z.string().min(1, 'Provider ID is required'),
 });
 
+const ProviderCatalogEntrySchema = ProviderOptionsWithIdSchema.extend({
+  label: z.string().optional(),
+});
+
 // POST /api/providers/test
 
 /** Request body for testing provider connectivity. */
@@ -44,7 +48,7 @@ export const ProviderCatalogResponseSchema = z.union([
   z.object({
     success: z.literal(true),
     data: z.object({
-      providers: z.array(ProviderOptionsWithIdSchema),
+      providers: z.array(ProviderCatalogEntrySchema),
       hasCustomConfig: z.boolean(),
     }),
   }),
