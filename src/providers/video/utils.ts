@@ -71,7 +71,7 @@ export function generateVideoCacheKey(params: {
     const safeUrl = new URL(sanitizeUrl(rawReference));
     for (const key of Array.from(safeUrl.searchParams.keys())) {
       if (
-        /^(?:x-amz-|x-goog-|sig(?:nature)?$|st$|se$|sp$|sv$|sr$|skoid$|sktid$|skt$|ske$|sks$|skv$)/i.test(
+        /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i.test(
           key,
         )
       ) {

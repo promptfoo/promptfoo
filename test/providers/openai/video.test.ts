@@ -934,12 +934,12 @@ describe('OpenAiVideoProvider', () => {
       const first = generateVideoCacheKey({
         ...base,
         inputReference:
-          'https://account.blob.core.windows.net/container/start.png?sv=2024-11-04&st=2026-07-15T00%3A00Z&se=2026-07-15T01%3A00Z&sr=b&sp=r&sig=one',
+          'https://account.blob.core.windows.net/container/start.png?sv=2024-11-04&st=2026-07-15T00%3A00Z&se=2026-07-15T01%3A00Z&sr=b&sp=r&spr=https&sip=10.0.0.1&saoid=owner-one&scid=correlation-one&sig=one',
       });
       const rotated = generateVideoCacheKey({
         ...base,
         inputReference:
-          'https://account.blob.core.windows.net/container/start.png?sv=2024-11-04&st=2026-07-15T02%3A00Z&se=2026-07-15T03%3A00Z&sr=b&sp=r&sig=two',
+          'https://account.blob.core.windows.net/container/start.png?sv=2024-11-04&st=2026-07-15T02%3A00Z&se=2026-07-15T03%3A00Z&sr=b&sp=r&spr=http&sip=10.0.0.2&saoid=owner-two&scid=correlation-two&sig=two',
       });
 
       expect(first).toBe(rotated);
