@@ -1300,6 +1300,10 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.output).not.toContain('Let me check that.');
       expect(response.metadata?.functionCallOccurred).toBe(true);
       expect(response.metadata?.functionCallResults).toEqual(['{"call_status":"callback"}']);
+      expect(response.metadata?.usageEvents).toEqual([
+        { total_tokens: 8, input_tokens: 5, output_tokens: 3 },
+        { total_tokens: 11, input_tokens: 7, output_tokens: 4 },
+      ]);
       expect(response.tokenUsage).toEqual({
         total: 11,
         prompt: 7,
@@ -2747,6 +2751,10 @@ describe('OpenAI Realtime Provider', () => {
         const result = await responsePromise;
         expect(result.error).toBeUndefined();
         expect(result.output).toContain('tool done');
+        expect(result.metadata?.usageEvents).toEqual([
+          { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
+          { total_tokens: 2, input_tokens: 1, output_tokens: 1 },
+        ]);
       } finally {
         vi.useRealTimers();
       }
@@ -2802,6 +2810,10 @@ describe('OpenAI Realtime Provider', () => {
 
         const result = await responsePromise;
         expect(result.output).toContain('tool done');
+        expect(result.metadata?.usageEvents).toEqual([
+          { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
+          { total_tokens: 2, input_tokens: 1, output_tokens: 1 },
+        ]);
       } finally {
         vi.useRealTimers();
       }

@@ -2711,6 +2711,24 @@ describe('util', () => {
       );
     });
 
+    it('should apply the Gemini Live cached-input rate across cached modalities', () => {
+      const cost = calculateGoogleCost(
+        'gemini-live-2.5-flash-preview-native-audio-09-2025',
+        {},
+        1_000,
+        500,
+        false,
+        400,
+        500,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
+    });
+
     it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {
       const cost = calculateGoogleCost(
         'gemini-3.1-flash-live-preview',

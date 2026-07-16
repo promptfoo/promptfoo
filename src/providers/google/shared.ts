@@ -5,6 +5,7 @@
 export interface GoogleModelCost {
   input: number;
   output: number;
+  cacheRead?: number;
   audioInput?: number;
   audioOutput?: number;
   imageInput?: number;
@@ -84,7 +85,13 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
   {
     id: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
-    cost: { input: 0.3 / 1e6, output: 2.0 / 1e6, audioInput: 3.0 / 1e6, audioOutput: 12.0 / 1e6 },
+    cost: {
+      input: 0.3 / 1e6,
+      output: 2.0 / 1e6,
+      cacheRead: 0.075 / 1e6,
+      audioInput: 3.0 / 1e6,
+      audioOutput: 12.0 / 1e6,
+    },
   },
   ...[
     'gemini-2.5-flash-native-audio-latest',

@@ -20,7 +20,7 @@ export function throwConfigurationError(message: string): never {
  */
 export function calculateAzureCost(
   modelName: string,
-  _config: AzureCompletionOptions,
+  config: AzureCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
   cachedPromptTokens?: number,
@@ -71,15 +71,18 @@ export function calculateAzureCost(
     textInputTokens,
   );
   const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
+  const priorityMultiplier = serviceTier === 'priority' ? (model.cost.priorityMultiplier ?? 1) : 1;
 
   return (
-    (textInputTokens - cachedTextTokens) * inputCost +
-    cachedTextTokens * cacheReadCost +
-    (audioInputTokens - cachedAudioTokens) * (model.cost.audioInput ?? inputCost) +
-    cachedAudioTokens * (model.cost.cacheReadAudio ?? cacheReadCost) +
-    (imageInputTokens - cachedImageTokens) * (model.cost.imageInput ?? inputCost) +
-    cachedImageTokens * (model.cost.cacheReadImage ?? cacheReadCost) +
-    (completionTokens - audioOutputTokens) * outputCost +
-    audioOutputTokens * (model.cost.audioOutput ?? outputCost)
+    ((textInputTokens - cachedTextTokens) * inputCost +
+      cachedTextTokens * cacheReadCost +
+      (audioInputTokens - cachedAudioTokens) * (model.cost.audioInput ?? inputCost) +
+      cachedAudioTokens * (model.cost.cacheReadAudio ?? cacheReadCost) +
+      (imageInputTokens - cachedImageTokens) * (model.cost.imageInput ?? inputCost) +
+      cachedImageTokens * (model.cost.cacheReadImage ?? cacheReadCost) +
+      (completionTokens - audioOutputTokens) * outputCost +
+      audioOutputTokens * (model.cost.audioOutput ?? outputCost)) *
+    priorityMultiplier
   );
 }

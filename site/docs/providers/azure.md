@@ -144,7 +144,7 @@ Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/op
 
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so set `isReasoningModel: true`.
 
-The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (including mini and 1.5 variants). Audio-capable models report separate text and audio-token costs.
+The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (including mini and 1.5 variants). GPT-5.6 cost estimates honor `passthrough.service_tier: priority`, and audio-capable models report separate text and audio-token costs.
 
 ### Azure Realtime API
 

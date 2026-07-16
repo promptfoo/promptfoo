@@ -173,6 +173,63 @@ describe('calculateAzureCost', () => {
   });
 
   it.each([
+    {
+      id: 'gpt-5.6',
+      input: 5,
+      cached: 0.5,
+      output: 30,
+      longInput: 10,
+      longCached: 1,
+      longOutput: 45,
+    },
+    {
+      id: 'gpt-5.6-sol',
+      input: 5,
+      cached: 0.5,
+      output: 30,
+      longInput: 10,
+      longCached: 1,
+      longOutput: 45,
+    },
+    {
+      id: 'gpt-5.6-terra',
+      input: 2.5,
+      cached: 0.25,
+      output: 15,
+      longInput: 5,
+      longCached: 0.5,
+      longOutput: 22.5,
+    },
+    {
+      id: 'gpt-5.6-luna',
+      input: 1,
+      cached: 0.1,
+      output: 6,
+      longInput: 2,
+      longCached: 0.2,
+      longOutput: 9,
+    },
+  ])('uses the priority-tier rate for $id', ({
+    id,
+    input,
+    cached,
+    output,
+    longInput,
+    longCached,
+    longOutput,
+  }) => {
+    const config = { passthrough: { service_tier: 'priority' } };
+    expect(calculateAzureCost(id, config, 2_000, 1_000, 500)).toBeCloseTo(
+      (2 * (1_500 * input + 500 * cached + 1_000 * output)) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost(id, config, 272_001, 1_000, 1_000)).toBeCloseTo(
+      (2 * (271_001 * longInput + 1_000 * longCached + 1_000 * longOutput)) / 1e6,
+      12,
+    );
+  });
+
+  it.each([
     { id: 'gpt-realtime', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-realtime-2025-08-28', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-realtime-1.5-2026-02-23', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
@@ -189,6 +246,58 @@ describe('calculateAzureCost', () => {
     { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
     { id: 'gpt-audio-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
     { id: 'gpt-audio-mini-2025-10-06', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
+    { id: 'gpt-4o-realtime-preview', input: 5, output: 20, audioInput: 40, audioOutput: 80 },
+    {
+      id: 'gpt-4o-realtime-preview-2024-10-01',
+      input: 5,
+      output: 20,
+      audioInput: 100,
+      audioOutput: 200,
+    },
+    {
+      id: 'gpt-4o-realtime-preview-2024-12-17',
+      input: 5,
+      output: 20,
+      audioInput: 40,
+      audioOutput: 80,
+    },
+    {
+      id: 'gpt-4o-realtime-preview-2025-06-03',
+      input: 5,
+      output: 20,
+      audioInput: 40,
+      audioOutput: 80,
+    },
+    {
+      id: 'gpt-4o-mini-realtime-preview',
+      input: 0.6,
+      output: 2.4,
+      audioInput: 10,
+      audioOutput: 20,
+    },
+    {
+      id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+      input: 0.6,
+      output: 2.4,
+      audioInput: 10,
+      audioOutput: 20,
+    },
+    { id: 'gpt-4o-audio-preview', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    {
+      id: 'gpt-4o-audio-preview-2024-12-17',
+      input: 2.5,
+      output: 10,
+      audioInput: 40,
+      audioOutput: 80,
+    },
+    { id: 'gpt-4o-mini-audio-preview', input: 0.15, output: 0.6, audioInput: 40, audioOutput: 80 },
+    {
+      id: 'gpt-4o-mini-audio-preview-2024-12-17',
+      input: 2.5,
+      output: 10,
+      audioInput: 40,
+      audioOutput: 80,
+    },
   ])('uses the correct audio-token rates for $id', ({
     id,
     input,

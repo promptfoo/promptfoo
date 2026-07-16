@@ -177,6 +177,70 @@ describe('AzureRealtimeProvider', () => {
       (930 * 0.6 + 70 * 0.06 + 20 * 0.3 + 10 * 0.08 + 20 * 2.4 + 10 * 20) / 1e6,
       12,
     );
+    expect(result.tokenUsage).toEqual({
+      prompt: 1_030,
+      completion: 30,
+      total: 1_060,
+      cached: 100,
+      numRequests: 1,
+    });
+  });
+
+  it('aggregates every realtime response when a tool call creates a follow-up turn', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      output: 'hello',
+      tokenUsage: { prompt: 200, completion: 50, total: 250 },
+      metadata: {
+        usage: { input_tokens: 200, output_tokens: 50, total_tokens: 250 },
+        usageEvents: [
+          {
+            input_tokens: 1_000,
+            input_token_details: {
+              text_tokens: 800,
+              audio_tokens: 200,
+              cached_tokens: 100,
+              cached_tokens_details: { text_tokens: 100 },
+            },
+            output_tokens: 500,
+            output_token_details: { text_tokens: 400, audio_tokens: 100 },
+            total_tokens: 1_500,
+          },
+          { input_tokens: 200, output_tokens: 50, total_tokens: 250 },
+        ],
+      },
+    });
+    const provider = new AzureRealtimeProvider('gpt-realtime-mini-2025-10-06', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.tokenUsage).toEqual({
+      prompt: 1_200,
+      completion: 550,
+      total: 1_750,
+      cached: 100,
+      numRequests: 2,
+    });
+    expect(result.cost).toBeCloseTo(
+      (700 * 0.6 + 100 * 0.06 + 200 * 10 + 400 * 2.4 + 100 * 20 + 200 * 0.6 + 50 * 2.4) / 1e6,
+      12,
+    );
+  });
+
+  it('falls back to token usage when a realtime response does not include metadata usage', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      output: 'hello',
+      tokenUsage: { prompt: 1_000, completion: 500, total: 1_500 },
+      metadata: {},
+    });
+    const provider = new AzureRealtimeProvider('gpt-realtime-mini-2025-10-06', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBeCloseTo((1_000 * 0.6 + 500 * 2.4) / 1e6, 12);
   });
 
   it('cleans up the delegated realtime connection', async () => {

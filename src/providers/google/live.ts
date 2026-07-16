@@ -43,6 +43,17 @@ const formatContentMessages = (
   const parts = contents[contentIndex].parts;
 
   if (useRealtimeTextInput) {
+    const videoFrameCount = parts.filter((part) => {
+      const inlineData = (part as any).inlineData ?? (part as any).inline_data;
+      const mimeType = inlineData?.mimeType ?? inlineData?.mime_type;
+      return mimeType === 'image/jpeg' || mimeType === 'image/png';
+    }).length;
+    if (videoFrameCount > 1) {
+      throw new Error(
+        'Google Live accepts at most one image/jpeg or image/png frame per user turn (maximum 1 frame per second).',
+      );
+    }
+
     return parts.map((part) => {
       const userPart = part as {
         text?: string;
@@ -60,7 +71,11 @@ const formatContentMessages = (
             'Google Live video input must be sent as individual image/jpeg or image/png frames (maximum 1 frame per second).',
           );
         }
-        if (!mimeType.startsWith('audio/') && !mimeType.startsWith('image/')) {
+        if (
+          !mimeType.startsWith('audio/') &&
+          mimeType !== 'image/jpeg' &&
+          mimeType !== 'image/png'
+        ) {
           throw new Error(`Unsupported Google Live realtime input MIME type: ${mimeType}`);
         }
         const mediaType = mimeType.startsWith('audio/') ? 'audio' : 'video';
@@ -514,6 +529,38 @@ export class GoogleLiveProvider implements ApiProvider {
               ),
             0,
           );
+          const cachedPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getTokenCount(usage.cachedContentTokenCount, usage.cached_content_token_count),
+            0,
+          );
+          const cachedAudioPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'AUDIO',
+              ),
+            0,
+          );
+          const cachedImagePromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'IMAGE',
+              ) +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'VIDEO',
+              ) +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'DOCUMENT',
+              ),
+            0,
+          );
 
           result.tokenUsage = {
             prompt: promptTokens,
@@ -524,6 +571,7 @@ export class GoogleLiveProvider implements ApiProvider {
               0,
             ),
             numRequests: usageMetadata.length,
+            ...(cachedPromptTokens > 0 ? { cached: cachedPromptTokens } : {}),
             ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
           };
           result.cost = calculateGoogleCost(
@@ -536,6 +584,9 @@ export class GoogleLiveProvider implements ApiProvider {
             audioCompletionTokens,
             undefined,
             imagePromptTokens,
+            cachedPromptTokens,
+            cachedAudioPromptTokens,
+            cachedImagePromptTokens,
           );
         }
 
@@ -667,7 +718,7 @@ export class GoogleLiveProvider implements ApiProvider {
           if (frameUsageMetadata) {
             pendingUsageMetadata = frameUsageMetadata;
           }
-          if (response.serverContent?.turnComplete && pendingUsageMetadata) {
+          if ((response.serverContent?.turnComplete || response.toolCall) && pendingUsageMetadata) {
             usageMetadata.push(pendingUsageMetadata);
             pendingUsageMetadata = undefined;
           }

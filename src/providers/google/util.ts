@@ -228,6 +228,9 @@ export function stripExecutableToolFileReferences(
  * @param audioCompletionTokens - Number of audio tokens included in the completion token count
  * @param videoCompletionTokens - Number of video tokens included in the completion token count
  * @param imagePromptTokens - Number of image tokens included in the prompt token count
+ * @param cachedPromptTokens - Number of cached tokens included in the prompt token count
+ * @param cachedAudioPromptTokens - Number of cached audio tokens included in the prompt token count
+ * @param cachedImagePromptTokens - Number of cached image tokens included in the prompt token count
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -240,6 +243,9 @@ export function calculateGoogleCost(
   audioCompletionTokens?: number,
   videoCompletionTokens?: number,
   imagePromptTokens?: number,
+  cachedPromptTokens?: number,
+  cachedAudioPromptTokens?: number,
+  cachedImagePromptTokens?: number,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
@@ -269,6 +275,20 @@ export function calculateGoogleCost(
     imagePromptTokens,
     Math.max(promptTokens - audioInputTokens, 0),
   );
+  const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
+  const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
+  const cachedAudioTokens = clampCachedTokens(
+    cachedAudioPromptTokens,
+    Math.min(cachedTokens, audioInputTokens),
+  );
+  const cachedImageTokens = clampCachedTokens(
+    cachedImagePromptTokens,
+    Math.min(Math.max(cachedTokens - cachedAudioTokens, 0), imageInputTokens),
+  );
+  const cachedTextTokens = Math.min(
+    Math.max(cachedTokens - cachedAudioTokens - cachedImageTokens, 0),
+    textInputTokens,
+  );
   const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
   const videoOutputTokens = clampCachedTokens(
     videoCompletionTokens,
@@ -280,11 +300,18 @@ export function calculateGoogleCost(
     config.audioOutputCost ?? config.audioCost ?? modelCost.audioOutput ?? outputCost;
   const videoOutputCost = config.videoOutputCost ?? modelCost.videoOutput ?? outputCost;
   const imageInputCost = config.imageInputCost ?? modelCost.imageInput ?? inputCost;
+  const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
+  const cachedAudioInputCost =
+    config.audioInputCost ?? config.audioCost ?? modelCost.cacheRead ?? audioInputCost;
+  const cachedImageInputCost = config.imageInputCost ?? modelCost.cacheRead ?? imageInputCost;
 
   return (
-    (promptTokens - audioInputTokens - imageInputTokens) * inputCost +
-    audioInputTokens * audioInputCost +
-    imageInputTokens * imageInputCost +
+    (textInputTokens - cachedTextTokens) * inputCost +
+    cachedTextTokens * cachedInputCost +
+    (audioInputTokens - cachedAudioTokens) * audioInputCost +
+    cachedAudioTokens * cachedAudioInputCost +
+    (imageInputTokens - cachedImageTokens) * imageInputCost +
+    cachedImageTokens * cachedImageInputCost +
     (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
     audioOutputTokens * audioOutputCost +
     videoOutputTokens * videoOutputCost

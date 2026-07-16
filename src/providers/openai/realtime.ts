@@ -739,6 +739,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let responseError = '';
       let responseDone = false;
       let usage = null;
+      const usageEvents: any[] = [];
 
       // Audio content accumulators
       const audioContent: Buffer[] = [];
@@ -975,7 +976,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             case 'response.done':
               responseDone = true;
-              usage = message.response.usage;
+              usage = message.response?.usage ?? message.usage;
+              if (usage) {
+                usageEvents.push(usage);
+              }
 
               // If there are pending function calls, process them
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
@@ -1111,6 +1115,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   responseId,
                   messageId,
                   usage,
+                  usageEvents,
                   // Include audio data in metadata if available
                   ...(hasAudioContent && {
                     audio: {
@@ -1414,6 +1419,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let responseError = '';
       let responseDone = false;
       let usage = null;
+      const usageEvents: any[] = [];
 
       // Audio content accumulators
       const audioContent: Buffer[] = [];
@@ -1648,7 +1654,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             case 'response.done':
               responseDone = true;
-              usage = message.response.usage;
+              usage = message.response?.usage ?? message.usage;
+              if (usage) {
+                usageEvents.push(usage);
+              }
 
               // If there are pending function calls, process them
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
@@ -1784,6 +1793,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   responseId,
                   messageId,
                   usage,
+                  usageEvents,
                   // Include audio data in metadata if available
                   ...(hasAudioContent && {
                     audio: {
@@ -2124,6 +2134,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       input_tokens?: number;
       output_tokens?: number;
     } | null = null;
+    const usageEvents: any[] = [];
 
     // Track message IDs and function call state
     let _messageId = '';
@@ -2205,6 +2216,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           responseId: _responseId,
           messageId: _messageId,
           usage: _usage,
+          usageEvents,
           ...(hadAudio && {
             audio: {
               data: finalAudioData,
@@ -2345,6 +2357,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             responseDone = true;
             if (message.response?.usage || message.usage) {
               _usage = message.response?.usage ?? message.usage;
+              usageEvents.push(_usage);
             }
 
             if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {

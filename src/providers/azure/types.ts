@@ -127,6 +127,7 @@ export interface AzureModelCost {
     audioInput?: number;
     audioOutput?: number;
     imageInput?: number;
+    priorityMultiplier?: number;
     longContext?: {
       threshold: number;
       input: number;

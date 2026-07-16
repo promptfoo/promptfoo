@@ -75,28 +75,81 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     }
 
     const result = await this.realtimeProvider.callApi(prompt, context, callApiOptions);
-    const usage = result.metadata?.usage as any;
-    const inputDetails =
-      usage?.prompt_tokens_details ?? usage?.input_tokens_details ?? usage?.input_token_details;
-    const outputDetails =
-      usage?.completion_tokens_details ??
-      usage?.output_tokens_details ??
-      usage?.output_token_details;
-
-    return {
-      ...result,
-      cost: calculateAzureCost(
+    const reportedUsageEvents = result.metadata?.usageEvents;
+    const usageEvents: any[] =
+      Array.isArray(reportedUsageEvents) && reportedUsageEvents.length > 0
+        ? reportedUsageEvents
+        : result.metadata?.usage
+          ? [result.metadata.usage]
+          : [];
+    const costForUsageEvents = usageEvents.reduce<number | undefined>((total, usage) => {
+      const inputDetails =
+        usage?.prompt_tokens_details ?? usage?.input_tokens_details ?? usage?.input_token_details;
+      const outputDetails =
+        usage?.completion_tokens_details ??
+        usage?.output_tokens_details ??
+        usage?.output_token_details;
+      const usageCost = calculateAzureCost(
         this.deploymentName,
         this.config,
-        usage?.prompt_tokens ?? usage?.input_tokens ?? result.tokenUsage?.prompt,
-        usage?.completion_tokens ?? usage?.output_tokens ?? result.tokenUsage?.completion,
+        usage?.prompt_tokens ?? usage?.input_tokens,
+        usage?.completion_tokens ?? usage?.output_tokens,
         inputDetails?.cached_tokens,
         inputDetails?.audio_tokens,
         outputDetails?.audio_tokens,
         inputDetails?.image_tokens,
         inputDetails?.cached_tokens_details?.audio_tokens,
         inputDetails?.cached_tokens_details?.image_tokens,
-      ),
+      );
+
+      return typeof total === 'number' && typeof usageCost === 'number'
+        ? total + usageCost
+        : undefined;
+    }, 0);
+    const cost =
+      usageEvents.length > 0
+        ? costForUsageEvents
+        : calculateAzureCost(
+            this.deploymentName,
+            this.config,
+            result.tokenUsage?.prompt,
+            result.tokenUsage?.completion,
+          );
+    const tokenUsage =
+      usageEvents.length > 0
+        ? {
+            ...result.tokenUsage,
+            prompt: usageEvents.reduce(
+              (total, usage) => total + (usage?.prompt_tokens ?? usage?.input_tokens ?? 0),
+              0,
+            ),
+            completion: usageEvents.reduce(
+              (total, usage) => total + (usage?.completion_tokens ?? usage?.output_tokens ?? 0),
+              0,
+            ),
+            total: usageEvents.reduce(
+              (total, usage) =>
+                total +
+                (usage?.total_tokens ??
+                  (usage?.prompt_tokens ?? usage?.input_tokens ?? 0) +
+                    (usage?.completion_tokens ?? usage?.output_tokens ?? 0)),
+              0,
+            ),
+            cached: usageEvents.reduce((total, usage) => {
+              const inputDetails =
+                usage?.prompt_tokens_details ??
+                usage?.input_tokens_details ??
+                usage?.input_token_details;
+              return total + (inputDetails?.cached_tokens ?? 0);
+            }, 0),
+            numRequests: usageEvents.length,
+          }
+        : result.tokenUsage;
+
+    return {
+      ...result,
+      tokenUsage,
+      cost,
     };
   }
 

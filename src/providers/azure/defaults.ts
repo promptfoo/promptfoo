@@ -78,6 +78,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 5 / 1000000,
       output: 30 / 1000000,
       cacheRead: 0.5 / 1000000,
+      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 10 / 1000000,
@@ -92,6 +93,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 2.5 / 1000000,
       output: 15 / 1000000,
       cacheRead: 0.25 / 1000000,
+      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 5 / 1000000,
@@ -106,6 +108,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 1 / 1000000,
       output: 6 / 1000000,
       cacheRead: 0.1 / 1000000,
+      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 2 / 1000000,
@@ -454,39 +457,102 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   {
     id: 'gpt-4o-realtime-preview',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4o-realtime-preview-2024-10-01',
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      cacheReadAudio: 20 / 1000000,
+      audioInput: 100 / 1000000,
+      audioOutput: 200 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-realtime-preview-2024-12-17',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-realtime-preview-2025-06-03',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-realtime-preview',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      cacheRead: 0.3 / 1000000,
+      cacheReadAudio: 0.3 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      cacheRead: 0.3 / 1000000,
+      cacheReadAudio: 0.3 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-audio-preview',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-audio-preview-2024-12-17',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-audio-preview',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-audio-preview-2024-12-17',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime',

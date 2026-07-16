@@ -1082,7 +1082,7 @@ providers:
       timeoutMs: 10000
 ```
 
-Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames (at most one frame per second), not as an inline video container such as `video/mp4`. Promptfoo prices returned `IMAGE`, `VIDEO`, and `DOCUMENT` input-token usage at the image/video rate.
+Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as an individual `image/jpeg` or `image/png` frame per user turn (at most one frame per second), not as an inline video container such as `video/mp4`. Promptfoo prices returned `IMAGE`, `VIDEO`, and `DOCUMENT` input-token usage at the image/video rate.
 
 ### Key Features
 
