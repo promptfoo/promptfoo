@@ -442,6 +442,21 @@ describe('AzureRealtimeProvider', () => {
     expect(mockCallApi).toHaveBeenCalledTimes(3);
   });
 
+  it('keeps numeric and string realtime conversation IDs isolated', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+    const numericContext = { test: { metadata: { conversationId: 1 } } } as any;
+    const stringContext = { test: { metadata: { conversationId: '1' } } } as any;
+
+    await provider.callApi('hello numeric', numericContext);
+    await provider.callApi('hello string', stringContext);
+    await provider.callApi('follow up numeric', numericContext);
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledTimes(3);
+  });
+
   it('isolates normal evaluator prompts that have labels but no explicit IDs', async () => {
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
       config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },

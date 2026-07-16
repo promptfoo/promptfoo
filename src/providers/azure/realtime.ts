@@ -129,7 +129,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
 
     const promptId = context?.prompt ? generateIdFromPrompt(context.prompt) : 'default';
     const realtimeProviderKey = hasConversationId
-      ? `prompt:${promptId}:conversation:${conversationId}`
+      ? `persistent:${JSON.stringify([promptId, conversationId])}`
       : `stateless:${++this.nextStatelessProviderId}`;
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
 
