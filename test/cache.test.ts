@@ -294,7 +294,7 @@ describe('cache configuration', () => {
 
     expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
     await cacheModule.clearCache();
-    expect(rmSync).toHaveBeenCalledWith('/custom/cache/path/claims', {
+    expect(rmSync).toHaveBeenCalledWith(path.join('/custom/cache/path', 'claims'), {
       force: true,
       recursive: true,
     });

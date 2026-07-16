@@ -1750,6 +1750,8 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should preserve a shareable queued background response after a local polling timeout', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
@@ -1759,11 +1761,14 @@ describe('OpenAiResponsesProvider request building', () => {
         statusText: 'OK',
         deleteFromCache,
       })
-      .mockResolvedValueOnce({
-        data: { id: 'resp_shared_timeout', status: 'in_progress', output: [], usage: null },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
+      .mockImplementationOnce(async () => {
+        now += 10;
+        return {
+          data: { id: 'resp_shared_timeout', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
       })
       .mockResolvedValueOnce({
         data: { id: 'resp_shared_timeout', status: 'queued', output: [], usage: null },
@@ -1797,21 +1802,27 @@ describe('OpenAiResponsesProvider request building', () => {
       },
     });
 
-    const first = await provider.callApi('Resume this background task');
-    const second = await provider.callApi('Resume this background task');
+    try {
+      const first = await provider.callApi('Resume this background task');
+      const second = await provider.callApi('Resume this background task');
 
-    expect(first.error).toContain('Background response resp_shared_timeout timed out after 10ms.');
-    expect(second.error).toBeUndefined();
-    expect(second.output).toBe('Ready');
-    expect(deleteFromCache).not.toHaveBeenCalled();
-    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
-      expect.stringContaining('/cancel'),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-    );
+      expect(first.error).toContain(
+        'Background response resp_shared_timeout timed out after 10ms.',
+      );
+      expect(second.error).toBeUndefined();
+      expect(second.output).toBe('Ready');
+      expect(deleteFromCache).not.toHaveBeenCalled();
+      expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+        expect.stringContaining('/cancel'),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('should preserve the polling deadline of a late background subscriber', async () => {
