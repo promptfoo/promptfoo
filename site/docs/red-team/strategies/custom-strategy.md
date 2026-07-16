@@ -189,7 +189,7 @@ strategies:
 
 :::note
 
-The global `excludeTargetOutputFromAgenticAttackGeneration` option prevents target responses from being sent during follow-up attack generation across strategies, not just custom. It applies to the documented attack-generation path, not unrelated diagnostics or hosted features.
+The global `excludeTargetOutputFromAgenticAttackGeneration` option removes target responses from the main follow-up attack prompt across strategies, not just custom. It does not prevent GOAT failure-extraction requests from sending the previous target response, so use an isolated or local generation path for sensitive targets.
 
 :::
 
