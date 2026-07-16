@@ -286,15 +286,30 @@ export class GoogleInteractionsProvider implements ApiProvider {
           (downloadUrl.protocol === 'https:' &&
             downloadUrl.hostname === 'generativelanguage.googleapis.com')
         ) {
-          const response = await fetchWithTimeout(
+          const downloadHeaders =
+            downloadUrl.origin === endpointOrigin ? headers : { 'x-goog-api-key': apiKey };
+          let response = await fetchWithTimeout(
             downloadUrl.toString(),
             {
               method: 'GET',
-              headers:
-                downloadUrl.origin === endpointOrigin ? headers : { 'x-goog-api-key': apiKey },
+              headers: downloadHeaders,
+              redirect: 'manual',
             },
             getRequestTimeoutMs(),
           );
+          const redirectLocation = response.headers.get('location');
+          if (response.status >= 300 && response.status < 400 && redirectLocation) {
+            const redirectUrl = new URL(redirectLocation, downloadUrl);
+            response = await fetchWithTimeout(
+              redirectUrl.toString(),
+              {
+                method: 'GET',
+                ...(redirectUrl.origin === downloadUrl.origin ? { headers: downloadHeaders } : {}),
+                redirect: 'manual',
+              },
+              getRequestTimeoutMs(),
+            );
+          }
           if (!response.ok) {
             return { error: `Failed to download Gemini interaction video: ${response.statusText}` };
           }

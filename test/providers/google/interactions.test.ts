@@ -258,6 +258,61 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.video).toMatchObject({ url: 'blob://video/omni', format: 'webm' });
   });
 
+  it('does not forward Gemini credentials across a video-download redirect', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [
+              {
+                type: 'video',
+                mime_type: 'video/mp4',
+                uri: 'https://generativelanguage.googleapis.com/v1beta/files/video-2:download?alt=media',
+              },
+            ],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockFetchWithTimeout
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://storage.example/signed-video' },
+        }) as any,
+      )
+      .mockResolvedValueOnce(new Response(Buffer.from('redirected video')) as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('a city at dusk');
+
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      'https://generativelanguage.googleapis.com/v1beta/files/video-2:download?alt=media',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'test-key' }),
+        redirect: 'manual',
+      }),
+      expect.any(Number),
+    );
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      'https://storage.example/signed-video',
+      { method: 'GET', redirect: 'manual' },
+      expect.any(Number),
+    );
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      Buffer.from('redirected video'),
+      'video/mp4',
+      expect.any(Object),
+    );
+  });
+
   it('does not reuse an Omni video from a previous interaction turn', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
