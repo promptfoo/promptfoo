@@ -62,7 +62,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
   {
     id: 'gemini-flash-latest',
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6, cacheRead: 0.075 / 1e6, audioInput: 1.0 / 1e6 },
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6, cacheRead: 0.03 / 1e6, audioInput: 1.0 / 1e6 },
   },
   {
     id: 'gemini-omni-flash-preview',
@@ -114,7 +114,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   })),
   {
     id: 'gemini-flash-lite-latest',
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: 0.025 / 1e6, audioInput: 0.3 / 1e6 },
+    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: 0.01 / 1e6, audioInput: 0.3 / 1e6 },
   },
   {
     id: 'gemini-3.1-flash-live-preview',

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest'
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -251,6 +252,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send mixed text and image parts as Gemini 3.1 realtime input', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
         generationConfig: { response_modalities: ['audio'] },
@@ -285,6 +287,14 @@ describe('GoogleLiveProvider', () => {
       { realtime_input: { video: { mime_type: 'image/jpeg', data: 'aW1hZ2U=' } } },
       { realtime_input: { text: 'Describe this image.' } },
     ]);
+    expect(debugSpy).toHaveBeenCalledWith('WebSocket sent', { messageCount: 2 });
+    expect(
+      debugSpy.mock.calls.some(
+        ([message]) =>
+          String(message).startsWith('WebSocket sent') && String(message).includes('aW1hZ2U='),
+      ),
+    ).toBe(false);
+    debugSpy.mockRestore();
   });
 
   it('should terminate finite Gemini 3.1 Live audio input', async () => {
@@ -965,6 +975,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should advance Gemini 3.1 multi-turn prompts after generationComplete', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
         generationConfig: {
@@ -1028,6 +1039,14 @@ describe('GoogleLiveProvider', () => {
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
     expect(sentMessages[1]).toEqual({ realtime_input: { text: 'first prompt' } });
     expect(sentMessages[2]).toEqual({ realtime_input: { text: 'second prompt' } });
+    expect(debugSpy).toHaveBeenCalledWith('WebSocket sent (multi-turn)', { messageCount: 1 });
+    expect(
+      debugSpy.mock.calls.some(
+        ([message]) =>
+          String(message).startsWith('WebSocket sent') && String(message).includes('second prompt'),
+      ),
+    ).toBe(false);
+    debugSpy.mockRestore();
     expect(response.output).toMatchObject({
       text: 'First answer. Second answer.',
       toolCall: { functionCalls: [] },

@@ -704,14 +704,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-4o-transcribe-diarize-2025-10-15',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
   },
-  {
-    id: 'gpt-4o-mini-tts',
+  ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-03-20'].map((id) => ({
+    id,
     cost: { input: 2.5 / 1000000, output: 10 / 1000000, audioOutput: 12 / 1000000 },
-  },
-  {
-    id: 'gpt-4o-mini-tts-2025-03-20',
-    cost: { input: 0.6 / 1000000, output: 12 / 1000000 },
-  },
+  })),
 
   // =============================================================================
   // GPT-4 Legacy

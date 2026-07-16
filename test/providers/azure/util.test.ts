@@ -419,8 +419,11 @@ describe('calculateAzureCost', () => {
     );
   });
 
-  it('prices GPT-4o mini TTS text input and audio output using the current Azure rates', () => {
-    expect(calculateAzureCost('gpt-4o-mini-tts', {}, 1_000, 1_000, 0, 0, 1_000)).toBeCloseTo(
+  it.each([
+    'gpt-4o-mini-tts',
+    'gpt-4o-mini-tts-2025-03-20',
+  ])('prices %s text input and audio output using the current Azure rates', (id) => {
+    expect(calculateAzureCost(id, {}, 1_000, 1_000, 0, 0, 1_000)).toBeCloseTo(
       (1_000 * 2.5 + 1_000 * 12) / 1e6,
       12,
     );
@@ -756,6 +759,7 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-audio-mini', 0.6, 2.4],
     ['gpt-4o-mini-transcribe', 1.25, 5],
     ['gpt-4o-mini-tts', 2.5, 10],
+    ['gpt-4o-mini-tts-2025-03-20', 2.5, 10],
     ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],

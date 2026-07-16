@@ -847,7 +847,7 @@ export class GoogleLiveProvider implements ApiProvider {
               usesRealtimeTextInput,
             );
             contentIndex += 1;
-            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessages)}`);
+            logger.debug('WebSocket sent', { messageCount: contentMessages.length });
             await sendContentMessages(contentMessages);
           } else if (response.serverContent) {
             const { serverContent } = response;
@@ -904,7 +904,7 @@ export class GoogleLiveProvider implements ApiProvider {
                 usesRealtimeTextInput,
               );
               contentIndex += 1;
-              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessages)}`);
+              logger.debug('WebSocket sent (multi-turn)', { messageCount: contentMessages.length });
               hasTextStreamEnded = !isTextExpected;
               hasAudioStreamEnded = !isAudioExpected;
               await sendContentMessages(contentMessages);

@@ -38,6 +38,23 @@ type InteractionResponse = {
 function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
   try {
     const parsed = JSON.parse(prompt) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((content) => {
+        if (!content || typeof content !== 'object' || !('role' in content)) {
+          return content;
+        }
+
+        const role = content.role;
+        return {
+          ...content,
+          ...(role === 'assistant'
+            ? { role: 'model' }
+            : role === 'system' || role === 'developer'
+              ? { role: 'user' }
+              : {}),
+        };
+      });
+    }
     return parsed && typeof parsed === 'object'
       ? (parsed as unknown[] | Record<string, unknown>)
       : prompt;
@@ -144,6 +161,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'negativePrompt',
       'system_instruction',
       'systemInstruction',
+      'service_tier',
+      'serviceTier',
     ]);
     const passthroughGenerationConfig = config.passthrough?.generation_config;
     const generationConfig = {
@@ -181,7 +200,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
-      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...passthrough,
       background: false,
       stream: false,

@@ -2839,8 +2839,8 @@ describe('util', () => {
     });
 
     it.each([
-      ['gemini-flash-latest', 0.3, 0.075, 1, 2.5],
-      ['gemini-flash-lite-latest', 0.1, 0.025, 0.3, 0.4],
+      ['gemini-flash-latest', 0.3, 0.03, 1, 2.5],
+      ['gemini-flash-lite-latest', 0.1, 0.01, 0.3, 0.4],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.7, 0.4],
     ])('uses AI Studio cached and audio rates for %s', (id, input, cached, audioInput, output) => {
       expect(

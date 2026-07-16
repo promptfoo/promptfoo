@@ -52,6 +52,7 @@ describe('GoogleInteractionsProvider', () => {
         aspectRatio: '9:16',
         previousInteractionId: 'interaction-0',
         store: true,
+        service_tier: 'priority',
         maxOutputTokens: 2_048,
         generationConfig: {
           thinking_level: 'low',
@@ -73,6 +74,8 @@ describe('GoogleInteractionsProvider', () => {
           generationConfig: { temperature: 0.6 },
           system_instruction: { parts: [{ text: 'unsupported passthrough instruction' }] },
           temperature: 0.8,
+          service_tier: 'priority',
+          serviceTier: 'priority',
         },
       },
     });
@@ -143,6 +146,43 @@ describe('GoogleInteractionsProvider', () => {
     await expect(provider.callApi('A city at dusk')).resolves.toMatchObject({
       error: 'Gemini interaction did not return video output',
     });
+  });
+
+  it('normalizes Promptfoo chat roles for the Omni Interactions API', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/chat' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        { role: 'system', content: 'Keep the scene family friendly.' },
+        { role: 'developer', content: 'Use a cinematic style.' },
+        { role: 'user', content: 'Create a city at dusk.' },
+        { role: 'assistant', content: 'I will create that scene.' },
+        { role: 'user', content: 'Add rain.' },
+      ]),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).input).toEqual([
+      { role: 'user', content: 'Keep the scene family friendly.' },
+      { role: 'user', content: 'Use a cinematic style.' },
+      { role: 'user', content: 'Create a city at dusk.' },
+      { role: 'model', content: 'I will create that scene.' },
+      { role: 'user', content: 'Add rain.' },
+    ]);
   });
 
   it('forwards native multimodal input and prompt-level interaction overrides', async () => {
