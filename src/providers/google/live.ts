@@ -375,6 +375,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let pendingUsageMetadata: any;
       let completedGenerations = 0;
       let completedTurns = 0;
+      let hasPendingToolFollowup = false;
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
@@ -878,6 +879,17 @@ export class GoogleLiveProvider implements ApiProvider {
             await sendContentMessages(contentMessages);
           } else if (response.serverContent) {
             const { serverContent } = response;
+            const hasModelOutput =
+              Boolean(serverContent.modelTurn?.parts?.length) ||
+              Boolean(serverContent.outputTranscription?.text) ||
+              Boolean(serverContent.generationComplete);
+            if (hasModelOutput) {
+              hasPendingToolFollowup = false;
+            } else if (serverContent.turnComplete && hasPendingToolFollowup) {
+              hasPendingToolFollowup = false;
+              logger.debug('Ignoring Gemini Live bookkeeping turnComplete after a tool response.');
+              return;
+            }
 
             if (serverContent.modelTurn?.parts) {
               for (const part of serverContent.modelTurn.parts) {
@@ -968,6 +980,10 @@ export class GoogleLiveProvider implements ApiProvider {
             if (isResolved) {
               return;
             }
+            hasPendingToolFollowup = response.toolCall.functionCalls.some(
+              (functionCall: { id?: string; name?: string }) =>
+                Boolean(functionCall?.id && functionCall.name),
+            );
             if (toolsDisabled) {
               // Reply with an error tool_response so the model can complete its turn
               // instead of waiting for a response that will never come (which would

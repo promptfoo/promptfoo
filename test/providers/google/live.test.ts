@@ -1383,6 +1383,53 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should ignore a bookkeeping turnComplete after a Gemini Live tool response', async () => {
+    const callback = vi.fn().mockResolvedValue({ ok: true });
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+        functionToolCallbacks: { get_weather: callback },
+      },
+    });
+    const responsePromise = provider.callApi('What is the weather?');
+    await vi.waitFor(() => expect(WebSocket).toHaveBeenCalled());
+    mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+    const emit = async (data: any) => {
+      await (mockWs.onmessage as any)({ data: JSON.stringify(data) });
+    };
+
+    await emit({ setupComplete: {} });
+    await emit({
+      toolCall: {
+        functionCalls: [{ id: 'tool-call-1', name: 'get_weather', args: { city: 'SF' } }],
+      },
+    });
+    expect(callback).toHaveBeenCalledWith('{"city":"SF"}');
+    await emit({
+      serverContent: { turnComplete: true },
+      usageMetadata: { promptTokenCount: 10, responseTokenCount: 5, totalTokenCount: 15 },
+    });
+    expect(mockWs.close).not.toHaveBeenCalled();
+    await emit({ serverContent: { modelTurn: { parts: [{ text: 'It is sunny.' }] } } });
+    await emit({
+      serverContent: { turnComplete: true },
+      usageMetadata: { promptTokenCount: 20, responseTokenCount: 7, totalTokenCount: 27 },
+    });
+
+    const response = await responsePromise;
+
+    expect(response.output).toMatchObject({ text: 'It is sunny.' });
+    expect(response.tokenUsage).toMatchObject({
+      prompt: 30,
+      completion: 12,
+      total: 42,
+      numRequests: 2,
+    });
+  });
+
   it('should send message and handle in-built google search tool', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
