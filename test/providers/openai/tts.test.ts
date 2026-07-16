@@ -425,7 +425,7 @@ describe('OpenAiTtsProvider', () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
     mockedFetch.mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise<void>((resolve) => setImmediate(resolve));
       return audioResponse();
     });
     const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
@@ -512,7 +512,7 @@ describe('OpenAiTtsProvider', () => {
       (cacheKey) => `${namespaceIndex++ === 0 ? 'repeat:0' : 'repeat:1'}:${cacheKey}`,
     );
     mockedFetch.mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise<void>((resolve) => setImmediate(resolve));
       return audioResponse();
     });
     const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });

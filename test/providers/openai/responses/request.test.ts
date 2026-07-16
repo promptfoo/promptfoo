@@ -330,7 +330,7 @@ describe('OpenAiResponsesProvider request building', () => {
       }
       if (String(url).endsWith('/responses/resp_shared') && options?.method === 'GET') {
         polls++;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: {
             id: 'resp_shared',
@@ -450,7 +450,7 @@ describe('OpenAiResponsesProvider request building', () => {
       }
       if (String(url).endsWith('/responses/resp_header_case') && options?.method === 'GET') {
         polls++;
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: {
             id: 'resp_header_case',
@@ -506,7 +506,7 @@ describe('OpenAiResponsesProvider request building', () => {
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         const id = `resp_canonical_${++creates}`;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id, status: 'queued', output: [], usage: null },
           cached: false,
@@ -572,7 +572,7 @@ describe('OpenAiResponsesProvider request building', () => {
         const id = `resp_schema_${++creates}`;
         const body = JSON.parse(String(options.body));
         orders.set(id, Object.keys(body.text.format.schema.properties));
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id, status: 'queued', output: [], usage: null },
           cached: false,
@@ -761,7 +761,7 @@ describe('OpenAiResponsesProvider request building', () => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         creates++;
         authorizations.push(new Headers(options.headers).get('authorization')!);
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id: `resp_project_${creates}`, status: 'completed', output: [], usage: null },
           cached: false,
@@ -874,7 +874,7 @@ describe('OpenAiResponsesProvider request building', () => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         creates++;
         seenAuthorization.push(new Headers(options.headers).get('authorization') ?? '');
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id: `resp_auth_${creates}`, status: 'completed', output: [], usage: null },
           cached: false,
@@ -905,7 +905,7 @@ describe('OpenAiResponsesProvider request building', () => {
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         const id = `resp_private_${++creates}`;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id, status: 'queued', output: [], usage: null },
           cached: false,
@@ -967,7 +967,7 @@ describe('OpenAiResponsesProvider request building', () => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         creates++;
         seenAuthorization.push(new Headers(options.headers).get('authorization') ?? '');
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id: `resp_auth_${creates}`, status: 'queued', output: [], usage: null },
           cached: false,
@@ -1072,7 +1072,7 @@ describe('OpenAiResponsesProvider request building', () => {
       if (String(url).endsWith('/responses/resp_shared_abort') && options?.method === 'GET') {
         polls++;
         notifyPoll?.();
-        await new Promise((resolve) => setTimeout(resolve, 15));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: {
             id: 'resp_shared_abort',
@@ -1175,7 +1175,7 @@ describe('OpenAiResponsesProvider request building', () => {
       provider.callApi('Shared pending creation', undefined, { abortSignal: first.signal }),
       provider.callApi('Shared pending creation', undefined, { abortSignal: second.signal }),
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setImmediate(resolve));
     first.abort(new Error('first subscriber cancelled during creation'));
     resolveCreation?.({
       data: { id: 'resp_shared_creation', status: 'queued', output: [], usage: null },
@@ -1271,7 +1271,7 @@ describe('OpenAiResponsesProvider request building', () => {
     first.abort(new Error('first subscriber stopped'));
     await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
     const thirdResult = provider.callApi('Persist the shared task');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(creates).toBe(1);
     expect(deleteFromCache).not.toHaveBeenCalled();
@@ -1322,7 +1322,7 @@ describe('OpenAiResponsesProvider request building', () => {
     const firstResult = provider
       .callApi('Late subscriber task', undefined, { abortSignal: first.signal })
       .catch((error: Error) => error);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setImmediate(resolve));
     first.abort(new Error('first subscriber stopped'));
     await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
     const lateResult = provider.callApi('Late subscriber task');
@@ -1349,7 +1349,7 @@ describe('OpenAiResponsesProvider request building', () => {
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         const id = `resp_repeat_${++creates}`;
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: { id, status: 'queued', output: [], usage: null },
           cached: false,
@@ -1416,7 +1416,7 @@ describe('OpenAiResponsesProvider request building', () => {
       }
       if (String(url).endsWith('/responses/resp_same_id') && options?.method === 'GET') {
         polls++;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         return {
           data: {
             id: 'resp_same_id',
@@ -1655,7 +1655,7 @@ describe('OpenAiResponsesProvider request building', () => {
     });
     setTimeout(() => controller.abort(new Error('caller cancelled creation')), 5);
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await vi.waitFor(() => expect(deleteFromCache).toHaveBeenCalledOnce());
 
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining('/responses/resp_accepted/cancel'),
@@ -1816,6 +1816,16 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should preserve the polling deadline of a late background subscriber', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    let notifyFirstPoll: (() => void) | undefined;
+    let releaseFirstPoll: (() => void) | undefined;
+    const firstPollStarted = new Promise<void>((resolve) => {
+      notifyFirstPoll = resolve;
+    });
+    const firstPollGate = new Promise<void>((resolve) => {
+      releaseFirstPoll = resolve;
+    });
     let polls = 0;
     vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
       if (options?.method === 'POST') {
@@ -1828,7 +1838,9 @@ describe('OpenAiResponsesProvider request building', () => {
       }
       polls++;
       if (polls === 1) {
-        await new Promise((resolve) => setTimeout(resolve, 145));
+        notifyFirstPoll?.();
+        await firstPollGate;
+        now += 90;
         return {
           data: { id: 'resp_late_deadline', status: 'in_progress', output: [], usage: null },
           cached: false,
@@ -1862,17 +1874,24 @@ describe('OpenAiResponsesProvider request building', () => {
       },
     });
 
-    const first = provider.callApi('Shared deadline task');
-    await new Promise((resolve) => setTimeout(resolve, 55));
-    const second = provider.callApi('Shared deadline task');
-    const [firstResult, secondResult] = await Promise.all([first, second]);
+    try {
+      const first = provider.callApi('Shared deadline task');
+      await firstPollStarted;
+      now += 55;
+      const second = provider.callApi('Shared deadline task');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releaseFirstPoll?.();
+      const [firstResult, secondResult] = await Promise.all([first, second]);
 
-    expect(firstResult.error).toContain(
-      'Background response resp_late_deadline timed out after 140ms.',
-    );
-    expect(secondResult.error).toBeUndefined();
-    expect(secondResult.output).toBe('Completed for late subscriber');
-    expect(polls).toBe(2);
+      expect(firstResult.error).toContain(
+        'Background response resp_late_deadline timed out after 140ms.',
+      );
+      expect(secondResult.error).toBeUndefined();
+      expect(secondResult.output).toBe('Completed for late subscriber');
+      expect(polls).toBe(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('should cancel and evict an upstream background response when polling times out', async () => {
@@ -2272,7 +2291,13 @@ describe('OpenAiResponsesProvider request building', () => {
     await replacementStarted;
     controller.abort(new Error('cancel replacement'));
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    await new Promise((resolve) => setTimeout(resolve, 35));
+    await vi.waitFor(() =>
+      expect(
+        vi
+          .mocked(cache.fetchWithCache)
+          .mock.calls.some(([url]) => String(url).endsWith('/responses/resp_replacement/cancel')),
+      ).toBe(true),
+    );
 
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining('/responses/resp_replacement/cancel'),

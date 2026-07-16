@@ -584,6 +584,7 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
       fs.closeSync(handle);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        claimedCacheKeys.add(scopedCacheKey);
         return false;
       }
       logger.warn(

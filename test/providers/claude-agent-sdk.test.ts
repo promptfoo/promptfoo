@@ -2347,6 +2347,7 @@ describe('ClaudeCodeSDKProvider', () => {
           const provider = new ClaudeCodeSDKProvider({
             config: {
               ask_user_question: { behavior: 'first_option' },
+              // @ts-expect-error Intentionally exercise an out-of-band null permission response.
               can_use_tool: canUseTool,
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },

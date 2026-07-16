@@ -269,6 +269,21 @@ describe('cache configuration', () => {
     expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
   });
 
+  it('should memoize an existing disk-backed one-time claim', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    const openSync = vi.spyOn(fs, 'openSync').mockImplementation(() => {
+      throw Object.assign(new Error('Already claimed'), { code: 'EEXIST' });
+    });
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-existing:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+    expect(openSync).toHaveBeenCalledOnce();
+
+    openSync.mockRestore();
+  });
+
   it('should clear persistent one-time claims with the disk cache', async () => {
     mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
     const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);

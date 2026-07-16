@@ -245,8 +245,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? config.passthrough.model.replace(/(^|\/)ft:/, '$1')
         : this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
     const isGPT5Model =
-      capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
+      this.isGPT5Model() ||
+      capabilityModelName.startsWith('gpt-5') ||
+      capabilityModelName.includes('/gpt-5');
+    const isPassthroughReasoningModel =
+      typeof config.passthrough?.model === 'string' &&
+      (isGPT5Model ||
+        capabilityModelName.startsWith('o1') ||
+        capabilityModelName.startsWith('o3') ||
+        capabilityModelName.startsWith('o4') ||
+        capabilityModelName.includes('/o1') ||
+        capabilityModelName.includes('/o3') ||
+        capabilityModelName.includes('/o4'));
     const isReasoningModel =
+      this.isReasoningModel() ||
       isGPT5Model ||
       capabilityModelName.startsWith('o1') ||
       capabilityModelName.startsWith('o3') ||
@@ -270,7 +282,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = isReasoningModel ? undefined : (config.temperature ?? temperatureDefault);
+    const temperature =
+      this.supportsTemperature() && !isPassthroughReasoningModel
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
@@ -404,7 +419,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const modelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').at(-1) ?? modelName;
+    const billingModelName = modelName.split('/').pop() ?? modelName;
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,

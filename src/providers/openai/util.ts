@@ -443,7 +443,7 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
     }
   }
 
-  const normalizedModel = model.split('/').at(-1) ?? model;
+  const normalizedModel = model.split('/').pop() ?? model;
   if (OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === normalizedModel)) {
     throw new Error(
       `OpenAI model ${model} is only available through openai:codex-sdk with eligible Codex authentication.`,
