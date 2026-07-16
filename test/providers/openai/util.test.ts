@@ -6,6 +6,7 @@ import {
   formatOpenAiError,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
+  OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
@@ -179,8 +180,14 @@ describe('calculateOpenAICost', () => {
     );
   });
 
-  it('does not classify the Responses-only GPT-5 Codex mini model as Chat Completions', () => {
+  it('does not classify the Codex-surface-only GPT-5 Codex mini model as an API model', () => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini')).toBe(false);
+    expect(
+      OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini'),
+    ).toBe(false);
+    expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini')).toBe(
+      true,
+    );
   });
 
   it.each([

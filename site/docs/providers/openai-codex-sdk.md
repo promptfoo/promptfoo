@@ -285,6 +285,9 @@ Supported models include:
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
+`gpt-5-codex-mini` is a legacy Codex-surface model for ChatGPT-authenticated Codex sessions, not an
+OpenAI Responses API model. Use `gpt-5.1-codex-mini` when running Codex with an OpenAI API key.
+
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
 GPT-5.6 and GPT-5.5 model IDs are recognized for routing and usage tracking. GPT-5.5 receives a standard API cost estimate. GPT-5.6 cost stays undefined until Codex exposes cache-write tokens; estimating without them could understate the 1.25x cache-write rate. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
