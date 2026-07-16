@@ -302,8 +302,10 @@ describe('GoogleLiveProvider', () => {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'hello');
+        simulateMessage(mockWs, { serverContent: { generationComplete: true } });
         simulateMessage(mockWs, {
-          serverContent: { modelTurn: { parts: [{ text: 'hello' }] }, turnComplete: true },
+          serverContent: { turnComplete: true },
           usageMetadata: {
             promptTokenCount: 1_000,
             responseTokenCount: 500,
@@ -331,6 +333,68 @@ describe('GoogleLiveProvider', () => {
       numRequests: 1,
     });
     expect(response.cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
+  });
+
+  it('should aggregate per-turn Gemini Live usage including tool and thought tokens', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'first');
+        simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+        simulateMessage(mockWs, {
+          serverContent: { turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 100,
+            responseTokenCount: 20,
+            toolUsePromptTokenCount: 40,
+            thoughtsTokenCount: 60,
+            totalTokenCount: 220,
+            promptTokensDetails: [{ modality: 'TEXT', tokenCount: 100 }],
+            responseTokensDetails: [{ modality: 'AUDIO', tokenCount: 20 }],
+            toolUsePromptTokensDetails: [{ modality: 'TEXT', tokenCount: 40 }],
+          },
+        });
+        simulateTextMessage(mockWs, 'second');
+        simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+        simulateMessage(mockWs, {
+          serverContent: { turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 140,
+            responseTokenCount: 30,
+            totalTokenCount: 170,
+            promptTokensDetails: [{ modality: 'TEXT', tokenCount: 140 }],
+            responseTokensDetails: [{ modality: 'AUDIO', tokenCount: 30 }],
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        { role: 'user', content: 'first question' },
+        { role: 'user', content: 'second question' },
+      ]),
+    );
+
+    expect(response.output).toMatchObject({ text: 'firstsecond' });
+    expect(response.tokenUsage).toEqual({
+      prompt: 280,
+      completion: 50,
+      total: 390,
+      numRequests: 2,
+      completionDetails: { reasoning: 60 },
+    });
+    expect(response.cost).toBeCloseTo((280 * 0.75 + 50 * 12 + 60 * 4.5) / 1e6, 12);
   });
 
   it('should advance Gemini 3.1 multi-turn prompts after generationComplete', async () => {
@@ -381,6 +445,7 @@ describe('GoogleLiveProvider', () => {
             generationComplete: true,
           },
         });
+        simulateCompletionMessage(mockWs);
       });
       return mockWs;
     });

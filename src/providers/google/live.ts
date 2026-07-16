@@ -79,6 +79,11 @@ const getAudioTokenCount = (details: unknown): number => {
   }, 0);
 };
 
+const getTokenCount = (...values: unknown[]): number => {
+  const value = values.find((entry) => typeof entry === 'number' && Number.isFinite(entry));
+  return typeof value === 'number' ? Math.max(value, 0) : 0;
+};
+
 /**
  * Helper function to fetch JSON with error handling
  */
@@ -318,7 +323,9 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: unknown = undefined;
-      let usageMetadata: any;
+      const usageMetadata: any[] = [];
+      let completedGenerations = 0;
+      let completedTurns = 0;
       let hasFinalized = false;
 
       const isTextExpected =
@@ -396,34 +403,67 @@ export class GoogleLiveProvider implements ApiProvider {
           metadata: {},
         };
 
-        if (usageMetadata) {
-          const promptTokens = usageMetadata.promptTokenCount ?? usageMetadata.prompt_token_count;
-          const completionTokens =
-            usageMetadata.responseTokenCount ??
-            usageMetadata.candidatesTokenCount ??
-            usageMetadata.response_token_count ??
-            usageMetadata.candidates_token_count;
-          const audioPromptTokens = getAudioTokenCount(
-            usageMetadata.promptTokensDetails ?? usageMetadata.prompt_tokens_details,
+        if (usageMetadata.length > 0) {
+          const promptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getTokenCount(usage.promptTokenCount, usage.prompt_token_count) +
+              getTokenCount(usage.toolUsePromptTokenCount, usage.tool_use_prompt_token_count),
+            0,
           );
-          const audioCompletionTokens = getAudioTokenCount(
-            usageMetadata.responseTokensDetails ??
-              usageMetadata.candidatesTokensDetails ??
-              usageMetadata.response_tokens_details ??
-              usageMetadata.candidates_tokens_details,
+          const responseTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getTokenCount(
+                usage.responseTokenCount,
+                usage.candidatesTokenCount,
+                usage.response_token_count,
+                usage.candidates_token_count,
+              ),
+            0,
+          );
+          const thoughtTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total + getTokenCount(usage.thoughtsTokenCount, usage.thoughts_token_count),
+            0,
+          );
+          const audioPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getAudioTokenCount(usage.promptTokensDetails ?? usage.prompt_tokens_details) +
+              getAudioTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+              ),
+            0,
+          );
+          const audioCompletionTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getAudioTokenCount(
+                usage.responseTokensDetails ??
+                  usage.candidatesTokensDetails ??
+                  usage.response_tokens_details ??
+                  usage.candidates_tokens_details,
+              ),
+            0,
           );
 
           result.tokenUsage = {
             prompt: promptTokens,
-            completion: completionTokens,
-            total: usageMetadata.totalTokenCount ?? usageMetadata.total_token_count,
-            numRequests: 1,
+            completion: responseTokens,
+            total: usageMetadata.reduce(
+              (total, usage) =>
+                total + getTokenCount(usage.totalTokenCount, usage.total_token_count),
+              0,
+            ),
+            numRequests: usageMetadata.length,
+            ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
           };
           result.cost = calculateGoogleCost(
             this.modelName,
             config,
             promptTokens,
-            completionTokens,
+            responseTokens + thoughtTokens,
             false,
             audioPromptTokens,
             audioCompletionTokens,
@@ -548,7 +588,10 @@ export class GoogleLiveProvider implements ApiProvider {
           }
           const response = JSON.parse(responseText);
 
-          usageMetadata = response.usageMetadata ?? response.usage_metadata ?? usageMetadata;
+          const frameUsageMetadata = response.usageMetadata ?? response.usage_metadata;
+          if (frameUsageMetadata) {
+            usageMetadata.push(frameUsageMetadata);
+          }
 
           if (response.error) {
             logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
@@ -615,6 +658,7 @@ export class GoogleLiveProvider implements ApiProvider {
             }
 
             if (serverContent.generationComplete) {
+              completedGenerations += 1;
               logger.debug(
                 `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
               );
@@ -642,6 +686,7 @@ export class GoogleLiveProvider implements ApiProvider {
             }
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
+              completedTurns += 1;
               const contentMessage = formatContentMessage(
                 contents,
                 contentIndex,
@@ -654,6 +699,7 @@ export class GoogleLiveProvider implements ApiProvider {
             }
 
             if (serverContent.turnComplete && contentIndex >= contents.length) {
+              completedTurns += 1;
               logger.debug(
                 `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
               );
@@ -665,7 +711,13 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
 
-            if (hasTextStreamEnded && hasAudioStreamEnded && contentIndex >= contents.length) {
+            if (
+              serverContent.turnComplete &&
+              Math.max(completedGenerations, completedTurns) >= contents.length &&
+              hasTextStreamEnded &&
+              hasAudioStreamEnded &&
+              contentIndex >= contents.length
+            ) {
               try {
                 await finalizeResponse();
               } catch (err) {

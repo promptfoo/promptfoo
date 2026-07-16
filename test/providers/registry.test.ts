@@ -487,6 +487,7 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(completionProvider).toBeDefined();
+
       expect(completionProvider.id()).toBe('anthropic:claude-2');
 
       const shorthandProvider = await factory!.create(
@@ -555,6 +556,13 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
+      const realtimeProvider = await factory!.create(
+        'azure:realtime:gpt-realtime-1.5-2026-02-23',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(realtimeProvider).toBeDefined();
+
       const imageProvider = await factory!.create(
         'azure:image:mai-image-2-5',
         mockProviderOptions,
@@ -572,7 +580,7 @@ describe('Provider Registry', () => {
 
       // Model types without a default deployment must name one in the path. Cover both
       // the missing (`azure:chat`) and empty (`azure:chat:`) third-segment variants.
-      for (const prefix of ['azure:chat', 'azure:completion']) {
+      for (const prefix of ['azure:chat', 'azure:completion', 'azure:realtime']) {
         await expect(factory!.create(prefix, mockProviderOptions, mockContext)).rejects.toThrow(
           /requires a deployment name/,
         );

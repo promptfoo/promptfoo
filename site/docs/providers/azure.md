@@ -91,6 +91,7 @@ providers:
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-4.1)
+- `azure:realtime:<deployment name>` - For GA Realtime API deployments (e.g., gpt-realtime-1.5-2026-02-23)
 - `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
@@ -144,6 +145,21 @@ Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/op
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so set `isReasoningModel: true`.
 
 The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, `gpt-audio-1.5-2026-02-23`, and `gpt-realtime-1.5-2026-02-23`.
+
+### Azure Realtime API
+
+Use `azure:realtime:<deployment name>` for current GA Realtime deployments. Promptfoo connects to the Azure GA WebSocket endpoint (`/openai/v1/realtime?model=<deployment name>`), forwards API-key or Microsoft Entra authentication, and reports the snapshot's text/audio token costs.
+
+```yaml
+providers:
+  - id: azure:realtime:gpt-realtime-1.5-2026-02-23
+    config:
+      apiHost: your-resource.openai.azure.com
+      apiKeyEnvar: AZURE_API_KEY
+      modalities: ['text', 'audio']
+```
+
+The preview Realtime endpoint (`/openai/realtime?api-version=...&deployment=...`) uses a different wire format and is not selected by this provider.
 
 ## Azure Responses API
 
