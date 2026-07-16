@@ -302,7 +302,11 @@ export function calculateGoogleCost(
   const imageInputCost = config.imageInputCost ?? modelCost.imageInput ?? inputCost;
   const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
   const cachedAudioInputCost =
-    config.audioInputCost ?? config.audioCost ?? modelCost.cacheRead ?? audioInputCost;
+    config.audioInputCost ??
+    config.audioCost ??
+    modelCost.cacheReadAudio ??
+    modelCost.cacheRead ??
+    audioInputCost;
   const cachedImageInputCost = config.imageInputCost ?? modelCost.cacheRead ?? imageInputCost;
   const serviceTier =
     (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)

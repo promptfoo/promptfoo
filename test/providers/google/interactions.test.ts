@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storeBlob } from '../../../src/blobs';
 import { fetchWithCache } from '../../../src/cache';
+import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleInteractionsProvider } from '../../../src/providers/google/interactions';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
@@ -469,6 +470,56 @@ describe('GoogleInteractionsProvider', () => {
       error: expect.stringContaining('Gemini Interactions API requires an API key'),
     });
     expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('routes Vertex Omni through the global Interactions endpoint with OAuth authentication', async () => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: { getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }) },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      id: 'vertex:gemini-omni-flash-preview',
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        aspectRatio: '16:9',
+        temperature: 0.2,
+        topP: 0.9,
+      },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+        body: JSON.stringify({
+          model: 'gemini-omni-flash-preview',
+          input: [{ type: 'text', text: 'A city at dusk' }],
+          response_format: [{ type: 'video', aspect_ratio: '16:9' }],
+          generation_config: { temperature: 0.2, top_p: 0.9 },
+          background: false,
+          stream: false,
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
   });
 
   it('preserves a configured provider id and supports the legacy PALM API key', async () => {

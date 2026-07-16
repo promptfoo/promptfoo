@@ -1343,11 +1343,21 @@ describe('Provider Registry', () => {
         'vertex:chat:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
+      [
+        'vertex:chat:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
       // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
       // (distinct from the vertex:chat: branch, which slices from index 2).
       [
         'vertex:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
         'vertex:embedding:gemini-embedding-001',
@@ -1372,6 +1382,17 @@ describe('Provider Registry', () => {
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config?.vertexai).toBe(true);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it.each([
+      'vertex:gemini-omni-flash-preview',
+      'vertex:chat:gemini-omni-flash-preview',
+    ])('applies vertexai config and provider id for %s', async (providerPath) => {
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);

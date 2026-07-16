@@ -9,7 +9,7 @@ import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { CompletionOptions, GoogleProviderConfig } from './types';
 
 type InteractionContent = {
   type?: string;
@@ -141,15 +141,36 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
 
+function getVertexInteractionsEndpoint(
+  config: GoogleProviderConfig,
+  projectId: string,
+  env?: EnvOverrides,
+): string {
+  const region =
+    config.region ||
+    env?.VERTEX_REGION ||
+    getEnvString('VERTEX_REGION') ||
+    getEnvString('GOOGLE_CLOUD_LOCATION') ||
+    'global';
+  const configuredHost =
+    config.apiBaseUrl ||
+    config.apiHost ||
+    env?.VERTEX_API_HOST ||
+    getEnvString('VERTEX_API_HOST') ||
+    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
+  const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
+  return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
+}
+
 export class GoogleInteractionsProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
   private providerId?: string;
 
   constructor(
     modelName: string,
-    options: { config?: CompletionOptions; env?: EnvOverrides; id?: string } = {},
+    options: { config?: GoogleProviderConfig; env?: EnvOverrides; id?: string } = {},
   ) {
     this.modelName = modelName;
     this.config = options.config || {};
@@ -173,30 +194,69 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const config = mergeGoogleCompletionOptions(
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
-    const rawApiKey =
-      GoogleAuthManager.getApiKey(config, this.env).apiKey ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
-    const apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
-    if (!apiKey) {
-      return {
-        error:
-          'Gemini Interactions API requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.',
+    ) as GoogleProviderConfig;
+    let apiKey: string | undefined;
+    let endpoint: string;
+    let headers: Record<string, string>;
+    if (config.vertexai) {
+      try {
+        const { client, projectId: authProjectId } = await GoogleAuthManager.getOAuthClient({
+          credentials: config.credentials,
+          googleAuthOptions: config.googleAuthOptions,
+          keyFilename: config.keyFilename,
+          scopes: config.scopes,
+        });
+        const projectId =
+          config.projectId ||
+          this.env?.VERTEX_PROJECT_ID ||
+          this.env?.GOOGLE_PROJECT_ID ||
+          this.env?.GOOGLE_CLOUD_PROJECT ||
+          getEnvString('VERTEX_PROJECT_ID') ||
+          getEnvString('GOOGLE_PROJECT_ID') ||
+          getEnvString('GOOGLE_CLOUD_PROJECT') ||
+          authProjectId;
+        if (!projectId) {
+          return {
+            error:
+              'Gemini Omni on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
+          };
+        }
+        const accessToken = await client.getAccessToken();
+        const token = typeof accessToken === 'string' ? accessToken : accessToken?.token;
+        if (!token) {
+          return { error: 'Gemini Omni on Vertex AI could not obtain an OAuth access token.' };
+        }
+        endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
+        headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...config.headers,
+        };
+      } catch (err) {
+        return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
+      }
+    } else {
+      const rawApiKey =
+        GoogleAuthManager.getApiKey(config, this.env).apiKey ||
+        this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
+        getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
+      apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
+      if (!apiKey) {
+        return {
+          error:
+            'Gemini Interactions API requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.',
+        };
+      }
+      endpoint = getInteractionsEndpoint(config, this.env);
+      headers = {
+        'Content-Type': 'application/json',
+        'Api-Revision': '2026-05-20',
+        'x-goog-api-key': apiKey,
+        ...config.headers,
       };
     }
-
-    const endpoint = getInteractionsEndpoint(config, this.env);
-    const headers = {
-      'Content-Type': 'application/json',
-      'Api-Revision': '2026-05-20',
-      'x-goog-api-key': apiKey,
-      ...config.headers,
-    };
     const unsupportedGenerationFields = new Set([
-      'temperature',
-      'top_p',
-      'topP',
+      ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
       'stop_sequences',
       'stopSequences',
       'negative_prompt',
@@ -211,6 +271,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(config.maxOutputTokens === undefined
         ? {}
         : { max_output_tokens: config.maxOutputTokens }),
+      ...(config.vertexai && config.temperature !== undefined
+        ? { temperature: config.temperature }
+        : {}),
+      ...(config.vertexai && config.topP !== undefined ? { top_p: config.topP } : {}),
       ...Object.fromEntries(
         Object.entries({
           ...(config.generationConfig || {}),
@@ -219,7 +283,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           !Array.isArray(passthroughGenerationConfig)
             ? passthroughGenerationConfig
             : {}),
-        }).filter(([field]) => !unsupportedGenerationFields.has(field)),
+        })
+          .filter(([field]) => !unsupportedGenerationFields.has(field))
+          .map(([field, value]) => [field === 'topP' ? 'top_p' : field, value]),
       ),
     };
     const passthrough = Object.fromEntries(
@@ -230,13 +296,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
           !unsupportedGenerationFields.has(field),
       ),
     );
+    const interactionInput = parseInteractionInput(prompt);
     const body = {
       model: this.modelName,
-      input: parseInteractionInput(prompt),
-      response_format: {
-        type: 'video',
-        ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
-      },
+      input:
+        config.vertexai && typeof interactionInput === 'string'
+          ? [{ type: 'text', text: interactionInput }]
+          : interactionInput,
+      response_format: config.vertexai
+        ? [{ type: 'video', ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}) }]
+        : { type: 'video', ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}) },
       ...(config.previousInteractionId
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
@@ -298,7 +367,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
             downloadUrl.hostname === 'generativelanguage.googleapis.com')
         ) {
           const downloadHeaders =
-            downloadUrl.origin === endpointOrigin ? headers : { 'x-goog-api-key': apiKey };
+            downloadUrl.origin === endpointOrigin
+              ? headers
+              : apiKey
+                ? { 'x-goog-api-key': apiKey }
+                : {};
           let response = await fetchWithTimeout(
             downloadUrl.toString(),
             {

@@ -6,6 +6,7 @@ export interface GoogleModelCost {
   input: number;
   output: number;
   cacheRead?: number;
+  cacheReadAudio?: number;
   audioInput?: number;
   audioOutput?: number;
   imageInput?: number;
@@ -95,6 +96,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
         input: 0.25 / 1e6,
         output: 1.5 / 1e6,
         cacheRead: 0.025 / 1e6,
+        cacheReadAudio: 0.05 / 1e6,
         audioInput: 0.5 / 1e6,
         ...(id === 'gemini-3.1-flash-lite-preview'
           ? {}
@@ -144,6 +146,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       input: 0.5 / 1e6,
       output: 3.0 / 1e6,
       cacheRead: 0.05 / 1e6,
+      cacheReadAudio: 0.1 / 1e6,
       audioInput: 1.0 / 1e6,
       priorityMultiplier: 1.8,
     },
@@ -179,11 +182,23 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
   ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17'].map((id) => ({
     id,
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6, cacheRead: 0.03 / 1e6, audioInput: 1.0 / 1e6 },
+    cost: {
+      input: 0.3 / 1e6,
+      output: 2.5 / 1e6,
+      cacheRead: 0.03 / 1e6,
+      cacheReadAudio: 0.1 / 1e6,
+      audioInput: 1.0 / 1e6,
+    },
   })),
   {
     id: 'gemini-2.5-flash-lite',
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: 0.01 / 1e6, audioInput: 0.3 / 1e6 },
+    cost: {
+      input: 0.1 / 1e6,
+      output: 0.4 / 1e6,
+      cacheRead: 0.01 / 1e6,
+      cacheReadAudio: 0.03 / 1e6,
+      audioInput: 0.3 / 1e6,
+    },
   },
 
   // Gemini 2.0 models
@@ -193,6 +208,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       input: 0.1 / 1e6,
       output: 0.4 / 1e6,
       cacheRead: 0.025 / 1e6,
+      cacheReadAudio: 0.175 / 1e6,
       audioInput: 0.7 / 1e6,
     },
     vertexCost: {

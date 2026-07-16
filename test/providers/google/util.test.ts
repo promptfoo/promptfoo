@@ -2820,7 +2820,7 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo(
-        (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.045 + 100 * 2.7) / 1e6,
+        (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.09 + 100 * 2.7) / 1e6,
         12,
       );
     });
@@ -2844,23 +2844,47 @@ describe('util', () => {
       );
 
       expect(flexCost).toBeCloseTo(
-        (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.0125 + 100_000 * 0.75) /
+        (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.025 + 100_000 * 0.75) /
           1e6,
         12,
       );
     });
 
     it.each([
-      ['gemini-flash-latest', 1.5, 0.15, 1, 9],
-      ['gemini-flash-lite-latest', 0.25, 0.025, 0.5, 1.5],
-      ['gemini-2.0-flash-001', 0.1, 0.025, 0.7, 0.4],
-    ])('uses AI Studio cached and audio rates for %s', (id, input, cached, audioInput, output) => {
+      ['gemini-flash-latest', 1.5, 0.15, 0.15, 1, 9],
+      ['gemini-flash-lite-latest', 0.25, 0.025, 0.05, 0.5, 1.5],
+      ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
+    ])('uses AI Studio cached and audio rates for %s', (id, input, cached, cachedAudio, audioInput, output) => {
       expect(
         calculateGoogleCost(id, {}, 1_000, 100, false, 200, 0, undefined, 0, 400, 100),
       ).toBeCloseTo(
-        (500 * input + 300 * cached + 100 * audioInput + 100 * cached + 100 * output) / 1e6,
+        (500 * input + 300 * cached + 100 * audioInput + 100 * cachedAudio + 100 * output) / 1e6,
         12,
       );
+    });
+
+    it.each([
+      ['gemini-2.5-flash', 0.1],
+      ['gemini-2.5-flash-lite', 0.03],
+      ['gemini-3-flash-preview', 0.1],
+      ['gemini-3.1-flash-lite', 0.05],
+      ['gemini-2.0-flash-001', 0.175],
+    ])('uses the published cached-audio rate for %s', (id, cachedAudio) => {
+      expect(
+        calculateGoogleCost(
+          id,
+          {},
+          1_000_000,
+          0,
+          false,
+          1_000_000,
+          0,
+          undefined,
+          0,
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBeCloseTo(cachedAudio, 12);
     });
 
     it.each([
