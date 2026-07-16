@@ -1634,7 +1634,7 @@ describe('AIStudioChatProvider', () => {
           passthrough: {
             tools: [
               { functionDeclarations: [{ name: 'passthrough_function' }] },
-              { googleSearch: {} },
+              { codeExecution: {} },
             ],
           },
           [key]: value,
@@ -1661,8 +1661,8 @@ describe('AIStudioChatProvider', () => {
       const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
       const body = JSON.parse(callArgs![1]!.body as string);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-      // googleSearch is preserved; functionDeclarations entry is dropped.
-      expect(body.tools).toEqual([{ googleSearch: {} }]);
+      // Both non-function tools are preserved; functionDeclarations entries are dropped.
+      expect(body.tools).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
     });
 
     it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {

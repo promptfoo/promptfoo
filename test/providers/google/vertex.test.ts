@@ -350,6 +350,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
           },
         },
         tools,
+        passthrough: { tools: [{ googleSearch: {} }] },
       },
     });
 
@@ -426,7 +427,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               allowedFunctionNames: ['get_weather'],
             },
           },
-          tools,
+          tools: [...tools, { googleSearch: {} }],
         }),
       }),
     );
@@ -456,7 +457,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         passthrough: {
           tools: [
             { functionDeclarations: [{ name: 'passthrough_function' }] },
-            { googleSearch: {} },
+            { codeExecution: {} },
           ],
         },
         [key]: value,
@@ -485,7 +486,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-          tools: [{ googleSearch: {} }],
+          tools: [{ googleSearch: {} }, { codeExecution: {} }],
         }),
       }),
     );

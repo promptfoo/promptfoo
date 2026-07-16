@@ -64,6 +64,7 @@ describe('GoogleInteractionsProvider', () => {
         service_tier: 'priority',
         maxOutputTokens: 2_048,
         generationConfig: {
+          maxOutputTokens: 2_048,
           thinking_level: 'low',
           video_config: { task: 'text_to_video' },
           temperature: 0.2,
@@ -242,6 +243,8 @@ describe('GoogleInteractionsProvider', () => {
             { text: 'Create a city at dusk using these references.' },
             { inlineData: { mimeType: 'image/jpeg', data: 'aW1hZ2U=' } },
             { fileData: { mimeType: 'video/mp4', fileUri: 'https://video.example/reference' } },
+            { inline_data: { mime_type: 'image/png', data: 'cG5n' } },
+            { file_data: { mime_type: 'video/webm', file_uri: 'https://video.example/snake' } },
           ],
         },
       ]),
@@ -255,9 +258,101 @@ describe('GoogleInteractionsProvider', () => {
           { type: 'text', text: 'Create a city at dusk using these references.' },
           { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' },
           { type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/reference' },
+          { type: 'image', mime_type: 'image/png', data: 'cG5n' },
+          { type: 'video', mime_type: 'video/webm', uri: 'https://video.example/snake' },
         ],
       },
     ]);
+  });
+
+  it('unwraps native Gemini prompt envelopes for the Omni Interactions API', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi(
+      JSON.stringify({
+        system_instruction: { parts: [{ text: 'unsupported Omni instruction' }] },
+        contents: [{ role: 'user', parts: [{ text: 'Create a city at dusk.' }] }],
+      }),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).input).toEqual([
+      { type: 'user_input', content: [{ type: 'text', text: 'Create a city at dusk.' }] },
+    ]);
+  });
+
+  it('prices reported Interactions input and output modalities with configured overrides', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+        usage: {
+          total_input_tokens: 1_000,
+          total_tool_use_tokens: 100,
+          total_cached_tokens: 200,
+          total_output_tokens: 500,
+          total_reasoning_tokens: 20,
+          total_tokens: 1_620,
+          input_tokens_by_modality: [
+            { modality: 'text', tokens: 400 },
+            { modality: 'audio', tokens: 300 },
+            { modality: 'image', tokens: 300 },
+          ],
+          tool_use_tokens_by_modality: [{ modality: 'audio', tokens: 100 }],
+          cached_tokens_by_modality: [
+            { modality: 'audio', tokens: 100 },
+            { modality: 'image', tokens: 100 },
+          ],
+          output_tokens_by_modality: [
+            { modality: 'text', tokens: 100 },
+            { modality: 'audio', tokens: 100 },
+            { modality: 'video', tokens: 300 },
+          ],
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        inputCost: 0.01,
+        outputCost: 0.04,
+        audioInputCost: 0.02,
+        audioOutputCost: 0.05,
+        imageInputCost: 0.03,
+        videoOutputCost: 0.06,
+      },
+    });
+
+    const result = await provider.callApi('Animate the reference');
+
+    expect(result.tokenUsage).toMatchObject({
+      prompt: 1_100,
+      completion: 500,
+      total: 1_620,
+      cached: 200,
+      completionDetails: { reasoning: 20 },
+    });
+    expect(result.cost).toBeCloseTo(48.8, 10);
   });
 
   it('returns only the latest Omni turn and stores authenticated URI-delivered video', async () => {

@@ -1188,6 +1188,7 @@ describe('GoogleProvider', () => {
               ],
             },
           ],
+          passthrough: { tools: [{ googleSearch: {} }] },
         },
       });
 
@@ -1207,6 +1208,7 @@ describe('GoogleProvider', () => {
       const body = JSON.parse(calledOptions.body);
       expect(body.tools).toBeDefined();
       expect(body.tools[0].functionDeclarations[0].name).toBe('test_function');
+      expect(body.tools[1]).toEqual({ googleSearch: {} });
     });
 
     it('should include toolConfig in request body', async () => {

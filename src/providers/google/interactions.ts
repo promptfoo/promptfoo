@@ -32,13 +32,23 @@ type InteractionResponse = {
     total_tool_use_tokens?: number;
     total_cached_tokens?: number;
     total_tokens?: number;
+    input_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
+    tool_use_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
+    cached_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
     output_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
   };
 };
 
 function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
   try {
-    const parsed = JSON.parse(prompt) as unknown;
+    const parsedPrompt = JSON.parse(prompt) as unknown;
+    const parsed =
+      parsedPrompt &&
+      typeof parsedPrompt === 'object' &&
+      !Array.isArray(parsedPrompt) &&
+      Array.isArray((parsedPrompt as { contents?: unknown }).contents)
+        ? (parsedPrompt as { contents: unknown[] }).contents
+        : parsedPrompt;
     if (Array.isArray(parsed)) {
       return parsed.map((content) => {
         if (!content || typeof content !== 'object') {
@@ -53,22 +63,32 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             const geminiPart = part as {
               text?: string;
               inlineData?: { mimeType?: string; data?: string };
+              inline_data?: { mime_type?: string; data?: string };
               fileData?: { mimeType?: string; fileUri?: string };
+              file_data?: { mime_type?: string; file_uri?: string };
             };
             if (typeof geminiPart.text === 'string') {
               return { type: 'text', text: geminiPart.text };
             }
-            const media = geminiPart.inlineData || geminiPart.fileData;
-            const mimeType = media?.mimeType;
+            const inlineData = geminiPart.inlineData || geminiPart.inline_data;
+            const mimeType =
+              geminiPart.inlineData?.mimeType ||
+              geminiPart.inline_data?.mime_type ||
+              geminiPart.fileData?.mimeType ||
+              geminiPart.file_data?.mime_type;
             if (mimeType) {
               const type = mimeType.startsWith('video/')
                 ? 'video'
                 : mimeType.startsWith('audio/')
                   ? 'audio'
                   : 'image';
-              return geminiPart.inlineData
-                ? { type, mime_type: mimeType, data: geminiPart.inlineData.data }
-                : { type, mime_type: mimeType, uri: geminiPart.fileData?.fileUri };
+              return inlineData
+                ? { type, mime_type: mimeType, data: inlineData.data }
+                : {
+                    type,
+                    mime_type: mimeType,
+                    uri: geminiPart.fileData?.fileUri || geminiPart.file_data?.file_uri,
+                  };
             }
             return part;
           }
@@ -131,10 +151,13 @@ function normalizeInteractionSafetySettings(
   }));
 }
 
-function getVideoTokenCount(usage: InteractionResponse['usage']): number {
-  return (usage?.output_tokens_by_modality || [])
-    .filter((detail) => detail.modality?.toLowerCase() === 'video')
-    .reduce((total, detail) => total + (detail.tokens ?? 0), 0);
+function getInteractionModalityTokenCount(
+  details: Array<{ modality?: string; tokens?: number }> | undefined,
+  modalities: string[],
+): number {
+  return (details || [])
+    .filter((detail) => modalities.includes(detail.modality?.toLowerCase() || ''))
+    .reduce((total, detail) => total + Math.max(detail.tokens ?? 0, 0), 0);
 }
 
 function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
@@ -338,7 +361,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
             : {}),
         })
           .filter(([field]) => !unsupportedGenerationFields.has(field))
-          .map(([field, value]) => [field === 'topP' ? 'top_p' : field, value]),
+          .map(([field, value]) => [
+            field === 'topP' ? 'top_p' : field === 'maxOutputTokens' ? 'max_output_tokens' : field,
+            value,
+          ]),
       ),
     };
     const passthrough = Object.fromEntries(
@@ -501,7 +527,25 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
     const outputTokens = usage?.total_output_tokens ?? 0;
     const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
-    const videoTokens = getVideoTokenCount(usage);
+    const audioInputTokens =
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
+    const imageInputTokens =
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['image', 'document']) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['image', 'document']);
+    const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
+      'audio',
+    ]);
+    const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
+      'image',
+      'document',
+    ]);
+    const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
+      'audio',
+    ]);
+    const videoTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
+      'video',
+    ]);
     const videoUrl = blobRef?.uri ?? video.uri;
     const sanitizedPrompt = prompt
       .replace(/\r?\n|\r/g, ' ')
@@ -527,10 +571,14 @@ export class GoogleInteractionsProvider implements ApiProvider {
             config,
             promptTokens,
             outputTokens + thoughtTokens,
-            false,
-            undefined,
-            undefined,
+            config.vertexai,
+            audioInputTokens,
+            audioOutputTokens,
             videoTokens,
+            imageInputTokens,
+            usage?.total_cached_tokens,
+            cachedAudioTokens,
+            cachedImageTokens,
           ),
       video: {
         id: data.id,

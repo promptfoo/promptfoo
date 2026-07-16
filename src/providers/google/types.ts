@@ -128,6 +128,12 @@ export interface CompletionOptions {
   inputCost?: number;
   /** Custom per-token output cost override. Takes precedence over cost. */
   outputCost?: number;
+  /** Custom per-token audio input/output cost override. */
+  audioCost?: number;
+  /** Custom per-token audio input cost override. */
+  audioInputCost?: number;
+  /** Custom per-token audio output cost override. */
+  audioOutputCost?: number;
   /** Custom per-token video output cost override. */
   videoOutputCost?: number;
   /** Custom per-token image input cost override. */

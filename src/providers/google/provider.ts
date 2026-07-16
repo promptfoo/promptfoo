@@ -393,7 +393,11 @@ export class GoogleProvider extends GoogleGenericProvider {
         : {}),
       ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
       ...passthrough,
-      ...(requestPassthroughTools === undefined ? {} : { tools: requestPassthroughTools }),
+      ...(Array.isArray(requestPassthroughTools)
+        ? { tools: [...requestTools, ...requestPassthroughTools] }
+        : requestPassthroughTools === undefined
+          ? {}
+          : { tools: requestPassthroughTools }),
       ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
 
