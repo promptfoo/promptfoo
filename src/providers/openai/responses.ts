@@ -159,7 +159,7 @@ async function resolveBackgroundResponse(
     request,
     timeout,
     'json',
-    true,
+    false,
     maxRetries,
   );
   if (retried.status < 200 || retried.status >= 300) {
@@ -649,10 +649,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
+    // Calculate timeout for long-running models and background responses.
     let timeout = getRequestTimeoutMs();
     const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
-    const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
+    const isLongRunningModel = isDeepResearchModel || isGpt5ProModel || body.background === true;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
@@ -664,7 +664,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let updateCache:
+      | ((
+          data: OpenAIResponsesResponse,
+          status: number,
+          statusText: string,
+          headers?: Record<string, string>,
+        ) => Promise<void>)
+      | undefined;
     let responseHeaders: Record<string, string> | undefined;
+    let pollingBackground = false;
     try {
       const url = `${this.getApiUrl()}/responses`;
       const request = {
@@ -716,6 +725,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           deleteFromCache,
+          updateCache,
           headers: responseHeaders,
         } = await fetchWithCache<OpenAIResponsesResponse>(
           url,
@@ -761,6 +771,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
 
       if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
+        pollingBackground = true;
         const polled = await resolveBackgroundResponse(
           data,
           url,
@@ -772,14 +783,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         );
         if (polled.retried) {
           cached = false;
-          deleteFromCache = undefined;
         }
         data = polled.data;
         status = polled.status;
         statusText = polled.statusText;
         responseHeaders = polled.headers;
+        if (!polled.error && data.status === 'completed') {
+          await updateCache?.(data, status, statusText, responseHeaders);
+        }
         if (polled.error) {
-          await deleteFromCache?.();
           return {
             error: polled.error,
             metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
@@ -788,7 +800,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await deleteFromCache?.();
+      if (!pollingBackground) {
+        await deleteFromCache?.();
+      }
       return {
         error: `API call error: ${String(err)}`,
         metadata: {

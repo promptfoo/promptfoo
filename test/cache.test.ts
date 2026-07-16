@@ -450,6 +450,30 @@ describe('fetchWithCache', () => {
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
+    it('should replace a cached response without making another upstream request', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, { status: 'queued', output: [] });
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      const result = await fetchWithCache<{ status: string; output: string[] }>(url, {}, 1000);
+
+      await result.updateCache?.({ status: 'completed', output: ['done'] }, 200, 'OK', {
+        'x-completed': 'true',
+      });
+      const cachedResult = await fetchWithCache<{ status: string; output: string[] }>(
+        url,
+        {},
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(cachedResult).toMatchObject({
+        cached: true,
+        data: { status: 'completed', output: ['done'] },
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-completed': 'true' },
+      });
+    });
+
     it('should return cached false to all concurrent callers on a cache miss', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValue(mockResponse);

@@ -73,12 +73,14 @@ describe('OpenAiResponsesProvider request building', () => {
   });
 
   it('should poll a queued background response until it is ready to grade', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
         data: { id: 'resp_background', status: 'queued', output: [], usage: null },
         cached: false,
         status: 200,
         statusText: 'OK',
+        updateCache,
       })
       .mockResolvedValueOnce({
         data: {
@@ -105,6 +107,12 @@ describe('OpenAiResponsesProvider request building', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('Background result');
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
     expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
       2,
       'https://api.openai.com/v1/responses/resp_background',
@@ -116,8 +124,33 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should honor the eval timeout for a background response on a standard model', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '600000' });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { id: 'resp_background', status: 'completed', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await provider.callApi('A long task');
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST' }),
+      600000,
+      'json',
+      undefined,
+      undefined,
+    );
+  });
+
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
         data: { id: 'resp_expired', status: 'queued', output: [], usage: null },
@@ -125,6 +158,7 @@ describe('OpenAiResponsesProvider request building', () => {
         status: 200,
         statusText: 'OK',
         deleteFromCache,
+        updateCache,
       })
       .mockResolvedValueOnce({
         data: { error: { message: 'Response not found' } },
@@ -165,15 +199,105 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.output).toBe('Recovered background result');
     expect(result.cached).toBe(false);
     expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_retried', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
     expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
       3,
       'https://api.openai.com/v1/responses',
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
+      false,
+      undefined,
+    );
+  });
+
+  it('should preserve a cached background job when polling fails transiently', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Temporary retrieval outage' } },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const first = await provider.callApi('A long task');
+    const second = await provider.callApi('A long task');
+
+    expect(first.error).toContain('503 Service Unavailable');
+    expect(second.error).toBeUndefined();
+    expect(second.output).toBe('Recovered background result');
+    expect(second.cached).toBe(true);
+    expect(deleteFromCache).not.toHaveBeenCalled();
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      4,
+      'https://api.openai.com/v1/responses/resp_background',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+      'json',
       true,
       undefined,
     );
+  });
+
+  it('should preserve a cached background job when the polling request throws', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockRejectedValueOnce(new Error('Temporary network failure'));
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toContain('Temporary network failure');
+    expect(deleteFromCache).not.toHaveBeenCalled();
   });
 
   it('should handle system prompts correctly', async () => {

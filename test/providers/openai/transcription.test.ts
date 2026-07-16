@@ -409,6 +409,30 @@ describe('OpenAiTranscriptionProvider', () => {
   });
 
   describe('Diarization support', () => {
+    it('should forward a custom chunking strategy for standard transcription models', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          chunking_strategy: {
+            type: 'server_vad',
+            threshold: 0.6,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+          },
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockTranscriptionResponse);
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
+      expect(formData.get('response_format')).toBe('json');
+      expect(formData.get('chunking_strategy[type]')).toBe('server_vad');
+      expect(formData.get('chunking_strategy[threshold]')).toBe('0.6');
+      expect(formData.get('chunking_strategy[prefix_padding_ms]')).toBe('300');
+      expect(formData.get('chunking_strategy[silence_duration_ms]')).toBe('500');
+    });
+
     it('should handle diarized transcription', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize', {
         config: { apiKey: 'test-key' },

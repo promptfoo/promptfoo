@@ -1527,13 +1527,15 @@ describe('OpenAiVideoProvider', () => {
       );
     });
 
-    it('should not include size and seconds in remix request', async () => {
+    it('should only include the prompt in a remix request', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
           apiKey: 'test-key',
           remix_video_id: 'original_video_789',
-          size: '720x1280',
-          seconds: 12,
+          size: '1792x1024',
+          seconds: 20,
+          input_reference: { file_id: 'file_unused' },
+          characters: [{ id: 'character_unused' }],
         },
       });
 
@@ -1576,12 +1578,54 @@ describe('OpenAiVideoProvider', () => {
       const [, options] = mockFetchWithProxy.mock.calls[0];
       const body = JSON.parse(options.body);
 
-      // Remix requests should not include size and seconds
-      expect(body.size).toBeUndefined();
-      expect(body.seconds).toBeUndefined();
-      // But should include model and prompt
-      expect(body.model).toBe('sora-2');
-      expect(body.prompt).toBe('Change the style');
+      expect(body).toEqual({ prompt: 'Change the style' });
+    });
+
+    it('should use the completed remix dimensions and duration for cost and metadata', async () => {
+      const provider = new OpenAiVideoProvider('sora-2-pro', {
+        config: {
+          apiKey: 'test-key',
+          remix_video_id: 'original_video_1080p',
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockGetMediaStorage.mockReturnValue({ exists: vi.fn().mockResolvedValue(true) });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'remixed_video_1080p', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'remixed_video_1080p',
+            status: 'completed',
+            progress: 100,
+            model: 'sora-2-pro',
+            size: '1920x1080',
+            seconds: '20',
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(100),
+        });
+      mockStoreMedia.mockResolvedValue({
+        ref: { provider: 'local', key: 'video/abc.mp4', contentHash: 'abc', metadata: {} },
+        deduplicated: false,
+      });
+
+      const result = await provider.callApi('Change the lighting');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(14, 10);
+      expect(result.video).toEqual(
+        expect.objectContaining({ model: 'sora-2-pro', size: '1920x1080', duration: 20 }),
+      );
+      expect(result.metadata).toEqual(
+        expect.objectContaining({ model: 'sora-2-pro', size: '1920x1080', seconds: 20 }),
+      );
     });
   });
 });

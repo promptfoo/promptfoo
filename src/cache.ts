@@ -280,6 +280,12 @@ export type FetchWithCacheResult<T> = {
   headers?: Record<string, string>;
   latencyMs?: number;
   deleteFromCache?: () => Promise<void>;
+  updateCache?: (
+    data: unknown,
+    status: number,
+    statusText: string,
+    headers?: Record<string, string>,
+  ) => Promise<void>;
 };
 
 type SerializedFetchResponse = string;
@@ -590,6 +596,18 @@ function deserializeFetchResponse<T>(
     deleteFromCache: async () => {
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
+    },
+    updateCache: async (
+      data: unknown,
+      status: number,
+      statusText: string,
+      headers?: Record<string, string>,
+    ) => {
+      await cache.set(
+        cacheKey,
+        serializeFetchResponse(data, status, statusText, headers ?? {}, parsedResponse.latencyMs),
+      );
+      logger.debug(`Updated cached response: ${cacheKey}`);
     },
   };
 }

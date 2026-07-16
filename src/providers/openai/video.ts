@@ -255,13 +255,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       ? `${this.getApiUrl()}/videos/${config.remix_video_id}/remix`
       : `${this.getApiUrl()}/videos`;
 
-    const body: Record<string, unknown> = {
-      model: config.model || this.modelName,
-      prompt,
-    };
+    const body: Record<string, unknown> = { prompt };
 
     // Only include these for new videos (not remix)
     if (!config.remix_video_id) {
+      body.model = config.model || this.modelName;
       body.size = config.size || DEFAULT_SIZE;
       // API requires seconds as a string ("4", "8", "12", "16", or "20")
       body.seconds = String(config.seconds || DEFAULT_SECONDS);
@@ -271,7 +269,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     }
 
     // Handle input_reference (image-to-video)
-    if (config.input_reference) {
+    if (!config.remix_video_id && config.input_reference) {
       try {
         body.input_reference = await normalizeInputReference(config.input_reference);
       } catch (error) {
@@ -441,24 +439,24 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;
 
-    // Validate size
-    const sizeValidation = validateVideoSize(size, model);
-    if (!sizeValidation.valid) {
-      return { error: sizeValidation.message };
-    }
+    if (!config.remix_video_id) {
+      const sizeValidation = validateVideoSize(size, model);
+      if (!sizeValidation.valid) {
+        return { error: sizeValidation.message };
+      }
 
-    // Validate seconds
-    const secondsValidation = validateVideoSeconds(seconds);
-    if (!secondsValidation.valid) {
-      return { error: secondsValidation.message };
-    }
+      const secondsValidation = validateVideoSeconds(seconds);
+      if (!secondsValidation.valid) {
+        return { error: secondsValidation.message };
+      }
 
-    if (!hasValidCharacters(config.characters)) {
-      return { error: 'Sora generation accepts at most two characters with non-empty IDs.' };
-    }
+      if (!hasValidCharacters(config.characters)) {
+        return { error: 'Sora generation accepts at most two characters with non-empty IDs.' };
+      }
 
-    if (!hasValidInputReference(config.input_reference)) {
-      return { error: 'Sora input_reference must provide exactly one of image_url or file_id.' };
+      if (!hasValidInputReference(config.input_reference)) {
+        return { error: 'Sora input_reference must provide exactly one of image_url or file_id.' };
+      }
     }
 
     // Generate deterministic cache key from inputs
@@ -543,7 +541,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const pollIntervalMs = config.poll_interval_ms || DEFAULT_POLL_INTERVAL_MS;
     const maxPollTimeMs = config.max_poll_time_ms || DEFAULT_MAX_POLL_TIME_MS;
 
-    const { error: pollError } = await this.pollVideoStatus(videoId, pollIntervalMs, maxPollTimeMs);
+    const { job: completedJob, error: pollError } = await this.pollVideoStatus(
+      videoId,
+      pollIntervalMs,
+      maxPollTimeMs,
+    );
 
     if (pollError) {
       return { error: pollError };
@@ -600,7 +602,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost = calculateVideoCost(model, seconds, false, size);
+    const completedModel = (completedJob.model || model) as OpenAiVideoModel;
+    const completedSize = (completedJob.size || size) as OpenAiVideoSize;
+    const parsedSeconds = Number(completedJob.seconds);
+    const completedSeconds =
+      Number.isFinite(parsedSeconds) && parsedSeconds > 0 ? parsedSeconds : seconds;
+    const cost = calculateVideoCost(completedModel, completedSeconds, false, completedSize);
 
     // Store cache mapping for future lookups
     await storeCacheMapping(
@@ -629,18 +636,18 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         storageRef: { key: videoRef.key }, // Structured storage reference (preferred)
         url: videoUrl, // Legacy URL format for backwards compatibility
         format: 'mp4',
-        size,
-        duration: seconds,
+        size: completedSize,
+        duration: completedSeconds,
         thumbnail: thumbnailUrl,
         spritesheet: spritesheetUrl,
-        model,
+        model: completedModel,
       },
       metadata: {
         soraVideoId: videoId,
         cacheKey,
-        model,
-        size,
-        seconds,
+        model: completedModel,
+        size: completedSize,
+        seconds: completedSeconds,
         storageKey: videoRef.key,
       },
     };

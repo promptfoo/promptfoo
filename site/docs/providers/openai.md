@@ -22,7 +22,7 @@ The OpenAI provider supports the following model formats:
 - `openai:assistant:<assistant id>` - use an assistant
 - `openai:chat` - defaults to `gpt-4.1-2025-04-14`
 - `openai:responses` - defaults to `gpt-4.1-2025-04-14`
-- `openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name::ID` - example of a fine-tuned chat completion model
 - `openai:completion` - defaults to `gpt-3.5-turbo-instruct`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embedding:<model name>` / `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
@@ -231,19 +231,22 @@ OpenAI updates aliases, dated snapshots, and pricing frequently. Promptfoo suppo
 endpoint syntax like `openai:chat:<model>` and `openai:responses:<model>` for newly released
 models right away, while the tables below call out the common model IDs promptfoo knows about
 for routing and cost estimation. Check the official
-[OpenAI models docs](https://platform.openai.com/docs/models) and
-[pricing](https://openai.com/pricing) for the latest availability and rates.
+[OpenAI models docs](https://developers.openai.com/api/docs/models) and
+[API pricing](https://developers.openai.com/api/docs/pricing) for the latest availability and rates.
 
 ### Fine-tuned and legacy completion models
 
 Fine-tuned model IDs can be used with their corresponding endpoint, for example
-`openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name:ID` or
-`openai:completion:ft:babbage-002:company-name:ID`. Promptfoo recognizes the published
+`openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name::ID` or
+`openai:completion:ft:babbage-002:company-name::ID`. Promptfoo recognizes the published
 inference rates for fine-tuned GPT-4.1, GPT-4o, GPT-3.5, GPT-4, o4-mini, Babbage, and Davinci
 bases, including cached-input and Batch rates where available. Flex and Priority pricing is not
 inferred for fine-tuned models. See the
 [OpenAI supervised fine-tuning guide](https://developers.openai.com/api/docs/guides/supervised-fine-tuning)
 for currently supported training bases and lifecycle information.
+
+The empty segment before `ID` represents an omitted fine-tuning suffix. If a suffix was set during
+training, use `ft:<base-model>:<organization>:<suffix>:<id>` instead.
 
 The legacy `/v1/completions` endpoint supports `babbage-002`, `davinci-002`,
 `gpt-3.5-turbo-instruct`, and `gpt-3.5-turbo-instruct-0914`. These models are useful for
@@ -532,7 +535,7 @@ GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT
 #### Key Specifications
 
 - **Endpoint support**: `gpt-5.3-chat-latest` supports Chat Completions and Responses; `gpt-5.3-codex` is Responses-only.
-- **Limits and pricing**: The `-latest` alias can move over time. Check [OpenAI model docs](https://platform.openai.com/docs/models) and [pricing](https://openai.com/pricing) for current context limits and rates.
+- **Limits and pricing**: The `-latest` alias can move over time. Check [OpenAI model docs](https://developers.openai.com/api/docs/models) and [API pricing](https://developers.openai.com/api/docs/pricing) for current context limits and rates.
 
 #### Usage Examples
 
@@ -1056,6 +1059,9 @@ prompts:
 ```
 
 The `remix_video_id` is the video ID returned from a previous Sora generation (found in `response.video.id`).
+Remixes inherit the source video's model, size, and duration; creation-only options such as
+`size`, `seconds`, `input_reference`, and `characters` are ignored. Promptfoo reports cost and
+metadata using the completed remix job returned by OpenAI.
 
 :::note
 Remixed videos are not cached since each remix produces unique results even with the same prompt.
@@ -1883,15 +1889,15 @@ tests:
 
 #### Transcription configuration options
 
-| Parameter                  | Description                            | Options                |
-| -------------------------- | -------------------------------------- | ---------------------- |
-| `language`                 | Language of the audio (ISO-639-1)      | e.g., 'en', 'es', 'fr' |
-| `prompt`                   | Context for non-diarized transcription | Any text string        |
-| `temperature`              | Controls randomness (0-1)              | Number between 0 and 1 |
-| `timestamp_granularities`  | Word or segment timestamps for Whisper | ['word', 'segment']    |
-| `chunking_strategy`        | Split long diarized audio using VAD    | `auto` or `server_vad` |
-| `known_speaker_names`      | Up to four known speaker identifiers   | Array of strings       |
-| `known_speaker_references` | Matching 2-10 second audio data URLs   | Array of data URLs     |
+| Parameter                  | Description                              | Options                |
+| -------------------------- | ---------------------------------------- | ---------------------- |
+| `language`                 | Language of the audio (ISO-639-1)        | e.g., 'en', 'es', 'fr' |
+| `prompt`                   | Context for non-diarized transcription   | Any text string        |
+| `temperature`              | Controls randomness (0-1)                | Number between 0 and 1 |
+| `timestamp_granularities`  | Word or segment timestamps for Whisper   | ['word', 'segment']    |
+| `chunking_strategy`        | Split long transcription audio using VAD | `auto` or `server_vad` |
+| `known_speaker_names`      | Up to four known speaker identifiers     | Array of strings       |
+| `known_speaker_references` | Matching 2-10 second audio data URLs     | Array of data URLs     |
 
 Supported audio formats include FLAC, MP3, MP4, MPEG, MPGA, M4A, OGG, WAV, and WEBM. Promptfoo
 automatically sets `chunking_strategy: auto` for diarization, which is required for inputs longer
@@ -2360,7 +2366,7 @@ Both models feature:
 - Large context window (200,000 tokens)
 - High maximum output tokens (100,000 tokens)
 
-For current specifications and pricing information, refer to [OpenAI's pricing page](https://openai.com/pricing).
+For current specifications and pricing information, refer to [OpenAI API pricing](https://developers.openai.com/api/docs/pricing).
 
 Example configuration:
 
@@ -2481,11 +2487,12 @@ Example response structure:
 
 #### Timeout Configuration
 
-Deep research models automatically use appropriate timeouts:
+Deep research models, GPT-5 pro variants, and any Responses request with `background: true`
+automatically use appropriate timeouts:
 
 - If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it will be used for the API call
-- Otherwise, deep research models default to a 10-minute timeout (600,000ms)
-- Regular models continue to use the standard 5-minute timeout
+- Otherwise, these long-running requests default to a 10-minute timeout (600,000ms)
+- Regular foreground requests continue to use the standard 5-minute timeout
 
 Example:
 

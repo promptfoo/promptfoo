@@ -871,6 +871,18 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(0.01, 10);
   });
 
+  it('uses reasoning web-search pricing for fine-tuned o4 models', () => {
+    expect(
+      calculateObservableOpenAIToolCost(
+        {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+        },
+        'ft:o4-mini-2025-04-16:company::model',
+        { tools: [{ type: 'web_search_preview' }] },
+      ),
+    ).toBeCloseTo(0.01, 10);
+  });
+
   it('does not charge non-search web actions', () => {
     expect(
       calculateObservableOpenAIToolCost(

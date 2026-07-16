@@ -46,6 +46,7 @@ const ENV_KEYS_TO_CLEAR = [
   'OPENAI_BASE_URL',
   'OPENAI_API_HOST',
   'REQUEST_TIMEOUT_MS',
+  'PROMPTFOO_EVAL_TIMEOUT_MS',
 ] as const;
 
 type OpenAiEnvKey = (typeof ENV_KEYS_TO_CLEAR)[number];

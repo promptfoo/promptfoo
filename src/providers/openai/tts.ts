@@ -1,6 +1,7 @@
 import { getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
@@ -247,6 +248,19 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
         return result;
       } catch (error) {
+        if (error instanceof HttpRateLimitError) {
+          return {
+            error: formatRateLimitErrorMessage(error),
+            metadata: {
+              rateLimitKind: error.kind,
+              http: {
+                status: error.status,
+                statusText: error.statusText,
+                headers: error.headers ?? {},
+              },
+            },
+          };
+        }
         return { error: `API call error: ${String(error)}` };
       }
     };

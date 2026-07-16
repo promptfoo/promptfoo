@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -98,6 +99,31 @@ describe('OpenAiTtsProvider', () => {
       expect.any(Number),
       2,
     );
+  });
+
+  it('preserves rate-limit metadata so the scheduler honors Retry-After', async () => {
+    mockedFetch.mockRejectedValue(
+      new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 120000,
+        headers: { 'retry-after': '120' },
+      }),
+    );
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi('Retry later');
+
+    expect(result.error).toContain('Rate limit exceeded');
+    expect(result.metadata).toEqual({
+      rateLimitKind: 'rate_limit',
+      http: {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '120' },
+      },
+    });
   });
 
   it('passes an uploaded custom voice ID through to the speech API', async () => {

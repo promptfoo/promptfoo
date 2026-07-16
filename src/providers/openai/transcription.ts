@@ -138,20 +138,22 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Diarization-specific options (for gpt-4o-transcribe-diarize)
-      if (this.modelName.includes('diarize')) {
-        formData.append('response_format', 'diarized_json');
-        const chunkingStrategy = config.chunking_strategy ?? 'auto';
-        if (typeof chunkingStrategy === 'string') {
-          formData.append('chunking_strategy', chunkingStrategy);
-        } else {
-          for (const [key, value] of Object.entries(chunkingStrategy)) {
-            if (value !== undefined) {
-              formData.append(`chunking_strategy[${key}]`, String(value));
-            }
+      const isDiarizationModel = this.modelName.includes('diarize');
+      const chunkingStrategy =
+        config.chunking_strategy ?? (isDiarizationModel ? 'auto' : undefined);
+      if (typeof chunkingStrategy === 'string') {
+        formData.append('chunking_strategy', chunkingStrategy);
+      } else if (chunkingStrategy) {
+        for (const [key, value] of Object.entries(chunkingStrategy)) {
+          if (value !== undefined) {
+            formData.append(`chunking_strategy[${key}]`, String(value));
           }
         }
+      }
 
+      // Diarization-specific options (for gpt-4o-transcribe-diarize)
+      if (isDiarizationModel) {
+        formData.append('response_format', 'diarized_json');
         for (const name of config.known_speaker_names || []) {
           formData.append('known_speaker_names[]', name);
         }
