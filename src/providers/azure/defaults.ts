@@ -72,6 +72,42 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-5-pro-2025-10-06',
     cost: { input: 15 / 1000000, output: 120 / 1000000 },
   },
+  ...['gpt-5.6', 'gpt-5.6-sol'].map((id) => ({
+    id,
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
+  })),
+  {
+    id: 'gpt-5.6-terra',
+    cost: {
+      input: 2.5 / 1000000,
+      output: 15 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
+    },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    cost: {
+      input: 1 / 1000000,
+      output: 6 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 2 / 1000000,
+        output: 9 / 1000000,
+      },
+    },
+  },
   {
     id: 'gpt-5.4',
     cost: {
@@ -163,6 +199,18 @@ export const AZURE_MODELS: AzureModelCost[] = [
       },
     },
   },
+  ...['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'].map((id) => ({
+    id,
+    cost: {
+      input: 30 / 1000000,
+      output: 180 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+      },
+    },
+  })),
   {
     id: 'gpt-5.2',
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
@@ -171,6 +219,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-5.2-2025-12-11',
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
+  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((id) => ({
+    id,
+    cost: { input: 21 / 1000000, output: 168 / 1000000 },
+  })),
   {
     id: 'gpt-5.2-chat',
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
@@ -437,6 +489,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 4 / 1000000, output: 16 / 1000000 },
   },
   {
+    id: 'gpt-realtime-1.5-2026-02-23',
+    cost: { input: 4 / 1000000, output: 16 / 1000000 },
+  },
+  {
     id: 'gpt-realtime-mini',
     cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
   },
@@ -450,6 +506,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-audio-2025-08-28',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-audio-1.5-2026-02-23',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
   },
   {

@@ -2662,6 +2662,16 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it('should calculate cost for gemini-omni-flash-preview', () => {
+      const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should calculate cost for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost('gemini-3.1-flash-live-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.003, 10);
+    });
+
     it('should not apply long-context tiered pricing to gemini-3.5-flash', () => {
       // gemini-3.5-flash is flat-rate: prompts above 200k tokens bill at the
       // standard rate (unlike the tiered gemini-3.1-pro-preview).

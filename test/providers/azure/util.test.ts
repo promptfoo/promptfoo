@@ -68,6 +68,36 @@ describe('calculateAzureCost', () => {
     );
   });
 
+  it.each([
+    { id: 'gpt-5.6', input: 5, output: 30, longInput: 10, longOutput: 45 },
+    { id: 'gpt-5.6-sol', input: 5, output: 30, longInput: 10, longOutput: 45 },
+    { id: 'gpt-5.6-terra', input: 2.5, output: 15, longInput: 5, longOutput: 22.5 },
+    { id: 'gpt-5.6-luna', input: 1, output: 6, longInput: 2, longOutput: 9 },
+    { id: 'gpt-5.5-pro', input: 30, output: 180, longInput: 60, longOutput: 270 },
+    {
+      id: 'gpt-5.5-pro-2026-04-23',
+      input: 30,
+      output: 180,
+      longInput: 60,
+      longOutput: 270,
+    },
+  ])('uses the correct standard and long-context pricing for $id', ({
+    id,
+    input,
+    output,
+    longInput,
+    longOutput,
+  }) => {
+    expect(calculateAzureCost(id, {}, 272_000, 1_000)).toBeCloseTo(
+      (272_000 * input + 1_000 * output) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost(id, {}, 272_001, 1_000)).toBeCloseTo(
+      (272_001 * longInput + 1_000 * longOutput) / 1e6,
+      12,
+    );
+  });
+
   it('calculates cost for Claude Fable 5', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });
@@ -281,8 +311,16 @@ describe('AZURE_MODELS cost coverage', () => {
   // so tiered models (gpt-5.4-pro, gpt-5.5) assert their standard input rate here, while the
   // long-context tiers are pinned by the dedicated boundary tests above.
   it.each([
+    ['gpt-5.6', 5, 30],
+    ['gpt-5.6-sol', 5, 30],
+    ['gpt-5.6-terra', 2.5, 15],
+    ['gpt-5.6-luna', 1, 6],
     ['gpt-5.5', 5, 30],
+    ['gpt-5.5-pro', 30, 180],
+    ['gpt-5.5-pro-2026-04-23', 30, 180],
     ['gpt-5.2', 1.75, 14],
+    ['gpt-5.2-pro', 21, 168],
+    ['gpt-5.2-pro-2025-12-11', 21, 168],
     ['gpt-5.1-codex-max', 1.25, 10],
     ['gpt-5', 1.25, 10],
     ['gpt-5-pro', 15, 120],
@@ -301,6 +339,8 @@ describe('AZURE_MODELS cost coverage', () => {
     ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],
     ['gpt-realtime', 4, 16],
+    ['gpt-realtime-1.5-2026-02-23', 4, 16],
+    ['gpt-audio-1.5-2026-02-23', 2.5, 10],
     ['gpt-audio-mini', 0.6, 2.4],
     ['gpt-4o-mini-transcribe', 1.25, 5],
     ['gpt-4o-mini-tts', 0.6, 12],

@@ -53,10 +53,8 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude 4.7 models
-  // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
-  // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
-  // canonical ID here.
-  ...['claude-opus-4-7'].map((model) => ({
+  // NOTE: Opus 4.7 has a canonical ID and a pinned snapshot, but no `-latest` alias.
+  ...['claude-opus-4-7', 'claude-opus-4-7-20260416'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
@@ -71,7 +69,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-opus-4-6', 'claude-opus-4-6-latest'].map((model) => ({
+  ...['claude-opus-4-6', 'claude-opus-4-6-20260205', 'claude-opus-4-6-latest'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok

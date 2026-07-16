@@ -45,6 +45,10 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     id,
     cost: { input: 1.5 / 1e6, output: 9.0 / 1e6 },
   })),
+  {
+    id: 'gemini-omni-flash-preview',
+    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6 },
+  },
 
   // Gemini 3.1 models. gemini-pro-latest is a Google-maintained alias that currently
   // resolves server-side to gemini-3.1-pro-preview, so it tracks the Gemini 3 Pro tier.
@@ -64,6 +68,10 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
     }),
   ),
+  {
+    id: 'gemini-3.1-flash-live-preview',
+    cost: { input: 0.75 / 1e6, output: 4.5 / 1e6 },
+  },
 
   // Gemini 3.0 models (Preview)
   {
