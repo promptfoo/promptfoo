@@ -489,7 +489,7 @@ cache:
    - Consider on-premise deployments for enterprise
 
 3. **Data Privacy**
-   - Enable output stripping for sensitive data:
+   - Use output stripping to reduce stored result data. It is best-effort and may not remove every trace, diagnostic, or shared field:
 
    ```bash
    export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true

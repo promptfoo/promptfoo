@@ -26,6 +26,8 @@ The web UI, local helper servers, and MCP server bind address, port, and contain
 
 MCP clients are expected to be trusted clients selected by the user. Project roots and workspace paths supplied to MCP tools, generators, and local helper flows are convenience defaults, not filesystem sandboxes, unless a specific feature documents a hard workspace isolation boundary. File reads or writes requested through trusted MCP tool arguments, local API requests, config values, or CLI options are equivalent to local CLI file access, even when they target paths outside the current project directory. A vulnerability exists when a documented MCP authentication or authorization control is bypassed, or when an MCP tool sends data to a destination that was not configured for that data.
 
+TargetLink, agent filesystem helpers, and generated-provider workflows run with the local runner's permissions and network access. Workspace roots, extension checks, approvals, and generated-code checks are safety features, not filesystem or network isolation boundaries. Treat repository files, links, agent instructions, generated pipelines, target responses, and target-selected redirects as trusted. Use an isolated runner with scoped credentials and restricted egress when needed.
+
 ### Trust Boundaries
 
 **Trusted configuration and explicit code execution:**
@@ -61,6 +63,8 @@ In this document, the terms **Promptfoo-hosted feature** and **Cloud-backed feat
 
 A destination is configured for the data and credentials the user directly selected, invoked, signed into, or configured it to receive as part of the eval, reporting, sharing, hosted-feature, account, or Cloud path. Selecting a provider, grader, report, hosted feature, account login, sharing action, Cloud-backed feature, or other eval component for a run counts as configuring that destination for the data and credentials needed by that component in that path.
 
+Configured destinations include endpoints selected through normal protocol behavior, such as HTTP redirects, OAuth/OIDC discovery and token endpoints, regional routing, and service-selected upload or inference endpoints. Provider-specific headers, request bodies, and other request metadata may follow that routing. Use an egress proxy or network policy when credentials or data must stay bound to a specific origin.
+
 For example, an HTTP provider URL is configured to receive that provider's rendered request, and a grading provider is configured to receive prompts and runtime data needed by the selected model-graded assertion. A Promptfoo-hosted service endpoint, telemetry path, browser-loaded resource, or unrelated provider is a separate destination unless the user separately chose or configured it for that same eval path and data or credential.
 
 Transport behavior for configured destinations is deployment and hardening configuration. TLS verification, custom certificate authorities, proxy settings, local interception, HTTP agent behavior, and related environment variables are not separate Promptfoo security boundaries unless Promptfoo documents a specific transport-security control for that feature. Default transport posture — including the default TLS verification setting for `fetchWithProxy` and other outbound dispatchers, default proxy and certificate-authority handling, and default HTTP agent behavior — is operational and may favor compatibility with corporate proxies, captive portals, and self-signed CAs. Defaults can change between releases and are not by themselves transport-security controls. Users who require strict transport guarantees should configure them explicitly (for example, set `PROMPTFOO_INSECURE_SSL=false`, point `PROMPTFOO_CA_CERT_PATH` at a trusted bundle, or run Promptfoo behind a transport-enforcing egress proxy). Reports about relaxed or disabled certificate verification are out of scope when Promptfoo sends data only to a destination configured for that path and does not bypass a documented transport-security setting that the user has explicitly configured.
@@ -82,11 +86,11 @@ Documented opt-out and disable controls are operational controls for the feature
 
 **Local artifacts and logs:**
 
-Promptfoo stores local artifacts such as logs, cache entries, databases, trace data, media blobs, config snapshots, reports, and exported files under the user's local account. These local artifacts are not external destinations by themselves. For OSS, secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction, exclusion, authentication, authorization, or tenant-isolation control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account, including to other users or tenants.
+Promptfoo stores local artifacts such as logs, cache entries, databases, trace data, media blobs, config snapshots, reports, and exported files under the user's local account. These local artifacts are not external destinations by themselves. Secret persistence or display that stays within the same local account, including debug, warning, and error output, is a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope when it bypasses a supported authentication, authorization, or tenant-isolation control, or exposes data to another user or tenant outside the configured sharing or Cloud path.
 
 Local caches, OAuth/token stores, provider response caches, temporary files, debug logs, report databases, and media/blob stores are scoped to the user's local Promptfoo environment. They are not isolation boundaries between different credentials, providers, endpoints, regions, tenants, accounts, evals, projects, or users running under the same local account unless Promptfoo documents such partitioning for a specific feature. Cache keys, token-store keys, and local artifact paths are not guaranteed to include provider identity, endpoint, region, tenant, account, credential, or project identity unless documented. Cache or token reuse, collision, overwrite, or lookup ambiguity within the same local user environment is generally treated as hardening or privacy behavior rather than a security-boundary bypass. Use separate operating-system users, containers, `PROMPTFOO_CONFIG_DIR` values, cache directories, token stores, and credentials when you need isolation between projects, tenants, or accounts.
 
-Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Do not put secrets in prompts, datasets, provider config fields, metadata, or other shareable inputs unless that field is documented as redacted. If a field is documented as redacted or excluded, bypassing that redaction or exclusion is in scope.
+Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, errors, media/blob references, scan artifacts, and derived artifacts. Strip, exclusion, sanitization, and redaction options are best-effort privacy features, not data-loss-prevention boundaries, and may not apply to every request, preflight, diagnostic, trace field, map key, or derived artifact. Do not put secrets in content that may be shared or processed remotely.
 
 Report files, Markdown, HTML, CSV, JSON, screenshots, and other exports are generated artifacts from the user's run. They may contain active markup, formulas, links, media, `data:` URLs, or provider-controlled text. Treat exported artifacts as untrusted when opening them in browsers, spreadsheets, terminals, or other tools.
 
@@ -96,7 +100,9 @@ Promptfoo's public repository workflows, example CI snippets, code-scan action c
 
 Treat pull-request content, repository-local config files, `package.json` scripts, npm configuration, workflow inputs, scanner guidance files, and agent/editor instructions as trusted code whenever a workflow or local automation runs them with secrets or write-capable credentials. Do not run Promptfoo, repository CI, scanners, agent tools, or examples with secrets on untrusted pull requests or third-party repositories unless those jobs are isolated and the credentials are scoped for that run.
 
-Reports about repository automation are generally out of scope unless they affect Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary.
+Code Scan and `code-scan-action` are best-effort analysis tools, not adversarial-repository sandboxes or CI integrity boundaries. Repository contents, Git metadata and attributes, refs, local configuration, npm configuration, guidance, and scanner responses can affect scan behavior. Scan omissions, configuration or severity manipulation, parser and diff edge cases, timeouts, resource exhaustion, and checkout changes are out of scope. Reports remain in scope when a repository-selected installer or tool obtains runner credentials, Promptfoo-published artifacts are compromised, or Cloud/on-prem tenant isolation is bypassed.
+
+Reports about other repository automation are generally out of scope unless they compromise Promptfoo-published packages or artifacts, Cloud/on-prem tenant isolation, or a supported authentication or authorization boundary.
 
 ## Hardening Recommendations
 
@@ -185,9 +191,9 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 
 - Code execution that bypasses a supported isolation boundary or hardening control: typically **Critical**
 - Secret or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path: typically **High**
-- Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls that send data externally: typically **Medium–High**, depending on the data sent
-- Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
-- Sensitive data written only to local logs, cache, token stores, traces, reports, exports, or databases: typically **Low–Medium**, and higher only if the artifact is uploaded, shared, or exposed to another user or tenant outside the documented sharing or Cloud-backed behavior
+- Bypasses of documented tenant-isolation, authentication, or authorization controls that send data externally: typically **Medium–High**, depending on the data sent
+- Algorithmic DoS affecting a supported service or isolation boundary: typically **Medium–High**
+- Sensitive local data exposed to another user or tenant outside the configured sharing or Cloud-backed behavior: typically **Low–Medium**, depending on the data and exposure
 - Web UI or report XSS requiring deliberate user interaction, local report access, or same-user artifact opening: typically **Low** or no CVE (see Scope)
 
 ## Embargo and Non-Disclosure
@@ -208,12 +214,12 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 - Code execution that bypasses a supported hardening control or isolation boundary outside the documented local eval pipeline
 - Bypasses of Cloud/on-prem isolation boundaries
 - Secret or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path
-- Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls that send secrets, credentials, or sensitive eval data to an external destination
+- Bypasses of documented tenant-isolation, authentication, or authorization controls that send secrets, credentials, or sensitive eval data to an external destination
 - Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
 
 **CVE-eligible (case-by-case):**
 
-- Algorithmic DoS in CI pipelines with significant resource impact
+- Algorithmic DoS affecting a supported service or isolation boundary
 - Sensitive data exposure through local artifacts when those artifacts are uploaded, shared, or exposed across users or tenants outside the documented sharing or Cloud-backed behavior
 - Web UI XSS with demonstrable impact beyond self-XSS
 
@@ -228,7 +234,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 - TLS verification, certificate-validation, custom-CA, proxy, HTTP agent, or local network interception behavior for configured destinations, unless Promptfoo bypasses a documented transport-security control
 - Active content, formulas, links, media, or markup in local reports or exports generated from the user's eval data
 - File reads or writes outside the current project directory requested through trusted MCP tool arguments, local API requests, config values, or CLI options, unless a specific feature documents a hard workspace isolation boundary
-- Repository CI, examples, maintainer scripts, code-scan configuration, package-manager configuration, or local agent/editor automation unless the issue affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
+- Repository CI, examples, maintainer scripts, Code Scan and `code-scan-action` behavior, package-manager configuration, or local agent/editor automation, including scan omissions, evasion, availability issues, and checkout changes. Repository-selected installers or tools obtaining runner credentials, compromise of Promptfoo-published artifacts, and Cloud/on-prem tenant-isolation bypasses remain in scope
 - Self-XSS requiring the user to paste payloads into their own console or UI
 - Quality, UX, or non-security functional bugs
 
@@ -265,9 +271,9 @@ When a fix is released, we will:
 - Path traversal or arbitrary file read/write that escapes a documented sandbox, authentication/authorization boundary, Cloud/on-prem tenant boundary, or explicit path restriction that Promptfoo identifies as a security boundary
 - Vulnerabilities in CLI, config parsing, or web UI affecting confidentiality, integrity, or availability beyond the intended trust model described above
 - Exposure of privileged local developer interfaces only when it bypasses an explicit authentication or authorization control documented for a remote or multi-user deployment
-- Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls
+- Bypasses of documented tenant-isolation, authentication, or authorization controls
 - Sensitive local artifacts that are uploaded, shared, served to other users, or exposed across Cloud/on-prem tenant boundaries outside the documented sharing or Cloud-backed behavior
-- Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
+- Algorithmic complexity DoS affecting a supported service or isolation boundary (crafted input causing hang/crash with modest input size)
 
 **Out of scope:**
 
@@ -277,17 +283,18 @@ When a fix is released, we will:
 - Code execution, data access, report access, CORS, CSRF, browser-origin, bind-address, local helper server, embedded client configuration, or network-reachability issues via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, browser extensions, same-user local processes, another machine on the same network, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
 - Direct access to the MCP server by a trusted local MCP client selected by the user, including tool behavior that is equivalent to running the CLI locally, unless a documented MCP authentication or authorization control is bypassed
 - File reads or writes outside the current project directory requested through trusted MCP tool arguments, local API requests, config values, or CLI options. Project roots and workspace paths are convenience defaults, not security boundaries, unless a specific feature documents a hard workspace isolation boundary
+- Agent, TargetLink, generated-provider, and filesystem-helper behavior, including workspace escape through links, generated-code execution, target-selected redirects, and access to local or private network resources. These workflows are not filesystem, SSRF, or network-egress sandboxes
 - Issues requiring the user to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges, including cases where adversarial model output is rendered or processed by built-in assertions or graders during that local run
 - Network requests to URLs, providers, graders, Promptfoo-hosted features, account/license endpoints, telemetry controls, sharing endpoints, Cloud sync, hosted report viewing, hosted scan upload, media/blob upload, or other Promptfoo services that were configured to receive the relevant eval data, account data, artifacts, or credentials
 - Reports that treat telemetry, remote-generation, sharing, Cloud-upload, or privacy controls as a general network egress firewall outside the documented scope of the specific control
-- Reports that a disable flag or local-only preference was not honored when the request goes only to a configured provider, Promptfoo-operated endpoint, account endpoint, hosted feature, or Cloud-backed feature for the documented path. These are product correctness or privacy issues unless they bypass a documented tenant-isolation, authentication, authorization, redaction, or exclusion control
+- Reports that a disable flag or local-only preference was not honored when the request goes only to a configured provider, Promptfoo-operated endpoint, account endpoint, hosted feature, or Cloud-backed feature for the documented path. These are product correctness or privacy issues unless they bypass a documented tenant-isolation, authentication, or authorization control
 - TLS, certificate-validation, proxy, or local network interception concerns for a user-configured destination when Promptfoo sends the data only along that configured path and does not bypass a documented transport-security setting
 - TLS verification, certificate-validation, custom-CA, proxy, HTTP agent, or local network interception behavior for Promptfoo-hosted feature requests that remain within the documented payload and controls for that feature, unless Promptfoo bypasses a documented transport-security control
-- Sensitive data present only in local logs, cache entries, OAuth/token stores, provider response caches, databases, trace files, temporary files, media blobs, screenshots, reports, or exports created by the user's own run and confined to the same local user account, unless a separate supported boundary is crossed, Promptfoo bypasses a documented redaction or exclusion control, or Promptfoo uploads, shares, or exposes that artifact beyond the documented local, sharing, or Cloud-backed behavior
+- Sensitive data present only in local logs, cache entries, OAuth/token stores, provider response caches, databases, trace files, temporary files, media blobs, screenshots, reports, or exports created by the user's own run and confined to the same local user account, unless a separate supported boundary is crossed or Promptfoo exposes that artifact to another user or tenant outside the configured sharing or Cloud-backed behavior
 - Local cache, provider response cache, OAuth/token-store, temporary-file, or artifact namespace reuse, collision, overwrite, or lookup ambiguity between credentials, providers, endpoints, regions, accounts, tenants, projects, or evals within the same local user environment, unless Promptfoo documents the namespace as an isolation boundary for that feature
 - Active content, formulas, links, media, `data:` URLs, or markup in local reports, shared reports, screenshots, CSV/JSON exports, Markdown/HTML renderers, citations, or viewer downloads generated from the user's eval data
-- Shared or Cloud-backed report snapshots containing prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, or derived artifacts, unless Promptfoo bypasses a documented redaction or exclusion for that field
-- Repository workflows, example CI snippets, code-scan action configuration, package-manager behavior, local agent/editor automation, maintainer scripts, and other developer automation surfaces unless the issue affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
+- Shared or Cloud-backed report snapshots containing prompts, vars, outputs, traces, metadata, provider configuration fields, errors, media/blob references, scan artifacts, or derived artifacts, including cases where a best-effort strip, exclusion, sanitization, or redaction option does not remove a field
+- Repository workflows, example CI snippets, Code Scan and `code-scan-action` behavior, package-manager behavior, local agent/editor automation, maintainer scripts, and other developer automation surfaces, including scan omissions, evasion, availability issues, and checkout changes. Repository-selected installers or tools obtaining runner credentials, compromise of Promptfoo-published artifacts, and Cloud/on-prem tenant-isolation bypasses remain in scope
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
 - Social engineering, phishing, or physical attacks
@@ -302,7 +309,7 @@ When a fix is released, we will:
 - "An HTTP provider fetches a URL produced from a prompt or test variable" → Expected behavior; provider requests are part of the configured eval flow
 - "The local web API executes provider transforms as code" → Expected behavior; the web API has the same trust model as the CLI
 - "A trusted local MCP client asks Promptfoo to run an eval or inspect a config" → Expected behavior; MCP tools have the same trust model as local CLI invocations unless a documented MCP authentication or authorization control is bypassed
-- "An API key, bearer token, prompt, response, or config value appears in a local DB row, cache entry, report, export, or UI view generated by my own run" → Usually a hardening or privacy bug rather than a security-boundary bypass, unless Promptfoo bypassed a documented redaction or exclusion control or the artifact is uploaded, shared, or exposed beyond the documented local, sharing, or Cloud-backed behavior
+- "An API key, bearer token, prompt, response, or config value appears in a local DB row, cache entry, report, export, or UI view generated by my own run" → Usually a hardening or privacy bug rather than a security-boundary bypass, unless the artifact is exposed to another user or tenant outside the configured sharing or Cloud-backed behavior
 - "A malicious website can reach the local server if I replay browser headers with `curl`" → Not a valid browser repro, and local-server browser-origin claims are out of scope
 - "A browser DNS rebinding or `Host`/`Origin` confusion attack reaches the local web UI or MCP HTTP server" → Local deployment hardening; bind local interfaces explicitly to loopback when the host machine is reachable from other devices
 - "A non-browser client on the same network reaches a local API such as `/api/user/login`, `/providers/test`, `/providers/test-session`, or other helper endpoints because the bound port is reachable from other hosts" → Local deployment hardening; the local server has the same trust model as the CLI
@@ -313,7 +320,7 @@ When a fix is released, we will:
 - "A Promptfoo-hosted generation, red team target/provider setup/test, telemetry, sharing, or Cloud-backed path sends data despite a local-only or disable setting" → Product correctness or privacy issue, not a security-boundary bypass, when the request goes only to a configured provider or Promptfoo-operated hosted feature for that documented path
 - "A spreadsheet formula appears in a CSV export generated from my eval output" → Expected artifact behavior; treat exports as untrusted when opening them in other tools
 - "A signed-in Cloud workflow uploads a hosted report snapshot or scan artifact described by the feature documentation" → Expected Cloud-backed behavior
-- "A repository workflow, scanner, or local agent reads PR-controlled files while running with secrets" → Out of scope unless it affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
+- "A repository workflow, scanner, or local agent reads PR-controlled files while running with secrets" → Out of scope unless a repository-selected installer or tool obtains runner credentials, Promptfoo-published artifacts are compromised, or Cloud/on-prem tenant isolation is bypassed
 
 If unsure whether something is in scope, report it anyway.
 

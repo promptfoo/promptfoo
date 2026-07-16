@@ -189,7 +189,7 @@ strategies:
 
 :::note
 
-There's also a global red team configuration option `excludeTargetOutputFromAgenticAttackGeneration` that prevents the AI from seeing target responses when generating follow-up attacks. This applies to all strategies, not just custom.
+The global `excludeTargetOutputFromAgenticAttackGeneration` option reduces target-response data sent during follow-up attack generation across strategies, not just custom. It is a best-effort privacy option and may not apply to every derived or diagnostic request, so do not treat it as a data-loss-prevention boundary.
 
 :::
 
