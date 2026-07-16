@@ -183,10 +183,19 @@ export function mergeGoogleCompletionOptions(
   return mergedConfig;
 }
 
-export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
-  return tools.flatMap(({ functionDeclarations, ...tool }) =>
-    functionDeclarations && Object.keys(tool).length === 0 ? [] : [tool as Tool],
-  );
+export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
+  const toolList = Array.isArray(tools) ? tools : [tools];
+  return toolList.flatMap((rawTool) => {
+    if (!rawTool || typeof rawTool !== 'object' || Array.isArray(rawTool)) {
+      return [];
+    }
+    const { functionDeclarations, function_declarations, ...tool } = rawTool as Tool & {
+      function_declarations?: unknown;
+    };
+    return (functionDeclarations || function_declarations) && Object.keys(tool).length === 0
+      ? []
+      : [tool as Tool];
+  });
 }
 
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {

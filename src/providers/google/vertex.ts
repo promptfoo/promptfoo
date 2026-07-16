@@ -561,7 +561,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...passthrough
     } = config.passthrough || {};
     const requestPassthroughTools =
-      toolsDisabled && Array.isArray(passthroughTools)
+      toolsDisabled && passthroughTools !== undefined
         ? removeGoogleFunctionDeclarations(passthroughTools)
         : passthroughTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent

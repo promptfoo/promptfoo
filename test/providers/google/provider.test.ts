@@ -1263,6 +1263,7 @@ describe('GoogleProvider', () => {
           passthrough: {
             tools: [
               { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
               { googleSearch: {} },
             ],
           },
@@ -1367,6 +1368,38 @@ describe('GoogleProvider', () => {
 
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          passthrough: {
+            tools: {
+              function_declarations: [{ name: 'passthrough_snake_case_function' }],
+              googleSearch: {},
+            },
+          },
+        } as any,
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });

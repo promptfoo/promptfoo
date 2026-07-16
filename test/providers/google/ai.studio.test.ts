@@ -1634,6 +1634,7 @@ describe('AIStudioChatProvider', () => {
           passthrough: {
             tools: [
               { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
               { codeExecution: {} },
             ],
           },
@@ -1663,6 +1664,46 @@ describe('AIStudioChatProvider', () => {
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       // Both non-function tools are preserved; functionDeclarations entries are dropped.
       expect(body.tools).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
+    });
+
+    it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          passthrough: {
+            tools: {
+              function_declarations: [{ name: 'passthrough_snake_case_function' }],
+              codeExecution: {},
+            },
+          },
+        } as any,
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ codeExecution: {} }]);
     });
 
     it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {

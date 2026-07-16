@@ -358,7 +358,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       ...passthrough
     } = config.passthrough || {};
     const requestPassthroughTools =
-      toolsDisabled && Array.isArray(passthroughTools)
+      toolsDisabled && passthroughTools !== undefined
         ? removeGoogleFunctionDeclarations(passthroughTools)
         : passthroughTools;
 

@@ -3314,6 +3314,11 @@ describe('util', () => {
       expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
     });
 
+    it('drops documented snake_case function_declarations entries', () => {
+      const tools = [{ function_declarations: [{ name: 'foo' }] }] as unknown as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
+    });
+
     it('strips functionDeclarations from mixed-capability tool entries', () => {
       const tools = [
         {
@@ -3322,6 +3327,14 @@ describe('util', () => {
         },
       ] as Tool[];
       expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('strips snake_case function declarations from a single mixed-capability tool', () => {
+      const tool = {
+        function_declarations: [{ name: 'foo' }],
+        googleSearch: {},
+      } as unknown as Tool;
+      expect(removeGoogleFunctionDeclarations(tool)).toEqual([{ googleSearch: {} }]);
     });
 
     it('passes through non-function tools unchanged', () => {

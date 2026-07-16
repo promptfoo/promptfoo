@@ -457,6 +457,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         passthrough: {
           tools: [
             { functionDeclarations: [{ name: 'passthrough_function' }] },
+            { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
             { codeExecution: {} },
           ],
         },
@@ -536,6 +537,45 @@ describe('VertexChatProvider.callGeminiApi', () => {
     // Reset cache state so other tests aren't affected.
     mockIsCacheEnabled.mockReturnValue(false);
     mockCacheGet.mockReset();
+  });
+
+  it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_choice: 'none',
+        passthrough: {
+          tools: {
+            function_declarations: [{ name: 'passthrough_snake_case_function' }],
+            codeExecution: {},
+          },
+        },
+      } as any,
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
+          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
+        },
+      ],
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((c) => c as any);
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('hi');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ codeExecution: {} }],
+        }),
+      }),
+    );
   });
 
   it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
