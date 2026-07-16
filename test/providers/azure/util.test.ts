@@ -228,8 +228,8 @@ describe('calculateAzureCost', () => {
     {
       id: 'gpt-realtime-1.5-2026-02-23',
       input: 4,
-      cachedText: 0.4,
-      cachedAudio: 0.4,
+      cachedText: 4,
+      cachedAudio: 4,
       cachedImage: 0.5,
       output: 16,
       audioOutput: 64,

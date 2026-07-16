@@ -56,12 +56,23 @@ function getModelOutputContent(data: InteractionResponse): InteractionContent[] 
 }
 
 function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
-  const apiHost = config.apiHost || env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
-  if (apiHost) {
-    return `https://${apiHost.replace(/^https?:\/\//, '').replace(/\/$/, '')}/v1beta/interactions`;
+  const endpointFromHost = (apiHost: string) => {
+    const normalizedHost = /^https?:\/\//i.test(apiHost) ? apiHost : `https://${apiHost}`;
+    return `${normalizedHost.replace(/\/$/, '')}/v1beta/interactions`;
+  };
+
+  if (config.apiHost) {
+    return endpointFromHost(config.apiHost);
   }
-  const apiBaseUrl =
-    config.apiBaseUrl || env?.GOOGLE_API_BASE_URL || getEnvString('GOOGLE_API_BASE_URL');
+  if (config.apiBaseUrl) {
+    return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
+  }
+
+  const apiHost = env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
+  if (apiHost) {
+    return endpointFromHost(apiHost);
+  }
+  const apiBaseUrl = env?.GOOGLE_API_BASE_URL || getEnvString('GOOGLE_API_BASE_URL');
   if (apiBaseUrl) {
     return `${apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
   }
@@ -146,7 +157,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        context?.bustCache ?? context?.debug ?? false,
+        // Authentication headers must never contribute to a persistent cache key.
+        true,
       )) as { data: InteractionResponse; cached: boolean });
     } catch (err) {
       return { error: `Gemini Interactions API error: ${String(err)}` };

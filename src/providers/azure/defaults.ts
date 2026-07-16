@@ -493,8 +493,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 4 / 1000000,
       output: 16 / 1000000,
-      cacheRead: 0.4 / 1000000,
-      cacheReadAudio: 0.4 / 1000000,
+      cacheRead: 4 / 1000000,
+      cacheReadAudio: 4 / 1000000,
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
@@ -506,8 +506,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 4 / 1000000,
       output: 16 / 1000000,
-      cacheRead: 0.4 / 1000000,
-      cacheReadAudio: 0.4 / 1000000,
+      cacheRead: 4 / 1000000,
+      cacheReadAudio: 4 / 1000000,
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
@@ -519,8 +519,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 4 / 1000000,
       output: 16 / 1000000,
-      cacheRead: 0.4 / 1000000,
-      cacheReadAudio: 0.4 / 1000000,
+      cacheRead: 4 / 1000000,
+      cacheReadAudio: 4 / 1000000,
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,

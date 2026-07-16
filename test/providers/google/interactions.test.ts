@@ -73,7 +73,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
     expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
     expect(mockStoreBlob).toHaveBeenCalledWith(
@@ -202,7 +202,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -237,7 +237,47 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      false,
+      true,
+    );
+  });
+
+  it.each([
+    [
+      { apiHost: 'http://127.0.0.1:15500/proxy' },
+      { GOOGLE_API_HOST: 'wrong.example' },
+      'http://127.0.0.1:15500/proxy/v1beta/interactions',
+    ],
+    [
+      { apiBaseUrl: 'http://127.0.0.1:15500/proxy' },
+      { GOOGLE_API_HOST: 'wrong.example' },
+      'http://127.0.0.1:15500/proxy/v1beta/interactions',
+    ],
+  ])('prefers explicit interaction endpoints and preserves HTTP schemes', async (config, env, endpoint) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/4' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { ...config, apiKey: 'test-key' },
+      env,
+    });
+
+    await provider.callApi('A city at dusk');
+
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
     );
   });
 });
