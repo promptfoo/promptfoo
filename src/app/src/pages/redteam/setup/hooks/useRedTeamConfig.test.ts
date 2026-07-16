@@ -2411,6 +2411,267 @@ describe('useRedTeamConfig', () => {
   });
 
   it.each([
+    'session',
+    'cookie',
+  ] as const)('does not restore a stale local invalid marker when an authenticated %s clear consumed its token', async (fallback) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: { temperature: 0.3 },
+      },
+    });
+    useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('{"temperature":,}');
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
+    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+    expect(invalidMarker).toMatch(/^invalid-json:[a-z0-9-]+$/);
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    try {
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+      const fallbackClear = window.sessionStorage.getItem('redTeamTargetConfigValidation');
+      expect(fallbackClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      expect(fallbackClear?.split(':')[1]).toBe(invalidMarker?.split(':')[1]);
+    } finally {
+      setItem.mockRestore();
+    }
+    if (fallback === 'cookie') {
+      window.sessionStorage.removeItem('redTeamTargetConfigValidation');
+    }
+
+    vi.resetModules();
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    expect(reloadedValidation.getState().targetConfigError).toBeNull();
+  });
+
+  it.each([
+    ['newer session invalid', 'session-invalid'],
+    ['newer cookie invalid', 'cookie-invalid'],
+    ['mismatched fallback clear token', 'mismatched-clear'],
+    ['mismatched fallback clear fingerprint', 'mismatched-fingerprint'],
+    ['legacy local invalid', 'legacy-invalid'],
+  ] as const)('keeps a %s blocked when local storage still contains an older invalid marker', async (_case, interference) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: { temperature: 0.3 },
+      },
+    });
+    useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('{"temperature":,}');
+    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
+    const oldInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    try {
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+    } finally {
+      setItem.mockRestore();
+    }
+    const fallbackClear = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
+    expect(fallbackClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+    const newerInvalid = 'invalid-json:newer-tab-token';
+    let expectedLocalInvalid = oldInvalid;
+    if (interference === 'session-invalid') {
+      window.sessionStorage.setItem('redTeamTargetConfigValidation', newerInvalid);
+    } else if (interference === 'cookie-invalid') {
+      document.cookie = `redTeamTargetConfigValidation=${newerInvalid}; Path=/; SameSite=Lax`;
+    } else if (interference === 'mismatched-clear') {
+      window.sessionStorage.setItem(
+        'redTeamTargetConfigValidation',
+        fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:other-tab-token:'),
+      );
+      document.cookie = `redTeamTargetConfigValidation=${fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:other-tab-token:')}; Path=/; SameSite=Lax`;
+    } else if (interference === 'mismatched-fingerprint') {
+      const corruptedClear = `${fallbackClear.slice(0, -1)}${fallbackClear.endsWith('0') ? '1' : '0'}`;
+      window.sessionStorage.setItem('redTeamTargetConfigValidation', corruptedClear);
+      document.cookie = `redTeamTargetConfigValidation=${corruptedClear}; Path=/; SameSite=Lax`;
+    } else {
+      expectedLocalInvalid = 'invalid-json';
+      window.localStorage.setItem('redTeamTargetConfigValidation', expectedLocalInvalid);
+      const legacyClear = fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:legacy:');
+      window.sessionStorage.setItem('redTeamTargetConfigValidation', legacyClear);
+      document.cookie = `redTeamTargetConfigValidation=${legacyClear}; Path=/; SameSite=Lax`;
+    }
+
+    vi.resetModules();
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(expectedLocalInvalid);
+    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+  });
+
+  it('does not clear a newer quota-fallback draft on a queued older invalid event', async () => {
+    vi.resetModules();
+    const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: tabValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    tabConfig.getState().setFullConfig({
+      ...tabConfig.getState().config,
+      target: {
+        id: 'openai:gpt-5',
+        label: 'Foundation target',
+        config: { temperature: 0.3 },
+      },
+    });
+    tabValidation.getState().setTargetConfigDraft('{"temperature":,}');
+    tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+    const olderInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+    expect(olderInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+    tabValidation.getState().clearTargetConfigValidation();
+    const olderClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+    expect(olderClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    try {
+      tabValidation.getState().setTargetConfigDraft('{"temperature":"newer",}');
+      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      const newerInvalid = window.sessionStorage.getItem('redTeamTargetConfigValidation');
+      expect(newerInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+      expect(newerInvalid).not.toBe(olderInvalid);
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(olderClear);
+
+      dispatchStorageEvent('redTeamTargetConfigValidation', olderInvalid);
+
+      expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(tabValidation.getState().targetConfigDraft).toBe('{"temperature":"newer",}');
+      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(newerInvalid);
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it('does not clear a newer quota-fallback draft on a queued older broadcast invalid event', async () => {
+    const peers = new Set<MockBroadcastChannel>();
+    class MockBroadcastChannel {
+      readonly name: string;
+      readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+      constructor(name: string) {
+        this.name = name;
+        peers.add(this);
+      }
+      addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
+        this.listeners.add(listener);
+      }
+      postMessage(data: unknown) {
+        for (const peer of peers) {
+          if (peer !== this && peer.name === this.name) {
+            for (const listener of peer.listeners) {
+              listener({ data } as MessageEvent<unknown>);
+            }
+          }
+        }
+      }
+      close() {
+        peers.delete(this);
+      }
+    }
+    mockBrowserProperty(
+      globalThis,
+      'BroadcastChannel',
+      MockBroadcastChannel as unknown as typeof BroadcastChannel,
+    );
+
+    try {
+      vi.resetModules();
+      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      tabConfig.getState().setFullConfig({
+        ...tabConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: { temperature: 0.3 },
+        },
+      });
+      tabValidation.getState().setTargetConfigDraft('{"temperature":,}');
+      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      const olderInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(olderInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+      tabValidation.getState().clearTargetConfigValidation();
+      const olderClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(olderClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        tabValidation.getState().setTargetConfigDraft('{"temperature":"newer",}');
+        tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+        const newerInvalid = window.sessionStorage.getItem('redTeamTargetConfigValidation');
+        expect(newerInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+        expect(newerInvalid).not.toBe(olderInvalid);
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(olderClear);
+
+        new MockBroadcastChannel('redTeamTargetConfigValidation').postMessage(olderInvalid);
+
+        expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+        expect(tabValidation.getState().targetConfigDraft).toBe('{"temperature":"newer",}');
+        expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(newerInvalid);
+        vi.resetModules();
+        const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      } finally {
+        setItem.mockRestore();
+      }
+    } finally {
+      restoreBrowserMocks();
+    }
+  });
+
+  it.each([
     [
       'malformed JSON',
       'Invalid JSON configuration',

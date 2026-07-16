@@ -140,28 +140,55 @@ const getStoredTargetConfigError = (): string | null => {
     return null;
   }
 
+  const markers: Array<string | null> = [];
   try {
-    const marker = window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
-    const targetConfigError = getTargetConfigErrorFromMarker(marker);
-    if (targetConfigError) {
-      currentTargetConfigInvalidMarker = marker;
-      return targetConfigError;
-    }
+    markers.push(window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY));
   } catch {}
   try {
-    const marker = window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
-    const targetConfigError = getTargetConfigErrorFromMarker(marker);
-    if (targetConfigError) {
-      currentTargetConfigInvalidMarker = marker;
-      return targetConfigError;
-    }
+    markers.push(window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY));
   } catch {}
-  const marker = getTargetConfigCookieMarker();
-  const targetConfigError = getTargetConfigErrorFromMarker(marker);
-  if (targetConfigError) {
-    currentTargetConfigInvalidMarker = marker;
+  markers.push(getTargetConfigCookieMarker());
+
+  const snapshot = getPersistedTargetSnapshot();
+  const consumedTokens = new Set<string>();
+  if (snapshot) {
+    for (const marker of markers.slice(1)) {
+      if (!isClearMessage(marker)) {
+        continue;
+      }
+      const token = getClearToken(marker);
+      if (
+        token !== 'legacy' &&
+        token !== 'none' &&
+        marker === getClearMessage(snapshot.serialized, token)
+      ) {
+        consumedTokens.add(token);
+      }
+    }
   }
-  return targetConfigError;
+
+  for (const marker of markers) {
+    const targetConfigError = getTargetConfigErrorFromMarker(marker);
+    const token = getTargetConfigMarkerToken(marker);
+    if (!targetConfigError || (token !== null && consumedTokens.has(token))) {
+      continue;
+    }
+    currentTargetConfigInvalidMarker = marker;
+    return targetConfigError;
+  }
+  return null;
+};
+
+const hasStoredTargetConfigInvalidToken = (token: string): boolean => {
+  const markers: Array<string | null> = [];
+  try {
+    markers.push(window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY));
+  } catch {}
+  try {
+    markers.push(window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY));
+  } catch {}
+  markers.push(getTargetConfigCookieMarker());
+  return markers.some((marker) => getTargetConfigMarkerToken(marker) === token);
 };
 
 const hasDurableTargetConfigMarker = (): boolean => {
@@ -370,6 +397,25 @@ if (typeof window !== 'undefined') {
     if (currentClearMessage) {
       const targetConfigError = getTargetConfigErrorFromMarker(event.newValue);
       const invalidToken = getTargetConfigMarkerToken(event.newValue);
+      const activeInvalidToken = getTargetConfigMarkerToken(currentTargetConfigInvalidMarker);
+      if (
+        targetConfigError &&
+        invalidToken === getClearToken(currentClearMessage) &&
+        activeInvalidToken &&
+        activeInvalidToken !== invalidToken &&
+        hasStoredTargetConfigInvalidToken(activeInvalidToken)
+      ) {
+        const { targetConfigError: activeTargetConfigError } =
+          useRedTeamTargetConfigValidation.getState();
+        if (activeTargetConfigError) {
+          persistTargetConfigError(
+            activeTargetConfigError,
+            false,
+            currentTargetConfigInvalidMarker,
+          );
+        }
+        return;
+      }
       if (
         targetConfigError &&
         (invalidToken === 'legacy' || invalidToken !== getClearToken(currentClearMessage))
@@ -447,6 +493,23 @@ if (typeof window !== 'undefined') {
           currentClearMessage &&
           token === getClearToken(currentClearMessage)
         ) {
+          const activeInvalidToken = getTargetConfigMarkerToken(currentTargetConfigInvalidMarker);
+          if (
+            activeInvalidToken &&
+            activeInvalidToken !== token &&
+            hasStoredTargetConfigInvalidToken(activeInvalidToken)
+          ) {
+            const { targetConfigError: activeTargetConfigError } =
+              useRedTeamTargetConfigValidation.getState();
+            if (activeTargetConfigError) {
+              persistTargetConfigError(
+                activeTargetConfigError,
+                false,
+                currentTargetConfigInvalidMarker,
+              );
+            }
+            return;
+          }
           const reconciled = reconcileTargetConfigClear(currentClearMessage);
           if (reconciled) {
             return;
