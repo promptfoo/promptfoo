@@ -9,6 +9,8 @@ const TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let targetConfigValidationChannel: BroadcastChannel | null = null;
 let reconcileTargetConfig: ((config: Config) => boolean) | null = null;
 let reconcilingTargetConfig = false;
+let currentTargetConfigInvalidMarker: string | null = null;
+let targetConfigMarkerSequence = 0;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== 'object' || value === null) {
@@ -44,11 +46,13 @@ const getPersistedTargetSnapshot = (): {
   }
 };
 
-const getClearMessage = (serialized: string): string =>
-  `clear:${serialized.length.toString(36)}:${targetConfigSha256(serialized)}`;
+const getClearMessage = (serialized: string, token = 'none'): string =>
+  `clear:${token}:${serialized.length.toString(36)}:${targetConfigSha256(serialized)}`;
 
 const isClearMessage = (value: string | null): value is string =>
-  value !== null && /^clear:[a-z0-9]+:[a-f0-9]{64}$/.test(value);
+  value !== null && /^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/.test(value);
+
+const getClearToken = (value: string): string => value.split(':')[1];
 
 const getCurrentClearMessage = (): string | null => {
   try {
@@ -57,7 +61,9 @@ const getCurrentClearMessage = (): string | null => {
       return null;
     }
     const snapshot = getPersistedTargetSnapshot();
-    return snapshot && marker === getClearMessage(snapshot.serialized) ? marker : null;
+    return snapshot && marker === getClearMessage(snapshot.serialized, getClearToken(marker))
+      ? marker
+      : null;
   } catch {
     return null;
   }
@@ -67,14 +73,25 @@ export const registerTargetConfigReconciler = (reconciler: (config: Config) => b
   reconcileTargetConfig = reconciler;
 };
 
-const getTargetConfigMarkerFromError = (error: string): string =>
-  error === 'Configuration must be a JSON object' ? 'non-object-json' : 'invalid-json';
+const getTargetConfigMarkerFromError = (error: string): string => {
+  const kind = error === 'Configuration must be a JSON object' ? 'non-object-json' : 'invalid-json';
+  const token = `${Date.now().toString(36)}-${(targetConfigMarkerSequence++).toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${kind}:${token}`;
+};
+
+const getTargetConfigMarkerToken = (marker: string | null): string | null => {
+  const match = marker?.match(/^(?:invalid-json|non-object-json)(?::([a-z0-9-]+))?$/);
+  return match ? (match[1] ?? 'legacy') : null;
+};
 
 const getTargetConfigErrorFromMarker = (marker: string | null): string | null => {
-  if (marker === 'non-object-json') {
+  if (!getTargetConfigMarkerToken(marker)) {
+    return null;
+  }
+  if (marker?.startsWith('non-object-json')) {
     return 'Configuration must be a JSON object';
   }
-  return marker === 'invalid-json' ? 'Invalid JSON configuration' : null;
+  return marker?.startsWith('invalid-json') ? 'Invalid JSON configuration' : null;
 };
 
 const getTargetConfigCookieMarker = (): string | null => {
@@ -101,22 +118,27 @@ const getStoredTargetConfigError = (): string | null => {
   }
 
   try {
-    const targetConfigError = getTargetConfigErrorFromMarker(
-      window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
-    );
+    const marker = window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+    const targetConfigError = getTargetConfigErrorFromMarker(marker);
     if (targetConfigError) {
+      currentTargetConfigInvalidMarker = marker;
       return targetConfigError;
     }
   } catch {}
   try {
-    const targetConfigError = getTargetConfigErrorFromMarker(
-      window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
-    );
+    const marker = window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+    const targetConfigError = getTargetConfigErrorFromMarker(marker);
     if (targetConfigError) {
+      currentTargetConfigInvalidMarker = marker;
       return targetConfigError;
     }
   } catch {}
-  return getTargetConfigErrorFromMarker(getTargetConfigCookieMarker());
+  const marker = getTargetConfigCookieMarker();
+  const targetConfigError = getTargetConfigErrorFromMarker(marker);
+  if (targetConfigError) {
+    currentTargetConfigInvalidMarker = marker;
+  }
+  return targetConfigError;
 };
 
 const hasDurableTargetConfigMarker = (): boolean => {
@@ -135,14 +157,24 @@ const hasDurableTargetConfigMarker = (): boolean => {
   return Boolean(getTargetConfigErrorFromMarker(getTargetConfigCookieMarker()));
 };
 
-const persistTargetConfigError = (error: string | null, broadcast = true) => {
+const persistTargetConfigError = (
+  error: string | null,
+  broadcast = true,
+  existingMarker?: string | null,
+) => {
   if (typeof window === 'undefined') {
     return;
   }
 
   if (!error) {
     const snapshot = getPersistedTargetSnapshot();
-    const clearMessage = snapshot ? getClearMessage(snapshot.serialized) : null;
+    const clearMessage = snapshot
+      ? getClearMessage(
+          snapshot.serialized,
+          getTargetConfigMarkerToken(existingMarker ?? currentTargetConfigInvalidMarker) ?? 'none',
+        )
+      : null;
+    currentTargetConfigInvalidMarker = null;
     try {
       if (clearMessage) {
         window.localStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, clearMessage);
@@ -164,7 +196,8 @@ const persistTargetConfigError = (error: string | null, broadcast = true) => {
     return;
   }
 
-  const marker = getTargetConfigMarkerFromError(error);
+  const marker = existingMarker ?? getTargetConfigMarkerFromError(error);
+  currentTargetConfigInvalidMarker = marker;
   let persistedLocally = false;
   try {
     window.localStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, marker);
@@ -207,7 +240,14 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
         persistTargetConfigError(targetConfigError);
       }
     },
-    setTargetConfigDraft: (targetConfigDraft) => set({ targetConfigDraft }),
+    setTargetConfigDraft: (targetConfigDraft) => {
+      const previousDraft = get().targetConfigDraft;
+      set({ targetConfigDraft });
+      const { targetConfigError } = get();
+      if (targetConfigError && targetConfigDraft !== null && previousDraft !== targetConfigDraft) {
+        persistTargetConfigError(targetConfigError);
+      }
+    },
     clearTargetConfigValidation: () => {
       persistTargetConfigError(null);
       set((state) => ({
@@ -219,7 +259,7 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
     reassertTargetConfigValidation: () => {
       const { targetConfigError } = get();
       if (targetConfigError && !reconcilingTargetConfig && !hasDurableTargetConfigMarker()) {
-        persistTargetConfigError(targetConfigError);
+        persistTargetConfigError(targetConfigError, true, currentTargetConfigInvalidMarker);
       }
     },
   }),
@@ -227,9 +267,12 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
 
 const reconcileTargetConfigClear = (clearMessage: string): boolean => {
   const snapshot = getPersistedTargetSnapshot();
+  const token = getClearToken(clearMessage);
+  const currentToken = getTargetConfigMarkerToken(currentTargetConfigInvalidMarker);
   if (
     !snapshot ||
-    clearMessage !== getClearMessage(snapshot.serialized) ||
+    clearMessage !== getClearMessage(snapshot.serialized, token) ||
+    (currentToken && token !== currentToken) ||
     !reconcileTargetConfig
   ) {
     return false;
@@ -248,7 +291,7 @@ const reconcileTargetConfigClear = (clearMessage: string): boolean => {
     return false;
   }
 
-  persistTargetConfigError(null, false);
+  persistTargetConfigError(null, false, `invalid-json:${token}`);
   useRedTeamTargetConfigValidation.setState((state) => ({
     targetConfigError: null,
     targetConfigDraft: null,
@@ -274,12 +317,22 @@ if (typeof window !== 'undefined') {
     }
 
     if (isClearMessage(event.newValue)) {
-      reconcileTargetConfigClear(event.newValue);
+      if (getCurrentClearMessage() === event.newValue) {
+        reconcileTargetConfigClear(event.newValue);
+      }
       return;
     }
 
     const currentClearMessage = getCurrentClearMessage();
     if (currentClearMessage) {
+      const targetConfigError = getTargetConfigErrorFromMarker(event.newValue);
+      if (
+        targetConfigError &&
+        getTargetConfigMarkerToken(event.newValue) === getClearToken(currentClearMessage)
+      ) {
+        currentTargetConfigInvalidMarker = event.newValue;
+        useRedTeamTargetConfigValidation.setState({ targetConfigError });
+      }
       reconcileTargetConfigClear(currentClearMessage);
       return;
     }
@@ -287,13 +340,14 @@ if (typeof window !== 'undefined') {
     if (!event.newValue) {
       const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
       if (targetConfigError) {
-        persistTargetConfigError(targetConfigError, false);
+        persistTargetConfigError(targetConfigError, false, currentTargetConfigInvalidMarker);
       }
       return;
     }
 
     const targetConfigError = getTargetConfigErrorFromMarker(event.newValue);
     if (targetConfigError) {
+      currentTargetConfigInvalidMarker = event.newValue;
       useRedTeamTargetConfigValidation.setState({ targetConfigError });
     }
   };
@@ -318,7 +372,7 @@ if (typeof window !== 'undefined') {
       const targetConfigError = getTargetConfigErrorFromMarker(event.data);
       if (targetConfigError) {
         useRedTeamTargetConfigValidation.setState({ targetConfigError });
-        persistTargetConfigError(targetConfigError, false);
+        persistTargetConfigError(targetConfigError, false, event.data);
       }
     });
     targetConfigWindow.__promptfooTargetConfigValidationChannel = targetConfigValidationChannel;

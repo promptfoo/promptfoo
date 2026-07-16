@@ -277,6 +277,38 @@ describe('RedTeamSetupPage', () => {
       );
     });
 
+    it.each([
+      ['array', '[]', '[]'],
+      ['null', 'null', 'null'],
+      ['scalar', 'invalid-config', '"invalid-config"'],
+      ['timestamp', '2024-01-01', '"2024-01-01T00:00:00.000Z"'],
+    ])('keeps a YAML %s target config blocked with a stateful strategy', async (_case, yamlConfig, expectedDraft) => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          `description: Invalid stateful target\ntargets:\n  - id: openinterpreter\n    label: Coding target\n    config: ${yamlConfig}\nredteam:\n  plugins: [default]\n  strategies:\n    - id: jailbreak\n      config:\n        stateful: true\n`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() =>
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+          'Configuration must be a JSON object',
+        ),
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(expectedDraft);
+    });
+
     it('should preserve redteam.provider when loading a YAML config', async () => {
       const user = userEvent.setup();
       mockedUseToast.mockReturnValue({ showToast: vi.fn() });

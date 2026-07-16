@@ -79,6 +79,33 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const withStatefulTargetConfig = (
+  target: Config['target'] | string,
+  strategies: RedteamStrategy[],
+): Config['target'] | string => {
+  const hasStatefulStrategy = strategies.some(
+    (strategy) => typeof strategy !== 'string' && strategy?.config?.stateful,
+  );
+  if (!hasStatefulStrategy) {
+    return target;
+  }
+  if (typeof target === 'string') {
+    return { id: target, config: { stateful: true } };
+  }
+  if (target.config !== undefined && !isPlainObject(target.config)) {
+    return target;
+  }
+  return { ...target, config: { ...target.config, stateful: true } };
+};
+
 const TAB_CONFIG = [
   { value: '0', label: 'Target Type', icon: Crosshair },
   { value: '1', label: 'Target Config', icon: Settings },
@@ -346,16 +373,7 @@ export default function RedTeamSetupPage() {
         });
       }
 
-      const hasAnyStatefulStrategies = strategies.some(
-        (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
-      );
-      if (hasAnyStatefulStrategies) {
-        if (typeof target === 'string') {
-          target = { id: target, config: { stateful: true } };
-        } else {
-          target.config = { ...target.config, stateful: true };
-        }
-      }
+      target = withStatefulTargetConfig(target, strategies);
 
       // Parse applicationDefinition from purpose string or use explicit definition if available
       // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults

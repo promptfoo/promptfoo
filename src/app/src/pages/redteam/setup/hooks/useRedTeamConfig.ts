@@ -373,6 +373,11 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     }),
     {
       name: 'redTeamConfig',
+      onRehydrateStorage: () => (state) => {
+        if (state && !isPlainObject(state.config.target?.config)) {
+          state.setFullConfig(state.config);
+        }
+      },
     },
   ),
 );
