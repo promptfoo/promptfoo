@@ -172,11 +172,12 @@ export function calculateAzureCost(
     cachedImagePromptTokens,
     Math.min(Math.max(cachedTokens - cachedAudioTokens, 0), imageInputTokens),
   );
-  if (cachedAudioTokens === 0 && cachedImageTokens === 0 && textInputTokens === 0) {
+  if (cachedAudioTokens === 0 && cachedImageTokens === 0) {
+    const cachedNonTextTokens = Math.max(cachedTokens - textInputTokens, 0);
     if (imageInputTokens === 0) {
-      cachedAudioTokens = Math.min(cachedTokens, audioInputTokens);
+      cachedAudioTokens = Math.min(cachedNonTextTokens, audioInputTokens);
     } else if (audioInputTokens === 0) {
-      cachedImageTokens = Math.min(cachedTokens, imageInputTokens);
+      cachedImageTokens = Math.min(cachedNonTextTokens, imageInputTokens);
     }
   }
   const cachedTextTokens = Math.min(

@@ -254,6 +254,28 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
     });
 
+    it('reports discounted cached-input usage from Foundry agent Responses details', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue({
+        ...createMessageResponse('priced cache'),
+        model: 'gpt-5.6',
+        usage: {
+          input_tokens: 2_000,
+          input_tokens_details: { cached_tokens: 500 },
+          output_tokens: 1_000,
+          total_tokens: 3_000,
+        },
+      });
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, modelName: 'gpt-5.6' } as any,
+      });
+
+      const result = await provider.callApi('reuse context');
+
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+    });
+
     it('prices image-token usage from the Foundry agent Responses details', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue({

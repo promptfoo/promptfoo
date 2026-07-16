@@ -2938,6 +2938,23 @@ describe('util', () => {
 
       expect(calculateCachedCost('AUDIO')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
       expect(calculateCachedCost('IMAGE')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+
+      const calculateMixedCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
+        calculateGoogleCostFromUsage(model, {}, 1_000, 0, false, {
+          promptTokensDetails: [
+            { modality: 'TEXT', tokenCount: 200 },
+            { modality, tokenCount: 800 },
+          ],
+          cachedContentTokenCount: 500,
+        });
+      expect(calculateMixedCachedCost('AUDIO')).toBeCloseTo(
+        (200 * 0.075 + 500 * 3 + 300 * 0.075) / 1e6,
+        12,
+      );
+      expect(calculateMixedCachedCost('IMAGE')).toBeCloseTo(
+        (200 * 0.075 + 500 * 0.3 + 300 * 0.075) / 1e6,
+        12,
+      );
     });
 
     it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {

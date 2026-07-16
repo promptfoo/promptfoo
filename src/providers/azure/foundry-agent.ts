@@ -514,6 +514,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     effectiveConfig: EffectiveFoundryConfig,
   ): Promise<ProviderResponse> {
     const result = await this.processor.processResponseOutput(response, effectiveConfig, false);
+    const cachedInputTokens = response.usage?.input_tokens_details?.cached_tokens;
+    if (result.tokenUsage && cachedInputTokens !== undefined) {
+      result.tokenUsage.cached = cachedInputTokens;
+    }
     if (!result.error) {
       return result;
     }

@@ -527,6 +527,13 @@ describe('calculateAzureCost', () => {
       (1_000 * 0.5) / 1e6,
       12,
     );
+    expect(calculateAzureCost('gpt-realtime-mini-2025-10-06', {}, 1_000, 0, 500, 800)).toBeCloseTo(
+      (200 * 0.06 + 500 * 10 + 300 * 0.3) / 1e6,
+      12,
+    );
+    expect(
+      calculateAzureCost('gpt-realtime-mini-2025-10-06', {}, 1_000, 0, 500, 0, 0, 800),
+    ).toBeCloseTo((200 * 0.06 + 500 * 0.8 + 300 * 0.08) / 1e6, 12);
   });
 
   it('uses the higher cached-audio rate for the 2024 realtime snapshot', () => {
