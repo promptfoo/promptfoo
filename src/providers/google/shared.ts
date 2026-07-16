@@ -171,15 +171,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   })),
   {
     id: 'gemini-2.5-pro-preview-tts',
-    cost: { ...GEMINI_2_5_PRO_COST, audioInput: 0.7 / 1e6 },
-    tieredCost: {
-      ...GEMINI_2_5_PRO_TIERED_COST,
-      above: { ...GEMINI_2_5_PRO_TIERED_COST.above, audioInput: 0.7 / 1e6 },
-    },
+    cost: { input: 1 / 1e6, output: 20 / 1e6, audioOutput: 20 / 1e6 },
   },
   {
     id: 'gemini-2.5-flash-preview-tts',
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+    cost: { input: 0.5 / 1e6, output: 10 / 1e6, audioOutput: 10 / 1e6 },
   },
   ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17'].map((id) => ({
     id,

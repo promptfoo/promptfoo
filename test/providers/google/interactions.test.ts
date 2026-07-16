@@ -58,6 +58,7 @@ describe('GoogleInteractionsProvider', () => {
         store: true,
         safetySettings: [
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
         ],
         service_tier: 'priority',
         maxOutputTokens: 2_048,
@@ -103,7 +104,10 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
-          safety_settings: [{ type: 'hate_speech', threshold: 'block_low_and_above' }],
+          safety_settings: [
+            { type: 'hate_speech', threshold: 'block_low_and_above' },
+            { type: 'harassment', threshold: 'block_medium_and_above' },
+          ],
           generation_config: {
             max_output_tokens: 2_048,
             thinking_level: 'low',

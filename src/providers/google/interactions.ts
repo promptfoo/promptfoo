@@ -96,9 +96,9 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
 function normalizeInteractionSafetySettings(
   safetySettings: NonNullable<CompletionOptions['safetySettings']>,
 ) {
-  return safetySettings.map(({ category, threshold }) => ({
+  return safetySettings.map(({ category, threshold, probability }) => ({
     type: category.replace(/^HARM_CATEGORY_/i, '').toLowerCase(),
-    ...(threshold ? { threshold: threshold.toLowerCase() } : {}),
+    ...(threshold || probability ? { threshold: (threshold || probability)?.toLowerCase() } : {}),
   }));
 }
 

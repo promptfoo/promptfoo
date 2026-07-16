@@ -2863,13 +2863,18 @@ describe('util', () => {
       );
     });
 
-    it('prices the active Gemini 2.5 Pro TTS model at both context tiers', () => {
-      expect(
-        calculateGoogleCost('gemini-2.5-pro-preview-tts', {}, 1_000, 100, false, 200),
-      ).toBeCloseTo((800 * 1.25 + 200 * 0.7 + 100 * 10) / 1e6, 12);
-      expect(
-        calculateGoogleCost('gemini-2.5-pro-preview-tts', {}, 250_001, 1_000, false, 1_000),
-      ).toBeCloseTo((249_001 * 2.5 + 1_000 * 0.7 + 1_000 * 15) / 1e6, 12);
+    it.each([
+      ['gemini-2.5-pro-preview-tts', 1, 20],
+      ['gemini-2.5-flash-preview-tts', 0.5, 10],
+    ])('prices %s using the published TTS rates without context tiering', (id, input, output) => {
+      expect(calculateGoogleCost(id, {}, 1_000, 100, false, 0, 100)).toBeCloseTo(
+        (1_000 * input + 100 * output) / 1e6,
+        12,
+      );
+      expect(calculateGoogleCost(id, {}, 250_001, 1_000, false, 0, 1_000)).toBeCloseTo(
+        (250_001 * input + 1_000 * output) / 1e6,
+        12,
+      );
     });
 
     it('should forward standard Gemini usage metadata into modality-aware billing', () => {
