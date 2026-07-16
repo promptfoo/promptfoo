@@ -32,7 +32,7 @@ describe('GoogleInteractionsProvider', () => {
         usage: {
           total_input_tokens: 100,
           total_output_tokens: 600,
-          total_thought_tokens: 20,
+          total_reasoning_tokens: 20,
           total_tokens: 720,
           output_tokens_by_modality: [
             { modality: 'text', tokens: 100 },

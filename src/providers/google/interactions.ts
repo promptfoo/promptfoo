@@ -28,6 +28,7 @@ type InteractionResponse = {
   usage?: {
     total_input_tokens?: number;
     total_output_tokens?: number;
+    total_reasoning_tokens?: number;
     total_thought_tokens?: number;
     total_tool_use_tokens?: number;
     total_cached_tokens?: number;
@@ -190,7 +191,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const usage = data.usage;
     const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
     const outputTokens = usage?.total_output_tokens ?? 0;
-    const thoughtTokens = usage?.total_thought_tokens ?? 0;
+    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
     const videoTokens = getVideoTokenCount(usage);
     const videoUrl = blobRef?.uri ?? video.uri;
     const sanitizedPrompt = prompt
