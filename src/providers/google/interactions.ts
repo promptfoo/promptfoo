@@ -195,6 +195,21 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     ) as GoogleProviderConfig;
+    if (config.vertexai && config.previousInteractionId) {
+      return {
+        error:
+          'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
+      };
+    }
+    if (
+      (Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools)) ||
+      Boolean(config.passthrough?.tools)
+    ) {
+      return {
+        error:
+          'Gemini Omni Flash does not support tools, including grounding, code execution, or function calling.',
+      };
+    }
     let apiKey: string | undefined;
     let endpoint: string;
     let headers: Record<string, string>;
@@ -227,10 +242,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
           return { error: 'Gemini Omni on Vertex AI could not obtain an OAuth access token.' };
         }
         endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
+        const { authorization, ...authHeaders } =
+          typeof client.getRequestHeaders === 'function'
+            ? Object.fromEntries((await client.getRequestHeaders(endpoint)).entries())
+            : {};
         headers = {
           'Content-Type': 'application/json',
           'Api-Revision': '2026-05-20',
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization || `Bearer ${token}`,
+          ...authHeaders,
           ...config.headers,
         };
       } catch (err) {
@@ -360,19 +380,35 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let videoBuffer = video.data ? Buffer.from(video.data, 'base64') : undefined;
     if (!videoBuffer && video.uri) {
       try {
-        const downloadUrl = new URL(video.uri, endpoint);
+        let downloadUrl = new URL(video.uri, endpoint);
+        if (config.vertexai && downloadUrl.protocol === 'gs:') {
+          const bucket = encodeURIComponent(downloadUrl.hostname);
+          const object = encodeURIComponent(decodeURIComponent(downloadUrl.pathname.slice(1)));
+          downloadUrl = new URL(
+            `https://storage.googleapis.com/download/storage/v1/b/${bucket}/o/${object}?alt=media`,
+          );
+        }
         const endpointOrigin = new URL(endpoint).origin;
+        const isVertexStorageDownload =
+          config.vertexai && downloadUrl.origin === 'https://storage.googleapis.com';
         if (
           downloadUrl.origin === endpointOrigin ||
+          isVertexStorageDownload ||
           (downloadUrl.protocol === 'https:' &&
             downloadUrl.hostname === 'generativelanguage.googleapis.com')
         ) {
-          const downloadHeaders =
-            downloadUrl.origin === endpointOrigin
-              ? headers
-              : apiKey
-                ? { 'x-goog-api-key': apiKey }
-                : {};
+          let downloadHeaders: Record<string, string> = {};
+          if (downloadUrl.origin === endpointOrigin) {
+            downloadHeaders = headers;
+          } else if (isVertexStorageDownload) {
+            downloadHeaders = Object.fromEntries(
+              Object.entries(headers).filter(([header]) =>
+                ['authorization', 'x-goog-user-project'].includes(header.toLowerCase()),
+              ),
+            );
+          } else if (apiKey) {
+            downloadHeaders = { 'x-goog-api-key': apiKey };
+          }
           let response = await fetchWithTimeout(
             downloadUrl.toString(),
             {

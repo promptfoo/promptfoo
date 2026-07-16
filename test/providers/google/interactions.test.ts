@@ -473,8 +473,15 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('routes Vertex Omni through the global Interactions endpoint with OAuth authentication', async () => {
+    const oauthHeaders = new Headers();
+    oauthHeaders.set('Authorization', 'Bearer vertex-token');
+    oauthHeaders.set('x-goog-user-project', 'quota-project');
+    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
     vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-      client: { getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }) },
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
       projectId: 'detected-project',
     });
     mockFetchWithCache.mockResolvedValue({
@@ -509,6 +516,7 @@ describe('GoogleInteractionsProvider', () => {
         headers: expect.objectContaining({
           'Api-Revision': '2026-05-20',
           Authorization: 'Bearer vertex-token',
+          'x-goog-user-project': 'quota-project',
         }),
         body: JSON.stringify({
           model: 'gemini-omni-flash-preview',
@@ -522,6 +530,116 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Number),
       'json',
       true,
+    );
+    expect(getRequestHeaders).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
+    );
+  });
+
+  it('rejects unsupported Vertex Omni follow-up interactions before making a request', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        previousInteractionId: 'interaction-0',
+      },
+    });
+
+    const result = await provider.callApi('Make it brighter');
+
+    expect(result.error).toContain('does not support previousInteractionId');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported Omni tools before making a request', async () => {
+    const unsupportedToolConfigs = [
+      { tools: [{ googleSearch: {} }] },
+      { passthrough: { tools: [{ type: 'google_search' }] } },
+    ];
+    for (const toolConfig of unsupportedToolConfigs) {
+      const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+        config: { apiKey: 'test-key', ...toolConfig } as any,
+      });
+
+      const result = await provider.callApi('A city at dusk');
+
+      expect(result.error).toContain('does not support tools');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    }
+  });
+
+  it('allows an empty Omni tools list', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', tools: [] },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledOnce();
+  });
+
+  it('downloads Vertex Omni gs:// video output using OAuth headers', async () => {
+    const video = { type: 'video', mime_type: 'video/mp4', uri: 'gs://video-bucket/out/a.mp4' };
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(
+          new Headers({
+            Authorization: 'Bearer vertex-token',
+            'x-goog-user-project': 'quota-project',
+          }),
+        ),
+      },
+      projectId: 'configured-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [video],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockFetchWithTimeout.mockResolvedValue(new Response(Buffer.from('vertex video')) as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { vertexai: true, projectId: 'configured-project' },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      'https://storage.googleapis.com/download/storage/v1/b/video-bucket/o/out%2Fa.mp4?alt=media',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer vertex-token',
+          'x-goog-user-project': 'quota-project',
+        },
+        redirect: 'manual',
+      }),
+      expect.any(Number),
+    );
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      Buffer.from('vertex video'),
+      'video/mp4',
+      expect.any(Object),
     );
   });
 
