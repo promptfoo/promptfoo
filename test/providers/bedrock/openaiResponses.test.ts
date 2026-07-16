@@ -1,15 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
+  isBedrockGptOssResponsesModel,
   isBedrockGrokModel,
   isBedrockMantleResponsesModel,
   isBedrockOpenAiResponsesModel,
 } from '../../../src/providers/bedrock/mantle';
 import {
+  BedrockGptOssResponsesProvider,
   BedrockGrokResponsesProvider,
   BedrockOpenAiResponsesProvider,
   createBedrockOpenAiResponsesProvider,
+  DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION,
   getBedrockMantleBaseUrl,
+  getBedrockMantleResponsesBaseUrl,
 } from '../../../src/providers/bedrock/openaiResponses';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
@@ -28,8 +32,16 @@ const GPT_5_6_MODELS = [
 
 describe('bedrock openaiResponses helper', () => {
   let restoreEnv: (() => void) | undefined;
+  let restoreRegionEnv: (() => void) | undefined;
 
   beforeEach(() => {
+    // Keep default-region assertions deterministic when this file runs under shuffled test
+    // order or a developer shell that has AWS region variables configured.
+    restoreRegionEnv = mockProcessEnv({
+      AWS_BEDROCK_REGION: undefined,
+      AWS_REGION: undefined,
+      AWS_DEFAULT_REGION: undefined,
+    });
     vi.mocked(fetchWithCache)
       .mockReset()
       .mockResolvedValue({
@@ -54,6 +66,8 @@ describe('bedrock openaiResponses helper', () => {
   afterEach(() => {
     restoreEnv?.();
     restoreEnv = undefined;
+    restoreRegionEnv?.();
+    restoreRegionEnv = undefined;
     vi.resetAllMocks();
   });
 
@@ -116,23 +130,88 @@ describe('bedrock openaiResponses helper', () => {
     });
   });
 
-  describe('createBedrockOpenAiResponsesProvider', () => {
-    it('throws a helpful error when no Bedrock API key is configured', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {})).toThrow(
-        /AWS_BEARER_TOKEN_BEDROCK/,
+  describe('GPT OSS mantle Responses', () => {
+    it('classifies only the short mantle GPT OSS ids', () => {
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-20b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(false);
+    });
+
+    it('builds the standard /v1 mantle base URL', () => {
+      expect(getBedrockMantleResponsesBaseUrl('us-east-1')).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
       );
     });
 
-    it('treats an unresolved {{env.*}} apiKey template as missing (helpful error)', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      // Simulates the env var being unset: the template literal must NOT be sent as a bearer
-      // token (which would 401); the user should get the actionable missing-key error.
-      expect(() =>
-        createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-          config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+    it('defaults GPT OSS Responses to the standard mantle region', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {});
+
+      expect(DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION).toBe('us-east-1');
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+    });
+
+    it('uses the standard mantle endpoint and preserves GPT OSS reasoning controls', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: {
+          region: 'us-east-1',
+          reasoning_effort: 'high',
+          temperature: 0.3,
+          top_p: 0.8,
+        } as any,
+      });
+
+      expect(provider).toBeInstanceOf(BedrockGptOssResponsesProvider);
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+      expect((provider as any).getCapabilityModelName()).toBe('gpt-oss-120b');
+      expect((provider as any).isReasoningModel()).toBe(true);
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+      expect(body.model).toBe('openai.gpt-oss-120b');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0.3);
+      expect(body.top_p).toBe(0.8);
+    });
+
+    it('posts GPT OSS calls to /v1/responses with the Bedrock API key', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: { region: 'us-east-1' },
+      });
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-east-1.api.aws/v1/responses',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
         }),
-      ).toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+  });
+
+  describe('createBedrockOpenAiResponsesProvider', () => {
+    it('allows AWS credential-chain auth when no Bedrock API key is configured', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      expect(() => createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {})).not.toThrow();
+    });
+
+    it('does not preserve an unresolved {{env.*}} apiKey template as a bearer token', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+      });
+      expect((provider.config as any).apiKey).toBe('{{env.AWS_BEARER_TOKEN_BEDROCK}}');
     });
 
     it('falls back to the env var when apiKey is an unresolved template but the env is set', () => {
@@ -695,18 +774,9 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiKey).toBe('env-bedrock-key');
     });
 
-    it('reuses the missing-key error path', () => {
+    it('allows Grok to use the AWS credential chain without a configured bearer token', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).toThrow(
-        /AWS_BEARER_TOKEN_BEDROCK/,
-      );
-    });
-
-    it('links Grok missing-key errors to the Grok docs section', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).toThrow(
-        'https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models',
-      );
+      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).not.toThrow();
     });
 
     it('treats Grok as a reasoning model but does NOT mark it GPT-5', () => {

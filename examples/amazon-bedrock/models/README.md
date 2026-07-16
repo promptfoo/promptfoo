@@ -38,6 +38,7 @@ This directory contains several example configurations for different Bedrock mod
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
+- [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (requires `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-5.6 Sol, Terra, and Luna with reasoning, explicit prompt caching, and streaming
 - [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (requires `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (requires `AWS_BEARER_TOKEN_BEDROCK`)
@@ -244,10 +245,21 @@ The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS
 - **OpenAI API Format**: Uses familiar OpenAI parameters like `max_completion_tokens`
 - **Available in us-west-2**: Ensure you have model access in the correct region
 
+For the OpenAI-compatible Responses API variant, use
+`promptfooconfig.openai-responses.yaml`. It targets the shorter mantle model id
+`openai.gpt-oss-120b` through `bedrock:responses:` and requires
+`AWS_BEARER_TOKEN_BEDROCK`.
+
 Run the OpenAI example with:
 
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
+```
+
+Run the Responses API example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-responses.yaml --no-cache
 ```
 
 ## OpenAI Frontier Models Example

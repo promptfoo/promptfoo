@@ -1051,8 +1051,19 @@ not the native `InvokeModel` or `Converse` APIs. Promptfoo routes the bare
 model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
 configured; GPT-5.6 region availability is checked before a request is made.
 
-Authentication uses an **Amazon Bedrock API key**, not the AWS SDK credential chain. Set
-`AWS_BEARER_TOKEN_BEDROCK` (or `config.apiKey`):
+Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
+
+- Set `AWS_BEARER_TOKEN_BEDROCK` (or `config.apiKey`) to use a bearer token directly.
+- Otherwise, promptfoo uses `accessKeyId` / `secretAccessKey` / `sessionToken`, the
+  standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` variables,
+  `profile` / `AWS_PROFILE`, or the default AWS credential chain to generate a short-lived
+  Bedrock bearer token.
+
+Generated tokens are resolved before every request, so a long-running scan automatically picks
+up refreshed IAM role or SSO credentials. Concurrent requests share one in-flight generation.
+The AWS principal still needs permission to invoke the selected Bedrock model. A directly
+configured `AWS_BEARER_TOKEN_BEDROCK` is used as supplied; promptfoo cannot refresh a token
+whose underlying credentials it does not have.
 
 ```yaml
 providers:
@@ -1112,8 +1123,8 @@ options are available on Bedrock; use the service behavior documented for the se
 - **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
 - **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
 
-The open-weight models are served through Bedrock's native `InvokeModel` API and use the
-standard AWS SDK credential chain, with OpenAI-style request parameters:
+The versioned open-weight ids above are served through Bedrock's native `InvokeModel` API and
+use the standard AWS SDK credential chain, with OpenAI-style request parameters:
 
 ```yaml
 providers:
@@ -1130,13 +1141,32 @@ providers:
       showThinking: false # strip the <reasoning> block from output (see below)
 ```
 
+Amazon also exposes the base GPT OSS models through the OpenAI-compatible Responses API on the
+mantle endpoint. Select that API explicitly with `bedrock:responses:`; the mantle ids omit the
+`-1:0` suffix and use the bearer-token or AWS credential flow described above:
+
+```yaml
+providers:
+  - id: bedrock:responses:openai.gpt-oss-120b
+    config:
+      region: us-east-1
+      max_output_tokens: 1024
+      reasoning_effort: medium
+      temperature: 0.7
+      store: false
+```
+
+Use `bedrock:responses:openai.gpt-oss-20b` for the 20B model. The explicit prefix keeps
+existing `bedrock:openai.gpt-oss-*-1:0` configs on InvokeModel while targeting
+`https://bedrock-mantle.<region>.api.aws/v1/responses` for the Responses API.
+
 #### Reasoning Effort
 
 Both families accept the `reasoning_effort` provider option. Promptfoo forwards it as the
 native request field for GPT OSS and as `reasoning.effort` for the Responses API, allowing the
 selected model to validate the value:
 
-- **GPT OSS** (`openai.gpt-oss-*`): `low`, `medium`, `high`
+- **GPT OSS** (`openai.gpt-oss-*`, InvokeModel or Responses): `low`, `medium`, `high`
 - **GPT-5.6 frontier**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
 - **GPT-5.5 / GPT-5.4 frontier**: `none`, `low`, `medium`, `high`, `xhigh`
 
@@ -1178,8 +1208,8 @@ xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine a
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
 `Converse`. It is offered in **`us-west-2`** (check the Bedrock model card for current regional
-availability) and authenticates with an **Amazon Bedrock API key** (set
-`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
+availability) and uses the same bearer-token or AWS credential flow as the OpenAI Responses
+models above.
 
 ```yaml
 providers:
@@ -1559,7 +1589,10 @@ The following environment variables can be used to configure the Bedrock provide
 
 **Authentication:**
 
-- `AWS_BEARER_TOKEN_BEDROCK`: Bedrock API key for simplified authentication
+- `AWS_BEARER_TOKEN_BEDROCK`: pre-generated Bedrock bearer token
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`: standard AWS
+  credentials used to generate short-lived bearer tokens for Bedrock Responses
+- `AWS_PROFILE`: AWS shared-config profile used for generated Bedrock Responses tokens
 
 **Configuration:**
 

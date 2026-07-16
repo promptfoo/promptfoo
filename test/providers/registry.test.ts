@@ -712,6 +712,25 @@ describe('Provider Registry', () => {
       expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
     });
 
+    it('should handle explicit bedrock Responses providers correctly', async () => {
+      const path = 'bedrock:responses:openai.gpt-oss-120b';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        {
+          ...mockProviderOptions,
+          id: undefined,
+          config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+        },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockGptOssResponsesProvider');
+      expect(provider.id()).toBe(path);
+    });
+
     it('should handle bedrock-agent providers correctly', async () => {
       const factories = await getProviderFactories('bedrock-agent:agent-id');
       const factory = factories.find((f) => f.test('bedrock-agent:agent-id'));

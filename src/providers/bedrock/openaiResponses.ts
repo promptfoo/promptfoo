@@ -1,10 +1,12 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   getBedrockMantleOrigin,
+  isBedrockGptOssResponsesModel,
   isBedrockGrokModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { BedrockTokenProvider } from './tokenProvider';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -22,12 +24,16 @@ type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['
  *
  * This module routes those model ids to promptfoo's OpenAI Responses provider pointed at
  * that endpoint, so `bedrock:openai.gpt-5.6-sol` produces output identical to the OpenAI
- * Platform `openai:responses:gpt-5.6-sol` provider. The open-weight `gpt-oss` models, by
- * contrast, are served via `InvokeModel` and continue to use the standard Bedrock path.
+ * Platform `openai:responses:gpt-5.6-sol` provider. Open-weight `gpt-oss` models keep their
+ * legacy bare `bedrock:` InvokeModel route and use the explicit
+ * `bedrock:responses:openai.gpt-oss-*` route for the standard mantle `/v1/responses` path.
  */
 
 /** GA region for the OpenAI frontier models on Bedrock; used when none is configured. */
 export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
+
+/** Default region for standard mantle Responses models such as GPT OSS. */
+export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
 /**
  * Launch Regions for the GPT-5.6 tiers, verified live against the mantle model catalog
@@ -58,6 +64,11 @@ export function getBedrockMantleBaseUrl(region: string): string {
   return `${getBedrockMantleOrigin(region)}/openai/v1`;
 }
 
+/** Build the standard OpenAI-compatible mantle base URL documented for GPT OSS Responses. */
+export function getBedrockMantleResponsesBaseUrl(region: string): string {
+  return `${getBedrockMantleOrigin(region)}/v1`;
+}
+
 /**
  * OpenAI Responses provider for Bedrock frontier models. Behaves exactly like the OpenAI
  * Platform provider (shared request/response/usage handling).
@@ -70,6 +81,24 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * mirrors OpenAI first-party rates, so the OpenAI billing tables apply.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  private readonly bedrockTokenProvider: BedrockTokenProvider;
+
+  constructor(
+    modelName: string,
+    providerOptions: ProviderOptions & { bedrockRegion?: string; id?: string } = {},
+  ) {
+    super(modelName, providerOptions);
+    const config = providerOptions.config ?? {};
+    const region =
+      providerOptions.bedrockRegion ??
+      resolveBedrockMantleRegion(config, providerOptions.env, DEFAULT_BEDROCK_OPENAI_REGION);
+    this.bedrockTokenProvider = new BedrockTokenProvider(config, providerOptions.env, region);
+  }
+
+  protected async getApiKeyForRequest(): Promise<string | undefined> {
+    return this.bedrockTokenProvider.getToken();
+  }
+
   /**
    * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
    * detection and the OpenAI billing tables match. The request still sends the real
@@ -146,6 +175,36 @@ export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider
   }
 }
 
+/**
+ * Responses provider for open-weight GPT OSS models on Bedrock mantle.
+ *
+ * These models use the standard /v1/responses mantle path and the shorter mantle model ids
+ * (openai.gpt-oss-120b, not the InvokeModel id openai.gpt-oss-120b-1:0). GPT OSS accepts
+ * reasoning effort plus explicit temperature/top_p, so preserve those controls while still
+ * sending the real Bedrock model id.
+ */
+export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvider {
+  protected isReasoningModel(): boolean {
+    return true;
+  }
+
+  protected supportsTemperature(): boolean {
+    return true;
+  }
+
+  async getOpenAiBody(
+    prompt: string,
+    context?: BedrockOpenAiResponsesBodyContext,
+    callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (result.config.top_p !== undefined && result.body.top_p === undefined) {
+      result.body.top_p = result.config.top_p;
+    }
+    return result;
+  }
+}
+
 function getBedrockResponsesBaseUrl(
   modelName: string,
   region: string,
@@ -169,7 +228,7 @@ function getBedrockResponsesBaseUrl(
       throw new Error(
         `Invalid apiBaseUrl for Amazon Bedrock model "${modelName}". Expected an absolute HTTP(S) ` +
           `URL without embedded credentials, query parameters, or a fragment, such as ` +
-          `"https://bedrock-mantle.us-east-2.api.aws/openai/v1".`,
+          `"https://bedrock-mantle.us-east-1.api.aws/v1".`,
       );
     }
   }
@@ -182,15 +241,20 @@ function getBedrockResponsesBaseUrl(
     );
   }
 
-  return getBedrockMantleBaseUrl(region);
+  return modelName.startsWith('openai.') && !isBedrockGptOssResponsesModel(modelName)
+    ? getBedrockMantleBaseUrl(region)
+    : isBedrockGrokModel(modelName)
+      ? getBedrockMantleBaseUrl(region)
+      : getBedrockMantleResponsesBaseUrl(region);
 }
 
 /**
  * Construct an OpenAI Responses provider configured for a Bedrock model served on the mantle
  * endpoint — an OpenAI frontier model (`openai.gpt-5.x`) or an xAI Grok model (`xai.grok-4.3`).
- * Resolves the region (config → AWS_BEDROCK_REGION → AWS_REGION → family default) and the
- * Amazon Bedrock API key (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle
- * endpoint unless the caller supplies an explicit `apiBaseUrl`.
+ * Resolves the region (config → AWS_BEDROCK_REGION → AWS_REGION → family default), targets the
+ * mantle endpoint unless the caller supplies an explicit `apiBaseUrl`, and authenticates with
+ * either a configured Bedrock bearer token or a request-scoped token generated from AWS
+ * credentials.
  */
 export function createBedrockOpenAiResponsesProvider(
   modelName: string,
@@ -198,28 +262,33 @@ export function createBedrockOpenAiResponsesProvider(
 ): OpenAiResponsesProvider {
   const config: Record<string, any> = providerOptions.config ?? {};
   const isGrok = isBedrockGrokModel(modelName);
+  const isGptOss = isBedrockGptOssResponsesModel(modelName);
   const region = resolveBedrockMantleRegion(
     config,
     providerOptions.env,
-    isGrok ? DEFAULT_BEDROCK_GROK_REGION : DEFAULT_BEDROCK_OPENAI_REGION,
+    isGrok
+      ? DEFAULT_BEDROCK_GROK_REGION
+      : isGptOss
+        ? DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION
+        : DEFAULT_BEDROCK_OPENAI_REGION,
   );
   const apiBaseUrl = getBedrockResponsesBaseUrl(modelName, region, config.apiBaseUrl);
   const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
 
-  if (!apiKey) {
-    const docsAnchor = isGrok ? '#xai-grok-models' : '#openai-models';
-    throw new Error(
-      `Amazon Bedrock model "${modelName}" is served through Bedrock's OpenAI-compatible ` +
-        `Responses API on the mantle endpoint, which authenticates with an Amazon Bedrock API ` +
-        `key. Set the AWS_BEARER_TOKEN_BEDROCK environment variable (or config.apiKey). See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/${docsAnchor}`,
-    );
-  }
-
-  const ProviderClass = isGrok ? BedrockGrokResponsesProvider : BedrockOpenAiResponsesProvider;
+  const ProviderClass = isGrok
+    ? BedrockGrokResponsesProvider
+    : isGptOss
+      ? BedrockGptOssResponsesProvider
+      : BedrockOpenAiResponsesProvider;
 
   return new ProviderClass(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, apiKey, ...(isGrok ? { omitDefaults: true } : {}) },
+    bedrockRegion: region,
+    config: {
+      ...config,
+      apiBaseUrl,
+      ...(apiKey ? { apiKey } : {}),
+      ...(isGrok ? { omitDefaults: true } : {}),
+    },
   });
 }

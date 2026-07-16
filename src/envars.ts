@@ -256,6 +256,7 @@ type EnvVars = {
   ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
+  AWS_ACCESS_KEY_ID?: string;
   AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
@@ -267,6 +268,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  AWS_DEFAULT_REGION?: string;
+  AWS_PROFILE?: string;
+  AWS_REGION?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_SESSION_TOKEN?: string;
 
   // AWS Bedrock Agents
   AWS_BEDROCK_AGENT_ID?: string;

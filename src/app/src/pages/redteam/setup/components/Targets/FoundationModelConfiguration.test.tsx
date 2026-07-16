@@ -420,6 +420,65 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
+  it('should switch Bedrock to Responses ids without showing Converse-only MCP settings', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:openai.gpt-oss-120b-1:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'responses');
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'id',
+      'bedrock:responses:openai.gpt-oss-120b-1:0',
+    );
+    expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+  });
+
+  it('should preserve the Responses prefix and use Responses-specific settings', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:responses:openai.gpt-oss-120b',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('responses');
+    expect(screen.getByRole('textbox', { name: /Model ID/i })).toHaveValue('openai.gpt-oss-120b');
+    expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    await user.clear(modelIdInput);
+    await user.paste('openai.gpt-oss-20b');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+      'id',
+      'bedrock:responses:openai.gpt-oss-20b',
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: /Advanced Configuration Model parameters and API settings/i,
+      }),
+    );
+    const maxOutputTokensInput = screen.getByLabelText(/Max Output Tokens/i);
+    await user.click(maxOutputTokensInput);
+    await user.paste('2048');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_output_tokens', 2048);
+    expect(screen.getByText(/AWS_BEARER_TOKEN_BEDROCK/)).toBeInTheDocument();
+  });
+
   it('should render Bedrock Converse MCP configuration and save servers under config.mcp', async () => {
     const user = userEvent.setup();
     render(
