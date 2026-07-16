@@ -649,6 +649,10 @@ export class GoogleLiveProvider implements ApiProvider {
             videoFrameCount > 0 &&
             videoInputPerSecond !== undefined &&
             (videoPromptTokens > 0 || imagePromptTokens === 0);
+          const billableVideoFrameCount =
+            videoPromptTokens > 0
+              ? Math.min(videoFrameCount, Math.ceil(videoPromptTokens / 263))
+              : videoFrameCount;
 
           result.tokenUsage = {
             prompt: promptTokens,
@@ -679,7 +683,8 @@ export class GoogleLiveProvider implements ApiProvider {
           result.cost =
             tokenCost === undefined
               ? undefined
-              : tokenCost + (billVideoPerSecond ? videoFrameCount * videoInputPerSecond : 0);
+              : tokenCost +
+                (billVideoPerSecond ? billableVideoFrameCount * videoInputPerSecond : 0);
         }
 
         if (hasAudioContent) {

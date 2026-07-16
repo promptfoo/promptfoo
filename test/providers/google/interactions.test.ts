@@ -2,16 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storeBlob } from '../../../src/blobs';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleInteractionsProvider } from '../../../src/providers/google/interactions';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
 vi.mock('../../../src/blobs', () => ({ storeBlob: vi.fn() }));
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
 
 describe('GoogleInteractionsProvider', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
   const mockStoreBlob = vi.mocked(storeBlob);
+  const mockFetchWithTimeout = vi.mocked(fetchWithTimeout);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchWithTimeout.mockReset();
     mockStoreBlob.mockResolvedValue({
       ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
       deduplicated: false,
@@ -170,6 +174,14 @@ describe('GoogleInteractionsProvider', () => {
         { role: 'system', content: 'Keep the scene family friendly.' },
         { role: 'developer', content: 'Use a cinematic style.' },
         { role: 'user', content: 'Create a city at dusk.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Use this reference.' },
+            { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,aW1hZ2U=' } },
+            { type: 'input_image', image_url: 'https://image.example/reference.png' },
+          ],
+        },
         { role: 'assistant', content: 'I will create that scene.' },
         { role: 'user', content: 'Add rain.' },
       ]),
@@ -180,9 +192,94 @@ describe('GoogleInteractionsProvider', () => {
       { role: 'user', content: 'Keep the scene family friendly.' },
       { role: 'user', content: 'Use a cinematic style.' },
       { role: 'user', content: 'Create a city at dusk.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Use this reference.' },
+          { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' },
+          { type: 'image', uri: 'https://image.example/reference.png' },
+        ],
+      },
       { role: 'model', content: 'I will create that scene.' },
       { role: 'user', content: 'Add rain.' },
     ]);
+  });
+
+  it('returns only the latest Omni turn and stores authenticated URI-delivered video', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-latest',
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [
+              { type: 'text', text: 'old response' },
+              { type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/old' },
+            ],
+          },
+          { type: 'user_input', content: [{ type: 'text', text: 'make it rainy' }] },
+          {
+            type: 'model_output',
+            content: [
+              { type: 'text', text: 'new response' },
+              {
+                type: 'video',
+                mime_type: 'video/webm',
+                uri: 'https://generativelanguage.googleapis.com/v1beta/files/video-1:download?alt=media',
+              },
+            ],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockFetchWithTimeout.mockResolvedValue(new Response(Buffer.from('latest video')) as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', previousInteractionId: 'interaction-old' },
+    });
+
+    const result = await provider.callApi('make it rainy');
+
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/files/video-1:download?alt=media',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ 'x-goog-api-key': 'test-key' }),
+      }),
+      expect.any(Number),
+    );
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      Buffer.from('latest video'),
+      'video/webm',
+      expect.objectContaining({ kind: 'video' }),
+    );
+    expect(result.output).toBe('new response');
+    expect(result.video).toMatchObject({ url: 'blob://video/omni', format: 'webm' });
+  });
+
+  it('does not reuse an Omni video from a previous interaction turn', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/old' }],
+          },
+          { type: 'user_input', content: [{ type: 'text', text: 'make it rainy' }] },
+          { type: 'model_output', content: [{ type: 'text', text: 'no video generated' }] },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
+      error: 'Gemini interaction did not return video output',
+    });
   });
 
   it('forwards native multimodal input and prompt-level interaction overrides', async () => {

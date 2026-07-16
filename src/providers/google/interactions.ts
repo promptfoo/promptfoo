@@ -1,6 +1,7 @@
 import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
+import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
@@ -40,13 +41,43 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
     const parsed = JSON.parse(prompt) as unknown;
     if (Array.isArray(parsed)) {
       return parsed.map((content) => {
-        if (!content || typeof content !== 'object' || !('role' in content)) {
+        if (!content || typeof content !== 'object') {
           return content;
         }
+
+        const normalizePart = (part: unknown) => {
+          if (!part || typeof part !== 'object' || !('type' in part)) {
+            return part;
+          }
+          const imagePart = part as { type?: string; image_url?: string | { url?: string } };
+          if (imagePart.type !== 'image_url' && imagePart.type !== 'input_image') {
+            return part;
+          }
+          const imageUrl =
+            typeof imagePart.image_url === 'string'
+              ? imagePart.image_url
+              : imagePart.image_url?.url;
+          if (!imageUrl) {
+            return part;
+          }
+          const inlineImage = /^data:([^;,]+);base64,(.*)$/is.exec(imageUrl);
+          return inlineImage
+            ? { type: 'image', mime_type: inlineImage[1], data: inlineImage[2] }
+            : { type: 'image', uri: imageUrl };
+        };
+
+        if (!('role' in content)) {
+          return normalizePart(content);
+        }
+
+        const messageContent = 'content' in content ? content.content : undefined;
 
         const role = content.role;
         return {
           ...content,
+          ...(Array.isArray(messageContent)
+            ? { content: messageContent.map((part) => normalizePart(part)) }
+            : {}),
           ...(role === 'assistant'
             ? { role: 'model' }
             : role === 'system' || role === 'developer'
@@ -70,7 +101,10 @@ function getVideoTokenCount(usage: InteractionResponse['usage']): number {
 }
 
 function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
-  return (data.steps || [])
+  const steps = data.steps || [];
+  const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
+  return steps
+    .slice(latestUserInput + 1)
     .filter((step) => step.type === 'model_output')
     .flatMap((step) => step.content || []);
 }
@@ -242,19 +276,43 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
 
     let blobRef;
-    if (video.data) {
+    let videoBuffer = video.data ? Buffer.from(video.data, 'base64') : undefined;
+    if (!videoBuffer && video.uri) {
       try {
-        ({ ref: blobRef } = await storeBlob(
-          Buffer.from(video.data, 'base64'),
-          video.mime_type || 'video/mp4',
-          {
-            evalId: context?.evaluationId,
-            kind: 'video',
-            location: 'response.video',
-            promptIdx: context?.promptIdx,
-            testIdx: context?.testIdx,
-          },
-        ));
+        const downloadUrl = new URL(video.uri, endpoint);
+        const endpointOrigin = new URL(endpoint).origin;
+        if (
+          downloadUrl.origin === endpointOrigin ||
+          (downloadUrl.protocol === 'https:' &&
+            downloadUrl.hostname === 'generativelanguage.googleapis.com')
+        ) {
+          const response = await fetchWithTimeout(
+            downloadUrl.toString(),
+            {
+              method: 'GET',
+              headers:
+                downloadUrl.origin === endpointOrigin ? headers : { 'x-goog-api-key': apiKey },
+            },
+            getRequestTimeoutMs(),
+          );
+          if (!response.ok) {
+            return { error: `Failed to download Gemini interaction video: ${response.statusText}` };
+          }
+          videoBuffer = Buffer.from(await response.arrayBuffer());
+        }
+      } catch (err) {
+        return { error: `Failed to download Gemini interaction video: ${String(err)}` };
+      }
+    }
+    if (videoBuffer) {
+      try {
+        ({ ref: blobRef } = await storeBlob(videoBuffer, video.mime_type || 'video/mp4', {
+          evalId: context?.evaluationId,
+          kind: 'video',
+          location: 'response.video',
+          promptIdx: context?.promptIdx,
+          testIdx: context?.testIdx,
+        }));
       } catch (err) {
         return { error: `Failed to store Gemini interaction video: ${String(err)}` };
       }

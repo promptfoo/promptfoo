@@ -702,6 +702,58 @@ describe('GoogleLiveProvider', () => {
     expect(response.cost).toBeCloseTo(2 * 0.000033333333333333335 + (100 * 4.5) / 1e6, 12);
   });
 
+  it('should not count a Gemini 3.1 Live still image as an additional video second', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateTextMessage(mockWs, 'mixed media received');
+          simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+          simulateMessage(mockWs, {
+            serverContent: { turnComplete: true },
+            usageMetadata: {
+              promptTokenCount: 784,
+              responseTokenCount: 100,
+              totalTokenCount: 884,
+              promptTokensDetails: [
+                { modality: 'IMAGE', tokenCount: 258 },
+                { modality: 'VIDEO', tokenCount: 526 },
+              ],
+              responseTokensDetails: [{ modality: 'TEXT', tokenCount: 100 }],
+            },
+          });
+        }, 20);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            { inline_data: { mime_type: 'image/jpeg', data: 'c3RpbGw=' } },
+            { inline_data: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } },
+            { inline_data: { mime_type: 'image/png', data: 'ZnJhbWUy' } },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.cost).toBeCloseTo(
+      (258 * 1 + 100 * 4.5) / 1e6 + 2 * 0.000033333333333333335,
+      12,
+    );
+  });
+
   it('should bill Gemini 3.1 Live video frames when modality-token details are absent', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
