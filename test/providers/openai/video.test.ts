@@ -1506,7 +1506,12 @@ describe('OpenAiVideoProvider', () => {
 
     it('should not persist video prompts containing embedded credentials', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', download_thumbnail: false, download_spritesheet: false },
+        config: {
+          apiKey: 'test-key',
+          headers: { 'X-Tenant-Id': 'tenant-a' },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
       });
       mockFetchWithProxy
         .mockResolvedValueOnce({
@@ -1527,6 +1532,45 @@ describe('OpenAiVideoProvider', () => {
       expect(result.cached).toBe(false);
       expect(fsPromises.readFile).not.toHaveBeenCalled();
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should include non-secret routed-gateway headers in the video cache identity', async () => {
+      const config = {
+        apiKey: 'gateway-secret',
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { 'X-Tenant-Id': 'tenant-a', 'X-User-Id': 'alice', 'X-Route': 'blue' },
+        download_thumbnail: false,
+        download_spritesheet: false,
+      };
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_alice', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_alice', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_bob', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_bob', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      await new OpenAiVideoProvider('sora-2', { config }).callApi('Same routed prompt');
+      await new OpenAiVideoProvider('sora-2', {
+        config: { ...config, headers: { ...config.headers, 'X-User-Id': 'bob', 'X-Route': 'red' } },
+      }).callApi('Same routed prompt');
+
+      expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(fsPromises.writeFile).mock.calls[0]![0]).not.toBe(
+        vi.mocked(fsPromises.writeFile).mock.calls[1]![0],
+      );
     });
     it('should wrap base64 input_reference in the documented image_url object', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {

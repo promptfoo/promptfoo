@@ -130,6 +130,22 @@ describe('OpenAiTtsProvider', () => {
     });
   });
 
+  it('wraps PCM returned from a passthrough response_format override as playable WAV', async () => {
+    mockedFetch.mockResolvedValue(audioResponse(new Uint8Array([1, 0, 2, 0])));
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', passthrough: { response_format: 'pcm' } } as any,
+    });
+
+    const result = await provider.callApi('Return PCM through passthrough');
+
+    expect(result.audio?.format).toBe('wav');
+    expect(
+      Buffer.from(result.audio?.data ?? '', 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('RIFF');
+  });
+
   it('does not create speech for an already-aborted eval', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -140,6 +156,17 @@ describe('OpenAiTtsProvider', () => {
     await expect(
       provider.callApi('Cancelled speech', undefined, { abortSignal: controller.signal }),
     ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a pre-aborted custom speech reason to AbortError', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('caller cancelled before dispatch'));
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', { config: { apiKey: 'test-key' } });
+
+    await expect(
+      provider.callApi('Cancelled speech', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled before dispatch' });
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 

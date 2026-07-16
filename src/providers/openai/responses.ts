@@ -1,4 +1,9 @@
-import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
+import {
+  type FetchWithCacheResult,
+  fetchWithCache,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
@@ -85,9 +90,14 @@ interface BackgroundResponseResult {
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
 const BACKGROUND_STREAM_ABORT_GRACE_MS = 1_000;
-const inFlightBackgroundResponses = new Map<string, Promise<BackgroundResponseResult>>();
-const backgroundAbortSignalIds = new WeakMap<AbortSignal, number>();
-let nextBackgroundAbortSignalId = 0;
+const inFlightBackgroundCreations = new Map<
+  string,
+  { promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>; subscribers: number }
+>();
+const inFlightBackgroundResponses = new Map<
+  string,
+  { promise: Promise<BackgroundResponseResult>; controller: AbortController; subscribers: number }
+>();
 
 function getAbortError(signal: AbortSignal): Error {
   const reason = signal.reason;
@@ -221,34 +231,74 @@ async function createBackgroundResponseWithCancellation(
   maxRetries: number | undefined,
 ): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
   const signal = request.signal;
-  const creation = fetchWithCache<OpenAIResponsesResponse>(
-    url,
-    { method: request.method, headers: request.headers, body: request.body },
-    timeout,
-    'json',
-    bustCache,
-    maxRetries,
+  const canCoalesce = isCacheEnabled() && !bustCache;
+  const cacheKey = getScopedCacheKey(
+    sha256(
+      JSON.stringify({
+        url,
+        method: request.method,
+        headers: Object.entries(request.headers)
+          .map(([key, value]) => [key.toLowerCase(), value])
+          .sort(([left], [right]) => left.localeCompare(right)),
+        body: request.body,
+      }),
+    ),
   );
-  if (!signal) {
-    return creation;
+  let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
+  if (!inFlight) {
+    const promise = fetchWithCache<OpenAIResponsesResponse>(
+      url,
+      { method: request.method, headers: request.headers, body: request.body },
+      timeout,
+      'json',
+      bustCache,
+      maxRetries,
+    );
+    inFlight = { promise, subscribers: 0 };
+    if (canCoalesce) {
+      inFlightBackgroundCreations.set(cacheKey, inFlight);
+      void promise
+        .finally(() => {
+          if (inFlightBackgroundCreations.get(cacheKey) === inFlight) {
+            inFlightBackgroundCreations.delete(cacheKey);
+          }
+        })
+        .catch(() => {});
+    }
   }
 
+  inFlight.subscribers++;
+  let released = false;
   let onAbort: (() => void) | undefined;
+  const release = (aborted = false) => {
+    if (released) {
+      return;
+    }
+    released = true;
+    inFlight.subscribers--;
+    if (!aborted || inFlight.subscribers > 0) {
+      return;
+    }
+    void inFlight.promise
+      .then(async (created) => {
+        if (
+          created.data.id &&
+          (created.data.status === 'queued' || created.data.status === 'in_progress')
+        ) {
+          await cancelBackgroundResponse(created.data.id, url, request.headers);
+        }
+        await created.deleteFromCache?.();
+      })
+      .catch((error) => {
+        logger.warn(`Failed to clean up an aborted background response: ${String(error)}`);
+      });
+  };
   const cancellation = new Promise<never>((_resolve, reject) => {
+    if (!signal) {
+      return;
+    }
     onAbort = () => {
-      void creation
-        .then(async (created) => {
-          if (
-            created.data.id &&
-            (created.data.status === 'queued' || created.data.status === 'in_progress')
-          ) {
-            await cancelBackgroundResponse(created.data.id, url, request.headers);
-          }
-          await created.deleteFromCache?.();
-        })
-        .catch((error) => {
-          logger.warn(`Failed to clean up an aborted background response: ${String(error)}`);
-        });
+      release(true);
       reject(getAbortError(signal));
     };
     if (signal.aborted) {
@@ -259,11 +309,12 @@ async function createBackgroundResponseWithCancellation(
   });
 
   try {
-    return await Promise.race([creation, cancellation]);
+    return await Promise.race([inFlight.promise, cancellation]);
   } finally {
     if (onAbort) {
-      signal.removeEventListener('abort', onAbort);
+      signal?.removeEventListener('abort', onAbort);
     }
+    release();
   }
 }
 
@@ -340,42 +391,73 @@ async function coalesceBackgroundResponse(
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
 ): Promise<BackgroundResponseResult> {
-  let signalId: number | undefined;
-  if (request.signal) {
-    signalId = backgroundAbortSignalIds.get(request.signal);
-    if (signalId === undefined) {
-      signalId = ++nextBackgroundAbortSignalId;
-      backgroundAbortSignalIds.set(request.signal, signalId);
-    }
-  }
   const cacheKey = sha256(
     JSON.stringify({
       url,
       id: initial.id,
       headers: Object.entries(request.headers).sort(([left], [right]) => left.localeCompare(right)),
-      signalId,
     }),
   );
-  const inFlight = inFlightBackgroundResponses.get(cacheKey);
-  if (inFlight) {
-    const result = await inFlight;
-    return result.error ? result : { ...result, shared: true };
+  let inFlight = inFlightBackgroundResponses.get(cacheKey);
+  const shared = Boolean(inFlight);
+  if (!inFlight) {
+    const controller = new AbortController();
+    const promise = resolveBackgroundResponse(
+      initial,
+      url,
+      { ...request, signal: controller.signal },
+      timeout,
+      maxRetries,
+      cached,
+      deleteFromCache,
+    );
+    inFlight = { promise, controller, subscribers: 0 };
+    inFlightBackgroundResponses.set(cacheKey, inFlight);
+    void promise
+      .finally(() => {
+        if (inFlightBackgroundResponses.get(cacheKey) === inFlight) {
+          inFlightBackgroundResponses.delete(cacheKey);
+        }
+      })
+      .catch(() => {});
   }
 
-  const pending = resolveBackgroundResponse(
-    initial,
-    url,
-    request,
-    timeout,
-    maxRetries,
-    cached,
-    deleteFromCache,
-  );
-  inFlightBackgroundResponses.set(cacheKey, pending);
+  inFlight.subscribers++;
+  const callerSignal = request.signal;
+  let released = false;
+  let onAbort: (() => void) | undefined;
+  const release = () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    inFlight.subscribers--;
+    if (inFlight.subscribers === 0 && callerSignal?.aborted) {
+      inFlight.controller.abort(callerSignal.reason);
+    }
+  };
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    if (!callerSignal) {
+      return;
+    }
+    onAbort = () => {
+      release();
+      reject(getAbortError(callerSignal));
+    };
+    if (callerSignal.aborted) {
+      onAbort();
+      return;
+    }
+    callerSignal.addEventListener('abort', onAbort, { once: true });
+  });
   try {
-    return await pending;
+    const result = await Promise.race([inFlight.promise, cancellation]);
+    return result.error ? result : shared ? { ...result, shared: true } : result;
   } finally {
-    inFlightBackgroundResponses.delete(cacheKey);
+    if (onAbort) {
+      callerSignal?.removeEventListener('abort', onAbort);
+    }
+    release();
   }
 }
 
@@ -768,7 +850,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    callApiOptions?.abortSignal?.throwIfAborted();
+    if (callApiOptions?.abortSignal?.aborted) {
+      throw getAbortError(callApiOptions.abortSignal);
+    }
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -931,7 +1015,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             }
           }
         } catch (err) {
-          if (backgroundResponseId && (controller.signal.aborted || abortSignal?.aborted)) {
+          if (backgroundResponseId) {
             await cancelBackgroundResponse(backgroundResponseId, url, request.headers);
           }
           if (controller.signal.aborted && !abortSignal?.aborted) {

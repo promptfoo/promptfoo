@@ -198,7 +198,16 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    callApiOptions?.abortSignal?.throwIfAborted();
+    const abortSignal = callApiOptions?.abortSignal;
+    if (abortSignal?.aborted) {
+      const reason = abortSignal.reason;
+      if (reason instanceof Error && reason.name === 'AbortError') {
+        throw reason;
+      }
+      const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
     const apiKey = this.getApiKey();
     if (!apiKey && this.requiresApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -312,7 +321,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         }
 
         const audioBytes = Buffer.from(await response.arrayBuffer());
-        const audioFormat = config.format || config.response_format || 'mp3';
+        const audioFormat = body.format || body.response_format || 'mp3';
         const isPcm = audioFormat === 'pcm';
         const audio = (isPcm ? convertPcm16ToWav(audioBytes) : audioBytes).toString('base64');
         const isHd = model === 'tts-1-hd' || model === 'tts-1-hd-1106';

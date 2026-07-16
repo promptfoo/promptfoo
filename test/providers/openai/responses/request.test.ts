@@ -310,8 +310,8 @@ describe('OpenAiResponsesProvider request building', () => {
     });
 
     const results = await Promise.all([
-      provider.callApi('Share this task'),
-      provider.callApi('Share this task'),
+      provider.callApi('Share this task', undefined, { abortSignal: new AbortController().signal }),
+      provider.callApi('Share this task', undefined, { abortSignal: new AbortController().signal }),
     ]);
 
     expect(creates).toBe(1);
@@ -324,6 +324,211 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(results.filter((result) => result.cached === true)).toHaveLength(1);
     expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
     expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
+  it('should keep a shared background job alive when only one subscriber aborts', async () => {
+    let polls = 0;
+    let creation: Promise<any> | undefined;
+    let notifyPoll: (() => void) | undefined;
+    const pollStarted = new Promise<void>((resolve) => {
+      notifyPoll = resolve;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creation ??= Promise.resolve({
+          data: { id: 'resp_shared_abort', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_shared_abort') && options?.method === 'GET') {
+        polls++;
+        notifyPoll?.();
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        return {
+          data: {
+            id: 'resp_shared_abort',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed for remaining subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const pending = Promise.allSettled([
+      provider.callApi('Shared cancellable task', undefined, { abortSignal: first.signal }),
+      provider.callApi('Shared cancellable task', undefined, { abortSignal: second.signal }),
+    ]);
+    await pollStarted;
+    first.abort(new Error('first subscriber cancelled'));
+    const results = await pending;
+
+    expect(polls).toBe(1);
+    expect(results[0]).toMatchObject({
+      status: 'rejected',
+      reason: { name: 'AbortError', message: 'first subscriber cancelled' },
+    });
+    expect(results[1]).toMatchObject({
+      status: 'fulfilled',
+      value: { output: 'Completed for remaining subscriber' },
+    });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_shared_abort/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should keep a shared background creation alive when one subscriber aborts before acceptance', async () => {
+    let resolveCreation: ((value: any) => void) | undefined;
+    const creation = new Promise<any>((resolve) => {
+      resolveCreation = resolve;
+    });
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_shared_creation') && options?.method === 'GET') {
+        polls++;
+        return {
+          data: {
+            id: 'resp_shared_creation',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Accepted for remaining subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_shared_creation/cancel')) {
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const pending = Promise.allSettled([
+      provider.callApi('Shared pending creation', undefined, { abortSignal: first.signal }),
+      provider.callApi('Shared pending creation', undefined, { abortSignal: second.signal }),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    first.abort(new Error('first subscriber cancelled during creation'));
+    resolveCreation?.({
+      data: { id: 'resp_shared_creation', status: 'queued', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const results = await pending;
+
+    expect(polls).toBe(1);
+    expect(results[0]).toMatchObject({
+      status: 'rejected',
+      reason: { name: 'AbortError', message: 'first subscriber cancelled during creation' },
+    });
+    expect(results[1]).toMatchObject({
+      status: 'fulfilled',
+      value: { output: 'Accepted for remaining subscriber' },
+    });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_shared_creation/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should isolate identical background creations across repeat cache namespaces', async () => {
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_repeat_${++creates}`;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_repeat_') && options?.method === 'GET') {
+        const id = String(url).split('/').at(-1);
+        return {
+          data: {
+            id,
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: `Completed ${id}` }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const results = await Promise.all([
+      cache.withCacheNamespace('repeat:0', () =>
+        provider.callApi('Repeated background task', undefined, {
+          abortSignal: new AbortController().signal,
+        }),
+      ),
+      cache.withCacheNamespace('repeat:1', () =>
+        provider.callApi('Repeated background task', undefined, {
+          abortSignal: new AbortController().signal,
+        }),
+      ),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(results.map((result) => result.output)).toEqual([
+      'Completed resp_repeat_1',
+      'Completed resp_repeat_2',
+    ]);
   });
 
   it('should return a clear error and evict a cancelled background response', async () => {
@@ -387,6 +592,19 @@ describe('OpenAiResponsesProvider request building', () => {
     await expect(
       provider.callApi('Cancelled task', undefined, { abortSignal: controller.signal }),
     ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should normalize a pre-aborted custom Responses reason to AbortError', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('caller cancelled before dispatch'));
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await expect(
+      provider.callApi('Cancelled task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled before dispatch' });
     expect(cache.fetchWithCache).not.toHaveBeenCalled();
   });
 
@@ -972,6 +1190,48 @@ describe('OpenAiResponsesProvider request building', () => {
     });
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining('/responses/resp_stream_background/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should cancel an accepted background response when its stream disconnects', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({
+                  type: 'response.created',
+                  response: { id: 'resp_stream_disconnect', status: 'in_progress' },
+                })}\n\n`,
+              ),
+            );
+            setTimeout(() => controller.error(new TypeError('socket terminated')), 0);
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { status: 'cancelled' },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    });
+
+    const result = await provider.callApi('Disconnect the stream');
+
+    expect(result.error).toContain('socket terminated');
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_stream_disconnect/cancel'),
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',

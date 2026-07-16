@@ -1050,7 +1050,7 @@ configured. Prompts and tenant headers containing credentials also bypass persis
 Provider and per-prompt headers are sent for video creation, status polling, and content downloads
 so routed gateways can authorize the full job lifecycle.
 
-### Video Remixing
+### Video Remixing (Legacy)
 
 Remix an existing Sora video with a new prompt using `remix_video_id`:
 
@@ -1073,8 +1073,9 @@ metadata using the completed remix job returned by OpenAI.
 Remixed videos are not cached since each remix produces unique results even with the same prompt.
 :::
 
-OpenAI has deprecated the remix endpoint in favor of video edits. Promptfoo does not currently
-implement the newer Videos API edits or extensions endpoints.
+OpenAI has deprecated the remix endpoint and recommends `POST /v1/videos/edits` for new
+integrations. Promptfoo currently exposes the legacy `remix_video_id` path and does not implement
+the newer Videos API edits or extensions endpoints.
 
 ### Viewing Generated Videos
 
@@ -1929,7 +1930,7 @@ tests:
 | `known_speaker_names`      | Up to four known speaker identifiers     | Array of strings       |
 | `known_speaker_references` | Matching 2-10 second audio data URLs     | Array of data URLs     |
 
-Supported audio formats include FLAC, MP3, MP4, MPEG, MPGA, M4A, OGG, WAV, and WEBM. Promptfoo
+Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM. Promptfoo
 automatically sets `chunking_strategy: auto` for diarization, which is required for inputs longer
 than 30 seconds. `timestamp_granularities` is only sent for `whisper-1`, and `prompt` is not
 supported for diarization. See OpenAI's

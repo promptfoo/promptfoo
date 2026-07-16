@@ -531,11 +531,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     } catch {
       hasSensitiveUrlCredentials = true;
     }
-    const tenantCacheScope = Object.fromEntries(
+    const safeCacheHeaders = Object.fromEntries(
       Object.entries(this.getOpenAiRequestHeaders(config.headers))
         .filter(
           ([key, value]) =>
-            /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
             !isSensitiveCacheHeader(key) &&
             typeof value === 'string' &&
             value.trim().length > 0 &&
@@ -544,18 +543,23 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
+    const tenantCacheScope = Object.fromEntries(
+      Object.entries(safeCacheHeaders).filter(([key]) =>
+        /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key),
+      ),
+    );
     const cacheScope = {
-      ...tenantCacheScope,
+      ...safeCacheHeaders,
       ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
     };
     const usesAuthenticatedCustomEndpoint =
       !sendsToOpenAiApi &&
       (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
     const canCacheVideo =
-      (!hasAuthenticatedInputReference(config.input_reference) &&
-        !usesAuthenticatedCustomEndpoint &&
-        !hasSensitiveCacheValue(prompt)) ||
-      Object.keys(tenantCacheScope).length > 0;
+      !hasSensitiveCacheValue(prompt) &&
+      ((!hasAuthenticatedInputReference(config.input_reference) &&
+        !usesAuthenticatedCustomEndpoint) ||
+        Object.keys(tenantCacheScope).length > 0);
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
       prompt,
