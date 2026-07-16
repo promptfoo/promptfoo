@@ -3063,6 +3063,10 @@ describe('OpenAI Realtime Provider', () => {
               { type: 'input_text', text: 'Describe these inputs.' },
               { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
               { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+              {
+                type: 'image_url',
+                image_url: { url: 'data:image/png;base64,c2Vjb25kLWltYWdl' },
+              },
             ],
           },
         ]),
@@ -3082,6 +3086,7 @@ describe('OpenAI Realtime Provider', () => {
             { type: 'input_text', text: 'Describe these inputs.' },
             { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
             { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+            { type: 'input_image', image_url: 'data:image/png;base64,c2Vjb25kLWltYWdl' },
           ],
         },
       });

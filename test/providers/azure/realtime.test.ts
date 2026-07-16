@@ -228,6 +228,42 @@ describe('AzureRealtimeProvider', () => {
     );
   });
 
+  it('charges a realtime input image once across tool-call response events', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      output: 'hello',
+      tokenUsage: { prompt: 1_000, completion: 0, total: 1_000 },
+      metadata: {
+        usageEvents: [
+          {
+            input_tokens: 1_000,
+            input_token_details: { image_tokens: 1_000 },
+            output_tokens: 0,
+          },
+          {
+            input_tokens: 1_000,
+            input_token_details: { image_tokens: 1_000 },
+            output_tokens: 0,
+          },
+        ],
+      },
+    });
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    const result = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,aW1hZ2U=' } }],
+        },
+      ]),
+    );
+
+    expect(result.cost).toBeCloseTo((2_000 * 4 + 5) / 1e6, 12);
+    expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 0, numRequests: 2 });
+  });
+
   it('falls back to token usage when a realtime response does not include metadata usage', async () => {
     mockCallApi.mockResolvedValueOnce({
       output: 'hello',

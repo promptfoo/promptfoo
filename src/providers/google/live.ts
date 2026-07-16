@@ -646,7 +646,10 @@ export class GoogleLiveProvider implements ApiProvider {
           );
           const videoInputPerSecond = GOOGLE_MODELS.find((model) => model.id === this.modelName)
             ?.cost?.videoInputPerSecond;
-          const billVideoPerSecond = videoFrameCount > 0 && videoInputPerSecond !== undefined;
+          const billVideoPerSecond =
+            videoFrameCount > 0 &&
+            videoInputPerSecond !== undefined &&
+            (videoPromptTokens > 0 || imagePromptTokens === 0);
 
           result.tokenUsage = {
             prompt: promptTokens,

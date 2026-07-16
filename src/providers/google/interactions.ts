@@ -35,10 +35,12 @@ type InteractionResponse = {
   };
 };
 
-function parseInteractionInput(prompt: string): string | unknown[] {
+function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
   try {
-    const parsed = JSON.parse(prompt);
-    return Array.isArray(parsed) ? parsed : prompt;
+    const parsed = JSON.parse(prompt) as unknown;
+    return parsed && typeof parsed === 'object'
+      ? (parsed as unknown[] | Record<string, unknown>)
+      : prompt;
   } catch {
     return prompt;
   }
@@ -132,11 +134,26 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'x-goog-api-key': apiKey,
       ...config.headers,
     };
+    const unsupportedGenerationFields = new Set([
+      'temperature',
+      'top_p',
+      'topP',
+      'stop_sequences',
+      'stopSequences',
+      'negative_prompt',
+      'negativePrompt',
+      'system_instruction',
+      'systemInstruction',
+    ]);
     const generationConfig = {
       ...(config.maxOutputTokens === undefined
         ? {}
         : { max_output_tokens: config.maxOutputTokens }),
-      ...(config.generationConfig || {}),
+      ...Object.fromEntries(
+        Object.entries(config.generationConfig || {}).filter(
+          ([field]) => !unsupportedGenerationFields.has(field),
+        ),
+      ),
     };
     const body = {
       model: this.modelName,

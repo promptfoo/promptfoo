@@ -363,10 +363,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (candidate.type === 'input_image' && typeof candidate.image_url === 'string') {
+    const imageUrl =
+      typeof candidate.image_url === 'string'
+        ? candidate.image_url
+        : candidate.image_url && typeof candidate.image_url === 'object'
+          ? (candidate.image_url as { url?: unknown }).url
+          : undefined;
+    if (
+      (candidate.type === 'input_image' || candidate.type === 'image_url') &&
+      typeof imageUrl === 'string'
+    ) {
       return {
         type: 'input_image',
-        image_url: candidate.image_url,
+        image_url: imageUrl,
       };
     }
 

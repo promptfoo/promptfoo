@@ -194,7 +194,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         : result.metadata?.usage
           ? [result.metadata.usage]
           : [];
-    const costForUsageEvents = usageEvents.reduce<number | undefined>((total, usage) => {
+    const costForUsageEvents = usageEvents.reduce<number | undefined>((total, usage, index) => {
       const inputDetails =
         usage?.prompt_tokens_details ?? usage?.input_tokens_details ?? usage?.input_token_details;
       const outputDetails =
@@ -213,7 +213,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         inputDetails?.cached_tokens_details?.audio_tokens,
         inputDetails?.cached_tokens_details?.image_tokens,
         outputDetails?.image_tokens,
-        inputImageCount,
+        index === 0 ? inputImageCount : 0,
       );
 
       return typeof total === 'number' && typeof usageCost === 'number'

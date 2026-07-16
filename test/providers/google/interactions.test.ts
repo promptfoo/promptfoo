@@ -53,7 +53,17 @@ describe('GoogleInteractionsProvider', () => {
         previousInteractionId: 'interaction-0',
         store: true,
         maxOutputTokens: 2_048,
-        generationConfig: { thinking_level: 'low', video_config: { task: 'text_to_video' } } as any,
+        generationConfig: {
+          thinking_level: 'low',
+          video_config: { task: 'text_to_video' },
+          temperature: 0.2,
+          topP: 0.8,
+          top_p: 0.8,
+          stopSequences: ['stop'],
+          stop_sequences: ['stop'],
+          negative_prompt: 'do not include text',
+          system_instruction: 'unsupported',
+        } as any,
       },
     });
 
@@ -171,6 +181,30 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockStoreBlob).not.toHaveBeenCalled();
     expect(result.video?.url).toBe('https://video.example/2');
     expect(result.cost).toBeUndefined();
+  });
+
+  it('preserves a single native multimodal interaction input object', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/1' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+    const input = { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' };
+
+    await provider.callApi(JSON.stringify(input));
+
+    const body = JSON.parse(mockFetchWithCache.mock.calls[0]?.[1]?.body as string);
+    expect(body.input).toEqual(input);
   });
 
   it('requires a Gemini API key', async () => {
