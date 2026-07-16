@@ -165,6 +165,62 @@ describe('handleSearchRubric', () => {
     expect(result.score).toBeCloseTo(0.1);
   });
 
+  it('should clamp inverted score when grader emits an out-of-range score', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Contains outdated information',
+    };
+
+    mockMatchesSearchRubric.mockResolvedValue({ pass: true, score: 5, reason: 'matched' });
+
+    const result = await handleSearchRubric(params);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('should treat NaN scores as 0 when inverting', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Contains outdated information',
+    };
+
+    mockMatchesSearchRubric.mockResolvedValue({
+      pass: false,
+      score: Number.NaN,
+      reason: 'malformed',
+    });
+
+    const result = await handleSearchRubric(params);
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('should propagate grader failures verbatim instead of inverting them', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Contains outdated information',
+    };
+
+    const graderFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Search rubric evaluation failed: search unavailable',
+      metadata: { graderError: true },
+    };
+    mockMatchesSearchRubric.mockResolvedValue(graderFailure);
+
+    const result = await handleSearchRubric(params);
+
+    // A grader transport failure is not evidence about the criterion; it must
+    // not flip into a spurious pass (or a full inverted score) under `not-`.
+    expect(result).toEqual(graderFailure);
+  });
+
   it('should handle inverse assertion when original fails', async () => {
     const params: AssertionParams = {
       ...defaultParams,

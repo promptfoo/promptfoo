@@ -1,3 +1,4 @@
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesSearchRubric } from '../matchers/search';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -25,6 +26,10 @@ export async function handleSearchRubric({
     provider,
     providerCallContext,
   );
+
+  if (isGraderFailure(result)) {
+    return result;
+  }
 
   if (inverse) {
     result.pass = !result.pass;
