@@ -342,7 +342,10 @@ export class GoogleLiveProvider implements ApiProvider {
 
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
-      const usesRealtimeTextInput = this.modelName.startsWith('gemini-3.1-flash-live');
+      const prefersV1beta =
+        this.modelName.startsWith('gemini-3.1-flash-live') ||
+        this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
+        this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
 
       const safeResolve = (response: ProviderResponse) => {
@@ -354,8 +357,9 @@ export class GoogleLiveProvider implements ApiProvider {
 
       let { apiVersion } = config;
       if (!apiVersion) {
-        apiVersion = usesRealtimeTextInput ? 'v1beta' : 'v1alpha';
+        apiVersion = prefersV1beta ? 'v1beta' : 'v1alpha';
       }
+      const usesRealtimeTextInput = apiVersion === 'v1beta';
 
       // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
       let url: string;
@@ -997,17 +1001,14 @@ export class GoogleLiveProvider implements ApiProvider {
               logger.warn('Ignoring function calls received while tools are disabled.');
               for (const functionCall of response.toolCall.functionCalls) {
                 if (functionCall?.id && functionCall.name) {
-                  const toolMessage = {
-                    toolResponse: {
-                      functionResponses: [
-                        {
-                          id: functionCall.id,
-                          name: functionCall.name,
-                          response: { error: 'Tool calls are disabled for this request.' },
-                        },
-                      ],
-                    },
+                  const functionResponse = {
+                    id: functionCall.id,
+                    name: functionCall.name,
+                    response: { error: 'Tool calls are disabled for this request.' },
                   };
+                  const toolMessage = usesRealtimeTextInput
+                    ? { toolResponse: { functionResponses: [functionResponse] } }
+                    : { tool_response: { function_responses: functionResponse } };
                   ws.send(JSON.stringify(toolMessage));
                 }
               }
@@ -1059,22 +1060,19 @@ export class GoogleLiveProvider implements ApiProvider {
                   if (isResolved) {
                     return;
                   }
-                  const toolMessage = {
-                    toolResponse: {
-                      functionResponses: [
-                        {
-                          id: functionCall.id,
-                          name: functionName,
-                          response:
-                            callbackResponse !== null &&
-                            typeof callbackResponse === 'object' &&
-                            !Array.isArray(callbackResponse)
-                              ? callbackResponse
-                              : { result: callbackResponse },
-                        },
-                      ],
-                    },
+                  const functionResponse = {
+                    id: functionCall.id,
+                    name: functionName,
+                    response:
+                      callbackResponse !== null &&
+                      typeof callbackResponse === 'object' &&
+                      !Array.isArray(callbackResponse)
+                        ? callbackResponse
+                        : { result: callbackResponse },
                   };
+                  const toolMessage = usesRealtimeTextInput
+                    ? { toolResponse: { functionResponses: [functionResponse] } }
+                    : { tool_response: { function_responses: functionResponse } };
                   logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
                   ws.send(JSON.stringify(toolMessage));
                 }

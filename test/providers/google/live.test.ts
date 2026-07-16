@@ -251,6 +251,72 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it.each([
+    'gemini-2.5-flash-native-audio-latest',
+    'gemini-2.5-flash-native-audio-preview-09-2025',
+    'gemini-2.5-flash-native-audio-preview-12-2025',
+    'gemini-live-2.5-flash-preview-native-audio-09-2025',
+  ])('should use the v1beta Live protocol for %s', async (modelName) => {
+    provider = new GoogleLiveProvider(modelName, {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'test');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+    );
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        generationConfig: { responseModalities: ['AUDIO'] },
+        outputAudioTranscription: {},
+      },
+    });
+    expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'test prompt' } });
+  });
+
+  it('should honor an explicit v1beta Live protocol override for older models', async () => {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        apiVersion: 'v1beta',
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'test');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+    );
+    expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'test prompt' } });
+  });
+
   it('should serialize Gemini 3.1 Live setup configuration using the v1beta schema', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
@@ -1488,7 +1554,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should wrap primitive Gemini Live tool responses in objects', async () => {
-    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
         generationConfig: { response_modalities: ['text'] },
         timeoutMs: 500,
@@ -2184,11 +2250,48 @@ describe('GoogleLiveProvider', () => {
     // complete its turn instead of stalling until the websocket times out.
     const toolResponses = mockWs.send.mock.calls
       .map(([message]) => JSON.parse(message as string))
-      .filter((m) => m.toolResponse);
+      .filter((m) => m.tool_response);
+    expect(toolResponses).toHaveLength(1);
+    expect(toolResponses[0].tool_response.function_responses).toEqual({
+      id: 'function-call-disabled',
+      name: 'addNumbers',
+      response: { error: 'Tool calls are disabled for this request.' },
+    });
+  });
+
+  it('should serialize disabled-tool responses with the v1beta Live wire shape', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [{ functionDeclarations: [{ name: 'addNumbers' }] }],
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-disabled-beta' },
+        ]);
+        simulateTextMessage(mockWs, 'No tools were used.');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('Do not use tools', {
+      prompt: { config: { tool_choice: 'none' } },
+    } as any);
+
+    const toolResponses = mockWs.send.mock.calls
+      .map(([message]) => JSON.parse(message as string))
+      .filter((message) => message.toolResponse);
     expect(toolResponses).toHaveLength(1);
     expect(toolResponses[0].toolResponse.functionResponses).toEqual([
       {
-        id: 'function-call-disabled',
+        id: 'function-call-disabled-beta',
         name: 'addNumbers',
         response: { error: 'Tool calls are disabled for this request.' },
       },
@@ -2234,10 +2337,12 @@ describe('GoogleLiveProvider', () => {
     expect(promptAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
     const toolResponses = mockWs.send.mock.calls
       .map(([message]) => JSON.parse(message as string))
-      .filter((message) => message.toolResponse);
-    expect(toolResponses[0].toolResponse.functionResponses).toEqual([
-      { id: 'function-call-prompt-level', name: 'addNumbers', response: { sum: 11 } },
-    ]);
+      .filter((message) => message.tool_response);
+    expect(toolResponses[0].tool_response.function_responses).toEqual({
+      id: 'function-call-prompt-level',
+      name: 'addNumbers',
+      response: { sum: 11 },
+    });
     expect(response.output).toEqual(
       expect.objectContaining({
         text: 'The sum is 11.',
