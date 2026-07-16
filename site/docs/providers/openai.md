@@ -1840,6 +1840,10 @@ models are billed at $15 and $30 per million characters, respectively. GPT-4o mi
 using input and audio-output tokens; the binary speech
 response does not expose usage, so promptfoo leaves `cost` unset instead of estimating it.
 
+For authenticated custom speech gateways, provide a non-secret tenant discriminator such as
+`headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
+the speech cache to prevent responses from being shared across gateway tenants.
+
 ### Audio transcription
 
 OpenAI provides dedicated transcription models for converting speech to text. GPT-4o transcription

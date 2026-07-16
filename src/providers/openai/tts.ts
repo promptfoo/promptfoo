@@ -20,6 +20,13 @@ const VALID_RESPONSE_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pc
 const MAX_INPUT_CHARACTERS = 4096;
 const inFlightRequests = new Map<string, Promise<ProviderResponse>>();
 
+function isSensitiveCacheHeader(key: string): boolean {
+  return (
+    isSecretField(key) ||
+    /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(key)
+  );
+}
+
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
   voice?: string | { id: string };
@@ -175,13 +182,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     };
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
-        .filter(
-          ([key]) =>
-            !isSecretField(key) &&
-            !/(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(
-              key,
-            ),
-        )
+        .filter(([key]) => !isSensitiveCacheHeader(key))
         .sort(([left], [right]) => left.localeCompare(right)),
     );
     const cacheKey = `openai:tts:${sha256(
@@ -193,9 +194,21 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         typeof value === 'string' &&
         value.trim().length > 0,
     );
+    let sendsToOpenAiApi = false;
+    try {
+      sendsToOpenAiApi = new URL(url).hostname.toLowerCase() === 'api.openai.com';
+    } catch {
+      // Leave malformed custom URLs to the request path to validate.
+    }
+    const usesAuthenticatedCustomEndpoint =
+      !sendsToOpenAiApi && Object.keys(requestHeaders).some(isSensitiveCacheHeader);
     const cacheEnabled =
       isCacheEnabled() &&
-      !(typeof config.voice === 'object' && config.voice !== null && !hasTenantDiscriminator);
+      !(
+        (usesAuthenticatedCustomEndpoint ||
+          (typeof config.voice === 'object' && config.voice !== null)) &&
+        !hasTenantDiscriminator
+      );
 
     if (cacheEnabled && !this.shouldBustCache(context)) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);

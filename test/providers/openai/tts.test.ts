@@ -349,6 +349,41 @@ describe('OpenAiTtsProvider', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
+  it('does not share authenticated custom speech endpoints without a tenant discriminator', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      const authorization = (options?.headers as Record<string, string>).Authorization;
+      return audioResponse(new TextEncoder().encode(`audio-for-${authorization}`));
+    });
+
+    const firstTenant = new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'tenant-a', apiBaseUrl: 'https://gateway.example/v1' },
+    });
+    const secondTenant = new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'tenant-b', apiBaseUrl: 'https://gateway.example/v1' },
+    });
+
+    const first = await firstTenant.callApi('same input');
+    const second = await secondTenant.callApi('same input');
+
+    expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer tenant-a',
+    );
+    expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer tenant-b',
+    );
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(false);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   const invalidCases: Array<
     [string, { model?: string; input?: string; config?: Record<string, unknown> }, string]
   > = [
