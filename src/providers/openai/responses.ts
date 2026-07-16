@@ -31,7 +31,7 @@ import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { fingerprintOpenAiCacheValue, formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -181,8 +181,10 @@ function getBackgroundCacheIdentity(
   responseId?: string,
 ): { key: string; cacheable: boolean } {
   const cacheHeaders = Object.entries(request.headers)
-    .filter(([key]) => !isSensitiveBackgroundCacheHeader(key))
-    .map(([key, value]) => [key.toLowerCase(), value])
+    .map(([key, value]) => [
+      key.toLowerCase(),
+      isSensitiveBackgroundCacheHeader(key) ? fingerprintOpenAiCacheValue(value) : value,
+    ])
     .sort(([left], [right]) => left.localeCompare(right));
   const hasSensitiveHeader = Object.entries(request.headers).some(
     ([key, value]) => isSensitiveBackgroundCacheHeader(key) && value.trim().length > 0,
@@ -254,6 +256,8 @@ async function pollBackgroundResponse(
   timeout: number,
   maxRetries?: number,
   signal?: AbortSignal,
+  deadline = Date.now() + timeout,
+  cancelOnStop = true,
 ): Promise<BackgroundResponseResult> {
   if (!initial.id) {
     return {
@@ -268,7 +272,6 @@ async function pollBackgroundResponse(
   let status = 200;
   let statusText = 'OK';
   let responseHeaders: Record<string, string> | undefined;
-  const deadline = Date.now() + timeout;
   let firstPoll = true;
   let deadlineSignal: AbortSignal | undefined;
 
@@ -283,7 +286,9 @@ async function pollBackgroundResponse(
 
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
-        await cancelBackgroundResponse(initial.id, url, headers);
+        if (cancelOnStop) {
+          await cancelBackgroundResponse(initial.id, url, headers);
+        }
         return {
           data,
           status: 0,
@@ -324,11 +329,15 @@ async function pollBackgroundResponse(
     }
   } catch (error) {
     if (signal?.aborted) {
-      await cancelBackgroundResponse(initial.id, url, headers);
+      if (cancelOnStop) {
+        await cancelBackgroundResponse(initial.id, url, headers);
+      }
       throw error;
     }
     if (deadlineSignal?.aborted || Date.now() >= deadline) {
-      await cancelBackgroundResponse(initial.id, url, headers);
+      if (cancelOnStop) {
+        await cancelBackgroundResponse(initial.id, url, headers);
+      }
       return {
         data,
         status: 0,
@@ -352,6 +361,7 @@ async function createBackgroundResponseWithCancellation(
   const signal = request.signal;
   const cacheIdentity = getBackgroundCacheIdentity(url, request);
   const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.cacheable;
+  const effectiveBustCache = cacheIdentity.cacheable ? bustCache : true;
   const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
   if (!inFlight) {
@@ -360,7 +370,7 @@ async function createBackgroundResponseWithCancellation(
       { method: request.method, headers: request.headers, body: request.body },
       timeout,
       'json',
-      bustCache,
+      effectiveBustCache,
       maxRetries,
     );
     inFlight = { promise, subscribers: 0, billed: false };
@@ -394,6 +404,7 @@ async function createBackgroundResponseWithCancellation(
           return;
         }
         if (
+          !canCoalesce &&
           created.data.id &&
           (created.data.status === 'queued' || created.data.status === 'in_progress')
         ) {
@@ -449,7 +460,9 @@ async function resolveBackgroundResponse(
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
+  cancelOnStop: boolean,
 ): Promise<BackgroundResponseResult> {
+  const deadline = Date.now() + timeout;
   const polled = await pollBackgroundResponse(
     initial,
     url,
@@ -457,6 +470,8 @@ async function resolveBackgroundResponse(
     timeout,
     maxRetries,
     request.signal,
+    deadline,
+    cancelOnStop,
   );
   if (!cached || !polled.error || (polled.status !== 404 && polled.status !== 410)) {
     return polled;
@@ -466,8 +481,8 @@ async function resolveBackgroundResponse(
   const retried = await createBackgroundResponseWithCancellation(
     url,
     request,
-    timeout,
-    false,
+    Math.max(1, deadline - Date.now()),
+    cancelOnStop,
     maxRetries,
   );
   if (retried.status < 200 || retried.status >= 300) {
@@ -490,6 +505,8 @@ async function resolveBackgroundResponse(
         timeout,
         maxRetries,
         request.signal,
+        deadline,
+        cancelOnStop,
       )),
       retried: true,
     };
@@ -512,8 +529,22 @@ async function coalesceBackgroundResponse(
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
+  cancelOnStop: boolean,
 ): Promise<BackgroundResponseResult> {
-  const cacheKey = getBackgroundCacheIdentity(url, request, initial.id).key;
+  const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.id);
+  if (!cacheIdentity.cacheable) {
+    return resolveBackgroundResponse(
+      initial,
+      url,
+      request,
+      timeout,
+      maxRetries,
+      cached,
+      deleteFromCache,
+      cancelOnStop,
+    );
+  }
+  const cacheKey = cacheIdentity.key;
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
   if (!inFlight) {
     const controller = new AbortController();
@@ -525,6 +556,7 @@ async function coalesceBackgroundResponse(
       maxRetries,
       cached,
       deleteFromCache,
+      cancelOnStop,
     );
     inFlight = { promise, controller, subscribers: 0, billed: false };
     inFlightBackgroundResponses.set(cacheKey, inFlight);
@@ -558,7 +590,7 @@ async function coalesceBackgroundResponse(
       return;
     }
     onAbort = () => {
-      if (release()) {
+      if (release() && cancelOnStop) {
         void deleteFromCache?.();
       }
       reject(getAbortError(callerSignal));
@@ -1295,6 +1327,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           config.maxRetries,
           cached,
           deleteFromCache,
+          !isCacheEnabled() ||
+            Boolean(this.shouldBustCache(context)) ||
+            !getBackgroundCacheIdentity(url, request, data.id).cacheable,
         );
         if (polled.shared) {
           cached = true;

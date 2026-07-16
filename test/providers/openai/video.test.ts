@@ -1390,6 +1390,62 @@ describe('OpenAiVideoProvider', () => {
   });
 
   describe('input_reference (image-to-video)', () => {
+    it('isolates video cache keys across different per-prompt gateway credentials in one tenant', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKeyRequired: false,
+          apiBaseUrl: 'https://gateway.example/v1',
+          headers: { 'X-Tenant-Id': 'tenant-a' },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      let creates = 0;
+      mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
+        if (url.endsWith('/videos') && options?.method === 'POST') {
+          creates++;
+          return { ok: true, json: async () => ({ id: `video_${creates}`, status: 'queued' }) };
+        }
+        if (url.endsWith('/content')) {
+          return { ok: true, arrayBuffer: async () => new ArrayBuffer(100) };
+        }
+        return { ok: true, json: async () => ({ status: 'completed', progress: 100 }) };
+      });
+      const context = (authorization: string) =>
+        ({ prompt: { config: { headers: { authorization, 'X-Tenant-Id': 'tenant-a' } } } }) as any;
+
+      const first = await provider.callApi('Same private video', context('Bearer user-a'));
+      const second = await provider.callApi('Same private video', context('Bearer user-b'));
+
+      expect(creates).toBe(2);
+      expect(first.metadata?.cacheKey).not.toBe(second.metadata?.cacheKey);
+    });
+
+    it('does not persist videos containing an embedded credential-bearing prompt URL', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', download_thumbnail: false, download_spritesheet: false },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_prompt', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_prompt', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi(
+        'Render this source: https://files.example/storyboard?access_token=tenant-a',
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
     it('should bypass the persistent video cache for authenticated image references without a tenant scope', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {

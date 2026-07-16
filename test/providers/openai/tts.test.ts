@@ -363,8 +363,56 @@ describe('OpenAiTtsProvider', () => {
     expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe('audio-for-tenant-a');
     expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe('audio-for-tenant-b');
     expect(second.cached).toBe(false);
-    expect(rotated.cached).toBe(true);
+    expect(rotated.cached).toBe(false);
+    expect(mockedFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('isolates speech cached with different per-prompt gateway credentials in one tenant', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      const authorization = new Headers(options?.headers).get('authorization');
+      return audioResponse(new TextEncoder().encode(`audio-for-${authorization}`));
+    });
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: { apiBaseUrl: 'https://gateway.example/v1', headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+    const context = (authorization: string) =>
+      ({ prompt: { config: { headers: { authorization, 'X-Tenant-Id': 'tenant-a' } } } }) as any;
+
+    const [first, second] = await Promise.all([
+      provider.callApi('same input', context('Bearer user-a')),
+      provider.callApi('same input', context('Bearer user-b')),
+    ]);
+
+    expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer user-a',
+    );
+    expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer user-b',
+    );
     expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.set.mock.calls[0]?.[0]).not.toBe(cache.set.mock.calls[1]?.[0]);
+  });
+
+  it('does not persist speech containing an embedded credential-bearing URL', async () => {
+    const cache = { get: vi.fn(), set: vi.fn() };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    await provider.callApi('Read this link: https://files.example/report?access_token=tenant-a');
+    await provider.callApi('Read this link: https://files.example/report?access_token=tenant-a');
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   it('coalesces concurrent identical speech requests into one paid call', async () => {

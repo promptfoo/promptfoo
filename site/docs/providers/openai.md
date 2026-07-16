@@ -1046,8 +1046,9 @@ characters can be used in one generation, and the character name should also app
 
 Credential-bearing image URLs and authenticated custom video gateways bypass the persistent video
 cache unless a non-secret tenant discriminator such as `headers: { X-Tenant-Id: tenant-a }` is
-configured. Prompts, tenant headers, and gateway URL paths containing credentials always bypass
-persistent caching.
+configured. Authentication headers are represented by a one-way cache fingerprint so different
+gateway credentials cannot share generated media. Prompts, tenant headers, and gateway URL paths
+containing credentials always bypass persistent caching.
 Provider and per-prompt headers are sent for video creation, status polling, and content downloads
 so routed gateways can authorize the full job lifecycle.
 
@@ -1869,10 +1870,12 @@ not yet have a dedicated provider setting.
 For custom speech gateways authenticated through headers or URL credentials, provide a non-secret
 tenant discriminator such as
 `headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
-the speech cache to prevent responses from being shared across gateway tenants. Speech inputs,
-instructions, passthrough values, tenant headers, and gateway URL paths containing credentials
-always bypass persistent caching. Header credentials such as `authorization` or `x-api-key` satisfy
-the provider's authentication requirement; a separate OpenAI API key is not needed.
+the speech cache to prevent responses from being shared across gateway tenants. Authentication
+headers are represented by a one-way cache fingerprint, preventing differently authenticated calls
+within a tenant from sharing audio. Speech inputs, instructions, passthrough values, tenant
+headers, and gateway URL paths containing credentials always bypass persistent caching. Header
+credentials such as `authorization` or `x-api-key` satisfy the provider's authentication
+requirement; a separate OpenAI API key is not needed.
 
 ### Audio transcription
 
@@ -2532,8 +2535,10 @@ automatically use appropriate timeouts:
 - If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it will be used for the API call
 - Otherwise, these long-running requests default to a 10-minute timeout (600,000ms)
 - Regular foreground requests continue to use the standard 5-minute timeout
-- Background requests honor the overall polling deadline and cancel upstream work when an eval
-  stops, including jobs accepted immediately before a delayed creation response arrives
+- Background requests honor the overall polling deadline. Non-cached requests cancel upstream work
+  when an eval stops, including jobs accepted immediately before a delayed creation response
+  arrives. Queued jobs in the shared persistent cache can be resumed by another eval process and
+  are not cancelled when one local subscriber stops; use `--no-cache` for exclusive cancellation.
 - Background streams preserve `stream: true`; promptfoo captures the response ID and cancels
   upstream work when an eval stops
 

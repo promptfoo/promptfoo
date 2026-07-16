@@ -10,7 +10,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { OPENAI_TTS_MODELS } from './util';
+import { fingerprintOpenAiCacheValue, OPENAI_TTS_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -38,7 +38,9 @@ function hasSensitiveCacheValue(value: unknown, fieldName?: string): boolean {
     return value !== undefined && value !== null && value !== '';
   }
   if (typeof value === 'string') {
+    const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
     return (
+      urls.some((url) => sanitizeUrl(url) !== url) ||
       looksLikeSecret(value) ||
       /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
         value,
@@ -265,16 +267,23 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     };
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
-        .filter(([key]) => !isSensitiveCacheHeader(key))
-        .map(([key, value]) => [key.toLowerCase(), value])
+        .map(([key, value]) => [
+          key.toLowerCase(),
+          isSensitiveCacheHeader(key) ? fingerprintOpenAiCacheValue(value) : value,
+        ])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
     const hasSensitiveHeaderValue = Object.entries(requestHeaders).some(
       ([key, value]) => !isSensitiveCacheHeader(key) && hasSensitiveCacheValue(value, key),
     );
+    const hasSensitiveBody = hasSensitiveCacheValue(body);
     const cacheKey = `openai:tts:${sha256(
       JSON.stringify(
-        canonicalizeCacheValue({ url: sanitizeUrl(url), body, headers: cacheHeaders }),
+        canonicalizeCacheValue({
+          url: sanitizeUrl(url),
+          body: hasSensitiveBody ? fingerprintOpenAiCacheValue(body) : body,
+          headers: cacheHeaders,
+        }),
       ),
     )}`;
     const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
@@ -305,7 +314,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
     const cacheEnabled =
       isCacheEnabled() &&
-      !hasSensitiveCacheValue(body) &&
+      !hasSensitiveBody &&
       !hasSensitiveHeaderValue &&
       !hasSensitiveUrlPath &&
       !(

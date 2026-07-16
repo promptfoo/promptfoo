@@ -16,6 +16,7 @@ import {
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
+import { fingerprintOpenAiCacheValue } from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -168,7 +169,9 @@ function isSensitiveCacheHeader(key: string): boolean {
 }
 
 function hasSensitiveCacheValue(value: string): boolean {
+  const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
   return (
+    urls.some((url) => sanitizeUrl(url) !== url) ||
     looksLikeSecret(value) ||
     /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
       value,
@@ -556,8 +559,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key),
       ),
     );
+    const credentialCacheScope = Object.fromEntries(
+      Object.entries(requestHeaders)
+        .filter(([key, value]) => isSensitiveCacheHeader(key) && value.trim().length > 0)
+        .map(([key, value]) => [key.toLowerCase(), fingerprintOpenAiCacheValue(value)]),
+    );
     const cacheScope = {
       ...safeCacheHeaders,
+      ...credentialCacheScope,
       ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
     };
     const usesAuthenticatedCustomEndpoint =
@@ -572,7 +581,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         Object.keys(tenantCacheScope).length > 0);
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
-      prompt,
+      prompt: hasSensitiveCacheValue(prompt) ? fingerprintOpenAiCacheValue(prompt) : prompt,
       model,
       size,
       seconds,
