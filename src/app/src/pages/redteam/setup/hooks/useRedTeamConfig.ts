@@ -16,6 +16,14 @@ interface RecentlyUsedPlugins {
 }
 
 const NUM_RECENT_PLUGINS = 6;
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
 export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
   persist(
     (set) => ({
@@ -317,16 +325,22 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         }),
       setFullConfig: (config) => {
         const providerType = getProviderType(config.target?.id);
-        set({ config, providerType });
+        const normalizedConfig =
+          config.target && config.target.config === undefined
+            ? {
+                ...config,
+                target: {
+                  ...config.target,
+                  config: {},
+                },
+              }
+            : config;
+        set({ config: normalizedConfig, providerType });
         const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
         targetConfigValidation.clearTargetConfigValidation();
-        if (
-          typeof config.target?.config !== 'object' ||
-          config.target.config === null ||
-          Array.isArray(config.target.config)
-        ) {
+        if (!isPlainObject(normalizedConfig.target?.config)) {
           targetConfigValidation.setTargetConfigDraft(
-            JSON.stringify(config.target?.config) ?? 'null',
+            JSON.stringify(normalizedConfig.target?.config) ?? 'null',
           );
           targetConfigValidation.setTargetConfigError('Configuration must be a JSON object');
         }

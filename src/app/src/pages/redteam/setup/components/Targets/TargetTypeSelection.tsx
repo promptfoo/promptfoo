@@ -75,8 +75,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     setSelectedTarget(updatedProvider);
     setProviderType(providerType);
     updateConfig('target', updatedProvider);
-    setTargetConfigError?.(null);
     setTargetConfigDraft?.(null);
+    setTargetConfigError?.(null);
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,

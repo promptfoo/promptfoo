@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { targetConfigSha256 } from './targetConfigSha256';
 
 import type { Config } from '../types';
 
@@ -8,11 +9,13 @@ const TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let targetConfigValidationChannel: BroadcastChannel | null = null;
 let reconcileTargetConfig: ((config: Config) => boolean) | null = null;
 let reconcilingTargetConfig = false;
-let targetConfigValidationEpoch = 0;
 
-const sha256 = async (value: string): Promise<string> => {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 };
 
 const getPersistedTargetSnapshot = (): {
@@ -31,17 +34,30 @@ const getPersistedTargetSnapshot = (): {
     const persisted = JSON.parse(rawConfig) as { state?: { config?: Config } };
     const config = persisted.state?.config;
     const target = config?.target;
-    if (
-      !target ||
-      typeof target.id !== 'string' ||
-      typeof target.config !== 'object' ||
-      target.config === null ||
-      Array.isArray(target.config)
-    ) {
+    if (!target || typeof target.id !== 'string' || !isPlainObject(target.config)) {
       return null;
     }
 
     return { config, serialized: JSON.stringify(target) };
+  } catch {
+    return null;
+  }
+};
+
+const getClearMessage = (serialized: string): string =>
+  `clear:${serialized.length.toString(36)}:${targetConfigSha256(serialized)}`;
+
+const isClearMessage = (value: string | null): value is string =>
+  value !== null && /^clear:[a-z0-9]+:[a-f0-9]{64}$/.test(value);
+
+const getCurrentClearMessage = (): string | null => {
+  try {
+    const marker = window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+    if (!isClearMessage(marker)) {
+      return null;
+    }
+    const snapshot = getPersistedTargetSnapshot();
+    return snapshot && marker === getClearMessage(snapshot.serialized) ? marker : null;
   } catch {
     return null;
   }
@@ -125,8 +141,14 @@ const persistTargetConfigError = (error: string | null, broadcast = true) => {
   }
 
   if (!error) {
+    const snapshot = getPersistedTargetSnapshot();
+    const clearMessage = snapshot ? getClearMessage(snapshot.serialized) : null;
     try {
-      window.localStorage.removeItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+      if (clearMessage) {
+        window.localStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, clearMessage);
+      } else {
+        window.localStorage.removeItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+      }
     } catch {}
     try {
       window.sessionStorage.removeItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
@@ -134,27 +156,10 @@ const persistTargetConfigError = (error: string | null, broadcast = true) => {
     try {
       document.cookie = `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
     } catch {}
-    if (broadcast) {
-      const snapshot = getPersistedTargetSnapshot();
-      if (snapshot) {
-        const clearEpoch = targetConfigValidationEpoch;
-        void sha256(snapshot.serialized).then(
-          (fingerprint) => {
-            if (
-              clearEpoch !== targetConfigValidationEpoch ||
-              getPersistedTargetSnapshot()?.serialized !== snapshot.serialized
-            ) {
-              return;
-            }
-            try {
-              targetConfigValidationChannel?.postMessage(
-                `clear:${snapshot.serialized.length.toString(36)}:${fingerprint}`,
-              );
-            } catch {}
-          },
-          () => {},
-        );
-      }
+    if (broadcast && clearMessage) {
+      try {
+        targetConfigValidationChannel?.postMessage(clearMessage);
+      } catch {}
     }
     return;
   }
@@ -197,18 +202,13 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
     targetConfigRevision: 0,
     setTargetConfigError: (targetConfigError) => {
       const previousError = get().targetConfigError;
-      targetConfigValidationEpoch++;
       set({ targetConfigError });
       if (previousError !== targetConfigError) {
         persistTargetConfigError(targetConfigError);
       }
     },
-    setTargetConfigDraft: (targetConfigDraft) => {
-      targetConfigValidationEpoch++;
-      set({ targetConfigDraft });
-    },
+    setTargetConfigDraft: (targetConfigDraft) => set({ targetConfigDraft }),
     clearTargetConfigValidation: () => {
-      targetConfigValidationEpoch++;
       persistTargetConfigError(null);
       set((state) => ({
         targetConfigError: null,
@@ -224,6 +224,38 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
     },
   }),
 );
+
+const reconcileTargetConfigClear = (clearMessage: string): boolean => {
+  const snapshot = getPersistedTargetSnapshot();
+  if (
+    !snapshot ||
+    clearMessage !== getClearMessage(snapshot.serialized) ||
+    !reconcileTargetConfig
+  ) {
+    return false;
+  }
+
+  let reconciled = false;
+  try {
+    reconcilingTargetConfig = true;
+    reconciled = reconcileTargetConfig(snapshot.config);
+  } catch {
+    return false;
+  } finally {
+    reconcilingTargetConfig = false;
+  }
+  if (!reconciled) {
+    return false;
+  }
+
+  persistTargetConfigError(null, false);
+  useRedTeamTargetConfigValidation.setState((state) => ({
+    targetConfigError: null,
+    targetConfigDraft: null,
+    targetConfigRevision: state.targetConfigRevision + 1,
+  }));
+  return true;
+};
 
 if (typeof window !== 'undefined') {
   const targetConfigWindow = window as Window & {
@@ -241,6 +273,17 @@ if (typeof window !== 'undefined') {
       return;
     }
 
+    if (isClearMessage(event.newValue)) {
+      reconcileTargetConfigClear(event.newValue);
+      return;
+    }
+
+    const currentClearMessage = getCurrentClearMessage();
+    if (currentClearMessage) {
+      reconcileTargetConfigClear(currentClearMessage);
+      return;
+    }
+
     if (!event.newValue) {
       const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
       if (targetConfigError) {
@@ -251,7 +294,6 @@ if (typeof window !== 'undefined') {
 
     const targetConfigError = getTargetConfigErrorFromMarker(event.newValue);
     if (targetConfigError) {
-      targetConfigValidationEpoch++;
       useRedTeamTargetConfigValidation.setState({ targetConfigError });
     }
   };
@@ -268,55 +310,13 @@ if (typeof window !== 'undefined') {
         return;
       }
 
-      if (/^clear:[a-z0-9]+:[a-f0-9]{64}$/.test(event.data)) {
-        const snapshot = getPersistedTargetSnapshot();
-        if (!snapshot || !reconcileTargetConfig) {
-          return;
-        }
-        const receivedEpoch = targetConfigValidationEpoch;
-
-        void sha256(snapshot.serialized).then(
-          (fingerprint) => {
-            const clearMessage = `clear:${snapshot.serialized.length.toString(36)}:${fingerprint}`;
-            const latestSnapshot = getPersistedTargetSnapshot();
-            if (
-              event.data !== clearMessage ||
-              receivedEpoch !== targetConfigValidationEpoch ||
-              latestSnapshot?.serialized !== snapshot.serialized ||
-              !reconcileTargetConfig
-            ) {
-              return;
-            }
-
-            let reconciled = false;
-            try {
-              reconcilingTargetConfig = true;
-              reconciled = reconcileTargetConfig(latestSnapshot.config);
-            } catch {
-              return;
-            } finally {
-              reconcilingTargetConfig = false;
-            }
-            if (!reconciled) {
-              return;
-            }
-
-            targetConfigValidationEpoch++;
-            persistTargetConfigError(null, false);
-            useRedTeamTargetConfigValidation.setState((state) => ({
-              targetConfigError: null,
-              targetConfigDraft: null,
-              targetConfigRevision: state.targetConfigRevision + 1,
-            }));
-          },
-          () => {},
-        );
+      if (isClearMessage(event.data)) {
+        reconcileTargetConfigClear(event.data);
         return;
       }
 
       const targetConfigError = getTargetConfigErrorFromMarker(event.data);
       if (targetConfigError) {
-        targetConfigValidationEpoch++;
         useRedTeamTargetConfigValidation.setState({ targetConfigError });
         persistTargetConfigError(targetConfigError, false);
       }

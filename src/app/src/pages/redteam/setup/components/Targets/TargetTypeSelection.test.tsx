@@ -8,6 +8,10 @@ import type { ProviderOptions } from '../../types';
 
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
+const mockTargetConfigValidation = vi.hoisted(() => ({
+  setTargetConfigError: vi.fn(),
+  setTargetConfigDraft: vi.fn(),
+}));
 vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
   DEFAULT_HTTP_TARGET: {
@@ -17,10 +21,7 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
   },
 }));
 vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
-  useRedTeamTargetConfigValidation: () => ({
-    setTargetConfigError: vi.fn(),
-    setTargetConfigDraft: vi.fn(),
-  }),
+  useRedTeamTargetConfigValidation: () => mockTargetConfigValidation,
 }));
 
 const mockRecordEvent = vi.fn();
@@ -243,6 +244,12 @@ describe('TargetTypeSelection', () => {
     expect(screen.getByText('Select Target Type')).toBeInTheDocument();
     const openAICard = await screen.findByText('OpenAI');
     await user.click(openAICard.closest('.cursor-pointer') as HTMLElement);
+
+    expect(mockTargetConfigValidation.setTargetConfigDraft).toHaveBeenCalledWith(null);
+    expect(mockTargetConfigValidation.setTargetConfigError).toHaveBeenCalledWith(null);
+    expect(
+      mockTargetConfigValidation.setTargetConfigDraft.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockTargetConfigValidation.setTargetConfigError.mock.invocationCallOrder[0]);
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalledWith(

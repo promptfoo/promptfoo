@@ -216,6 +216,67 @@ describe('RedTeamSetupPage', () => {
   });
 
   describe('YAML file import', () => {
+    it('normalizes an object target with an omitted config while importing YAML', async () => {
+      const user = userEvent.setup();
+      const showToast = vi.fn();
+      mockedUseToast.mockReturnValue({ showToast });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          'description: Valid shorthand target\ntargets:\n  - id: openai:gpt-5\n    label: customer-service-agent\nredteam:\n  plugins: [default]\n',
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() => {
+        expect(useRedTeamConfig.getState().config.target).toEqual({
+          id: 'openai:gpt-5',
+          label: 'customer-service-agent',
+          config: {},
+        });
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      });
+      expect(showToast).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    it('keeps a YAML timestamp target config blocked after import', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          'description: Invalid timestamp target\ntargets:\n  - id: openinterpreter\n    label: Coding target\n    config: 2024-01-01\nredteam:\n  plugins: [default]\n',
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() =>
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+          'Configuration must be a JSON object',
+        ),
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        '"2024-01-01T00:00:00.000Z"',
+      );
+    });
+
     it('should preserve redteam.provider when loading a YAML config', async () => {
       const user = userEvent.setup();
       mockedUseToast.mockReturnValue({ showToast: vi.fn() });
