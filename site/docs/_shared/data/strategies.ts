@@ -303,6 +303,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'flipattack',
+    displayName: 'FlipAttack',
+    description: 'Word/character flipping',
+    longDescription:
+      'Disguises the request by flipping word order or characters and instructs the target to recover and answer it',
+    cost: 'Low',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/flipattack/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'jailbreak-templates',
     displayName: 'Jailbreak Templates',
     description: 'Static jailbreak templates',

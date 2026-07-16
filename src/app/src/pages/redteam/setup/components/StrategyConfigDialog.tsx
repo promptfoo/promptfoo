@@ -435,7 +435,8 @@ export default function StrategyConfigDialog({
       strategy === 'custom' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
-      strategy === 'mischievous-user'
+      strategy === 'mischievous-user' ||
+      strategy === 'flipattack'
     ) {
       if (!isCustomStrategyValid()) {
         return;
@@ -1306,6 +1307,37 @@ export default function StrategyConfigDialog({
     </div>
   );
 
+  const renderFlipAttackStrategyConfig = () => {
+    const rawMode = localConfig.mode;
+    const mode =
+      rawMode === 'word_order' || rawMode === 'char_in_word' ? rawMode : 'char_in_sentence';
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Flip the words or characters of the request and instruct the target to recover and answer
+          it.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="flipattack-mode">Flip mode</Label>
+          <Select
+            value={mode}
+            onValueChange={(value) => setLocalConfig({ ...localConfig, mode: value })}
+          >
+            <SelectTrigger id="flipattack-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="char_in_sentence">Reverse all characters (default)</SelectItem>
+              <SelectItem value="word_order">Reverse word order</SelectItem>
+              <SelectItem value="char_in_word">Reverse characters within each word</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  };
+
   const renderStrategyConfig = () => {
     switch (strategy) {
       case 'basic':
@@ -1329,6 +1361,8 @@ export default function StrategyConfigDialog({
         return renderGcgStrategyConfig();
       case 'citation':
         return renderCitationStrategyConfig();
+      case 'flipattack':
+        return renderFlipAttackStrategyConfig();
       case 'layer':
         return renderLayerStrategyConfig();
       default:

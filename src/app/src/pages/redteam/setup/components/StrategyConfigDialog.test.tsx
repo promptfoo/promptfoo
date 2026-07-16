@@ -20,6 +20,68 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
+  describe('flipattack', () => {
+    const flipStrategyData = {
+      id: 'flipattack' as const,
+      name: 'FlipAttack',
+      description: 'FlipAttack strategy',
+    };
+
+    it('renders the mode select and preserves the configured mode on save', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="flipattack"
+          config={{ mode: 'word_order' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={flipStrategyData}
+        />,
+      );
+
+      expect(screen.getByText('Reverse word order')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(mockOnSave).toHaveBeenCalledWith('flipattack', { mode: 'word_order' });
+    });
+
+    it('updates the mode when a different option is selected', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="flipattack"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={flipStrategyData}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(screen.getByRole('option', { name: 'Reverse word order' }));
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(mockOnSave).toHaveBeenCalledWith('flipattack', { mode: 'word_order' });
+    });
+
+    it('defaults to reversing all characters when no mode is configured', async () => {
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="flipattack"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={flipStrategyData}
+        />,
+      );
+
+      expect(screen.getByText('Reverse all characters (default)')).toBeInTheDocument();
+    });
+  });
+
   it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
     const user = userEvent.setup();
     renderWithProviders(
