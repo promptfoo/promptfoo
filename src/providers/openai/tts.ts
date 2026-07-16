@@ -56,6 +56,20 @@ function hasSensitiveCacheValue(value: unknown, fieldName?: string): boolean {
   return false;
 }
 
+function canonicalizeCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeCacheValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, canonicalizeCacheValue(nestedValue)]),
+    );
+  }
+  return value;
+}
+
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
   voice?: string | { id: string };
@@ -252,7 +266,9 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ([key, value]) => !isSensitiveCacheHeader(key) && hasSensitiveCacheValue(value, key),
     );
     const cacheKey = `openai:tts:${sha256(
-      JSON.stringify({ url: sanitizeUrl(url), body, headers: cacheHeaders }),
+      JSON.stringify(
+        canonicalizeCacheValue({ url: sanitizeUrl(url), body, headers: cacheHeaders }),
+      ),
     )}`;
     const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
       ([key, value]) =>

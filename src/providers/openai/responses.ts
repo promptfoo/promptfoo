@@ -1015,52 +1015,81 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         let backgroundResponseId: string | undefined;
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+        let rejectPendingCreation: ((reason: Error) => void) | undefined;
+        const pendingCreationCancellation = new Promise<never>((_resolve, reject) => {
+          rejectPendingCreation = reject;
+        });
         const abortStream = () => {
           if (backgroundResponseId) {
             controller.abort(abortSignal?.reason);
             return;
           }
+          if (abortSignal) {
+            rejectPendingCreation?.(getAbortError(abortSignal));
+          }
         };
         abortSignal?.addEventListener('abort', abortStream, { once: true });
-        try {
-          const response = await fetchWithRetries(
-            url,
-            { ...request, signal: controller.signal },
-            timeout,
-            config.maxRetries,
-          );
-          status = response.status;
-          statusText = response.statusText;
-          responseHeaders = Object.fromEntries(response.headers.entries());
-          if (status >= 200 && status < 300) {
-            data = await readResponsesStream(response, 'OpenAI', logger, (streamedResponse) => {
-              if (typeof streamedResponse.id === 'string') {
-                backgroundResponseId = streamedResponse.id;
-                if (abortSignal?.aborted) {
-                  controller.abort(abortSignal.reason);
-                }
+        const streamCompletion = (async (): Promise<{
+          data: OpenAIResponsesResponse;
+          status: number;
+          statusText: string;
+          headers: Record<string, string>;
+        }> => {
+          try {
+            const response = await fetchWithRetries(
+              url,
+              { ...request, signal: controller.signal },
+              timeout,
+              config.maxRetries,
+            );
+            let responseData: OpenAIResponsesResponse;
+            if (response.status >= 200 && response.status < 300) {
+              responseData = await readResponsesStream(
+                response,
+                'OpenAI',
+                logger,
+                (streamedResponse) => {
+                  if (typeof streamedResponse.id === 'string') {
+                    backgroundResponseId = streamedResponse.id;
+                    if (abortSignal?.aborted) {
+                      controller.abort(abortSignal.reason);
+                    }
+                  }
+                },
+              );
+            } else {
+              const text = await response.text();
+              try {
+                responseData = JSON.parse(text);
+              } catch {
+                responseData = text as OpenAIResponsesResponse;
               }
-            });
-          } else {
-            const text = await response.text();
-            try {
-              data = JSON.parse(text);
-            } catch {
-              data = text as OpenAIResponsesResponse;
             }
+            return {
+              data: responseData,
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+            };
+          } catch (err) {
+            if (backgroundResponseId) {
+              await cancelBackgroundResponse(backgroundResponseId, url, request.headers);
+            }
+            if (controller.signal.aborted && !abortSignal?.aborted) {
+              throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
+            }
+            throw err;
+          } finally {
+            clearTimeout(timeoutHandle);
+            abortSignal?.removeEventListener('abort', abortStream);
           }
-        } catch (err) {
-          if (backgroundResponseId) {
-            await cancelBackgroundResponse(backgroundResponseId, url, request.headers);
-          }
-          if (controller.signal.aborted && !abortSignal?.aborted) {
-            throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
-          }
-          throw err;
-        } finally {
-          clearTimeout(timeoutHandle);
-          abortSignal?.removeEventListener('abort', abortStream);
-        }
+        })();
+        ({
+          data,
+          status,
+          statusText,
+          headers: responseHeaders,
+        } = await Promise.race([streamCompletion, pendingCreationCancellation]));
       } else if (body.stream) {
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);

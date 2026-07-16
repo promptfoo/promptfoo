@@ -1922,15 +1922,15 @@ tests:
 
 #### Transcription configuration options
 
-| Parameter                  | Description                              | Options                |
-| -------------------------- | ---------------------------------------- | ---------------------- |
-| `language`                 | Language of the audio (ISO-639-1)        | e.g., 'en', 'es', 'fr' |
-| `prompt`                   | Context for non-diarized transcription   | Any text string        |
-| `temperature`              | Controls randomness (0-1)                | Number between 0 and 1 |
-| `timestamp_granularities`  | Word or segment timestamps for Whisper   | ['word', 'segment']    |
-| `chunking_strategy`        | Split long transcription audio using VAD | `auto` or `server_vad` |
-| `known_speaker_names`      | Up to four known speaker identifiers     | Array of strings       |
-| `known_speaker_references` | Matching 2-10 second audio data URLs     | Array of data URLs     |
+| Parameter                  | Description                              | Options                               |
+| -------------------------- | ---------------------------------------- | ------------------------------------- |
+| `language`                 | Language of the audio (ISO-639-1)        | e.g., 'en', 'es', 'fr'                |
+| `prompt`                   | Context for non-diarized transcription   | Any text string                       |
+| `temperature`              | Controls randomness (0-1)                | Number between 0 and 1                |
+| `timestamp_granularities`  | Word or segment timestamps for Whisper   | ['word', 'segment']                   |
+| `chunking_strategy`        | Split long transcription audio using VAD | `auto` or `{ type: server_vad, ... }` |
+| `known_speaker_names`      | Up to four known speaker identifiers     | Array of strings                      |
+| `known_speaker_references` | Matching 2-10 second audio data URLs     | Array of data URLs                    |
 
 Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM. Promptfoo
 automatically sets `chunking_strategy: auto` for diarization, which is required for inputs longer

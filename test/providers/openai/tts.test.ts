@@ -680,6 +680,28 @@ describe('OpenAiTtsProvider', () => {
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('canonicalizes nested passthrough objects for the persistent cache key', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+
+    const first = await new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', passthrough: { vendor: { alpha: 1, beta: 2 } } },
+    }).callApi('same input');
+    const second = await new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', passthrough: { vendor: { beta: 2, alpha: 1 } } },
+    }).callApi('same input');
+
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(true);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('does not persist secret-valued speech tenant headers', async () => {
     const cache = { get: vi.fn(), set: vi.fn() };
     mockedIsCacheEnabled.mockReturnValue(true);

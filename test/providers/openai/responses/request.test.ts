@@ -1655,17 +1655,28 @@ describe('OpenAiResponsesProvider request building', () => {
     }).callApi('Delayed stream creation', undefined, { abortSignal: controller.signal });
     setTimeout(() => controller.abort(new Error('caller cancelled before stream ID')), 5);
 
-    await expect(pending).rejects.toMatchObject({
+    const result = await Promise.race([
+      pending.then(
+        () => 'resolved',
+        (error: Error) => error,
+      ),
+      new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+    ]);
+    expect(result).toMatchObject({
       name: 'AbortError',
       message: 'caller cancelled before stream ID',
     });
-    expect(cache.fetchWithCache).toHaveBeenCalledWith(
-      expect.stringContaining('/responses/resp_delayed_stream/cancel'),
-      expect.objectContaining({ method: 'POST' }),
-      expect.any(Number),
-      'json',
-      true,
-      0,
+    await vi.waitFor(
+      () =>
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.stringContaining('/responses/resp_delayed_stream/cancel'),
+          expect.objectContaining({ method: 'POST' }),
+          expect.any(Number),
+          'json',
+          true,
+          0,
+        ),
+      { timeout: 2000 },
     );
   });
 
