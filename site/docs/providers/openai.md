@@ -1833,19 +1833,21 @@ response does not expose usage, so promptfoo leaves `cost` unset instead of esti
 
 ### Audio transcription
 
-OpenAI provides dedicated transcription models for converting speech to text. These models charge per minute of audio rather than per token.
+OpenAI provides dedicated transcription models for converting speech to text. GPT-4o transcription
+models report token usage, which promptfoo prices using the published input/output token rates; the
+per-minute figures below are OpenAI's cost estimates. Whisper is billed per minute.
 
 **Available transcription models:**
 
-| Model                                  | Description                          | Cost per minute |
-| -------------------------------------- | ------------------------------------ | --------------- |
-| `whisper-1`                            | Original Whisper transcription model | $0.006          |
-| `gpt-4o-transcribe`                    | GPT-4o optimized for transcription   | $0.006          |
-| `gpt-4o-mini-transcribe`               | Faster, more cost-effective option   | $0.003          |
-| `gpt-4o-mini-transcribe-2025-12-15`    | Dated mini transcription snapshot    | $0.003          |
-| `gpt-4o-mini-transcribe-2025-03-20`    | Previous mini transcription snapshot | $0.003          |
-| `gpt-4o-transcribe-diarize`            | Identifies different speakers        | $0.006          |
-| `gpt-4o-transcribe-diarize-2025-10-15` | Dated diarization snapshot           | $0.006          |
+| Model                                  | Description                          | Estimated cost per minute |
+| -------------------------------------- | ------------------------------------ | ------------------------- |
+| `whisper-1`                            | Original Whisper transcription model | $0.006                    |
+| `gpt-4o-transcribe`                    | GPT-4o optimized for transcription   | $0.006                    |
+| `gpt-4o-mini-transcribe`               | Faster, more cost-effective option   | $0.003                    |
+| `gpt-4o-mini-transcribe-2025-12-15`    | Dated mini transcription snapshot    | $0.003                    |
+| `gpt-4o-mini-transcribe-2025-03-20`    | Previous mini transcription snapshot | $0.003                    |
+| `gpt-4o-transcribe-diarize`            | Identifies different speakers        | $0.006                    |
+| `gpt-4o-transcribe-diarize-2025-10-15` | Dated diarization snapshot           | $0.006                    |
 
 To use transcription models, specify the provider format `openai:transcription:<model name>`:
 
@@ -2202,7 +2204,6 @@ The Responses API configuration supports these parameters in addition to standar
 | `truncation`           | Strategy to handle context window overflow                     | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                             | None       | Object with `effort` field          |
 | `background`           | Run a long response asynchronously                             | false      | Boolean                             |
-| `webhook_url`          | Webhook URL for supported background responses                 | None       | URL                                 |
 
 ### MCP (Model Context Protocol) Support
 

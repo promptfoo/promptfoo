@@ -261,6 +261,51 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0.006);
     });
 
+    it('should calculate mini transcription cost from the real token-usage ledger', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-03-20', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          text: 'This is a test transcription.',
+          usage: {
+            type: 'tokens',
+            input_tokens: 1_000,
+            input_token_details: { text_tokens: 0, audio_tokens: 1_000 },
+            output_tokens: 100,
+            total_tokens: 1_100,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBeCloseTo((1_000 * 1.25 + 100 * 5) / 1e6, 10);
+    });
+
+    it('should calculate transcription cost from a duration usage ledger', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          text: 'This is a test transcription.',
+          usage: { type: 'duration', seconds: 120 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBe(0.012);
+      expect(result.metadata?.duration).toBe(120);
+    });
+
     it('should calculate cost correctly for whisper-1', async () => {
       const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: { apiKey: 'test-key' },

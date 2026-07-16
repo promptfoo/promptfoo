@@ -174,9 +174,13 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(calculateOpenAICost(model, {}, 1000, 0, 0, 500)).toBeCloseTo(
-      (1000 * 2.5 + 500 * 12) / 1e6,
+      (1000 * 0.6 + 500 * 12) / 1e6,
       6,
     );
+  });
+
+  it('does not classify the Responses-only GPT-5 Codex mini model as Chat Completions', () => {
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === 'gpt-5-codex-mini')).toBe(false);
   });
 
   it.each([

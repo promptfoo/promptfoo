@@ -893,6 +893,58 @@ describe('OpenAiVideoProvider', () => {
       expect(key1).not.toBe(key2);
     });
 
+    it('should ignore rotated signed-URL credentials while preserving the image identity', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+      const first = generateVideoCacheKey({
+        ...base,
+        inputReference:
+          'https://bucket.example/start.png?X-Amz-Credential=first&X-Amz-Signature=secret-one&version=1',
+      });
+      const rotated = generateVideoCacheKey({
+        ...base,
+        inputReference: {
+          image_url:
+            'https://bucket.example/start.png?X-Amz-Credential=second&X-Amz-Signature=secret-two&version=1',
+        },
+      });
+      const differentImage = generateVideoCacheKey({
+        ...base,
+        inputReference:
+          'https://bucket.example/other.png?X-Amz-Credential=second&X-Amz-Signature=secret-two&version=1',
+      });
+
+      expect(first).toBe(rotated);
+      expect(first).not.toBe(differentImage);
+    });
+
+    it('should ignore all rotating Azure Blob SAS parameters', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+      const first = generateVideoCacheKey({
+        ...base,
+        inputReference:
+          'https://account.blob.core.windows.net/container/start.png?sv=2024-11-04&st=2026-07-15T00%3A00Z&se=2026-07-15T01%3A00Z&sr=b&sp=r&sig=one',
+      });
+      const rotated = generateVideoCacheKey({
+        ...base,
+        inputReference:
+          'https://account.blob.core.windows.net/container/start.png?sv=2024-11-04&st=2026-07-15T02%3A00Z&se=2026-07-15T03%3A00Z&sr=b&sp=r&sig=two',
+      });
+
+      expect(first).toBe(rotated);
+    });
+
     it('should generate different keys for different reusable characters', () => {
       const base = {
         provider: 'openai',

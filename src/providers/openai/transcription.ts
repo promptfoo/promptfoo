@@ -59,9 +59,26 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     return `[OpenAI Transcription Provider ${this.modelName}]`;
   }
 
-  private calculateTranscriptionCost(durationSeconds: number | undefined): number | undefined {
+  private calculateTranscriptionCost(
+    durationSeconds: number | undefined,
+    usage: { type?: string; input_tokens?: number; output_tokens?: number } | undefined,
+  ): number | undefined {
     const model = OPENAI_TRANSCRIPTION_MODELS.find((m) => m.id === this.modelName);
-    if (!model || !model.cost || durationSeconds === undefined) {
+    if (!model?.cost) {
+      return undefined;
+    }
+
+    if (
+      usage?.type === 'tokens' &&
+      typeof usage.input_tokens === 'number' &&
+      typeof usage.output_tokens === 'number' &&
+      model.cost.input !== undefined &&
+      model.cost.output !== undefined
+    ) {
+      return usage.input_tokens * model.cost.input + usage.output_tokens * model.cost.output;
+    }
+
+    if (durationSeconds === undefined) {
       return undefined;
     }
     const durationMinutes = durationSeconds / 60;
@@ -187,8 +204,13 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       }
 
       // Calculate cost based on audio duration
-      const durationSeconds = typeof data.duration === 'number' ? data.duration : undefined;
-      const cost = cached ? 0 : this.calculateTranscriptionCost(durationSeconds);
+      const durationSeconds =
+        typeof data.duration === 'number'
+          ? data.duration
+          : data.usage?.type === 'duration' && typeof data.usage.seconds === 'number'
+            ? data.usage.seconds
+            : undefined;
+      const cost = cached ? 0 : this.calculateTranscriptionCost(durationSeconds, data.usage);
 
       // Calculate average quality metrics from segments
       const segments = data.segments || [];

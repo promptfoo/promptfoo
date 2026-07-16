@@ -1,4 +1,8 @@
-import { fetchWithProxy } from '../../util/fetch/index';
+import { getCache, isCacheEnabled } from '../../cache';
+import logger from '../../logger';
+import { sha256 } from '../../util/createHash';
+import { fetchWithRetries } from '../../util/fetch/index';
+import { sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TTS_MODELS } from './util';
@@ -21,6 +25,76 @@ export type OpenAiTtsOptions = OpenAiSharedOptions & {
   response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   speed?: number;
 };
+
+function getValidationError(
+  characterCount: number,
+  model: string,
+  config: OpenAiTtsOptions,
+): string | undefined {
+  if (characterCount > MAX_INPUT_CHARACTERS) {
+    return `Speech input exceeds ${MAX_INPUT_CHARACTERS} characters.`;
+  }
+  if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
+    return `Invalid response_format: ${config.response_format}.`;
+  }
+  if (
+    config.speed !== undefined &&
+    (!Number.isFinite(config.speed) || config.speed < 0.25 || config.speed > 4)
+  ) {
+    return 'Speech speed must be between 0.25 and 4.';
+  }
+  if (config.instructions && model.startsWith('tts-1')) {
+    return 'Speech instructions are only supported by gpt-4o-mini-tts models.';
+  }
+  return undefined;
+}
+
+async function getCachedResponse(
+  cacheKey: string,
+  startedAt: number,
+): Promise<ProviderResponse | undefined> {
+  try {
+    const cachedResponse = await getCache().get<string>(cacheKey);
+    if (!cachedResponse) {
+      return undefined;
+    }
+    return {
+      ...(JSON.parse(cachedResponse) as ProviderResponse),
+      cached: true,
+      cost: 0,
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    logger.debug('[OpenAI TTS] Failed to read cached response', { error });
+    return undefined;
+  }
+}
+
+async function cacheResponse(cacheKey: string, response: ProviderResponse): Promise<void> {
+  try {
+    await getCache().set(cacheKey, JSON.stringify(response));
+  } catch (error) {
+    logger.debug('[OpenAI TTS] Failed to cache response', { error });
+  }
+}
+
+function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000): Buffer {
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcmData.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcmData.length, 40);
+  return Buffer.concat([header, pcmData]);
+}
 
 export class OpenAiTtsProvider extends OpenAiGenericProvider {
   static OPENAI_TTS_MODEL_NAMES = OPENAI_TTS_MODELS.map((model) => model.id);
@@ -49,27 +123,17 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (!apiKey && this.requiresApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config = { ...this.config, ...context?.prompt?.config } as OpenAiTtsOptions;
     const model = config.model || this.modelName;
 
-    if (prompt.length > MAX_INPUT_CHARACTERS) {
-      return { error: `Speech input exceeds ${MAX_INPUT_CHARACTERS} characters.` };
-    }
-    if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
-      return { error: `Invalid response_format: ${config.response_format}.` };
-    }
-    if (
-      config.speed !== undefined &&
-      (!Number.isFinite(config.speed) || config.speed < 0.25 || config.speed > 4)
-    ) {
-      return { error: 'Speech speed must be between 0.25 and 4.' };
-    }
-    if (config.instructions && model.startsWith('tts-1')) {
-      return { error: 'Speech instructions are only supported by gpt-4o-mini-tts models.' };
+    const characterCount = Array.from(prompt).length;
+    const validationError = getValidationError(characterCount, model, config);
+    if (validationError) {
+      return { error: validationError };
     }
 
     const body = {
@@ -82,17 +146,32 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     };
 
     const startedAt = Date.now();
+    const url = `${this.getApiUrl()}/audio/speech`;
+    const cacheKey = `openai:tts:${sha256(JSON.stringify({ url: sanitizeUrl(url), body }))}`;
+    const cacheEnabled = isCacheEnabled();
+
+    if (cacheEnabled && !this.shouldBustCache(context)) {
+      const cachedResponse = await getCachedResponse(cacheKey, startedAt);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+    }
+
     try {
-      const response = await fetchWithProxy(`${this.getApiUrl()}/audio/speech`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-          ...this.getOpenAiRequestHeaders(config.headers),
+      const response = await fetchWithRetries(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            ...this.getOpenAiRequestHeaders(config.headers),
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(getRequestTimeoutMs()),
-      });
+        getRequestTimeoutMs(),
+        config.maxRetries,
+      );
 
       if (!response.ok) {
         const rawError = await response.text();
@@ -105,17 +184,25 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         return { error: `API error ${response.status}: ${message}` };
       }
 
-      const audio = Buffer.from(await response.arrayBuffer()).toString('base64');
+      const audioBytes = Buffer.from(await response.arrayBuffer());
+      const isPcm = config.response_format === 'pcm';
+      const audio = (isPcm ? convertPcm16ToWav(audioBytes) : audioBytes).toString('base64');
       const isHd = model === 'tts-1-hd' || model === 'tts-1-hd-1106';
       const isLegacy = model === 'tts-1' || model === 'tts-1-1106' || isHd;
 
-      return {
-        output: `Generated ${prompt.length} characters of speech`,
-        audio: { data: audio, format: config.response_format || 'mp3' },
-        ...(isLegacy ? { cost: (prompt.length * (isHd ? 30 : 15)) / 1e6 } : {}),
+      const result: ProviderResponse = {
+        output: `Generated ${characterCount} characters of speech`,
+        audio: { data: audio, format: isPcm ? 'wav' : config.response_format || 'mp3' },
+        ...(isLegacy ? { cost: (characterCount * (isHd ? 30 : 15)) / 1e6 } : {}),
         cached: false,
         latencyMs: Date.now() - startedAt,
       };
+
+      if (cacheEnabled) {
+        await cacheResponse(cacheKey, result);
+      }
+
+      return result;
     } catch (error) {
       return { error: `API call error: ${String(error)}` };
     }

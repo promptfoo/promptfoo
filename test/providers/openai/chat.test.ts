@@ -429,6 +429,9 @@ describe('OpenAI Provider', () => {
       expect(body).not.toHaveProperty('max_tokens');
       expect(result.output).toBe('Current answer');
       expect(result.metadata?.annotations).toEqual(annotations);
+      expect(result.metadata?.citations).toEqual([
+        { url: 'https://example.com/source', content: 'Example source: Current' },
+      ]);
       expect(result.cost).toBeCloseTo(0.01 + (1_500 * 1.25 + 500 * 0.125 + 1_000 * 10) / 1e6, 10);
     });
 

@@ -515,6 +515,7 @@ describe('loadApiProvider', () => {
 
   it.each([
     'gpt-5-codex',
+    'gpt-5-codex-mini',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
     'gpt-5.1-codex',

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 
@@ -175,6 +176,24 @@ describe('webSearchUtils', () => {
       'openai:chat:gpt-4o-mini-search-preview-2025-03-11',
     ])('should return true for built-in OpenAI Chat Completions search model %s', (id) => {
       expect(hasWebSearchCapability({ id: () => id, config: {} } as ApiProvider)).toBe(true);
+    });
+
+    it('should detect a real OpenAI Chat search provider with a custom API base URL', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5-search-api', {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
+
+      expect(provider.id()).toBe('gpt-5-search-api');
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should detect an OpenAI Chat search provider with a configured ID alias', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5-search-api', {
+        id: 'search-grader',
+      });
+
+      expect(provider.id()).toBe('search-grader');
+      expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
     it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {

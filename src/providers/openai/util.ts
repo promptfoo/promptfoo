@@ -34,7 +34,7 @@ export const OPENAI_TTS_MODELS: OpenAIModelInfo[] = [
     (model) => ({
       id: model,
       cost: {
-        input: 2.5 / 1e6,
+        input: 0.6 / 1e6,
         output: 0,
         audioOutput: 12 / 1e6,
       },
@@ -256,13 +256,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 6.0 / 1e6,
     },
   })),
-  ...['gpt-5-codex-mini'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
   // GPT-5.1 models
   ...['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'].map((model) => ({
     id: model,
@@ -386,6 +379,13 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
 ];
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
+  {
+    id: 'gpt-5-codex-mini',
+    cost: {
+      input: 0.5 / 1e6,
+      output: 2 / 1e6,
+    },
+  },
   ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
     id: model,
     cost: {
@@ -693,41 +693,55 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
-export const OPENAI_TRANSCRIPTION_MODELS = [
+export const OPENAI_TRANSCRIPTION_MODELS: Array<{
+  id: string;
+  cost: { perMinute: number; input?: number; output?: number };
+}> = [
   {
     id: 'gpt-4o-transcribe',
     cost: {
-      // Per minute costs - OpenAI charges for audio duration, not tokens
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
       perMinute: 0.006, // $0.006 per minute
     },
   },
   {
     id: 'gpt-4o-mini-transcribe',
     cost: {
+      input: 1.25 / 1e6,
+      output: 5 / 1e6,
       perMinute: 0.003, // $0.003 per minute
     },
   },
   {
     id: 'gpt-4o-mini-transcribe-2025-12-15',
     cost: {
+      input: 1.25 / 1e6,
+      output: 5 / 1e6,
       perMinute: 0.003,
     },
   },
   {
     id: 'gpt-4o-mini-transcribe-2025-03-20',
     cost: {
+      input: 1.25 / 1e6,
+      output: 5 / 1e6,
       perMinute: 0.003,
     },
   },
   {
     id: 'gpt-4o-transcribe-diarize',
     cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
       perMinute: 0.006, // $0.006 per minute (same as base gpt-4o-transcribe)
     },
   },
   {
     id: 'gpt-4o-transcribe-diarize-2025-10-15',
     cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
       perMinute: 0.006,
     },
   },

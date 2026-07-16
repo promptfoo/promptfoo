@@ -46,6 +46,34 @@ export type OpenAiChatCompletionCostData = Pick<
   'service_tier' | 'usage'
 >;
 
+function getChatSearchCitations(
+  annotations: unknown,
+  output: unknown,
+): Array<{ url: string; content: string }> {
+  if (!Array.isArray(annotations)) {
+    return [];
+  }
+
+  return annotations.flatMap((annotation) => {
+    const citation = annotation?.type === 'url_citation' ? annotation.url_citation : undefined;
+    if (typeof citation?.url !== 'string' || !/^https?:\/\//i.test(citation.url)) {
+      return [];
+    }
+
+    const excerpt =
+      typeof output === 'string' &&
+      Number.isInteger(citation.start_index) &&
+      Number.isInteger(citation.end_index)
+        ? output.slice(citation.start_index, citation.end_index).trim()
+        : '';
+    const title = typeof citation.title === 'string' ? citation.title.trim() : '';
+
+    return [
+      { url: citation.url, content: [title, excerpt].filter(Boolean).join(': ') || citation.url },
+    ];
+  });
+}
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
@@ -793,6 +821,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
+      const citations = getChatSearchCitations(message.annotations, output);
+
       return {
         output,
         tokenUsage: getTokenUsage(data, cached),
@@ -812,6 +842,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(data.choices.length > 1 && { choices: data.choices }),
           ...(Array.isArray(message.annotations) &&
             message.annotations.length > 0 && { annotations: message.annotations }),
+          ...(citations.length > 0 && { citations }),
         },
       };
     } catch (err) {

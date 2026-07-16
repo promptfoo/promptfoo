@@ -168,6 +168,21 @@ const FINE_TUNED_TEXT_RATES = buildRateTable<OpenAITextRates>([
   },
 ]);
 
+const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['ft:babbage-002'],
+    rates: { input: perMillion(0.8), output: perMillion(0.9) },
+  },
+  {
+    models: ['ft:gpt-4.1', 'ft:gpt-4.1-2025-04-14'],
+    rates: { input: perMillion(1.5), cachedInput: perMillion(0.5), output: perMillion(6) },
+  },
+  {
+    models: ['ft:gpt-4o', 'ft:gpt-4o-2024-08-06'],
+    rates: { input: perMillion(2.225), cachedInput: perMillion(0.9), output: perMillion(12.5) },
+  },
+]);
+
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.5) },
@@ -634,14 +649,15 @@ function getFineTunedModelRates(
   }
 
   const text = FINE_TUNED_TEXT_RATES[fineTunedBaseModel];
+  const batchOverride = FINE_TUNED_BATCH_OVERRIDES[fineTunedBaseModel];
   return {
     text:
       tier === 'batch'
-        ? {
+        ? (batchOverride ?? {
             input: text.input * 0.5,
             ...(text.cachedInput === undefined ? {} : { cachedInput: text.cachedInput * 0.5 }),
             ...(text.output === undefined ? {} : { output: text.output * 0.5 }),
-          }
+          })
         : text,
   };
 }

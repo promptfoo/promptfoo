@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 import { OpenAiTtsProvider } from '../../../src/providers/openai/tts';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
+vi.mock('../../../src/cache.ts');
 vi.mock('../../../src/util/fetch/index.ts');
 
-const mockedFetch = vi.mocked(fetchWithProxy);
+const mockedFetch = vi.mocked(fetchWithRetries);
+const mockedGetCache = vi.mocked(getCache);
+const mockedIsCacheEnabled = vi.mocked(isCacheEnabled);
 
 function audioResponse(bytes = new Uint8Array([1, 2, 3, 4])) {
   return {
@@ -19,6 +23,7 @@ function audioResponse(bytes = new Uint8Array([1, 2, 3, 4])) {
 describe('OpenAiTtsProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockedIsCacheEnabled.mockReturnValue(false);
   });
 
   it.each([
@@ -42,6 +47,8 @@ describe('OpenAiTtsProvider', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer test-key' }),
         body: JSON.stringify({ model, input: 'Hello from promptfoo', voice: 'alloy' }),
       }),
+      expect.any(Number),
+      undefined,
     );
     expect(result).toMatchObject({
       output: 'Generated 20 characters of speech',
@@ -75,6 +82,22 @@ describe('OpenAiTtsProvider', () => {
     expect(result.audio?.format).toBe('wav');
   });
 
+  it('passes the configured retry limit to the shared retry helper', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', maxRetries: 2 },
+    });
+
+    await provider.callApi('Retry temporary rate limits');
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/audio/speech',
+      expect.any(Object),
+      expect.any(Number),
+      2,
+    );
+  });
+
   it('passes an uploaded custom voice ID through to the speech API', async () => {
     mockedFetch.mockResolvedValue(audioResponse());
     const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
@@ -86,6 +109,22 @@ describe('OpenAiTtsProvider', () => {
     expect(JSON.parse(mockedFetch.mock.calls[0][1]?.body as string)).toMatchObject({
       voice: { id: 'voice_123' },
     });
+  });
+
+  it('wraps raw PCM16 speech in WAV so the results UI can play it', async () => {
+    mockedFetch.mockResolvedValue(audioResponse(new Uint8Array([1, 0, 2, 0, 3, 0, 4, 0])));
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', response_format: 'pcm' },
+    });
+
+    const result = await provider.callApi('Playable PCM');
+    const wav = Buffer.from(result.audio?.data ?? '', 'base64');
+
+    expect(result.audio?.format).toBe('wav');
+    expect(wav.subarray(0, 4).toString()).toBe('RIFF');
+    expect(wav.subarray(8, 12).toString()).toBe('WAVE');
+    expect(wav.readUInt32LE(24)).toBe(24_000);
+    expect(wav.subarray(44)).toEqual(Buffer.from([1, 0, 2, 0, 3, 0, 4, 0]));
   });
 
   it.each([
@@ -110,6 +149,42 @@ describe('OpenAiTtsProvider', () => {
     const result = await provider.callApi('Hello');
 
     expect(result.cost).toBeUndefined();
+  });
+
+  it('counts Unicode code points for the speech character limit and legacy billing', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const prompt = '😀'.repeat(2049);
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi(prompt);
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Generated 2049 characters of speech');
+    expect(result.cost).toBeCloseTo((2049 * 15) / 1e6, 10);
+    expect(mockedFetch).toHaveBeenCalledOnce();
+  });
+
+  it('caches successful speech responses and does not double-bill a cache hit', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    const first = await provider.callApi('Cache this speech');
+    const second = await provider.callApi('Cache this speech');
+    const busted = await provider.callApi('Cache this speech', { bustCache: true } as any);
+
+    expect(first.cached).toBe(false);
+    expect(first.cost).toBeGreaterThan(0);
+    expect(second).toMatchObject({ cached: true, cost: 0, audio: first.audio });
+    expect(busted.cached).toBe(false);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.set).toHaveBeenCalledTimes(2);
   });
 
   const invalidCases: Array<
@@ -163,5 +238,30 @@ describe('OpenAiTtsProvider', () => {
       restoreEnv();
     }
     expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it('allows unauthenticated speech endpoints when apiKeyRequired is false', async () => {
+    const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockedFetch.mockResolvedValue(audioResponse());
+    try {
+      const provider = new OpenAiTtsProvider('tts-1', {
+        config: { apiBaseUrl: 'https://gateway.example/v1', apiKeyRequired: false },
+      });
+
+      await expect(provider.callApi('Hello')).resolves.toMatchObject({
+        audio: { format: 'mp3' },
+      });
+    } finally {
+      restoreEnv();
+    }
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'https://gateway.example/v1/audio/speech',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ Authorization: expect.anything() }),
+      }),
+      expect.any(Number),
+      undefined,
+    );
   });
 });

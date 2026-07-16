@@ -79,7 +79,14 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   }
 
   // Chat Completions search models always retrieve from the web before responding.
-  if (/^openai:(?:chat:)?(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(id)) {
+  const isOpenAiChat =
+    id.startsWith('openai:') || provider.constructor?.name === 'OpenAiChatCompletionProvider';
+  const chatModelId =
+    'modelName' in provider && typeof provider.modelName === 'string' ? provider.modelName : id;
+  if (
+    isOpenAiChat &&
+    /(?:^|:)(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)
+  ) {
     return true;
   }
 

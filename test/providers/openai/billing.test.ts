@@ -161,6 +161,33 @@ describe('OpenAI billing helpers', () => {
     expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'flex' })).toBeUndefined();
   });
 
+  it.each([
+    ['ft:babbage-002:company::model', 0.8, undefined, 0.9],
+    ['ft:gpt-4.1-2025-04-14:company::model', 1.5, 0.5, 6],
+    ['ft:gpt-4o-2024-08-06:company::model', 2.225, 0.9, 12.5],
+  ])('uses the published fine-tuned Batch rates for %s', (model, inputRate, cachedRate, outputRate) => {
+    const cachedInput = cachedRate === undefined ? 0 : 500;
+
+    expect(
+      calculateOpenAIUsageCost(
+        model,
+        {},
+        {
+          prompt_tokens: 2_000,
+          completion_tokens: 1_000,
+          prompt_tokens_details: { cached_tokens: cachedInput },
+        },
+        { serviceTier: 'batch' },
+      ),
+    ).toBeCloseTo(
+      ((2_000 - cachedInput) * inputRate +
+        cachedInput * (cachedRate ?? inputRate) +
+        1_000 * outputRate) /
+        1e6,
+      10,
+    );
+  });
+
   it('prices the public GPT-5.3 coding model and leaves Codex-only Spark unset', () => {
     expect(
       calculateOpenAIUsageCost(

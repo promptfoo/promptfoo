@@ -11,6 +11,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { getConfigDirectoryPath } from '../../util/config/manage';
+import { sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 
 import type { MediaMetadata, MediaStorageRef } from '../../storage/types';
@@ -58,13 +59,36 @@ export function generateVideoCacheKey(params: {
   inputReference?: string | { file_id: string } | { image_url: string } | null;
   characters?: Array<{ id: string }>;
 }): string {
+  const rawReference =
+    typeof params.inputReference === 'string'
+      ? params.inputReference
+      : params.inputReference && 'image_url' in params.inputReference
+        ? params.inputReference.image_url
+        : undefined;
+  let inputReference: typeof params.inputReference = params.inputReference || null;
+
+  if (rawReference?.startsWith('http://') || rawReference?.startsWith('https://')) {
+    const safeUrl = new URL(sanitizeUrl(rawReference));
+    for (const key of Array.from(safeUrl.searchParams.keys())) {
+      if (
+        /^(?:x-amz-|x-goog-|sig(?:nature)?$|st$|se$|sp$|sv$|sr$|skoid$|sktid$|skt$|ske$|sks$|skv$)/i.test(
+          key,
+        )
+      ) {
+        safeUrl.searchParams.set(key, '[REDACTED]');
+      }
+    }
+    safeUrl.searchParams.sort();
+    inputReference = safeUrl.toString();
+  }
+
   const hashInput = JSON.stringify({
     provider: params.provider,
     prompt: params.prompt,
     model: params.model,
     size: params.size,
     seconds: params.seconds,
-    inputReference: params.inputReference || null,
+    inputReference,
     ...(params.characters?.length ? { characters: params.characters } : {}),
   });
 
