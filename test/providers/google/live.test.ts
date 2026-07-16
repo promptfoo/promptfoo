@@ -211,7 +211,7 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
-  it('should send realtime_input for Gemini 3.1 Live prompts', async () => {
+  it('should send v1beta realtimeInput for Gemini 3.1 Live prompts', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
         generationConfig: {
@@ -240,15 +240,61 @@ describe('GoogleLiveProvider', () => {
     );
     expect(sentMessages[0]).toMatchObject({
       setup: {
-        generation_config: { response_modalities: ['AUDIO'] },
-        output_audio_transcription: {},
+        generationConfig: { responseModalities: ['AUDIO'] },
+        outputAudioTranscription: {},
       },
     });
     expect(sentMessages[1]).toEqual({
-      realtime_input: {
+      realtimeInput: {
         text: 'test prompt',
       },
     });
+  });
+
+  it('should serialize Gemini 3.1 Live setup configuration using the v1beta schema', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: {
+          responseModalities: ['audio'],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+            languageCode: 'en-US',
+          },
+          outputAudioTranscription: { includeTextualContent: true },
+          inputAudioTranscription: { autoDetectLanguage: true },
+          enableAffectiveDialog: true,
+          proactivity: { proactiveAudio: true },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
+
+    const setup = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup;
+    expect(setup.generationConfig).toMatchObject({
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+        languageCode: 'en-US',
+      },
+      enableAffectiveDialog: true,
+      proactivity: { proactiveAudio: true },
+    });
+    expect(setup.outputAudioTranscription).toEqual({ includeTextualContent: true });
+    expect(setup.inputAudioTranscription).toEqual({ autoDetectLanguage: true });
+    expect(setup).not.toHaveProperty('generation_config');
+    expect(setup).not.toHaveProperty('output_audio_transcription');
+    expect(setup).not.toHaveProperty('input_audio_transcription');
   });
 
   it('should send mixed text and image parts as Gemini 3.1 realtime input', async () => {
@@ -284,8 +330,8 @@ describe('GoogleLiveProvider', () => {
 
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
     expect(sentMessages.slice(1)).toEqual([
-      { realtime_input: { video: { mime_type: 'image/jpeg', data: 'aW1hZ2U=' } } },
-      { realtime_input: { text: 'Describe this image.' } },
+      { realtimeInput: { video: { mimeType: 'image/jpeg', data: 'aW1hZ2U=' } } },
+      { realtimeInput: { text: 'Describe this image.' } },
     ]);
     expect(debugSpy).toHaveBeenCalledWith('WebSocket sent', { messageCount: 2 });
     expect(
@@ -322,8 +368,8 @@ describe('GoogleLiveProvider', () => {
 
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
     expect(sentMessages.slice(1)).toEqual([
-      { realtime_input: { audio: { mime_type: 'audio/pcm', data: 'YXVkaW8=' } } },
-      { realtime_input: { audio_stream_end: true } },
+      { realtimeInput: { audio: { mimeType: 'audio/pcm', data: 'YXVkaW8=' } } },
+      { realtimeInput: { audioStreamEnd: true } },
     ]);
   });
 
@@ -358,9 +404,9 @@ describe('GoogleLiveProvider', () => {
 
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
     expect(sentMessages.slice(1)).toEqual([
-      { realtime_input: { audio: { mime_type: 'audio/pcm', data: 'YXVkaW8=' } } },
-      { realtime_input: { text: 'Transcribe this audio.' } },
-      { realtime_input: { audio_stream_end: true } },
+      { realtimeInput: { audio: { mimeType: 'audio/pcm', data: 'YXVkaW8=' } } },
+      { realtimeInput: { text: 'Transcribe this audio.' } },
+      { realtimeInput: { audioStreamEnd: true } },
     ]);
   });
 
@@ -391,12 +437,12 @@ describe('GoogleLiveProvider', () => {
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
     expect(sentMessages[0]).toMatchObject({
       setup: {
-        generation_config: { response_modalities: ['AUDIO'] },
-        output_audio_transcription: {},
+        generationConfig: { responseModalities: ['AUDIO'] },
+        outputAudioTranscription: {},
       },
     });
     expect(sentMessages.slice(1)).toEqual([
-      { realtime_input: { text: 'First clause.\nSecond clause.' } },
+      { realtimeInput: { text: 'First clause.\nSecond clause.' } },
     ]);
   });
 
@@ -559,9 +605,9 @@ describe('GoogleLiveProvider', () => {
     expect(response.error).toBeUndefined();
     expect(mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string))).toEqual([
       expect.objectContaining({ setup: expect.any(Object) }),
-      { realtime_input: { video: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } } },
-      { realtime_input: { video: { mime_type: 'image/png', data: 'ZnJhbWUy' } } },
-      { client_content: { turn_complete: true } },
+      { realtimeInput: { video: { mimeType: 'image/jpeg', data: 'ZnJhbWUx' } } },
+      { realtimeInput: { video: { mimeType: 'image/png', data: 'ZnJhbWUy' } } },
+      { clientContent: { turnComplete: true } },
     ]);
     expect(mockSetTimeout).toHaveBeenCalledWith(expect.any(Function), 3_500);
   });
@@ -1123,8 +1169,8 @@ describe('GoogleLiveProvider', () => {
     );
 
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
-    expect(sentMessages[1]).toEqual({ realtime_input: { text: 'first prompt' } });
-    expect(sentMessages[2]).toEqual({ realtime_input: { text: 'second prompt' } });
+    expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'first prompt' } });
+    expect(sentMessages[2]).toEqual({ realtimeInput: { text: 'second prompt' } });
     expect(debugSpy).toHaveBeenCalledWith('WebSocket sent (multi-turn)', { messageCount: 1 });
     expect(
       debugSpy.mock.calls.some(

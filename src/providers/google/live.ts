@@ -51,7 +51,7 @@ const formatContentMessages = (
         inline_data?: { mime_type: string; data: string };
       };
       if (userPart.text !== undefined) {
-        return { realtime_input: { text: userPart.text } };
+        return { realtimeInput: { text: userPart.text } };
       }
       const inlineData = userPart.inlineData ?? userPart.inline_data;
       if (inlineData) {
@@ -70,29 +70,29 @@ const formatContentMessages = (
         }
         const mediaType = mimeType.startsWith('audio/') ? 'audio' : 'video';
         return {
-          realtime_input: {
-            [mediaType]: { mime_type: mimeType, data: inlineData.data },
+          realtimeInput: {
+            [mediaType]: { mimeType, data: inlineData.data },
           },
         };
       }
       throw new Error('Unsupported part in Google Live realtime input.');
     });
-    const textMessages = mappedMessages.filter((message) => 'text' in message.realtime_input);
-    const contentMessages = mappedMessages.filter((message) => !('text' in message.realtime_input));
+    const textMessages = mappedMessages.filter((message) => 'text' in message.realtimeInput);
+    const contentMessages = mappedMessages.filter((message) => !('text' in message.realtimeInput));
     if (textMessages.length > 0) {
       contentMessages.push({
-        realtime_input: {
-          text: textMessages.map((message) => message.realtime_input.text).join('\n'),
+        realtimeInput: {
+          text: textMessages.map((message) => message.realtimeInput.text).join('\n'),
         },
       } as any);
     }
-    if (contentMessages.some((message) => 'audio' in message.realtime_input)) {
-      contentMessages.push({ realtime_input: { audio_stream_end: true } } as any);
+    if (contentMessages.some((message) => 'audio' in message.realtimeInput)) {
+      contentMessages.push({ realtimeInput: { audioStreamEnd: true } } as any);
     } else if (
-      contentMessages.some((message) => 'video' in message.realtime_input) &&
+      contentMessages.some((message) => 'video' in message.realtimeInput) &&
       textMessages.length === 0
     ) {
-      contentMessages.push({ client_content: { turn_complete: true } } as any);
+      contentMessages.push({ clientContent: { turnComplete: true } } as any);
     }
     return contentMessages;
   }
@@ -378,9 +378,9 @@ export class GoogleLiveProvider implements ApiProvider {
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
-      const configuredResponseModalities = config.generationConfig?.response_modalities?.map(
-        (modality) => modality.toUpperCase(),
-      );
+      const configuredResponseModalities = (
+        config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
+      )?.map((modality) => modality.toUpperCase());
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities = usesRealtimeTextInput
         ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')
@@ -395,7 +395,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
       const sendContentMessages = async (contentMessages: any[]) => {
         for (const contentMessage of contentMessages) {
-          if (contentMessage.realtime_input?.video) {
+          if (contentMessage.realtimeInput?.video) {
             const delayMs = Math.max(lastVideoFrameSentAt + 1_000 - Date.now(), 0);
             if (delayMs > 0) {
               await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
@@ -701,6 +701,8 @@ export class GoogleLiveProvider implements ApiProvider {
         logger.debug('WebSocket connection is opening...');
         const {
           speechConfig,
+          response_modalities: _responseModalities,
+          responseModalities: _camelResponseModalities,
           outputAudioTranscription: configuredOutputAudioTranscription,
           inputAudioTranscription,
           enableAffectiveDialog,
@@ -715,27 +717,31 @@ export class GoogleLiveProvider implements ApiProvider {
         if (speechConfig) {
           formattedSpeechConfig = {
             ...(speechConfig.voiceConfig && {
-              voice_config: {
-                prebuilt_voice_config: {
-                  voice_name: speechConfig.voiceConfig.prebuiltVoiceConfig?.voiceName,
+              [usesRealtimeTextInput ? 'voiceConfig' : 'voice_config']: {
+                [usesRealtimeTextInput ? 'prebuiltVoiceConfig' : 'prebuilt_voice_config']: {
+                  [usesRealtimeTextInput ? 'voiceName' : 'voice_name']:
+                    speechConfig.voiceConfig.prebuiltVoiceConfig?.voiceName,
                 },
               },
             }),
-            ...(speechConfig.languageCode && { language_code: speechConfig.languageCode }),
+            ...(speechConfig.languageCode && {
+              [usesRealtimeTextInput ? 'languageCode' : 'language_code']: speechConfig.languageCode,
+            }),
           };
         }
 
         let formattedProactivity;
         if (proactivity) {
           formattedProactivity = {
-            proactive_audio: proactivity.proactiveAudio,
+            [usesRealtimeTextInput ? 'proactiveAudio' : 'proactive_audio']:
+              proactivity.proactiveAudio,
           };
         }
 
         const setupMessage = {
           setup: {
             model: `models/${this.modelName}`,
-            generation_config: {
+            [usesRealtimeTextInput ? 'generationConfig' : 'generation_config']: {
               context: config.context,
               examples: config.examples,
               stopSequences: config.stopSequences,
@@ -745,25 +751,49 @@ export class GoogleLiveProvider implements ApiProvider {
               topK: config.topK,
               ...restGenerationConfig,
               ...(effectiveResponseModalities
-                ? { response_modalities: effectiveResponseModalities }
+                ? {
+                    [usesRealtimeTextInput ? 'responseModalities' : 'response_modalities']:
+                      effectiveResponseModalities,
+                  }
                 : {}),
-              ...(formattedSpeechConfig ? { speech_config: formattedSpeechConfig } : {}),
-              ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
+              ...(formattedSpeechConfig
+                ? {
+                    [usesRealtimeTextInput ? 'speechConfig' : 'speech_config']:
+                      formattedSpeechConfig,
+                  }
+                : {}),
+              ...(enableAffectiveDialog
+                ? {
+                    [usesRealtimeTextInput ? 'enableAffectiveDialog' : 'enable_affective_dialog']:
+                      enableAffectiveDialog,
+                  }
+                : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(toolConfig ? { toolConfig } : {}),
             ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
-              ? { output_audio_transcription: outputAudioTranscription }
+              ? {
+                  [usesRealtimeTextInput
+                    ? 'outputAudioTranscription'
+                    : 'output_audio_transcription']: outputAudioTranscription,
+                }
               : {}),
             ...(inputAudioTranscription
-              ? { input_audio_transcription: inputAudioTranscription }
+              ? {
+                  [usesRealtimeTextInput ? 'inputAudioTranscription' : 'input_audio_transcription']:
+                    inputAudioTranscription,
+                }
               : {}),
           },
         };
 
-        logger.debug(`Sending setup message: ${JSON.stringify(setupMessage, null, 2)}`);
+        logger.debug('Sending setup message', {
+          model: this.modelName,
+          hasTools: requestTools.length > 0,
+          hasSystemInstruction: !!systemInstruction,
+        });
         ws.send(JSON.stringify(setupMessage));
       };
 
