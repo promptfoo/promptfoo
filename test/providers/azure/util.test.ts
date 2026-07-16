@@ -208,6 +208,13 @@ describe('calculateAzureCost', () => {
     ).toBeCloseTo((1_000 * 40 + 500 * 80) / 1e6, 12);
   });
 
+  it.each([
+    'gpt-realtime-mini',
+    'gpt-realtime-mini-2025-10-06',
+  ])('uses the discounted cached-text rate for %s', (id) => {
+    expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(1_000 * (0.06 / 1e6), 12);
+  });
+
   it('calculates cost for Claude Fable 5', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });

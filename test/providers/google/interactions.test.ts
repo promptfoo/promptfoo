@@ -172,4 +172,39 @@ describe('GoogleInteractionsProvider', () => {
     });
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [{ GOOGLE_API_HOST: 'proxy-host.example' }, 'https://proxy-host.example/v1beta/interactions'],
+    [
+      { GOOGLE_API_BASE_URL: 'https://proxy.example/google' },
+      'https://proxy.example/google/v1beta/interactions',
+    ],
+  ])('honors documented Google endpoint environment overrides', async (env, endpoint) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/3' }],
+          },
+        ],
+      },
+      cached: true,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+      env: env as any,
+    });
+
+    await provider.callApi('A city at dusk');
+
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      false,
+    );
+  });
 });

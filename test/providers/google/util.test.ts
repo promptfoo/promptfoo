@@ -2699,6 +2699,21 @@ describe('util', () => {
       expect(cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
     });
 
+    it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-flash-live-preview',
+        {},
+        1_000,
+        0,
+        false,
+        0,
+        0,
+        undefined,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(1_000 / 1e6, 12);
+    });
+
     it('should not apply long-context tiered pricing to gemini-3.5-flash', () => {
       // gemini-3.5-flash is flat-rate: prompts above 200k tokens bill at the
       // standard rate (unlike the tiered gemini-3.1-pro-preview).

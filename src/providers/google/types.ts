@@ -130,6 +130,8 @@ export interface CompletionOptions {
   outputCost?: number;
   /** Custom per-token video output cost override. */
   videoOutputCost?: number;
+  /** Custom per-token image input cost override. */
+  imageInputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;

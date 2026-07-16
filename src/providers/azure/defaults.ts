@@ -520,6 +520,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 0.6 / 1000000,
       output: 2.4 / 1000000,
+      cacheRead: 0.06 / 1000000,
       audioInput: 10 / 1000000,
       audioOutput: 20 / 1000000,
     },
@@ -529,6 +530,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 0.6 / 1000000,
       output: 2.4 / 1000000,
+      cacheRead: 0.06 / 1000000,
       audioInput: 10 / 1000000,
       audioOutput: 20 / 1000000,
     },

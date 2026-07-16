@@ -32,7 +32,7 @@ import type {
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
-const formatContentMessage = (
+const formatContentMessages = (
   contents: GeminiFormat,
   contentIndex: number,
   useRealtimeTextInput = false,
@@ -40,18 +40,36 @@ const formatContentMessage = (
   if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
-  if (contents[contentIndex].parts.length !== 1) {
-    throw new Error('Unexpected number of parts in user input.');
-  }
-  const userMessage = contents[contentIndex].parts[0].text;
+  const parts = contents[contentIndex].parts;
 
   if (useRealtimeTextInput) {
-    return {
-      realtime_input: {
-        text: userMessage,
-      },
-    };
+    return parts.map((part) => {
+      const userPart = part as {
+        text?: string;
+        inlineData?: { mimeType: string; data: string };
+        inline_data?: { mime_type: string; data: string };
+      };
+      if (userPart.text !== undefined) {
+        return { realtime_input: { text: userPart.text } };
+      }
+      const inlineData = userPart.inlineData ?? userPart.inline_data;
+      if (inlineData) {
+        const mimeType = 'mimeType' in inlineData ? inlineData.mimeType : inlineData.mime_type;
+        const mediaType = mimeType.startsWith('audio/') ? 'audio' : 'video';
+        return {
+          realtime_input: {
+            [mediaType]: { mime_type: mimeType, data: inlineData.data },
+          },
+        };
+      }
+      throw new Error('Unsupported part in Google Live realtime input.');
+    });
   }
+
+  if (parts.length !== 1) {
+    throw new Error('Unexpected number of parts in user input.');
+  }
+  const userMessage = parts[0].text;
 
   const contentMessage = {
     client_content: {
@@ -64,16 +82,16 @@ const formatContentMessage = (
       turn_complete: true,
     },
   };
-  return contentMessage;
+  return [contentMessage];
 };
 
-const getAudioTokenCount = (details: unknown): number => {
+const getModalityTokenCount = (details: unknown, modality: string): number => {
   if (!Array.isArray(details)) {
     return 0;
   }
   return details.reduce((total, detail) => {
     const count = detail?.tokenCount ?? detail?.token_count;
-    return detail?.modality === 'AUDIO' && typeof count === 'number' && Number.isFinite(count)
+    return detail?.modality === modality && typeof count === 'number' && Number.isFinite(count)
       ? total + Math.max(count, 0)
       : total;
   }, 0);
@@ -437,20 +455,38 @@ export class GoogleLiveProvider implements ApiProvider {
           const audioPromptTokens = usageMetadata.reduce(
             (total, usage) =>
               total +
-              getAudioTokenCount(usage.promptTokensDetails ?? usage.prompt_tokens_details) +
-              getAudioTokenCount(
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'AUDIO',
+              ) +
+              getModalityTokenCount(
                 usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'AUDIO',
               ),
             0,
           );
           const audioCompletionTokens = usageMetadata.reduce(
             (total, usage) =>
               total +
-              getAudioTokenCount(
+              getModalityTokenCount(
                 usage.responseTokensDetails ??
                   usage.candidatesTokensDetails ??
                   usage.response_tokens_details ??
                   usage.candidates_tokens_details,
+                'AUDIO',
+              ),
+            0,
+          );
+          const imagePromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'IMAGE',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'IMAGE',
               ),
             0,
           );
@@ -474,6 +510,8 @@ export class GoogleLiveProvider implements ApiProvider {
             false,
             audioPromptTokens,
             audioCompletionTokens,
+            undefined,
+            imagePromptTokens,
           );
         }
 
@@ -635,14 +673,16 @@ export class GoogleLiveProvider implements ApiProvider {
           );
 
           if (response.setupComplete) {
-            const contentMessage = formatContentMessage(
+            const contentMessages = formatContentMessages(
               contents,
               contentIndex,
               usesRealtimeTextInput,
             );
             contentIndex += 1;
-            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
+            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessages)}`);
+            for (const contentMessage of contentMessages) {
+              ws.send(JSON.stringify(contentMessage));
+            }
           } else if (response.serverContent) {
             const { serverContent } = response;
 
@@ -686,16 +726,18 @@ export class GoogleLiveProvider implements ApiProvider {
                 hasAudioStreamEnded = true;
               }
               if (usesRealtimeTextInput && contentIndex < contents.length) {
-                const contentMessage = formatContentMessage(
+                const contentMessages = formatContentMessages(
                   contents,
                   contentIndex,
                   usesRealtimeTextInput,
                 );
                 contentIndex += 1;
                 logger.debug(
-                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessage)}`,
+                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessages)}`,
                 );
-                ws.send(JSON.stringify(contentMessage));
+                for (const contentMessage of contentMessages) {
+                  ws.send(JSON.stringify(contentMessage));
+                }
                 hasTextStreamEnded = !isTextExpected;
                 hasAudioStreamEnded = !isAudioExpected;
                 return;
@@ -704,14 +746,16 @@ export class GoogleLiveProvider implements ApiProvider {
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
               completedTurns += 1;
-              const contentMessage = formatContentMessage(
+              const contentMessages = formatContentMessages(
                 contents,
                 contentIndex,
                 usesRealtimeTextInput,
               );
               contentIndex += 1;
-              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
-              ws.send(JSON.stringify(contentMessage));
+              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessages)}`);
+              for (const contentMessage of contentMessages) {
+                ws.send(JSON.stringify(contentMessage));
+              }
               return;
             }
 

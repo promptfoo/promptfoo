@@ -227,6 +227,7 @@ export function stripExecutableToolFileReferences(
  * @param audioPromptTokens - Number of audio tokens included in the prompt token count
  * @param audioCompletionTokens - Number of audio tokens included in the completion token count
  * @param videoCompletionTokens - Number of video tokens included in the completion token count
+ * @param imagePromptTokens - Number of image tokens included in the prompt token count
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -238,6 +239,7 @@ export function calculateGoogleCost(
   audioPromptTokens?: number,
   audioCompletionTokens?: number,
   videoCompletionTokens?: number,
+  imagePromptTokens?: number,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
@@ -263,6 +265,10 @@ export function calculateGoogleCost(
   const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
   const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
+  const imageInputTokens = clampCachedTokens(
+    imagePromptTokens,
+    Math.max(promptTokens - audioInputTokens, 0),
+  );
   const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
   const videoOutputTokens = clampCachedTokens(
     videoCompletionTokens,
@@ -273,10 +279,12 @@ export function calculateGoogleCost(
   const audioOutputCost =
     config.audioOutputCost ?? config.audioCost ?? modelCost.audioOutput ?? outputCost;
   const videoOutputCost = config.videoOutputCost ?? modelCost.videoOutput ?? outputCost;
+  const imageInputCost = config.imageInputCost ?? modelCost.imageInput ?? inputCost;
 
   return (
-    (promptTokens - audioInputTokens) * inputCost +
+    (promptTokens - audioInputTokens - imageInputTokens) * inputCost +
     audioInputTokens * audioInputCost +
+    imageInputTokens * imageInputCost +
     (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
     audioOutputTokens * audioOutputCost +
     videoOutputTokens * videoOutputCost

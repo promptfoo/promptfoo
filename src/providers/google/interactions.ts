@@ -57,6 +57,19 @@ function getModelOutputContent(data: InteractionResponse): InteractionContent[] 
     .flatMap((step) => step.content || []);
 }
 
+function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
+  const apiHost = config.apiHost || env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
+  if (apiHost) {
+    return `https://${apiHost.replace(/^https?:\/\//, '').replace(/\/$/, '')}/v1beta/interactions`;
+  }
+  const apiBaseUrl =
+    config.apiBaseUrl || env?.GOOGLE_API_BASE_URL || getEnvString('GOOGLE_API_BASE_URL');
+  if (apiBaseUrl) {
+    return `${apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
+  }
+  return 'https://generativelanguage.googleapis.com/v1beta/interactions';
+}
+
 export class GoogleInteractionsProvider implements ApiProvider {
   modelName: string;
   config: CompletionOptions;
@@ -100,10 +113,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       };
     }
 
-    const configuredBase = config.apiBaseUrl?.replace(/\/$/, '');
-    const endpoint = configuredBase
-      ? `${configuredBase}/v1beta/interactions`
-      : `https://${config.apiHost || 'generativelanguage.googleapis.com'}/v1beta/interactions`;
+    const endpoint = getInteractionsEndpoint(config, this.env);
     const headers = {
       'Content-Type': 'application/json',
       'Api-Revision': '2026-05-20',

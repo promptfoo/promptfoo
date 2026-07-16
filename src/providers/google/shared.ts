@@ -7,6 +7,7 @@ export interface GoogleModelCost {
   output: number;
   audioInput?: number;
   audioOutput?: number;
+  imageInput?: number;
   videoOutput?: number;
 }
 
@@ -78,6 +79,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       output: 4.5 / 1e6,
       audioInput: 3.0 / 1e6,
       audioOutput: 12.0 / 1e6,
+      imageInput: 1.0 / 1e6,
     },
   },
 

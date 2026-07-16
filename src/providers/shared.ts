@@ -41,6 +41,7 @@ export interface ProviderConfig {
   audioInputCost?: number;
   audioOutputCost?: number;
   videoOutputCost?: number;
+  imageInputCost?: number;
 }
 
 /**

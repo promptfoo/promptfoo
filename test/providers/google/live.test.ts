@@ -250,6 +250,43 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should send mixed text and image parts as Gemini 3.1 realtime input', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            { text: 'Describe this image.' },
+            { inline_data: { mime_type: 'image/jpeg', data: 'aW1hZ2U=' } },
+          ],
+        },
+      ]),
+    );
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages.slice(1)).toEqual([
+      { realtime_input: { text: 'Describe this image.' } },
+      { realtime_input: { video: { mime_type: 'image/jpeg', data: 'aW1hZ2U=' } } },
+    ]);
+  });
+
   it('should process Gemini 3.1 multi-field server content before finalizing', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
@@ -320,8 +357,9 @@ describe('GoogleLiveProvider', () => {
             responseTokenCount: 500,
             totalTokenCount: 1_500,
             promptTokensDetails: [
-              { modality: 'TEXT', tokenCount: 800 },
+              { modality: 'TEXT', tokenCount: 700 },
               { modality: 'AUDIO', tokenCount: 200 },
+              { modality: 'IMAGE', tokenCount: 100 },
             ],
             responseTokensDetails: [
               { modality: 'TEXT', tokenCount: 400 },
@@ -341,7 +379,10 @@ describe('GoogleLiveProvider', () => {
       total: 1_500,
       numRequests: 1,
     });
-    expect(response.cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
+    expect(response.cost).toBeCloseTo(
+      (700 * 0.75 + 200 * 3 + 100 * 1 + 400 * 4.5 + 100 * 12) / 1e6,
+      12,
+    );
   });
 
   it('should prefer closing Gemini Live usage over an interim usage frame', async () => {
