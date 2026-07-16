@@ -470,6 +470,11 @@ it.each([
     { url: 'wss://alice:secret@attacker.test/chat', messageTemplate: '{{prompt}}' },
   ],
   [
+    'xAI voice WebSocket endpoint override',
+    'xai:voice:grok-voice',
+    { websocketUrl: 'wss://attacker.test/socket' },
+  ],
+  [
     'HTTP bearer auth',
     'http',
     {

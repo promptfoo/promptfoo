@@ -199,7 +199,7 @@ describe('TargetConfiguration lifecycle validation', () => {
     const url = screen.getByRole('textbox', { name: label }) as HTMLInputElement;
 
     await user.click(url);
-    if (id.startsWith('http://') || id.startsWith('https://')) {
+    if (/^(?:https?|wss?):\/\//i.test(id)) {
       url.setSelectionRange(0, url.value.length);
     }
 
@@ -371,6 +371,9 @@ describe('TargetConfiguration lifecycle validation', () => {
     });
     render(<TargetConfigurationHarness onNext={onNext} />);
 
+    expect(
+      screen.getByRole('textbox', { name: id.startsWith('wss://') ? /WebSocket URL/i : /^URL/i }),
+    ).toHaveValue(id);
     const next = screen.getByRole('button', { name: /Next/i });
     expect(next).toBeEnabled();
     await user.click(next);

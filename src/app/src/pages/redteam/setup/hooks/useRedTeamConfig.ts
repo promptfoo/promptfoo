@@ -194,15 +194,7 @@ const RAW_HTTP_METHODS = new Set([
 ]);
 
 const isSafeBrowserNavigateUrl = (value: unknown): boolean => {
-  if (!isNonEmptyString(value)) {
-    return false;
-  }
-  try {
-    const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
-  } catch {
-    return false;
-  }
+  return isValidHttpUrlOrTemplate(value);
 };
 
 const isStringRecord = (value: unknown): value is Record<string, string> =>
@@ -560,6 +552,9 @@ const isValidBrowserStep = (step: unknown): boolean => {
       if (!segment) {
         return false;
       }
+      if (segment.startsWith('//') || segment.startsWith('..')) {
+        continue;
+      }
       const engineMatch = segment.match(/^([\w:-]+)=(.*)$/s);
       if (engineMatch) {
         const supportedEngines = new Set([
@@ -877,6 +872,8 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
           'azureAuthorityHost',
           'webhook_url',
           'webhookUrl',
+          'websocketUrl',
+          'webSocketUrl',
         ].some((field) => target.config[field] !== undefined) ||
         Object.keys(target.config).some((field) => field.toLowerCase().endsWith('envar')))) ||
     (isPlainObject(target.config.auth) && target.config.auth.type === 'file') ||

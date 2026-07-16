@@ -65,6 +65,9 @@ const WebSocketEndpointConfiguration = ({
   updateWebSocketTarget,
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^wss?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : '');
   const formattedProtocols = formatProtocols(selectedTarget.config.protocols);
   const [protocolsInput, setProtocolsInput] = useState(() => formattedProtocols);
   const isProtocolsInputFocused = useRef(false);
@@ -84,7 +87,7 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="websocket-url">WebSocket URL</Label>
           <Input
             id="websocket-url"
-            value={selectedTarget.config.url ?? ''}
+            value={targetUrl}
             onChange={(e) => updateWebSocketTarget('url', e.target.value)}
             className={cn(urlError && 'border-destructive')}
           />
