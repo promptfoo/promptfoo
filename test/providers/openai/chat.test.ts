@@ -449,10 +449,10 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
-      ['openai/gpt-5-search-api', 0.01],
-      ['openai/gpt-5-search-api-2025-10-14', 0.01],
-      ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.025],
-    ])('should include the Chat Completions search fee for routed model %s', async (model, fee) => {
+      ['openai/gpt-5-search-api', 0.0100625],
+      ['openai/gpt-5-search-api-2025-10-14', 0.0100625],
+      ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.0250045],
+    ])('should include token rates and the Chat Completions search fee for routed model %s', async (model, cost) => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
           choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
@@ -467,7 +467,7 @@ describe('OpenAI Provider', () => {
         config: { apiBaseUrl: 'https://gateway.example/v1' },
       }).callApi('What happened today?');
 
-      expect(result.cost).toBe(fee);
+      expect(result.cost).toBeCloseTo(cost, 10);
     });
 
     it('should build and bill a Chat search request using the effective passthrough model', async () => {
@@ -490,6 +490,28 @@ describe('OpenAI Provider', () => {
       expect(body.model).toBe('gpt-5-search-api');
       expect(body).not.toHaveProperty('max_tokens');
       expect(body).not.toHaveProperty('temperature');
+      expect(result.cost).toBeCloseTo(0.02125, 10);
+    });
+
+    it('should bill a routed Chat search passthrough model using its OpenAI token rates', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'openai/gpt-5-search-api' },
+        },
+      });
+
+      const result = await provider.callApi('What happened today?');
+
       expect(result.cost).toBeCloseTo(0.02125, 10);
     });
 

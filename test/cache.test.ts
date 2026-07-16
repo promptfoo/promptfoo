@@ -1518,6 +1518,26 @@ describe('fetchWithCache', () => {
       expect((error as Error).message).not.toContain('SUPER_SECRET_TOKEN');
     });
 
+    it('should sanitize opaque gateway path credentials in response-parse failure messages', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        text: () => Promise.resolve('<html>upstream error</html>'),
+        headers: new Headers({ 'content-type': 'text/html' }),
+      } as unknown as Response);
+      const credential = 'token_privateTenantCredential123';
+      const secretUrl = `https://gateway.example/v1/${credential}/responses`;
+
+      const error = await fetchWithCache(secretUrl, { method: 'POST', body: '{}' }, 1000).catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('Error parsing response from');
+      expect((error as Error).message).not.toContain(credential);
+    });
+
     it('should not catch fetchWithRetries errors in body retry loop', async () => {
       // fetchWithRetries itself throws — should propagate directly, not retry
       mockFetchWithRetries.mockRejectedValueOnce(new Error('ECONNRESET from fetch'));
@@ -1578,6 +1598,31 @@ describe('fetchWithCache', () => {
   });
 
   describe('per-repeat caching', () => {
+    it('should reuse an explicit safe cache key across credential rotations', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      const first = await fetchWithCache(
+        url,
+        { headers: { Authorization: 'Bearer project-key-a' } },
+        1000,
+        'json',
+        { cacheKey: 'project-a:response-hash' },
+      );
+      const second = await fetchWithCache(
+        url,
+        { headers: { Authorization: 'Bearer project-key-b' } },
+        1000,
+        'json',
+        { cacheKey: 'project-a:response-hash' },
+      );
+
+      expect(first.cached).toBe(false);
+      expect(second.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe('fetch:v3:project-a:response-hash');
+    });
+
     it('should use same cache key for repeatIndex 0 and no repeatIndex', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);

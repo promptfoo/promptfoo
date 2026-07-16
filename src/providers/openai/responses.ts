@@ -95,6 +95,7 @@ interface BackgroundResponseResult {
   retried?: boolean;
   cancelled?: boolean;
   shared?: boolean;
+  timedOut?: boolean;
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
@@ -316,6 +317,7 @@ async function pollBackgroundResponse(
           status: 0,
           statusText: 'Error',
           error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+          timedOut: true,
         };
       }
 
@@ -365,6 +367,7 @@ async function pollBackgroundResponse(
         status: 0,
         statusText: 'Error',
         error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+        timedOut: true,
       };
     }
     throw error;
@@ -383,7 +386,9 @@ async function createBackgroundResponseWithCancellation(
   const signal = request.signal;
   const cacheIdentity = getBackgroundCacheIdentity(url, request);
   const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.coalescable;
-  const effectiveBustCache = cacheIdentity.cacheable ? bustCache : true;
+  const effectiveCacheOptions = cacheIdentity.cacheable
+    ? { bust: bustCache, cacheKey: cacheIdentity.key }
+    : true;
   const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
   if (!inFlight) {
@@ -392,7 +397,7 @@ async function createBackgroundResponseWithCancellation(
       { method: request.method, headers: request.headers, body: request.body },
       timeout,
       'json',
-      effectiveBustCache,
+      effectiveCacheOptions,
       maxRetries,
     );
     inFlight = { promise, subscribers: 0, billed: false };
@@ -628,6 +633,23 @@ async function coalesceBackgroundResponse(
   });
   try {
     const result = await Promise.race([inFlight.promise, cancellation]);
+    if (result.timedOut && deadline !== undefined && Date.now() < deadline) {
+      if (inFlightBackgroundResponses.get(cacheKey) === inFlight) {
+        inFlightBackgroundResponses.delete(cacheKey);
+      }
+      release();
+      return await coalesceBackgroundResponse(
+        result.data,
+        url,
+        request,
+        timeout,
+        maxRetries,
+        cached,
+        deleteFromCache,
+        cancelOnStop,
+        deadline,
+      );
+    }
     if (result.error) {
       return result;
     }

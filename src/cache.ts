@@ -19,7 +19,7 @@ import {
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
-import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
+import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -687,7 +687,7 @@ async function fetchAndReadBody(
       // actionable diagnostics instead of a bare platform error. Sanitize the URL so
       // credential-bearing userinfo / query params are not leaked into logs.
       const wrappedError = new Error(
-        `Error reading response body from ${sanitizeUrl(getRequestUrlString(url))}: ${
+        `Error reading response body from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}`,
       ) as Error & { cause?: unknown };
@@ -741,7 +741,7 @@ async function prepareFetchResponse(
 
     if (format === 'json' && parsedData?.error) {
       logger.debug(
-        `Not caching ${sanitizeUrl(getRequestUrlString(url))} because it contains an 'error' key: ${parsedData.error}`,
+        `Not caching ${sanitizeUrlForLogging(getRequestUrlString(url))} because it contains an 'error' key: ${parsedData.error}`,
       );
       return {
         response: serializedResponse,
@@ -750,7 +750,7 @@ async function prepareFetchResponse(
     }
 
     logger.debug(
-      `Storing ${sanitizeUrl(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
+      `Storing ${sanitizeUrlForLogging(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
     );
     return {
       response: serializedResponse,
@@ -758,7 +758,7 @@ async function prepareFetchResponse(
     };
   } catch (err) {
     throw new Error(
-      `Error parsing response from ${sanitizeUrl(getRequestUrlString(url))}: ${
+      `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
         (err as Error).message
       }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
@@ -810,7 +810,7 @@ export async function fetchWithCache<T = unknown>(
 ): Promise<FetchWithCacheResult<T>> {
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, repeatIndex } = cacheOptions;
+  const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
@@ -819,8 +819,13 @@ export async function fetchWithCache<T = unknown>(
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
+  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   const cacheKey =
-    cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format, repeatIndex) : null;
+    cacheEnabled && !bust
+      ? providedCacheKey
+        ? getScopedCacheKey(`fetch:v3:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, options, method, format, repeatIndex)
+      : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
@@ -844,7 +849,7 @@ export async function fetchWithCache<T = unknown>(
       };
     } catch (err) {
       throw new Error(
-        `Error parsing response from ${sanitizeUrl(getRequestUrlString(url))}: ${
+        `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
       );
@@ -856,7 +861,7 @@ export async function fetchWithCache<T = unknown>(
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
     logger.debug(
-      `Returning cached response for ${sanitizeUrl(getRequestUrlString(url))}: ${cachedResponse}`,
+      `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
     );
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }

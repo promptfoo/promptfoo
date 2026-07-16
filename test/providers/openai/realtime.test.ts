@@ -3206,6 +3206,21 @@ describe('OpenAI Realtime Provider', () => {
       expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
     });
 
+    it('preserves custom gateway query credentials for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2.1', {
+        config: { apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+      await promise;
+
+      expect((MockWebSocket as any).mock.calls[0][0]).toBe(
+        'wss://gateway.example/v1/realtime?api_key=tenant-secret&model=gpt-realtime-2.1',
+      );
+    });
+
     it('uses apiBaseUrl for client-secret socket URL', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
@@ -3224,6 +3239,21 @@ describe('OpenAI Realtime Provider', () => {
           encodeURIComponent('secret123'),
       );
       expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('preserves custom gateway query credentials for client-secret WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2.1', {
+        config: { apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret' },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+      await promise;
+
+      expect((MockWebSocket as any).mock.calls[0][0]).toBe(
+        'wss://gateway.example/v1/realtime/socket?api_key=tenant-secret&client_secret=secret123',
+      );
     });
 
     it('normalizes response-level tools for client-secret requests', async () => {

@@ -800,6 +800,73 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should reuse project-scoped background persistence after an OpenAI credential rotation', async () => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    const createdByKey = new Map<string, any>();
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(
+      async (_url, options, _timeout, _format, cacheOptions) => {
+        if (options?.method !== 'POST') {
+          throw new Error(`Unexpected request: ${options?.method}`);
+        }
+        const key =
+          typeof cacheOptions === 'object' && cacheOptions !== null
+            ? cacheOptions.cacheKey
+            : undefined;
+        if (key && createdByKey.has(key)) {
+          return { ...createdByKey.get(key), cached: true };
+        }
+        const created = {
+          data: {
+            id: 'resp_project_cache',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Cached for the project' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        creates++;
+        if (key) {
+          createdByKey.set(key, created);
+        }
+        return created;
+      },
+    );
+    const provider = (apiKey: string) =>
+      new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey, background: true, headers: { 'OpenAI-Project': 'project-a' } },
+      });
+
+    const first = await provider('sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa').callApi('Project task');
+    const second = await provider('sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb').callApi('Project task');
+
+    expect(first.output).toBe('Cached for the project');
+    expect(second.output).toBe('Cached for the project');
+    expect(creates).toBe(1);
+    const creationOptions = vi
+      .mocked(cache.fetchWithCache)
+      .mock.calls.filter(([, options]) => options?.method === 'POST')
+      .map((call) => call[4]);
+    expect(creationOptions).toEqual([
+      expect.objectContaining({ bust: undefined, cacheKey: expect.any(String) }),
+      expect.objectContaining({ bust: undefined, cacheKey: expect.any(String) }),
+    ]);
+    expect((creationOptions[0] as { cacheKey: string }).cacheKey).toBe(
+      (creationOptions[1] as { cacheKey: string }).cacheKey,
+    );
+    const hashedInputs = hashSpy.mock.calls.map(([value]) => String(value)).join('\n');
+    expect(hashedInputs).not.toContain('sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(hashedInputs).not.toContain('sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+  });
+
   it('should isolate concurrent per-prompt OpenAI credentials without a project discriminator', async () => {
     let creates = 0;
     const seenAuthorization: string[] = [];
@@ -1747,6 +1814,67 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should preserve the polling deadline of a late background subscriber', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      if (options?.method === 'POST') {
+        return {
+          data: { id: 'resp_late_deadline', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      polls++;
+      if (polls === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 145));
+        return {
+          data: { id: 'resp_late_deadline', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      return {
+        data: {
+          id: 'resp_late_deadline',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Completed for late subscriber' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'OpenAI-Project': 'project-a' },
+      },
+    });
+
+    const first = provider.callApi('Shared deadline task');
+    await new Promise((resolve) => setTimeout(resolve, 55));
+    const second = provider.callApi('Shared deadline task');
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.error).toContain(
+      'Background response resp_late_deadline timed out after 140ms.',
+    );
+    expect(secondResult.error).toBeUndefined();
+    expect(secondResult.output).toBe('Completed for late subscriber');
+    expect(polls).toBe(2);
+  });
+
   it('should cancel and evict an upstream background response when polling times out', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
@@ -1892,7 +2020,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
-      false,
+      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
       undefined,
     );
   });

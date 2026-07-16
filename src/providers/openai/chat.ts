@@ -404,7 +404,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const modelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
-    const tokenCost = calculateOpenAIUsageCost(modelName, config, data.usage, {
+    const billingModelName = modelName.split('/').at(-1) ?? modelName;
+    const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
       serviceTier: data.service_tier ?? config.service_tier,

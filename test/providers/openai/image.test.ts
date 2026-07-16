@@ -566,6 +566,8 @@ describe('OpenAiImageProvider', () => {
         `${customApiUrl}/images/generations`,
         expect.any(Object),
         expect.any(Number),
+        'json',
+        true,
       );
     });
   });
