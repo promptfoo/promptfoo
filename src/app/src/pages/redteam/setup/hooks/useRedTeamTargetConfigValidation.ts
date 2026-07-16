@@ -304,6 +304,7 @@ const reconcileTargetConfigClear = (clearMessage: string): boolean => {
   const currentToken = getTargetConfigMarkerToken(currentTargetConfigInvalidMarker);
   if (
     !snapshot ||
+    token === 'legacy' ||
     clearMessage !== getClearMessage(snapshot.serialized, token) ||
     (currentToken && token !== currentToken) ||
     !reconcileTargetConfig
@@ -350,8 +351,11 @@ if (typeof window !== 'undefined') {
     }
 
     if (isClearMessage(event.newValue)) {
-      if (getCurrentClearMessage() === event.newValue) {
-        reconcileTargetConfigClear(event.newValue);
+      const reconciled =
+        getCurrentClearMessage() === event.newValue && reconcileTargetConfigClear(event.newValue);
+      const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
+      if (!reconciled && targetConfigError) {
+        persistTargetConfigError(targetConfigError, false, currentTargetConfigInvalidMarker);
       }
       return;
     }
@@ -359,6 +363,16 @@ if (typeof window !== 'undefined') {
     const currentClearMessage = getCurrentClearMessage();
     if (currentClearMessage) {
       const targetConfigError = getTargetConfigErrorFromMarker(event.newValue);
+      const invalidToken = getTargetConfigMarkerToken(event.newValue);
+      if (
+        targetConfigError &&
+        (invalidToken === 'legacy' || invalidToken !== getClearToken(currentClearMessage))
+      ) {
+        currentTargetConfigInvalidMarker = event.newValue;
+        useRedTeamTargetConfigValidation.setState({ targetConfigError });
+        persistTargetConfigError(targetConfigError, false, event.newValue);
+        return;
+      }
       if (
         targetConfigError &&
         getTargetConfigMarkerToken(event.newValue) === getClearToken(currentClearMessage)
@@ -366,7 +380,18 @@ if (typeof window !== 'undefined') {
         currentTargetConfigInvalidMarker = event.newValue;
         useRedTeamTargetConfigValidation.setState({ targetConfigError });
       }
-      reconcileTargetConfigClear(currentClearMessage);
+      const reconciled = reconcileTargetConfigClear(currentClearMessage);
+      if (!reconciled) {
+        const { targetConfigError: activeTargetConfigError } =
+          useRedTeamTargetConfigValidation.getState();
+        if (activeTargetConfigError) {
+          persistTargetConfigError(
+            activeTargetConfigError,
+            false,
+            currentTargetConfigInvalidMarker,
+          );
+        }
+      }
       return;
     }
 
@@ -382,6 +407,7 @@ if (typeof window !== 'undefined') {
     if (targetConfigError) {
       currentTargetConfigInvalidMarker = event.newValue;
       useRedTeamTargetConfigValidation.setState({ targetConfigError });
+      persistTargetConfigError(targetConfigError, false, event.newValue);
     }
   };
   targetConfigWindow.__promptfooTargetConfigValidationStorageListener = handleStorage;
@@ -398,7 +424,11 @@ if (typeof window !== 'undefined') {
       }
 
       if (isClearMessage(event.data)) {
-        reconcileTargetConfigClear(event.data);
+        const reconciled = reconcileTargetConfigClear(event.data);
+        const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
+        if (!reconciled && targetConfigError) {
+          persistTargetConfigError(targetConfigError, false, currentTargetConfigInvalidMarker);
+        }
         return;
       }
 
@@ -411,8 +441,11 @@ if (typeof window !== 'undefined') {
           currentClearMessage &&
           token === getClearToken(currentClearMessage)
         ) {
-          reconcileTargetConfigClear(currentClearMessage);
-          return;
+          const reconciled = reconcileTargetConfigClear(currentClearMessage);
+          if (reconciled) {
+            return;
+          }
+          currentTargetConfigInvalidMarker = event.data;
         }
         useRedTeamTargetConfigValidation.setState({ targetConfigError });
         persistTargetConfigError(targetConfigError, false, event.data);
