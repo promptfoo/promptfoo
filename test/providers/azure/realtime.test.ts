@@ -174,7 +174,7 @@ describe('AzureRealtimeProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.cost).toBeCloseTo(
-      (930 * 0.6 + 70 * 0.06 + 20 * 0.06 + 10 * 0.06 + 20 * 2.4 + 10 * 20) / 1e6,
+      (930 * 0.6 + 70 * 0.06 + 20 * 0.3 + 10 * 0.08 + 20 * 2.4 + 10 * 20) / 1e6,
       12,
     );
     expect(result.tokenUsage).toEqual({
@@ -298,6 +298,20 @@ describe('AzureRealtimeProvider', () => {
     expect(vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value.config.maintainContext).toBe(
       false,
     );
+    expect((provider as any).realtimeProviders.size).toBe(0);
+    expect(mockCleanup).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases a stateless realtime delegate when the request fails', async () => {
+    mockCallApi.mockRejectedValueOnce(new Error('realtime request failed'));
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    await expect(provider.callApi('hello')).rejects.toThrow('realtime request failed');
+
+    expect((provider as any).realtimeProviders.size).toBe(0);
+    expect(mockCleanup).toHaveBeenCalledOnce();
   });
 
   it('prices a realtime input image once instead of once per image token', async () => {

@@ -663,7 +663,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         : calculateGoogleCostFromUsage(
             this.modelName,
             config,
-            tokenUsage.prompt,
+            lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             this.isVertexMode,
             lastData.usageMetadata,

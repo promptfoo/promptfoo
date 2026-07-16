@@ -179,7 +179,13 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       this.registeredForShutdown = true;
     }
 
-    const result = await realtimeProvider.callApi(prompt, context, callApiOptions);
+    const delegatedProvider = realtimeProvider;
+    const result = await delegatedProvider.callApi(prompt, context, callApiOptions).finally(() => {
+      if (!hasConversationId) {
+        delegatedProvider.cleanup();
+        this.realtimeProviders.delete(realtimeProviderKey);
+      }
+    });
     const reportedUsageEvents = result.metadata?.usageEvents;
     const inputImageCount = countRealtimeInputImages(prompt);
     const usageEvents: any[] =
