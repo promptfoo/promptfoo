@@ -267,11 +267,15 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       // Leave malformed custom URLs to the request path to validate.
     }
     let hasSensitiveUrlCredentials = false;
+    let hasSensitiveUrlPath = false;
     try {
-      const normalizedUrl = new URL(url).toString();
+      const parsedUrl = new URL(url);
+      const normalizedUrl = parsedUrl.toString();
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedUrl) !== normalizedUrl;
+      hasSensitiveUrlPath = hasSensitiveCacheValue(decodeURIComponent(parsedUrl.pathname));
     } catch {
       hasSensitiveUrlCredentials = true;
+      hasSensitiveUrlPath = true;
     }
     const usesAuthenticatedCustomEndpoint =
       !sendsToOpenAiApi &&
@@ -280,6 +284,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       isCacheEnabled() &&
       !hasSensitiveCacheValue(body) &&
       !hasSensitiveHeaderValue &&
+      !hasSensitiveUrlPath &&
       !(
         (usesAuthenticatedCustomEndpoint ||
           (typeof body.voice === 'object' && body.voice !== null)) &&

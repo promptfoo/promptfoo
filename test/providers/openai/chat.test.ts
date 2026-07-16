@@ -435,6 +435,28 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo(0.01 + (1_500 * 1.25 + 500 * 0.125 + 1_000 * 10) / 1e6, 10);
     });
 
+    it.each([
+      ['openai/gpt-5-search-api', 0.01],
+      ['openai/gpt-5-search-api-2025-10-14', 0.01],
+      ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.025],
+    ])('should include the Chat Completions search fee for routed model %s', async (model, fee) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await new OpenAiChatCompletionProvider(model, {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      }).callApi('What happened today?');
+
+      expect(result.cost).toBe(fee);
+    });
+
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {

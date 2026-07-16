@@ -524,12 +524,16 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const requestHeaders = this.getAuthHeaders(config.headers);
     let sendsToOpenAiApi = false;
     let hasSensitiveUrlCredentials = false;
+    let hasSensitiveUrlPath = false;
     try {
-      const normalizedApiUrl = new URL(apiUrl).toString();
-      sendsToOpenAiApi = new URL(apiUrl).hostname.toLowerCase() === 'api.openai.com';
+      const parsedApiUrl = new URL(apiUrl);
+      const normalizedApiUrl = parsedApiUrl.toString();
+      sendsToOpenAiApi = parsedApiUrl.hostname.toLowerCase() === 'api.openai.com';
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedApiUrl) !== normalizedApiUrl;
+      hasSensitiveUrlPath = hasSensitiveCacheValue(decodeURIComponent(parsedApiUrl.pathname));
     } catch {
       hasSensitiveUrlCredentials = true;
+      hasSensitiveUrlPath = true;
     }
     const safeCacheHeaders = Object.fromEntries(
       Object.entries(this.getOpenAiRequestHeaders(config.headers))
@@ -562,6 +566,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const canCacheVideo =
       !hasSensitiveCacheValue(prompt) &&
       !hasSensitiveHeaderValue &&
+      !hasSensitiveUrlPath &&
       ((!hasAuthenticatedInputReference(config.input_reference) &&
         !usesAuthenticatedCustomEndpoint) ||
         Object.keys(tenantCacheScope).length > 0);

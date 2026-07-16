@@ -1325,6 +1325,78 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should not create a background stream when the eval is aborted while preparing the request', async () => {
+    const controller = new AbortController();
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    });
+    const getOpenAiBody = provider.getOpenAiBody.bind(provider);
+    vi.spyOn(provider, 'getOpenAiBody').mockImplementationOnce(async (prompt, context, options) => {
+      controller.abort(new Error('cancelled while preparing'));
+      return getOpenAiBody(prompt, context, options);
+    });
+
+    await expect(
+      provider.callApi('Do not create this task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'cancelled while preparing' });
+
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should normalize a custom abort reason while cancelling an active background stream', async () => {
+    const controller = new AbortController();
+    let streamStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      streamStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            streamController.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({
+                  type: 'response.created',
+                  response: { id: 'resp_custom_abort', status: 'in_progress' },
+                })}\n\n`,
+              ),
+            );
+            signal?.addEventListener('abort', () => streamController.error(signal.reason));
+            streamStarted?.();
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_custom_abort', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    }).callApi('Cancel this task', undefined, { abortSignal: controller.signal });
+    await started;
+    controller.abort(new Error('user stopped the eval'));
+
+    await expect(result).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'user stopped the eval',
+    });
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_custom_abort/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
   it('should cancel an accepted background response when its stream disconnects', async () => {
     vi.mocked(fetchWithRetries).mockResolvedValueOnce(
       new Response(

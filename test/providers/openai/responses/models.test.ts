@@ -115,6 +115,7 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.1-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.1-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-codex');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-codex-max');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-codex-mini');
     // GPT-5.2 models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.2-chat-latest');

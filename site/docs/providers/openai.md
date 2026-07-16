@@ -1046,7 +1046,8 @@ characters can be used in one generation, and the character name should also app
 
 Credential-bearing image URLs and authenticated custom video gateways bypass the persistent video
 cache unless a non-secret tenant discriminator such as `headers: { X-Tenant-Id: tenant-a }` is
-configured. Prompts and tenant headers containing credentials also bypass persistent caching.
+configured. Prompts, tenant headers, and gateway URL paths containing credentials always bypass
+persistent caching.
 Provider and per-prompt headers are sent for video creation, status polling, and content downloads
 so routed gateways can authorize the full job lifecycle.
 
@@ -1103,9 +1104,10 @@ reports the rate using the completed video's returned resolution.
 
 The OpenAI Responses API supports both the standard `web_search` tool and the
 `web_search_preview` tool family. Chat Completions also supports built-in search models such as
-`gpt-5-search-api`. All three forms enable the `search-rubric` assertion type; the preview tool
-remains required for deep research models. These tools let models search the web for current
-information and verify facts.
+`gpt-5-search-api`. All three forms enable the `search-rubric` assertion type. Deep research models
+require at least one supported data source, which can be either web-search tool, file search with a
+vector store, or a remote MCP server. These tools let models search the web for current information
+and verify facts.
 
 ### Enabling Web Search
 
@@ -1868,8 +1870,8 @@ For custom speech gateways authenticated through headers or URL credentials, pro
 tenant discriminator such as
 `headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
 the speech cache to prevent responses from being shared across gateway tenants. Speech inputs,
-instructions, passthrough values, and tenant headers containing credentials also bypass persistent
-caching.
+instructions, passthrough values, tenant headers, and gateway URL paths containing credentials
+always bypass persistent caching.
 
 ### Audio transcription
 
@@ -2427,9 +2429,12 @@ Available models:
 - `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
 - `o4-mini-deep-research-2025-06-26` - Snapshot version
 
+OpenAI has scheduled these deep research aliases and snapshots to shut down on July 23, 2026 and
+recommends `gpt-5.5-pro` for new integrations. Retain them only for existing eval coverage.
+
 All deep research models:
 
-- **Require** `web_search_preview` tool to be configured
+- **Require** at least one data source: `web_search`, `web_search_preview`, `file_search` with `vector_store_ids`, or an MCP tool
 - Support 200,000 token context window
 - Support up to 100,000 output tokens
 - May take 2-10 minutes to complete research tasks
@@ -2443,7 +2448,7 @@ providers:
     config:
       max_output_tokens: 50000 # High limit recommended
       tools:
-        - type: web_search_preview # Required
+        - type: web_search_preview # Data source
 ```
 
 #### Advanced Configuration
@@ -2457,7 +2462,7 @@ providers:
       background: true # Recommended for long-running tasks
       store: true # Store conversation for 30 days
       tools:
-        - type: web_search_preview # Required
+        - type: web_search_preview # Data source
         - type: code_interpreter # Optional: For data analysis
           container:
             type: auto
@@ -2544,7 +2549,7 @@ Deep research models require high `max_output_tokens` values (50,000+) and long 
 :::
 
 :::warning
-The `web_search_preview` tool is **required** for deep research models. The provider will return an error if this tool is not configured.
+Deep research models require at least one supported data source. The provider will return an error if none of `web_search`, `web_search_preview`, `file_search` with `vector_store_ids`, or a remote MCP tool is configured.
 :::
 
 ### GPT-5 Pro Timeout Configuration

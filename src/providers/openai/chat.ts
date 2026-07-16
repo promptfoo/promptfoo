@@ -392,9 +392,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     });
     const searchCost = cached
       ? 0
-      : /^gpt-5-search-api(?:-|$)/.test(modelName)
+      : /(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)
         ? 0.01
-        : /^gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)
+        : /(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)
           ? 0.025
           : 0;
 

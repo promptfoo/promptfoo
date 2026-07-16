@@ -1475,6 +1475,35 @@ describe('OpenAiVideoProvider', () => {
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
     });
 
+    it('should not persist video requests when a gateway credential is embedded in the URL path', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKeyRequired: false,
+          apiBaseUrl: 'https://gateway.example/v1/sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          headers: { 'X-Tenant-Id': 'tenant-a' },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_path_secret', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_path_secret', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Private gateway video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
     it('should not treat secret-valued tenant headers as a safe video cache scope', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {

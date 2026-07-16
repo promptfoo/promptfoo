@@ -531,11 +531,23 @@ describe('loadApiProvider', () => {
     'computer-use-preview',
     'computer-use-preview-2025-03-11',
   ])('should auto-route bare Responses-only model %s to Responses', async (model) => {
+    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
+      '../src/providers/openai/chat',
+    );
+    const actualResponsesProvider = await vi.importActual<
+      typeof import('../src/providers/openai/responses')
+    >('../src/providers/openai/responses');
     const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
     const originalResponsesModelNames = (OpenAiResponsesProvider as any)
       .OPENAI_RESPONSES_MODEL_NAMES;
-    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
-    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = [model];
+    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+    const responsesModelNames =
+      actualResponsesProvider.OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES;
+
+    expect(chatModelNames).not.toContain(model);
+    expect(responsesModelNames).toContain(model);
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = responsesModelNames;
     try {
       const provider = await loadApiProvider(`openai:${model}`);
 

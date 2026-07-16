@@ -199,6 +199,19 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
+    it.each([
+      'openai/gpt-5-search-api',
+      'openai/gpt-5-search-api-2025-10-14',
+      'github/openai/gpt-4o-mini-search-preview-2025-03-11',
+    ])('should detect a vendor-prefixed OpenAI Chat search model %s', (model) => {
+      const provider = new OpenAiChatCompletionProvider(model, {
+        id: 'search-grader',
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
     it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
       const provider = new OpenAiResponsesProvider('gpt-5.5-2026-04-23', {
         config: {

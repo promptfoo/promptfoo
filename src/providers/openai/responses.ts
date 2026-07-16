@@ -887,6 +887,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // we actually send (merged config from getOpenAiBody, not raw this.config).
     // The Responses API uses `max_output_tokens` rather than `max_tokens`.
     const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
+    if (callApiOptions?.abortSignal?.aborted) {
+      throw getAbortError(callApiOptions.abortSignal);
+    }
     const effectiveBody = resolved.body as Record<string, any>;
     // Read request params from the resolved body (what we actually send) rather
     // than the raw config, so defaults/env-derived values (e.g. a default
@@ -933,12 +936,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
     const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
     if (isDeepResearchModel) {
-      const hasWebSearchTool = config.tools?.some(
-        (tool: any) => tool.type === 'web_search_preview',
+      const hasDataSource = config.tools?.some(
+        (tool: any) =>
+          tool.type === 'web_search' ||
+          tool.type === 'web_search_preview' ||
+          (tool.type === 'file_search' &&
+            Array.isArray(tool.vector_store_ids) &&
+            tool.vector_store_ids.length > 0) ||
+          tool.type === 'mcp',
       );
-      if (!hasWebSearchTool) {
+      if (!hasDataSource) {
         return {
-          error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
+          error: `Deep research model ${this.modelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
         };
       }
 
@@ -1201,7 +1210,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         if (pollingBackground) {
           await deleteFromCache?.();
         }
-        throw err;
+        throw abortSignal?.aborted ? getAbortError(abortSignal) : err;
       }
       if (err instanceof HttpRateLimitError) {
         return {

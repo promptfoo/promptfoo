@@ -637,6 +637,27 @@ describe('OpenAiTtsProvider', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
+  it('does not persist speech requests when a gateway credential is embedded in the URL path', async () => {
+    const cache = { get: vi.fn(), set: vi.fn() };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKeyRequired: false,
+        apiBaseUrl: 'https://gateway.example/v1/sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+      },
+    });
+
+    await provider.callApi('same input');
+    await provider.callApi('same input');
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('canonicalizes case-insensitive speech headers for the persistent cache key', async () => {
     const values = new Map<string, string>();
     const cache = {

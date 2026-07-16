@@ -87,7 +87,7 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     'modelName' in provider && typeof provider.modelName === 'string' ? provider.modelName : id;
   if (
     isOpenAiChat &&
-    /(?:^|:)(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)
+    /(?:^|[/:])(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)
   ) {
     return true;
   }
