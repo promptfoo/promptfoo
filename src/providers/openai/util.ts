@@ -378,16 +378,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   })),
 ];
 
-export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [
-  {
-    id: 'gpt-5-codex-mini',
-    cost: {
-      input: 0.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  },
-  { id: 'gpt-5.3-codex-spark' },
-];
+export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex-spark' }];
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
   ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
@@ -416,6 +407,13 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
     cost: {
       input: 1.25 / 1e6,
       output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-codex-mini'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.5 / 1e6,
+      output: 2 / 1e6,
     },
   })),
   ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({

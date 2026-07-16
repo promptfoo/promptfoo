@@ -389,7 +389,7 @@ describe('OpenAI Provider', () => {
           type: 'url_citation',
           url_citation: {
             start_index: 0,
-            end_index: 7,
+            end_index: 6,
             url: 'https://example.com/source',
             title: 'Example source',
           },

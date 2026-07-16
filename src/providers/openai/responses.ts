@@ -89,7 +89,6 @@ interface BackgroundResponseResult {
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
-const BACKGROUND_STREAM_ABORT_GRACE_MS = 1_000;
 const inFlightBackgroundCreations = new Map<
   string,
   {
@@ -290,6 +289,9 @@ async function createBackgroundResponseWithCancellation(
     }
     void inFlight.promise
       .then(async (created) => {
+        if (inFlight.subscribers > 0) {
+          return;
+        }
         if (
           created.data.id &&
           (created.data.status === 'queued' || created.data.status === 'in_progress')
@@ -360,11 +362,10 @@ async function resolveBackgroundResponse(
   }
 
   await deleteFromCache?.();
-  const retried = await fetchWithCache<OpenAIResponsesResponse>(
+  const retried = await createBackgroundResponseWithCancellation(
     url,
     request,
     timeout,
-    'json',
     false,
     maxRetries,
   );
@@ -447,22 +448,26 @@ async function coalesceBackgroundResponse(
   const callerSignal = request.signal;
   let released = false;
   let onAbort: (() => void) | undefined;
-  const release = () => {
+  const release = (): boolean => {
     if (released) {
-      return;
+      return false;
     }
     released = true;
     inFlight.subscribers--;
     if (inFlight.subscribers === 0 && callerSignal?.aborted) {
       inFlight.controller.abort(callerSignal.reason);
+      return true;
     }
+    return false;
   };
   const cancellation = new Promise<never>((_resolve, reject) => {
     if (!callerSignal) {
       return;
     }
     onAbort = () => {
-      release();
+      if (release()) {
+        void deleteFromCache?.();
+      }
       reject(getAbortError(callerSignal));
     };
     if (callerSignal.aborted) {
@@ -577,6 +582,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     'codex-mini-latest',
     'gpt-5-codex',
+    'gpt-5-codex-mini',
     // Deep research models
     'o3-deep-research',
     'o3-deep-research-2025-06-26',
@@ -1009,16 +1015,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         let backgroundResponseId: string | undefined;
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);
-        let abortGraceHandle: ReturnType<typeof setTimeout> | undefined;
         const abortStream = () => {
           if (backgroundResponseId) {
             controller.abort(abortSignal?.reason);
             return;
           }
-          abortGraceHandle = setTimeout(
-            () => controller.abort(abortSignal?.reason),
-            BACKGROUND_STREAM_ABORT_GRACE_MS,
-          );
         };
         abortSignal?.addEventListener('abort', abortStream, { once: true });
         try {
@@ -1036,7 +1037,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               if (typeof streamedResponse.id === 'string') {
                 backgroundResponseId = streamedResponse.id;
                 if (abortSignal?.aborted) {
-                  clearTimeout(abortGraceHandle);
                   controller.abort(abortSignal.reason);
                 }
               }
@@ -1059,7 +1059,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           throw err;
         } finally {
           clearTimeout(timeoutHandle);
-          clearTimeout(abortGraceHandle);
           abortSignal?.removeEventListener('abort', abortStream);
         }
       } else if (body.stream) {
@@ -1207,9 +1206,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       if (isAbortError(err) || abortSignal?.aborted) {
-        if (pollingBackground) {
-          await deleteFromCache?.();
-        }
         throw abortSignal?.aborted ? getAbortError(abortSignal) : err;
       }
       if (err instanceof HttpRateLimitError) {

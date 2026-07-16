@@ -669,6 +669,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -685,7 +686,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, options.signal);
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }
 
@@ -695,8 +696,8 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
-      if (options.signal?.aborted) {
-        throw getAbortError(options.signal);
+      if (signal?.aborted) {
+        throw getAbortError(signal);
       }
 
       // Structured rate-limit errors are already final (quota fail-fast or
@@ -713,7 +714,7 @@ export async function fetchWithRetries(
       );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleepWithAbort(waitTime, options.signal);
+        await sleepWithAbort(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }

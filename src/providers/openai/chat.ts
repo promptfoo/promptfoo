@@ -64,7 +64,7 @@ function getChatSearchCitations(
       typeof output === 'string' &&
       Number.isInteger(citation.start_index) &&
       Number.isInteger(citation.end_index)
-        ? output.slice(citation.start_index, citation.end_index).trim()
+        ? output.slice(citation.start_index, citation.end_index + 1).trim()
         : '';
     const title = typeof citation.title === 'string' ? citation.title.trim() : '';
 

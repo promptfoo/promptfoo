@@ -285,8 +285,9 @@ Supported models include:
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
-`gpt-5-codex-mini` is a legacy Codex-surface model for ChatGPT-authenticated Codex sessions, not an
-OpenAI Responses API model. Use `gpt-5.1-codex-mini` when running Codex with an OpenAI API key.
+`gpt-5-codex-mini` is also OpenAI's documented Responses API replacement for the retired
+`codex-mini-latest` model. Use `openai:responses:gpt-5-codex-mini` when migrating existing API
+evals, or configure it here when running through the Codex SDK.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 

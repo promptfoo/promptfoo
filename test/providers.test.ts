@@ -515,6 +515,7 @@ describe('loadApiProvider', () => {
 
   it.each([
     'gpt-5-codex',
+    'gpt-5-codex-mini',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
     'gpt-5.1-codex',
@@ -561,18 +562,6 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
-    ['gpt-5-codex-mini', 'openai:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:chat:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:responses:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:completion:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:embedding:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:moderation:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:realtime:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:transcription:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:tts:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:speech:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:video:gpt-5-codex-mini'],
-    ['gpt-5-codex-mini', 'openai:image:gpt-5-codex-mini'],
     ['gpt-5.3-codex-spark', 'openai:gpt-5.3-codex-spark'],
     ['gpt-5.3-codex-spark', 'openai:chat:gpt-5.3-codex-spark'],
     ['gpt-5.3-codex-spark', 'openai:responses:gpt-5.3-codex-spark'],
@@ -591,6 +580,13 @@ describe('loadApiProvider', () => {
     );
     expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
     expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
+  });
+
+  it('should allow the documented gpt-5-codex-mini Responses replacement', async () => {
+    const provider = await loadApiProvider('openai:responses:gpt-5-codex-mini');
+
+    expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5-codex-mini', expect.any(Object));
+    expect(provider).toBeDefined();
   });
 
   it.each([

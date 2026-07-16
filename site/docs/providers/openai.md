@@ -2208,13 +2208,15 @@ The Responses API supports a wide range of models, including:
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Fast, cost-effective reasoning model
 - `gpt-5-codex` - GPT-5 based coding model optimized for code generation
+- `gpt-5-codex-mini` - Responses replacement for the retired `codex-mini-latest` model
 - `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
 
 The Pro and Codex variants of GPT-5, GPT-5.1, GPT-5.2, and GPT-5.3, along with `o1-pro`, `o3-pro`,
 and `computer-use-preview`, are Responses-only. Promptfoo auto-routes their bare IDs to Responses.
 Several older Codex and computer-use snapshots have published July 23, 2026 shutdown dates; check
 OpenAI's deprecation schedule before adding new eval coverage. `codex-mini-latest` has already
-been shut down. `gpt-5-pro` and its dated snapshot require `reasoning.effort: high`, while
+been shut down; OpenAI recommends `gpt-5-codex-mini` as its Responses API replacement. `gpt-5-pro`
+and its dated snapshot require `reasoning.effort: high`, while
 `gpt-5.2-pro` and its snapshot support `medium`, `high`, and `xhigh`.
 
 ### Using the Responses API

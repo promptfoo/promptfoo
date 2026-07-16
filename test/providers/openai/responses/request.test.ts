@@ -599,6 +599,146 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should keep the queued cache entry when one of several polling subscribers aborts', async () => {
+    let creates = 0;
+    let persisted = false;
+    let releasePoll: (() => void) | undefined;
+    let notifyPoll: (() => void) | undefined;
+    const pollStarted = new Promise<void>((resolve) => {
+      notifyPoll = resolve;
+    });
+    const pollGate = new Promise<void>((resolve) => {
+      releasePoll = resolve;
+    });
+    const deleteFromCache = vi.fn(async () => {
+      persisted = false;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const cached = persisted;
+        if (!cached) {
+          creates++;
+          persisted = true;
+        }
+        return {
+          data: { id: 'resp_persisted', status: 'queued', output: [], usage: null },
+          cached,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
+      }
+      if (String(url).endsWith('/responses/resp_persisted') && options?.method === 'GET') {
+        notifyPoll?.();
+        await pollGate;
+        return {
+          data: {
+            id: 'resp_persisted',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed once' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const firstResult = provider
+      .callApi('Persist the shared task', undefined, { abortSignal: first.signal })
+      .catch((error: Error) => error);
+    const secondResult = provider.callApi('Persist the shared task', undefined, {
+      abortSignal: second.signal,
+    });
+    await pollStarted;
+    first.abort(new Error('first subscriber stopped'));
+    await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
+    const thirdResult = provider.callApi('Persist the shared task');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(creates).toBe(1);
+    expect(deleteFromCache).not.toHaveBeenCalled();
+    releasePoll?.();
+    await expect(Promise.all([secondResult, thirdResult])).resolves.toEqual([
+      expect.objectContaining({ output: 'Completed once' }),
+      expect.objectContaining({ output: 'Completed once' }),
+    ]);
+  });
+
+  it('should not cancel an accepted background creation after a late subscriber joins', async () => {
+    let resolveCreation: ((value: any) => void) | undefined;
+    const creation = new Promise<any>((resolve) => {
+      resolveCreation = resolve;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_late') && options?.method === 'GET') {
+        return {
+          data: {
+            id: 'resp_late',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed for late subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_late/cancel')) {
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const firstResult = provider
+      .callApi('Late subscriber task', undefined, { abortSignal: first.signal })
+      .catch((error: Error) => error);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    first.abort(new Error('first subscriber stopped'));
+    await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
+    const lateResult = provider.callApi('Late subscriber task');
+    resolveCreation?.({
+      data: { id: 'resp_late', status: 'queued', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await expect(lateResult).resolves.toMatchObject({ output: 'Completed for late subscriber' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_late/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('should isolate identical background creations across repeat cache namespaces', async () => {
     let creates = 0;
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
@@ -1069,6 +1209,86 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should cancel an accepted replacement background job when recovery is aborted', async () => {
+    const controller = new AbortController();
+    let notifyReplacement: (() => void) | undefined;
+    const replacementStarted = new Promise<void>((resolve) => {
+      notifyReplacement = resolve;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        if (!notifyReplacement) {
+          throw new Error('Expected replacement notifier.');
+        }
+        if (
+          vi
+            .mocked(cache.fetchWithCache)
+            .mock.calls.filter(
+              ([callUrl, callOptions]) =>
+                String(callUrl).endsWith('/responses') && callOptions?.method === 'POST',
+            ).length === 1
+        ) {
+          return {
+            data: { id: 'resp_stale', status: 'queued', output: [], usage: null },
+            cached: true,
+            status: 200,
+            statusText: 'OK',
+            deleteFromCache: vi.fn(),
+          };
+        }
+        notifyReplacement();
+        return await new Promise<any>((resolve, reject) => {
+          const timer = setTimeout(
+            () =>
+              resolve({
+                data: { id: 'resp_replacement', status: 'queued', output: [], usage: null },
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+                deleteFromCache: vi.fn(),
+              }),
+            25,
+          );
+          options.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(options.signal?.reason);
+          });
+        });
+      }
+      if (String(url).endsWith('/responses/resp_stale') && options?.method === 'GET') {
+        return {
+          data: { error: { message: 'Not found' } },
+          cached: false,
+          status: 404,
+          statusText: 'Not Found',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_replacement/cancel')) {
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+    });
+    const pending = provider.callApi('Recover then cancel', undefined, {
+      abortSignal: controller.signal,
+    });
+    await replacementStarted;
+    controller.abort(new Error('cancel replacement'));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await new Promise((resolve) => setTimeout(resolve, 35));
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_replacement/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
   it('should preserve a cached background job when polling fails transiently', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
@@ -1389,6 +1609,58 @@ describe('OpenAiResponsesProvider request building', () => {
     });
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining('/responses/resp_custom_abort/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should cancel a streamed background job when its response ID arrives after the previous grace period', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '3000' });
+    const controller = new AbortController();
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            const timer = setTimeout(() => {
+              streamController.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({
+                    type: 'response.created',
+                    response: { id: 'resp_delayed_stream', status: 'in_progress' },
+                  })}\n\n`,
+                ),
+              );
+            }, 1050);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              streamController.error(signal.reason);
+            });
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_delayed_stream', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const pending = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    }).callApi('Delayed stream creation', undefined, { abortSignal: controller.signal });
+    setTimeout(() => controller.abort(new Error('caller cancelled before stream ID')), 5);
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'caller cancelled before stream ID',
+    });
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_delayed_stream/cancel'),
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',

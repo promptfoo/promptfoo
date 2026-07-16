@@ -180,10 +180,15 @@ describe('calculateOpenAICost', () => {
     );
   });
 
-  it.each([
-    'gpt-5-codex-mini',
-    'gpt-5.3-codex-spark',
-  ])('does not classify Codex-surface-only model %s as an API model', (model) => {
+  it('classifies the documented gpt-5-codex-mini API replacement as Responses-only', () => {
+    const model = 'gpt-5-codex-mini';
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+  });
+
+  it('does not classify the Codex-surface-only Spark model as an API model', () => {
+    const model = 'gpt-5.3-codex-spark';
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
