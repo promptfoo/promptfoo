@@ -234,6 +234,15 @@ describe('GoogleLiveProvider', () => {
     await provider.callApi('test prompt');
 
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+    );
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        generation_config: { response_modalities: ['audio'] },
+        output_audio_transcription: {},
+      },
+    });
     expect(sentMessages[1]).toEqual({
       realtime_input: {
         text: 'test prompt',
@@ -333,6 +342,50 @@ describe('GoogleLiveProvider', () => {
       numRequests: 1,
     });
     expect(response.cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
+  });
+
+  it('should prefer closing Gemini Live usage over an interim usage frame', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          usageMetadata: {
+            promptTokenCount: 80,
+            responseTokenCount: 10,
+            totalTokenCount: 90,
+          },
+        });
+        simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+        simulateMessage(mockWs, {
+          serverContent: { turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 100,
+            responseTokenCount: 20,
+            totalTokenCount: 120,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.tokenUsage).toEqual({
+      prompt: 100,
+      completion: 20,
+      total: 120,
+      numRequests: 1,
+    });
+    expect(response.cost).toBeCloseTo((100 * 0.75 + 20 * 4.5) / 1e6, 12);
   });
 
   it('should aggregate per-turn Gemini Live usage including tool and thought tokens', async () => {

@@ -282,7 +282,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
-- `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $4.50/1M text output)
+- `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -1065,6 +1065,8 @@ providers:
       timeoutMs: 10000
 ```
 
+Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work.
+
 ### Key Features
 
 - **Real-time bidirectional communication**: Uses WebSockets for faster responses
@@ -1184,7 +1186,7 @@ promptfoo init --example google-live-audio
 ### Limitations
 
 - Sessions are limited to 15 minutes for audio or 2 minutes of audio and video
-- Token counting is not supported
+- Token usage and cost are reported when the API returns `usageMetadata`
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 

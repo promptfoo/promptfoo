@@ -301,7 +301,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
       let { apiVersion } = config;
       if (!apiVersion) {
-        apiVersion = 'v1alpha';
+        apiVersion = usesRealtimeTextInput ? 'v1beta' : 'v1alpha';
       }
 
       // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
@@ -324,20 +324,27 @@ export class GoogleLiveProvider implements ApiProvider {
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: unknown = undefined;
       const usageMetadata: any[] = [];
+      let pendingUsageMetadata: any;
       let completedGenerations = 0;
       let completedTurns = 0;
       let hasFinalized = false;
 
-      const isTextExpected =
-        config.generationConfig?.response_modalities?.includes('text') ?? false;
-      const isAudioExpected =
-        config.generationConfig?.response_modalities?.includes('audio') ?? false;
+      const requestedText = config.generationConfig?.response_modalities?.includes('text') ?? false;
+      const responseModalities = usesRealtimeTextInput
+        ? config.generationConfig?.response_modalities?.filter((modality) => modality !== 'text')
+        : config.generationConfig?.response_modalities;
+      const effectiveResponseModalities =
+        usesRealtimeTextInput && !responseModalities?.length ? ['audio'] : responseModalities;
+      const isTextExpected = effectiveResponseModalities?.includes('text') ?? false;
+      const isAudioExpected = effectiveResponseModalities?.includes('audio') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;
 
       // Extract transcription config for use in message handler
-      const hasOutputTranscription = !!config.generationConfig?.outputAudioTranscription;
+      const hasOutputTranscription =
+        !!config.generationConfig?.outputAudioTranscription ||
+        (usesRealtimeTextInput && requestedText);
 
       // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
       const timeout = setTimeout(() => {
@@ -484,12 +491,15 @@ export class GoogleLiveProvider implements ApiProvider {
         logger.debug('WebSocket connection is opening...');
         const {
           speechConfig,
-          outputAudioTranscription,
+          outputAudioTranscription: configuredOutputAudioTranscription,
           inputAudioTranscription,
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
         } = config.generationConfig || {};
+        const outputAudioTranscription =
+          configuredOutputAudioTranscription ??
+          (usesRealtimeTextInput && requestedText ? {} : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {
@@ -524,6 +534,9 @@ export class GoogleLiveProvider implements ApiProvider {
               topP: config.topP,
               topK: config.topK,
               ...restGenerationConfig,
+              ...(effectiveResponseModalities
+                ? { response_modalities: effectiveResponseModalities }
+                : {}),
               ...(formattedSpeechConfig ? { speech_config: formattedSpeechConfig } : {}),
               ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
@@ -590,7 +603,11 @@ export class GoogleLiveProvider implements ApiProvider {
 
           const frameUsageMetadata = response.usageMetadata ?? response.usage_metadata;
           if (frameUsageMetadata) {
-            usageMetadata.push(frameUsageMetadata);
+            pendingUsageMetadata = frameUsageMetadata;
+          }
+          if (response.serverContent?.turnComplete && pendingUsageMetadata) {
+            usageMetadata.push(pendingUsageMetadata);
+            pendingUsageMetadata = undefined;
           }
 
           if (response.error) {
