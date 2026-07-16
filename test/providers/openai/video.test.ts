@@ -1534,6 +1534,38 @@ describe('OpenAiVideoProvider', () => {
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
     });
 
+    it('should not persist videos when a response-varying routing header contains a credential', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'gateway-secret',
+          apiBaseUrl: 'https://gateway.example/v1',
+          headers: {
+            'X-Tenant-Id': 'tenant-a',
+            'X-Route': 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_secret_route', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_secret_route', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Routed video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
     it('should include non-secret routed-gateway headers in the video cache identity', async () => {
       const config = {
         apiKey: 'gateway-secret',

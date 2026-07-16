@@ -92,11 +92,20 @@ const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
 const BACKGROUND_STREAM_ABORT_GRACE_MS = 1_000;
 const inFlightBackgroundCreations = new Map<
   string,
-  { promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>; subscribers: number }
+  {
+    promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>;
+    subscribers: number;
+    billed: boolean;
+  }
 >();
 const inFlightBackgroundResponses = new Map<
   string,
-  { promise: Promise<BackgroundResponseResult>; controller: AbortController; subscribers: number }
+  {
+    promise: Promise<BackgroundResponseResult>;
+    controller: AbortController;
+    subscribers: number;
+    billed: boolean;
+  }
 >();
 
 function getAbortError(signal: AbortSignal): Error {
@@ -254,7 +263,7 @@ async function createBackgroundResponseWithCancellation(
       bustCache,
       maxRetries,
     );
-    inFlight = { promise, subscribers: 0 };
+    inFlight = { promise, subscribers: 0, billed: false };
     if (canCoalesce) {
       inFlightBackgroundCreations.set(cacheKey, inFlight);
       void promise
@@ -309,7 +318,18 @@ async function createBackgroundResponseWithCancellation(
   });
 
   try {
-    return await Promise.race([inFlight.promise, cancellation]);
+    const created = await Promise.race([inFlight.promise, cancellation]);
+    if (
+      created.cached ||
+      created.status < 200 ||
+      created.status >= 300 ||
+      (created.data.status !== 'completed' && created.data.status !== 'incomplete')
+    ) {
+      return created;
+    }
+    const shared = inFlight.billed;
+    inFlight.billed = true;
+    return shared ? { ...created, cached: true } : created;
   } finally {
     if (onAbort) {
       signal?.removeEventListener('abort', onAbort);
@@ -395,11 +415,12 @@ async function coalesceBackgroundResponse(
     JSON.stringify({
       url,
       id: initial.id,
-      headers: Object.entries(request.headers).sort(([left], [right]) => left.localeCompare(right)),
+      headers: Object.entries(request.headers)
+        .map(([key, value]) => [key.toLowerCase(), value])
+        .sort(([left], [right]) => left.localeCompare(right)),
     }),
   );
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
-  const shared = Boolean(inFlight);
   if (!inFlight) {
     const controller = new AbortController();
     const promise = resolveBackgroundResponse(
@@ -411,7 +432,7 @@ async function coalesceBackgroundResponse(
       cached,
       deleteFromCache,
     );
-    inFlight = { promise, controller, subscribers: 0 };
+    inFlight = { promise, controller, subscribers: 0, billed: false };
     inFlightBackgroundResponses.set(cacheKey, inFlight);
     void promise
       .finally(() => {
@@ -452,7 +473,12 @@ async function coalesceBackgroundResponse(
   });
   try {
     const result = await Promise.race([inFlight.promise, cancellation]);
-    return result.error ? result : shared ? { ...result, shared: true } : result;
+    if (result.error) {
+      return result;
+    }
+    const shared = inFlight.billed;
+    inFlight.billed = true;
+    return shared ? { ...result, shared: true } : result;
   } finally {
     if (onAbort) {
       callerSignal?.removeEventListener('abort', onAbort);

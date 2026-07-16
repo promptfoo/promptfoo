@@ -214,16 +214,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     }
 
     const config = { ...this.config, ...context?.prompt?.config } as OpenAiTtsOptions;
-    const model = config.model || this.modelName;
-
-    const characterCount = Array.from(prompt).length;
-    const validationError = getValidationError(characterCount, model, config);
-    if (validationError) {
-      return { error: validationError };
-    }
-
     const body = {
-      model,
+      model: config.model || this.modelName,
       input: prompt,
       voice: config.voice || 'alloy',
       ...(config.instructions ? { instructions: config.instructions } : {}),
@@ -233,6 +225,12 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ...(config.speed === undefined ? {} : { speed: config.speed }),
       ...(config.passthrough || {}),
     };
+    const model = body.model;
+    const characterCount = Array.from(body.input).length;
+    const validationError = getValidationError(characterCount, model, { ...config, ...body });
+    if (validationError) {
+      return { error: validationError };
+    }
 
     const startedAt = Date.now();
     const url = `${this.getApiUrl()}/audio/speech`;
@@ -284,7 +282,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       !hasSensitiveHeaderValue &&
       !(
         (usesAuthenticatedCustomEndpoint ||
-          (typeof config.voice === 'object' && config.voice !== null)) &&
+          (typeof body.voice === 'object' && body.voice !== null)) &&
         !hasTenantDiscriminator
       );
 

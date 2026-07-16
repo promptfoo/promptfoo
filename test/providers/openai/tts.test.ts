@@ -487,6 +487,62 @@ describe('OpenAiTtsProvider', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
+  it('does not share passthrough custom voices without a non-secret tenant discriminator', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      const authorization = (options?.headers as Record<string, string>).Authorization;
+      return audioResponse(new TextEncoder().encode(`audio-for-${authorization}`));
+    });
+
+    const first = await new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'tenant-a', passthrough: { voice: { id: 'voice-private' } } } as any,
+    }).callApi('same input');
+    const second = await new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'tenant-b', passthrough: { voice: { id: 'voice-private' } } } as any,
+    }).callApi('same input');
+
+    expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer tenant-a',
+    );
+    expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer tenant-b',
+    );
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(false);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('uses passthrough model and input overrides for validation, character reporting, and billing', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const modelOverride = await new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', passthrough: { model: 'tts-1-hd' } } as any,
+    }).callApi('hello');
+    const inputOverride = await new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', passthrough: { input: 'x'.repeat(100) } } as any,
+    }).callApi('hi');
+    const oversized = await new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', passthrough: { input: 'x'.repeat(4097) } } as any,
+    }).callApi('short prompt');
+
+    expect(modelOverride).toMatchObject({
+      output: 'Generated 5 characters of speech',
+      cost: 0.00015,
+    });
+    expect(inputOverride).toMatchObject({
+      output: 'Generated 100 characters of speech',
+      cost: 0.0015,
+    });
+    expect(oversized.error).toBe('Speech input exceeds 4096 characters.');
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('does not share authenticated custom speech endpoints without a tenant discriminator', async () => {
     const values = new Map<string, string>();
     const cache = {

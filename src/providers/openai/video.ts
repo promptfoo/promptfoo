@@ -543,6 +543,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
+    const hasSensitiveHeaderValue = Object.entries(requestHeaders).some(
+      ([key, value]) =>
+        !isSensitiveCacheHeader(key) && typeof value === 'string' && hasSensitiveCacheValue(value),
+    );
     const tenantCacheScope = Object.fromEntries(
       Object.entries(safeCacheHeaders).filter(([key]) =>
         /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key),
@@ -557,6 +561,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
     const canCacheVideo =
       !hasSensitiveCacheValue(prompt) &&
+      !hasSensitiveHeaderValue &&
       ((!hasAuthenticatedInputReference(config.input_reference) &&
         !usesAuthenticatedCustomEndpoint) ||
         Object.keys(tenantCacheScope).length > 0);

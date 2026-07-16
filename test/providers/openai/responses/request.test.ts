@@ -326,6 +326,127 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
   });
 
+  it('should bill only one subscriber when a coalesced background creation completes immediately', async () => {
+    let creates = 0;
+    let creation: Promise<any> | undefined;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        if (!creation) {
+          creates++;
+          creation = new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  data: {
+                    id: 'resp_terminal_shared',
+                    status: 'completed',
+                    output: [
+                      {
+                        type: 'message',
+                        role: 'assistant',
+                        content: [{ type: 'output_text', text: 'Immediate background result' }],
+                      },
+                    ],
+                    usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+                  },
+                  cached: false,
+                  status: 200,
+                  statusText: 'OK',
+                }),
+              5,
+            );
+          });
+        }
+        return creation;
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const results = await Promise.all([
+      provider.callApi('Immediate shared task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+      provider.callApi('Immediate shared task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(results.map((result) => result.output)).toEqual([
+      'Immediate background result',
+      'Immediate background result',
+    ]);
+    expect(results.filter((result) => result.cached === false)).toHaveLength(1);
+    expect(results.filter((result) => result.cached === true)).toHaveLength(1);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
+  it('should coalesce background polling for case-equivalent routing headers', async () => {
+    let creates = 0;
+    let polls = 0;
+    let creation: Promise<any> | undefined;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        if (!creation) {
+          creates++;
+          creation = Promise.resolve({
+            data: { id: 'resp_header_case', status: 'queued', output: [], usage: null },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+        }
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_header_case') && options?.method === 'GET') {
+        polls++;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return {
+          data: {
+            id: 'resp_header_case',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Case-normalized result' }],
+              },
+            ],
+            usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const upper = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Route': 'alpha' } },
+    });
+    const lower = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'x-route': 'alpha' } },
+    });
+
+    const results = await Promise.all([
+      upper.callApi('Case-normalized task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+      lower.callApi('Case-normalized task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(polls).toBe(1);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
   it('should keep a shared background job alive when only one subscriber aborts', async () => {
     let polls = 0;
     let creation: Promise<any> | undefined;
@@ -389,6 +510,12 @@ describe('OpenAiResponsesProvider request building', () => {
       status: 'fulfilled',
       value: { output: 'Completed for remaining subscriber' },
     });
+    if (results[1]?.status !== 'fulfilled') {
+      throw new Error('Expected the remaining subscriber to complete.');
+    }
+    expect(results[1].value.cached).toBe(false);
+    expect(results[1].value.cost).toBeGreaterThan(0);
+    expect(results[1].value.tokenUsage?.cached ?? 0).toBe(0);
     expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
       expect.stringContaining('/responses/resp_shared_abort/cancel'),
       expect.anything(),
