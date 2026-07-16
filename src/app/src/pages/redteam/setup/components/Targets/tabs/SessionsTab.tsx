@@ -319,6 +319,11 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   // Get input variables from the provider config
   const inputVariables = selectedTarget.inputs ? Object.keys(selectedTarget.inputs) : [];
   const hasMultipleInputs = inputVariables.length > 0;
+  const targetUrl =
+    (typeof selectedTarget.config?.url === 'string' && selectedTarget.config.url.trim()) ||
+    (typeof selectedTarget.id === 'string' && /^https?:\/\//i.test(selectedTarget.id)
+      ? selectedTarget.id
+      : undefined);
 
   const handleTestSessionClick = () => {
     if (isTargetConfigInvalid?.()) {
@@ -631,9 +636,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={
-                  isTestRunning || !selectedTarget.config?.url || Boolean(isTargetConfigInvalid?.())
-                }
+                disabled={isTestRunning || !targetUrl || Boolean(isTargetConfigInvalid?.())}
                 size="sm"
                 className="mb-3"
               >
@@ -645,7 +648,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
-              {!selectedTarget.config?.url && (
+              {!targetUrl && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
                   <AlertContent>

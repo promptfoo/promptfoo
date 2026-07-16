@@ -242,6 +242,9 @@ it('recovers a foundation target after a non-object import fails and the tab rel
 
 it.each([
   ['A2A', 'a2a:https://agent.example/a2a', { timeoutMs: 30000, url: 'https://agent.example/a2a' }],
+  ['A2A no-auth', 'a2a:https://agent.example/a2a', { auth: { type: 'none' } }],
+  ['A2A empty no-auth', 'a2a:https://agent.example/a2a', { auth: { type: '' } }],
+  ['A2A legacy no-auth', 'a2a:https://agent.example/a2a', { auth: { type: 'no_auth' } }],
   [
     'browser',
     'browser',
@@ -1091,6 +1094,72 @@ it.each([
   ],
   ['Google hosted search tool', 'google:gemini-3-pro', { tools: [{ googleSearch: {} }] }],
   ['Google hosted code-execution tool', 'google:gemini-3-pro', { tools: [{ codeExecution: {} }] }],
+  ['Google hosted URL-context tool', 'google:gemini-3-pro', { tools: [{ urlContext: {} }] }],
+  [
+    'OpenAI function schema with an embedded credential',
+    'openai:responses:gpt-5',
+    {
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'lookup',
+            description: 'use sk-proj-abcdefghijklmnopqrstuvwxyz1234567890',
+          },
+        },
+      ],
+    },
+  ],
+  [
+    'OpenAI response schema with an embedded credential',
+    'openai:responses:gpt-5',
+    {
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'result',
+          schema: { description: 'use sk-proj-abcdefghijklmnopqrstuvwxyz1234567890' },
+        },
+      },
+    },
+  ],
+  [
+    'HTTP OAuth client assertion',
+    'http',
+    {
+      url: 'https://attacker.test/token',
+      method: 'POST',
+      body: {
+        client_assertion:
+          'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjbGllbnQiLCJhdWQiOiJodHRwczovL2F0dGFja2VyLnRlc3QifQ.signature',
+      },
+    },
+  ],
+  [
+    'Azure hosted search data source',
+    'azure:chat:deployment',
+    {
+      data_sources: [
+        {
+          type: 'azure_search',
+          parameters: {
+            endpoint: 'https://search.example.test',
+            index_name: 'sensitive-index',
+            authentication: { type: 'system_assigned_managed_identity' },
+          },
+        },
+      ],
+    },
+  ],
+  [
+    'OpenAI hosted file-search resources',
+    'openai:gpt-5',
+    { tool_resources: { file_search: { vector_store_ids: ['vs_sensitive'] } } },
+  ],
+  ['Groq Compound default tools', 'groq:groq/compound', {}],
+  ['Groq Compound Mini default tools', 'groq:groq/compound-mini', {}],
+  ['Perplexity default search', 'perplexity:sonar', {}],
+  ['Bedrock deployed agent', 'bedrock-agent:demo', { agentAliasId: 'alias' }],
   [
     'OpenAI remote MCP passthrough',
     'openai:responses:gpt-5',
@@ -1186,6 +1255,57 @@ it.each([
   useRedTeamConfig.getState().setFullConfig({
     ...useRedTeamConfig.getState().config,
     target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
+  });
+  const originalSetItem = Storage.prototype.setItem;
+  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+    this: Storage,
+    key: string,
+    value: string,
+  ) {
+    if (this === window.localStorage && key === 'redTeamConfig') {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    }
+    return originalSetItem.call(this, key, value);
+  });
+
+  try {
+    expect(() =>
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'http',
+          label: 'Imported target',
+          config: { url: 'https://imported.test/chat', body: '{{prompt}}', method: 'POST' },
+        },
+      }),
+    ).toThrow('The quota has been exceeded.');
+  } finally {
+    setItem.mockRestore();
+  }
+
+  vi.resetModules();
+  const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+  const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+    './useRedTeamTargetConfigValidation'
+  );
+  reloadedConfig.getState().updateConfig('target', {
+    ...reloadedConfig.getState().config.target,
+    config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
+  });
+
+  expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+});
+
+it('does not unlock a hydrated HTTP target with top-level environment credentials', async () => {
+  const { useRedTeamConfig } = await import('./useRedTeamConfig');
+  useRedTeamConfig.getState().setFullConfig({
+    ...useRedTeamConfig.getState().config,
+    target: {
+      id: 'http',
+      label: 'Persisted target',
+      env: { API_KEY: 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890' },
+      config: { url: 'https://safe.test/chat', body: '{{prompt}}', method: 'POST' },
+    },
   });
   const originalSetItem = Storage.prototype.setItem;
   const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (

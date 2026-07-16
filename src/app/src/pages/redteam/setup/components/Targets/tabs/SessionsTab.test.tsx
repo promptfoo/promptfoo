@@ -1037,6 +1037,24 @@ describe('SessionsTab', () => {
       const testButton = screen.getByRole('button', { name: /test session/i });
       expect(testButton).toBeDisabled();
     });
+
+    it('should enable session testing when the HTTP URL is stored in the provider ID', () => {
+      render(
+        <SessionsTab
+          selectedTarget={{
+            ...baseProvider,
+            id: 'https://api.example.com/chat',
+            config: { ...baseProvider.config, url: '' },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /test session/i })).toBeEnabled();
+      expect(
+        screen.queryByText(/Please configure the target URL in the endpoint configuration/i),
+      ).toBeNull();
+    });
   });
 
   describe('Clear test result on configuration change', () => {

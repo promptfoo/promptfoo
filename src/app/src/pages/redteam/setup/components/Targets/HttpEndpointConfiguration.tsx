@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -157,6 +157,13 @@ Content-Type: application/json
   const targetUrl =
     (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
     (/^https?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : undefined);
+  const [urlInput, setUrlInput] = useState(() => targetUrl ?? '');
+  const isUrlInputFocused = useRef(false);
+  useEffect(() => {
+    if (!isUrlInputFocused.current) {
+      setUrlInput(targetUrl ?? '');
+    }
+  }, [targetUrl]);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -622,8 +629,18 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
-                  value={targetUrl ?? ''}
-                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value);
+                    updateCustomTarget('url', e.target.value);
+                  }}
+                  onFocus={() => {
+                    isUrlInputFocused.current = true;
+                  }}
+                  onBlur={() => {
+                    isUrlInputFocused.current = false;
+                    setUrlInput(targetUrl ?? '');
+                  }}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />

@@ -381,6 +381,40 @@ describe('TargetConfiguration lifecycle validation', () => {
   });
 
   it.each([
+    [
+      'HTTP',
+      'https://old.example/chat',
+      { method: 'POST', body: '{{prompt}}' },
+      /^URL/i,
+      'https://new.example/chat',
+    ],
+    [
+      'WebSocket',
+      'wss://old.example/socket',
+      { messageTemplate: '{{prompt}}' },
+      /WebSocket URL/i,
+      'wss://new.example/socket',
+    ],
+  ])('allows an imported %s URL target to clear and replace its endpoint', async (_case, id, config, label, nextUrl) => {
+    const user = userEvent.setup();
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: { id, label: 'Imported URL target', config },
+      });
+    });
+    render(<TargetConfigurationHarness />);
+
+    const input = screen.getByRole('textbox', { name: label });
+    expect(input).toHaveValue(id);
+    await user.clear(input);
+    expect(input).toHaveValue('');
+    await user.type(input, nextUrl);
+
+    expect(useRedTeamConfig.getState().config.target.config.url).toBe(nextUrl);
+  });
+
+  it.each([
     ['without config.url', { method: 'POST', body: '{"message":"{{prompt}}"}' }],
     ['with an empty config.url', { url: '', method: 'POST', body: '{"message":"{{prompt}}"}' }],
   ])('keeps an imported HTTP URL target visible and testable %s', (_case, config) => {

@@ -854,6 +854,21 @@ describe('useRedTeamConfig', () => {
       { steps: [{ action: 'waitForNewChildren', args: { parentSelector: '[' } }] },
     ],
     [
+      'browser with empty XPath selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'xpath=' } }] },
+    ],
+    [
+      'browser with malformed relative XPath selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: '..garbage' } }] },
+    ],
+    [
+      'browser with empty text selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'text=' } }] },
+    ],
+    [
       'browser waitForNewChildren with invalid timing',
       'browser',
       {
@@ -1189,6 +1204,9 @@ describe('useRedTeamConfig', () => {
           { action: 'click', args: { selector: '//button[@type="submit"]' } },
           { action: 'click', args: { selector: '..//button[@type="submit"]' } },
           { action: 'click', args: { selector: '(//button[@id="send"])[1]' } },
+          { action: 'click', args: { selector: '"Submit"' } },
+          { action: 'click', args: { selector: "'Submit'" } },
+          { action: 'click', args: { selector: '*css=button >> text=Submit' } },
           { action: 'click', args: { selector: '{{operationSelector}}' } },
         ],
       },

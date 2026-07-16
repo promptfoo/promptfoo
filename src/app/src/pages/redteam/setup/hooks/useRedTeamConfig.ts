@@ -55,6 +55,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:assistant',
   'azure:assistant',
   'azure:foundry-agent',
+  'bedrock-agent',
   'bedrock:agents',
   'bedrock:kb',
   'bedrock:knowledge-base',
@@ -552,10 +553,29 @@ const isValidBrowserStep = (step: unknown): boolean => {
       if (!segment) {
         return false;
       }
-      if (/^\(*\/\//.test(segment) || segment.startsWith('..')) {
+      const engineMatch = segment.match(/^(\*?[\w:-]+)=(.*)$/s);
+      const engineName = engineMatch?.[1].replace(/^\*/, '');
+      const isQuotedText =
+        segment.length > 1 &&
+        ((segment.startsWith('"') && segment.endsWith('"')) ||
+          (segment.startsWith("'") && segment.endsWith("'")));
+      if (isQuotedText) {
         continue;
       }
-      const engineMatch = segment.match(/^([\w:-]+)=(.*)$/s);
+      const isImplicitXPath = /^\(*\/\//.test(segment) || segment.startsWith('..');
+      const isExplicitXPath = engineName?.startsWith('xpath') ?? false;
+      if (isImplicitXPath || isExplicitXPath) {
+        const xpathSelector = isExplicitXPath ? engineMatch?.[2].trim() : segment;
+        if (!xpathSelector) {
+          return false;
+        }
+        try {
+          document.evaluate(xpathSelector, document, null, 0, null);
+        } catch {
+          return false;
+        }
+        continue;
+      }
       if (engineMatch) {
         const supportedEngines = new Set([
           'css',
@@ -578,10 +598,13 @@ const isValidBrowserStep = (step: unknown): boolean => {
           'nth',
           'visible',
         ]);
-        if (!supportedEngines.has(engineMatch[1])) {
+        if (!engineName || !supportedEngines.has(engineName)) {
           return false;
         }
-        if (!engineMatch[1].startsWith('css')) {
+        if (!engineName.startsWith('css')) {
+          if (!engineMatch[2].trim()) {
+            return false;
+          }
           continue;
         }
       }
@@ -699,7 +722,7 @@ const containsRemoteToolEndpoint = (value: unknown): boolean => {
         value.type,
       )) ||
     Object.keys(value).some((name) =>
-      /^(?:google[-_]?search(?:[-_]?retrieval)?|code[-_]?execution)$/i.test(name),
+      /^(?:google[-_]?search(?:[-_]?retrieval)?|code[-_]?execution|url[-_]?context)$/i.test(name),
     ) ||
     value.server_url !== undefined ||
     value.serverUrl !== undefined ||
@@ -723,7 +746,11 @@ const containsRemoteA2APushCallback = (value: unknown): boolean => {
 
 const looksLikeRequestCredentialField = (name: string): boolean =>
   looksLikeRequestCredentialParameter(name) ||
-  /^(?:x[-_]?)?session(?:[-_]?(?:id|data))?$/i.test(name);
+  /^(?:(?:x[-_]?)?session(?:[-_]?(?:id|data))?|client[-_]?assertion(?:[-_]?type)?|jwt)$/i.test(
+    name,
+  );
+
+const JWT_PATTERN = /(?:^|[^\w-])eyJ[\w-]+\.[\w-]+\.[\w-]+(?:$|[^\w-])/;
 
 const OPAQUE_CREDENTIAL_FIELDS = new Set([
   'tools',
@@ -761,6 +788,7 @@ const containsCredentialRequestData = (value: unknown): boolean => {
   if (typeof value === 'string') {
     if (
       looksLikeCredentialValue(value.trim()) ||
+      JWT_PATTERN.test(value) ||
       value.split(/[\s,"'=&{}[\]()<>/?;:]+/).some((part) => looksLikeCredentialValue(part.trim()))
     ) {
       return true;
@@ -805,10 +833,32 @@ const containsCredentialRequestData = (value: unknown): boolean => {
   );
 };
 
+const containsCredentialValue = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return (
+      looksLikeCredentialValue(value.trim()) ||
+      JWT_PATTERN.test(value) ||
+      value.split(/[\s,"'=&{}[\]()<>/?;:]+/).some((part) => looksLikeCredentialValue(part.trim()))
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsCredentialValue);
+  }
+  return isPlainObject(value) && Object.values(value).some(containsCredentialValue);
+};
+
 const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolean => {
   if (!target || !isPlainObject(target.config)) {
     return true;
   }
+  const hasA2ANoAuth =
+    getProviderType(target.id) === 'a2a' &&
+    isPlainObject(target.config.auth) &&
+    typeof target.config.auth.type === 'string' &&
+    ['', 'none', 'no_auth'].includes(target.config.auth.type);
+  const credentialConfig = hasA2ANoAuth
+    ? Object.fromEntries(Object.entries(target.config).filter(([field]) => field !== 'auth'))
+    : target.config;
   const executableFields = [
     'transform',
     'transformResponse',
@@ -826,6 +876,8 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
         target.id.startsWith(`${agenticId}:`) ||
         (agenticId.startsWith('anthropic:claude-') && target.id.startsWith(agenticId)),
     ) ||
+    /^groq:(?:responses:)?groq\/compound(?:-mini)?$/i.test(target.id) ||
+    getProviderType(target.id) === 'perplexity' ||
     target.transform !== undefined ||
     executableFields.some((field) => target.config[field] !== undefined)
   ) {
@@ -844,11 +896,17 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
     target.config.search_parameters !== undefined ||
     target.config.compound_custom !== undefined ||
     (Array.isArray(target.config.connectors) && target.config.connectors.length > 0) ||
-    target.config.auth !== undefined ||
-    Object.keys(target.config).some(looksLikeRequestCredentialField) ||
+    (target.config.auth !== undefined && !hasA2ANoAuth) ||
+    Object.keys(credentialConfig).some(looksLikeRequestCredentialField) ||
     containsCredentialHeader(target.config.headers) ||
     containsCredentialRawHeader(target.config.request) ||
-    containsCredentialRequestData([target.id, target.config]) ||
+    containsCredentialRequestData([target.id, credentialConfig]) ||
+    containsCredentialValue(
+      Object.entries(target.config)
+        .filter(([field]) => OPAQUE_CREDENTIAL_FIELDS.has(field.replace(/-/g, '_').toLowerCase()))
+        .map(([, value]) => value),
+    ) ||
+    (target.env !== undefined && Object.keys(target.env).length > 0) ||
     target.config.functionToolCallbacks !== undefined ||
     containsNunjucksTemplate(target.config.responseSchema) ||
     containsNunjucksTemplate(target.config.tools) ||
@@ -857,9 +915,11 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
     target.config.keyFilename !== undefined ||
     target.config.googleAuthOptions !== undefined ||
     target.config.credentials !== undefined ||
+    target.config.data_sources !== undefined ||
+    target.config.dataSources !== undefined ||
+    target.config.tool_resources !== undefined ||
     (STRUCTURED_FOUNDATION_PROVIDER_TYPES.includes(getProviderType(target.id) ?? '') &&
       (target.id.startsWith('openai:transcription') ||
-        (target.env !== undefined && Object.keys(target.env).length > 0) ||
         [
           'apiBaseUrl',
           'apiHost',
