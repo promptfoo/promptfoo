@@ -360,6 +360,10 @@ type EnvVars = {
   // Moonshot AI (Kimi)
   MOONSHOT_API_KEY?: string;
 
+  // Zhipu AI (GLM)
+  ZHIPU_API_KEY?: string;
+  ZAI_API_KEY?: string;
+
   // n8n
   N8N_API_KEY?: string;
 
