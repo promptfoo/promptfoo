@@ -6,6 +6,8 @@ import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import TargetConfiguration from './TargetConfiguration';
 
+import type { Config } from '../../types';
+
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));
 vi.mock('../Prompts', () => ({ default: () => null }));
 vi.mock('./CommonConfigurationOptions', () => ({ default: () => null }));
@@ -184,5 +186,88 @@ describe('TargetConfiguration lifecycle validation', () => {
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
     expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
+  });
+
+  it.each([
+    ['HTTP', 'http', /Use Raw HTTP Request/i],
+    ['WebSocket', 'websocket', /Custom WebSocket Endpoint Configuration/i],
+    ['browser', 'browser', /Browser Automation Configuration/i],
+  ])('renders an imported %s target with null config without unblocking it', (_case, id, heading) => {
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id,
+          label: `${id} target`,
+          config: null as unknown as Config['target']['config'],
+        },
+      });
+    });
+
+    render(<TargetConfigurationHarness />);
+
+    expect(screen.getByText(heading)).toBeInTheDocument();
+    expect(useRedTeamConfig.getState().config.target.config).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('null');
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+  });
+
+  it('recovers an imported foundation target after a structured field replaces its null config', async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: null as unknown as Config['target']['config'],
+        },
+      });
+    });
+    render(<TargetConfigurationHarness />);
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+
+    await replaceText(user, screen.getByLabelText(/Model ID/i), 'openai:gpt-5-mini');
+
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id: 'openai:gpt-5-mini',
+      label: 'Foundation target',
+      config: {},
+    });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+    expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
+  });
+
+  it.each([
+    ['foundation', 'openai:gpt-5', 'openai'],
+    ['browser', 'browser', 'browser'],
+  ])('keeps a markerless %s target with null config blocked', (_case, id, providerType) => {
+    act(() => {
+      useRedTeamConfig.setState({
+        config: {
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id,
+            label: `${id} target`,
+            config: null as unknown as Config['target']['config'],
+          },
+        },
+        providerType,
+      });
+      useRedTeamTargetConfigValidation.setState({
+        ...useRedTeamTargetConfigValidation.getState(),
+        targetConfigError: null,
+        targetConfigDraft: null,
+      });
+      window.localStorage.removeItem('redTeamTargetConfigValidation');
+    });
+
+    render(<TargetConfigurationHarness />);
+
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
   });
 });

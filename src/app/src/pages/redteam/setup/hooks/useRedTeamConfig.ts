@@ -276,13 +276,28 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     (set) => ({
       config: defaultConfig,
       providerType: undefined,
-      updateConfig: (section, value) =>
-        set((state) => ({
-          config: {
-            ...state.config,
-            [section]: value,
-          },
-        })),
+      updateConfig: (section, value) => {
+        let replacedNonObjectTarget = false;
+        set((state) => {
+          replacedNonObjectTarget =
+            section === 'target' &&
+            !isPlainObject(state.config.target?.config) &&
+            isPlainObject((value as Config['target'] | undefined)?.config);
+          return {
+            config: {
+              ...state.config,
+              [section]: value,
+            },
+          };
+        });
+        if (
+          replacedNonObjectTarget &&
+          useRedTeamTargetConfigValidation.getState().targetConfigError ===
+            'Configuration must be a JSON object'
+        ) {
+          useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+        }
+      },
       updatePlugins: (plugins) =>
         set((state) => {
           // First compute the merged plugins

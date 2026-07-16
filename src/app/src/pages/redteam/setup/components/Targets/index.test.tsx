@@ -393,6 +393,26 @@ describe('Targets Component', () => {
   });
 
   describe('HTTP Target Configuration', () => {
+    it.each([
+      ['HTTP', 'http'],
+      ['WebSocket', 'websocket'],
+      ['browser', 'browser'],
+    ])('renders a legacy %s target with a null config safely', (_case, id) => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { id, label: `${id} target`, config: null },
+          plugins: [],
+          strategies: [],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      expect(() =>
+        renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />),
+      ).not.toThrow();
+      expect(screen.getAllByRole('button', { name: /Next/i })[0]).toBeDisabled();
+    });
+
     it('should enable the Next button only when HTTP target has valid URL and both tests pass', async () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({

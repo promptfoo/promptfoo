@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import deepEqual from 'fast-deep-equal';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -57,6 +57,17 @@ const isRestoredTargetConfigDraft = (
   }
 };
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const getStructuredProvider = (provider: ProviderOptions): ProviderOptions =>
+  isPlainObject(provider.config) ? provider : { ...provider, config: {} };
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -75,6 +86,7 @@ function ProviderConfigEditor({
   const { targetConfigError, setTargetConfigError, targetConfigDraft, setTargetConfigDraft } =
     useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
+  const structuredProvider = useMemo(() => getStructuredProvider(provider), [provider]);
   const preserveConfigErrorOnUnchangedConfig =
     isRedTeam &&
     Boolean(targetConfigError) &&
@@ -163,7 +175,7 @@ function ProviderConfigEditor({
     // by reference (which is React state owned by our parent).
     const updatedTarget = {
       ...provider,
-      config: { ...(provider.config ?? {}) },
+      config: { ...structuredProvider.config },
     } as ProviderOptions;
 
     if (field === 'id') {
@@ -247,7 +259,10 @@ function ProviderConfigEditor({
   };
 
   const updateWebSocketTarget = (field: string, value: unknown) => {
-    const updatedTarget = { ...provider } as ProviderOptions;
+    const updatedTarget = {
+      ...provider,
+      config: { ...structuredProvider.config },
+    } as ProviderOptions;
     if (field === 'url') {
       updatedTarget.config.url = value as string;
       if (validateUrl(value as string, 'websocket')) {
@@ -273,14 +288,14 @@ function ProviderConfigEditor({
 
     if (providerType === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request === undefined) {
+      if (structuredProvider.config.request === undefined) {
         // Structured mode: validate URL
-        if (!provider.config.url || !validateUrl(provider.config.url)) {
+        if (!structuredProvider.config.url || !validateUrl(structuredProvider.config.url)) {
           errors.push('Valid URL is required');
         }
       } else {
         // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
+        if (!structuredProvider.config.request || structuredProvider.config.request.trim() === '') {
           errors.push('HTTP request content is required');
         }
       }
@@ -289,7 +304,10 @@ function ProviderConfigEditor({
         errors.push(bodyError);
       }
     } else if (providerType === 'websocket') {
-      if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
+      if (
+        !structuredProvider.config.url ||
+        !validateUrl(structuredProvider.config.url, 'websocket')
+      ) {
         errors.push('Valid WebSocket URL is required');
       }
     } else if (
@@ -417,6 +435,7 @@ function ProviderConfigEditor({
   }, [
     providerType,
     provider,
+    structuredProvider,
     bodyError,
     extensionErrors,
     a2aAdvancedConfigError,
@@ -457,7 +476,7 @@ function ProviderConfigEditor({
 
       {providerType === 'http' && (
         <HttpEndpointConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           bodyError={bodyError}
           setBodyError={setBodyError}
@@ -470,7 +489,7 @@ function ProviderConfigEditor({
 
       {providerType === 'websocket' && (
         <WebSocketEndpointConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateWebSocketTarget={updateWebSocketTarget}
           urlError={urlError}
         />
@@ -478,14 +497,14 @@ function ProviderConfigEditor({
 
       {providerType === 'browser' && (
         <BrowserAutomationConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
         />
       )}
 
       {providerType === 'a2a' && (
         <A2AEndpointConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
@@ -511,7 +530,7 @@ function ProviderConfigEditor({
         'cerebras',
       ].includes(providerType || '') && (
         <FoundationModelConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           providerType={providerType || ''}
         />
@@ -574,7 +593,7 @@ function ProviderConfigEditor({
       {/* Agent frameworks */}
       {AGENT_FRAMEWORKS.includes(providerType || '') && (
         <AgentFrameworkConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           agentType={providerType || ''}
         />
@@ -596,7 +615,7 @@ function ProviderConfigEditor({
 
       <div className="mt-6">
         <CommonConfigurationOptions
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}

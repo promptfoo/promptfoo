@@ -25,6 +25,15 @@ const requiresPrompt = (target: ProviderOptions) => {
   );
 };
 
+const hasPlainTargetConfig = (target: ProviderOptions): boolean => {
+  const config = target.config as unknown;
+  if (typeof config !== 'object' || config === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(config);
+  return prototype === Object.prototype || prototype === null;
+};
+
 export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
   const { config, updateConfig, providerType } = useRedTeamConfig();
   const { targetConfigError } = useRedTeamTargetConfigValidation();
@@ -61,7 +70,12 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
   };
 
   const isProviderValid = () => {
-    return selectedTarget.label && !providerError && !targetConfigError;
+    return (
+      selectedTarget.label &&
+      !providerError &&
+      !targetConfigError &&
+      hasPlainTargetConfig(selectedTarget)
+    );
   };
 
   const getNextButtonTooltip = () => {
@@ -73,6 +87,9 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     }
     if (targetConfigError) {
       return targetConfigError;
+    }
+    if (!hasPlainTargetConfig(selectedTarget)) {
+      return 'Configuration must be a JSON object';
     }
     if (validationErrors) {
       return validationErrors;
