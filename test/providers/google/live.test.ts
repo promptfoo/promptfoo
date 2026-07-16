@@ -448,6 +448,40 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should preserve padded Gemini Live audio chunks when assembling the WAV response', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            modelTurn: {
+              parts: [
+                { inlineData: { mimeType: 'audio/pcm', data: 'YQ==' } },
+                { inlineData: { mimeType: 'audio/pcm', data: 'Yg==' } },
+              ],
+            },
+            turnComplete: true,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+    const wav = Buffer.from(response.audio?.data || '', 'base64');
+
+    expect(wav.subarray(44).toString()).toBe('ab');
+    expect(wav.readUInt32LE(40)).toBe(2);
+  });
+
   it('should return a clear error for an unsupported inline video container', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: { apiKey: 'test-api-key', timeoutMs: 500 },

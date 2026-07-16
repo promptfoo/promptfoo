@@ -195,8 +195,7 @@ export class GoogleLiveProvider implements ApiProvider {
     return `[Google Live Provider ${this.modelName}]`;
   }
 
-  private convertPcmToWav(base64PcmData: string): string {
-    const pcmBuffer = Buffer.from(base64PcmData, 'base64');
+  private convertPcmToWav(pcmBuffer: Buffer): string {
     const wavBuffer = this.createWavHeader(pcmBuffer.length, 24000, 16, 1);
     const wavData = Buffer.concat([wavBuffer, pcmBuffer]);
     return wavData.toString('base64');
@@ -367,7 +366,7 @@ export class GoogleLiveProvider implements ApiProvider {
       const ws = new WebSocketCtor(url);
 
       let response_text_total = '';
-      let response_audio_total = '';
+      const responseAudioChunks: Buffer[] = [];
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
@@ -685,7 +684,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
         if (hasAudioContent) {
           result.audio = {
-            data: this.convertPcmToWav(response_audio_total),
+            data: this.convertPcmToWav(Buffer.concat(responseAudioChunks)),
             format: 'wav',
             transcript: response_audio_transcript || response_text_total || undefined,
           };
@@ -782,7 +781,7 @@ export class GoogleLiveProvider implements ApiProvider {
           } catch {
             hasAudioContent = true;
             const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
-            response_audio_total += audioBuffer.toString('base64');
+            responseAudioChunks.push(audioBuffer);
             clearTimeout(timeout);
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
@@ -860,7 +859,7 @@ export class GoogleLiveProvider implements ApiProvider {
                 }
                 if (part.inlineData?.mimeType?.includes('audio')) {
                   hasAudioContent = true;
-                  response_audio_total += part.inlineData.data;
+                  responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
                   clearTimeout(timeout);
                   if (isAudioExpected) {
                     hasAudioStreamEnded = false;
@@ -1038,14 +1037,14 @@ export class GoogleLiveProvider implements ApiProvider {
             for (const chunk of response.realtimeInput.mediaChunks) {
               if (chunk.mimeType?.includes('audio')) {
                 hasAudioContent = true;
-                response_audio_total += chunk.data;
+                responseAudioChunks.push(Buffer.from(chunk.data, 'base64'));
               }
             }
           } else if (response.candidates?.[0]?.content?.parts) {
             for (const part of response.candidates[0].content.parts) {
               if (part.inlineData?.mimeType?.includes('audio')) {
                 hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
+                responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
               }
             }
           } else if (
