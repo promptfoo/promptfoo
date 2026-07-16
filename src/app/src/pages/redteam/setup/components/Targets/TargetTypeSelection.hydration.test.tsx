@@ -98,7 +98,7 @@ describe('TargetTypeSelection hydration', () => {
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
   });
 
-  it('keeps an explicit target replacement blocked when the persisted target is overwritten before its clear', async () => {
+  it('keeps Target Config reachable when an explicit target replacement cannot clear its error', async () => {
     const user = userEvent.setup();
     const onNext = vi.fn();
     useRedTeamTargetConfigValidation
@@ -152,9 +152,9 @@ describe('TargetTypeSelection hydration', () => {
       /^invalid-json:[a-z0-9-]+$/,
     );
     const nextButton = screen.getByRole('button', { name: 'Next' });
-    expect(nextButton).toBeDisabled();
+    expect(nextButton).toBeEnabled();
     await user.click(nextButton);
-    expect(onNext).not.toHaveBeenCalled();
+    expect(onNext).toHaveBeenCalledTimes(1);
   });
 
   it('does not restore an unsafe target after a full config is loaded while mounted', async () => {

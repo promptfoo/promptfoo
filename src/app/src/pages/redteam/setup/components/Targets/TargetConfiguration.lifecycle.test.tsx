@@ -153,6 +153,10 @@ describe('TargetConfiguration lifecycle validation', () => {
       });
     });
     const revision = useRedTeamTargetConfigValidation.getState().targetConfigRevision;
+    const clearTargetConfigValidation = vi.spyOn(
+      useRedTeamTargetConfigValidation.getState(),
+      'clearTargetConfigValidation',
+    );
     render(<TargetConfigurationHarness />);
     const editor = screen.getByTestId('code-editor') as HTMLTextAreaElement;
     const caret = editor.value.indexOf('1') + 1;
@@ -163,8 +167,72 @@ describe('TargetConfiguration lifecycle validation', () => {
 
     expect(useRedTeamConfig.getState().config.target.config.max_iterations).toBe(123);
     expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
+    expect(clearTargetConfigValidation).not.toHaveBeenCalled();
     expect(editor).toHaveFocus();
     expect(editor.isConnected).toBe(true);
+  });
+
+  it.each([
+    ['HTTP', 'http', /^URL/i, 'https://example.test/chat'],
+    ['HTTP URL provider', 'http://api.example.test', /^URL/i, 'https://example.test/chat'],
+    ['HTTPS URL provider', 'https://api.example.test', /^URL/i, 'https://example.test/chat'],
+    ['WebSocket', 'websocket', /WebSocket URL/i, 'wss://example.test/chat'],
+    ['WSS URL provider', 'wss://socket.example.test', /WebSocket URL/i, 'wss://example.test/chat'],
+  ])('keeps the %s editor mounted and focused while correcting an imported null config', async (_case, id, label, value) => {
+    const user = userEvent.setup();
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id,
+          label: `Imported ${id} target`,
+          config: null as unknown as Config['target']['config'],
+        },
+      });
+    });
+    const revision = useRedTeamTargetConfigValidation.getState().targetConfigRevision;
+    render(<TargetConfigurationHarness />);
+    const url = screen.getByRole('textbox', { name: label }) as HTMLInputElement;
+
+    await user.type(url, value.slice(0, 1));
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
+    expect(url).toHaveFocus();
+
+    await user.type(url, value.slice(1));
+
+    expect(useRedTeamConfig.getState().config.target.config.url).toBe(value);
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
+    expect(url).toHaveFocus();
+    expect(url.isConnected).toBe(true);
+
+    if (id.startsWith('http')) {
+      const [requestBody] = screen.getAllByTestId('code-editor');
+      await replaceText(user, requestBody, '{"message":"{{prompt}}"}');
+      expect(useRedTeamConfig.getState().config.target.config.body).toBe(
+        '{"message":"{{prompt}}"}',
+      );
+    } else {
+      const messageTemplate = screen.getByRole('textbox', { name: /Message Template/i });
+      const timeout = screen.getByRole('spinbutton', { name: /Timeout \(ms\)/i });
+      await replaceText(user, messageTemplate, 'Hello {{prompt}}');
+      await user.click(timeout);
+      await user.keyboard('25000');
+      expect(useRedTeamConfig.getState().config.target.config.messageTemplate).toBe(
+        'Hello {{prompt}}',
+      );
+      expect(useRedTeamConfig.getState().config.target.config.timeoutMs).toBe(25000);
+    }
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
   });
 
   it('keeps a restored unsafe config blocked through whitespace and Format until it is changed', async () => {

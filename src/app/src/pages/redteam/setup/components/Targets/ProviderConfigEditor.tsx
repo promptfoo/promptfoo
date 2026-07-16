@@ -114,7 +114,7 @@ function ProviderConfigEditor({
     error: string | null,
     expectedTarget?: ProviderOptions,
   ) => {
-    if (isRedTeam && !error) {
+    if (isRedTeam && !error && targetConfigError) {
       let cleared = false;
       try {
         cleared =
@@ -299,7 +299,9 @@ function ProviderConfigEditor({
       field in updatedTarget.config ||
       field === 'streamResponse' ||
       field === 'transformResponse' ||
-      field === 'protocols'
+      field === 'protocols' ||
+      field === 'messageTemplate' ||
+      field === 'timeoutMs'
     ) {
       (updatedTarget.config as Record<string, unknown>)[field] = value;
     } else if (field === 'label') {

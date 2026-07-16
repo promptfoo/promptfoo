@@ -168,6 +168,23 @@ const getStoredTargetConfigError = (): string | null => {
     }
   }
 
+  try {
+    const isolationToken = window.sessionStorage.getItem(
+      TARGET_CONFIG_VALIDATION_ISOLATION_STORAGE_KEY,
+    );
+    const isolatedMarker = markers[1];
+    const isolatedError = getTargetConfigErrorFromMarker(isolatedMarker);
+    if (
+      isolationToken &&
+      getTargetConfigMarkerToken(isolatedMarker) === isolationToken &&
+      isolatedError &&
+      !consumedTokens.has(isolationToken)
+    ) {
+      currentTargetConfigInvalidMarker = isolatedMarker;
+      return isolatedError;
+    }
+  } catch {}
+
   for (const marker of markers) {
     const targetConfigError = getTargetConfigErrorFromMarker(marker);
     const token = getTargetConfigMarkerToken(marker);

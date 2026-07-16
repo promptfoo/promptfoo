@@ -19,8 +19,7 @@ interface TargetTypeSelectionProps {
 
 export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
-  const { clearTargetConfigValidation, targetConfigError, targetConfigRevision } =
-    useRedTeamTargetConfigValidation();
+  const { clearTargetConfigValidation, targetConfigRevision } = useRedTeamTargetConfigValidation();
 
   // Keep configured imports even when their optional label is missing. The default HTTP
   // placeholder has no URL and should still require an explicit target-type selection.
@@ -83,7 +82,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   };
 
   const handleNext = () => {
-    if (!targetConfigError && hasTargetName && isValidSelection()) {
+    if (hasTargetName && isValidSelection()) {
       // Track provider type selection when moving to next step
       recordEvent('feature_used', {
         feature: 'redteam_config_provider_selected',
@@ -112,13 +111,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   };
 
   const isNextButtonDisabled = () => {
-    return Boolean(targetConfigError) || !hasTargetName || !isValidSelection();
+    return !hasTargetName || !isValidSelection();
   };
 
   const getNextButtonTooltip = () => {
-    if (targetConfigError) {
-      return targetConfigError;
-    }
     if (!hasTargetName) {
       return 'Please enter a target name';
     }

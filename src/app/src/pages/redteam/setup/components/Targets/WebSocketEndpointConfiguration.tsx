@@ -84,7 +84,7 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="websocket-url">WebSocket URL</Label>
           <Input
             id="websocket-url"
-            value={selectedTarget.config.url}
+            value={selectedTarget.config.url ?? ''}
             onChange={(e) => updateWebSocketTarget('url', e.target.value)}
             className={cn(urlError && 'border-destructive')}
           />
@@ -95,7 +95,7 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="message-template">Message Template</Label>
           <Textarea
             id="message-template"
-            value={selectedTarget.config.messageTemplate}
+            value={selectedTarget.config.messageTemplate ?? ''}
             onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
             rows={3}
           />
@@ -213,7 +213,7 @@ const WebSocketEndpointConfiguration = ({
             <Label htmlFor="response-transform">Response Transform</Label>
             <Input
               id="response-transform"
-              value={selectedTarget.config.transformResponse}
+              value={selectedTarget.config.transformResponse ?? ''}
               onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
             />
           </div>

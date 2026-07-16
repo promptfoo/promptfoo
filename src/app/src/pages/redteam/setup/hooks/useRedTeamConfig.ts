@@ -48,8 +48,48 @@ const isPersistedNonObjectTargetDraft = (draft: string | null): boolean => {
   }
 };
 
+const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolean => {
+  const providerType = getProviderType(target?.id);
+  const isHttpTarget = providerType === 'http' || providerType === 'https';
+  const isWebSocketTarget =
+    providerType === 'websocket' || providerType === 'ws' || providerType === 'wss';
+  if (!isHttpTarget && !isWebSocketTarget) {
+    return true;
+  }
+  if (!target || !isPlainObject(target.config)) {
+    return false;
+  }
+
+  if (isHttpTarget && target.config.request !== undefined) {
+    return typeof target.config.request === 'string' && target.config.request.trim().length > 0;
+  }
+
+  const url = target.config.url;
+  if (typeof url !== 'string' || !url.trim()) {
+    return false;
+  }
+  const isTemplatedHttpUrl = isHttpTarget && /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(url);
+  let protocol: string | undefined;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {}
+
+  if (isHttpTarget) {
+    return (
+      (isTemplatedHttpUrl || ['http:', 'https:'].includes(protocol ?? '')) &&
+      Boolean(target.config.body || target.config.multipart || target.config.method === 'GET')
+    );
+  }
+  return (
+    ['ws:', 'wss:'].includes(protocol ?? '') &&
+    typeof target.config.messageTemplate === 'string' &&
+    target.config.messageTemplate.trim().length > 0
+  );
+};
+
 const prepareTargetConfigValidationClear = (
   expectedTarget: Config['target'] | undefined,
+  incrementRevision = true,
 ): (() => void) => {
   const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
   const targetConfigInvalidMarker = getCurrentTargetConfigInvalidMarker();
@@ -67,7 +107,10 @@ const prepareTargetConfigValidationClear = (
       getCurrentTargetConfigInvalidMarker() === targetConfigInvalidMarker &&
       expectedSerializedTarget !== null
     ) {
-      currentTargetConfigValidation.clearTargetConfigValidation(expectedSerializedTarget);
+      currentTargetConfigValidation.clearTargetConfigValidation(
+        expectedSerializedTarget,
+        incrementRevision,
+      );
     }
   };
 };
@@ -75,9 +118,14 @@ const prepareTargetConfigValidationClear = (
 const prepareNonObjectTargetRecovery = (
   effectiveTarget: Config['target'] | undefined,
   replacedTargetConfig?: unknown,
+  incrementRevision = true,
 ): (() => void) | null => {
   const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
   const targetConfigInvalidMarker = getCurrentTargetConfigInvalidMarker();
+  const providerType = getProviderType(effectiveTarget?.id);
+  const isStructuredEndpointTarget = ['http', 'https', 'websocket', 'ws', 'wss'].includes(
+    providerType ?? '',
+  );
   let replacedMatchingNonObjectTarget = false;
   if (replacedTargetConfig !== undefined && !isPlainObject(replacedTargetConfig)) {
     try {
@@ -91,12 +139,14 @@ const prepareNonObjectTargetRecovery = (
     targetConfigValidation.targetConfigError !== 'Configuration must be a JSON object' ||
     !targetConfigInvalidMarker ||
     (!replacedMatchingNonObjectTarget &&
-      !isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft))
+      !isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft) &&
+      !isStructuredEndpointTarget) ||
+    !isValidStructuredEndpoint(effectiveTarget)
   ) {
     return null;
   }
 
-  return prepareTargetConfigValidationClear(effectiveTarget);
+  return prepareTargetConfigValidationClear(effectiveTarget, incrementRevision);
 };
 export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
   persist(
@@ -356,6 +406,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
           effectiveTarget,
           section === 'target' ? get().config.target?.config : undefined,
+          section !== 'target',
         );
         set((state) => {
           return {
@@ -435,7 +486,23 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         const finishTargetConfigValidationClear = prepareTargetConfigValidationClear(
           normalizedConfig.target,
         );
-        set({ config: normalizedConfig, providerType });
+        try {
+          set({ config: normalizedConfig, providerType });
+        } catch (error) {
+          const currentTargetConfigValidation = useRedTeamTargetConfigValidation.getState();
+          if (!currentTargetConfigValidation.targetConfigError) {
+            let targetConfigDraft = 'null';
+            try {
+              targetConfigDraft =
+                JSON.stringify(normalizedConfig.target?.config, null, 2) ?? 'null';
+            } catch {}
+            currentTargetConfigValidation.replaceTargetConfigValidation(
+              'Invalid JSON configuration',
+              targetConfigDraft,
+            );
+          }
+          throw error;
+        }
         finishTargetConfigValidationClear();
       },
       resetConfig: () => {

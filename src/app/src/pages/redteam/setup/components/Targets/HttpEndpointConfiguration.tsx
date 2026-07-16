@@ -614,7 +614,7 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
-                  value={selectedTarget.config.url}
+                  value={selectedTarget.config.url ?? ''}
                   onChange={(e) => updateCustomTarget('url', e.target.value)}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
