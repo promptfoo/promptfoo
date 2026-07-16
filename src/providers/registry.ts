@@ -1,6 +1,7 @@
 import path from 'path';
 
 import dedent from 'dedent';
+import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -957,8 +958,20 @@ export const providerMap: ProviderFactory[] = [
       const requestedApiModel = modelName || configuredModel || modelType;
       if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+        const apiHost =
+          providerOptions.config?.apiHost ||
+          providerOptions.env?.OPENAI_API_HOST ||
+          getEnvString('OPENAI_API_HOST');
+        const apiUrl = apiHost
+          ? `https://${apiHost}/v1`
+          : providerOptions.config?.apiBaseUrl ||
+            providerOptions.env?.OPENAI_API_BASE_URL ||
+            providerOptions.env?.OPENAI_BASE_URL ||
+            getEnvString('OPENAI_API_BASE_URL') ||
+            getEnvString('OPENAI_BASE_URL') ||
+            'https://api.openai.com/v1';
         for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
-          assertOpenAiApiModel(candidate);
+          assertOpenAiApiModel(candidate, apiUrl);
         }
       }
       if (modelType === 'chat') {

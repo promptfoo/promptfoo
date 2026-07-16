@@ -23,6 +23,7 @@ import {
   withCacheNamespace,
 } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -959,6 +960,24 @@ describe('fetchWithCache', () => {
       }
     });
 
+    it('should redact query credentials from cache-hit and cache-write debug logs', async () => {
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'cached response' }),
+      );
+      const secretUrl = 'https://api.example.com/data?api_key=SUPER_SECRET_TOKEN';
+
+      await fetchWithCache(secretUrl, {}, 1000);
+      await fetchWithCache(secretUrl, {}, 1000);
+
+      const messages = debug.mock.calls.map(([message]) => String(message)).join('\n');
+      expect(messages).toContain('Storing https://api.example.com/data?api_key=%5BREDACTED%5D');
+      expect(messages).toContain(
+        'Returning cached response for https://api.example.com/data?api_key=%5BREDACTED%5D',
+      );
+      expect(messages).not.toContain('SUPER_SECRET_TOKEN');
+    });
+
     it('produces a stable secret-bearing cache key across module loads (cacheable across processes)', async () => {
       const secretRequest = [
         'https://api.example.com/data',
@@ -1480,6 +1499,23 @@ describe('fetchWithCache', () => {
       expect((error as Error).message).not.toContain('SUPER_SECRET_TOKEN');
       // Original error preserved as cause.
       expect((error as Error).cause).toBeInstanceOf(TypeError);
+    });
+
+    it('should sanitize credential-bearing URLs in response-parse failure messages', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.resolve('not-json'),
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as unknown as Response);
+      const secretUrl = 'https://api.example.com/task?api_key=SUPER_SECRET_TOKEN';
+
+      const error = await fetchWithCache(secretUrl, {}, 1000).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('Error parsing response from');
+      expect((error as Error).message).not.toContain('SUPER_SECRET_TOKEN');
     });
 
     it('should not catch fetchWithRetries errors in body retry loop', async () => {

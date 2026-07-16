@@ -740,7 +740,9 @@ async function prepareFetchResponse(
     }
 
     if (format === 'json' && parsedData?.error) {
-      logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+      logger.debug(
+        `Not caching ${sanitizeUrl(getRequestUrlString(url))} because it contains an 'error' key: ${parsedData.error}`,
+      );
       return {
         response: serializedResponse,
         cacheable: false,
@@ -748,7 +750,7 @@ async function prepareFetchResponse(
     }
 
     logger.debug(
-      `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
+      `Storing ${sanitizeUrl(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
     );
     return {
       response: serializedResponse,
@@ -756,7 +758,7 @@ async function prepareFetchResponse(
     };
   } catch (err) {
     throw new Error(
-      `Error parsing response from ${url}: ${
+      `Error parsing response from ${sanitizeUrl(getRequestUrlString(url))}: ${
         (err as Error).message
       }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
@@ -842,7 +844,7 @@ export async function fetchWithCache<T = unknown>(
       };
     } catch (err) {
       throw new Error(
-        `Error parsing response from ${url}: ${
+        `Error parsing response from ${sanitizeUrl(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
       );
@@ -853,7 +855,9 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
+    logger.debug(
+      `Returning cached response for ${sanitizeUrl(getRequestUrlString(url))}: ${cachedResponse}`,
+    );
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 

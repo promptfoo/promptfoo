@@ -594,6 +594,17 @@ describe('loadApiProvider', () => {
     );
   });
 
+  it.each([
+    ['openai:chat:gpt-5.3-codex-spark', {}],
+    ['openai:responses:gpt-4.1', { passthrough: { model: 'gpt-5.3-codex-spark' } }],
+  ])('should allow a Codex-named model on a custom OpenAI-compatible gateway for %s', async (route, config) => {
+    await expect(
+      loadApiProvider(route, {
+        options: { config: { ...config, apiBaseUrl: 'https://gateway.example/v1' } },
+      }),
+    ).resolves.toBeDefined();
+  });
+
   it('should allow the documented gpt-5-codex-mini Responses replacement', async () => {
     const provider = await loadApiProvider('openai:responses:gpt-5-codex-mini');
 

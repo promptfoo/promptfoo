@@ -715,7 +715,9 @@ describe('OpenAiTtsProvider', () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
     mockedFetch.mockImplementation(async (url) => {
-      const token = new URL(String(url)).searchParams.get('api_key');
+      const parsedUrl = new URL(String(url));
+      expect(parsedUrl.pathname).toBe('/v1/audio/speech');
+      const token = parsedUrl.searchParams.get('api_key');
       return audioResponse(new TextEncoder().encode(`audio-for-${token}`));
     });
 
@@ -723,13 +725,13 @@ describe('OpenAiTtsProvider', () => {
       const first = await new OpenAiTtsProvider('tts-1', {
         config: {
           apiKeyRequired: false,
-          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-a-secret&path=',
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-a-secret',
         },
       }).callApi('same input');
       const second = await new OpenAiTtsProvider('tts-1', {
         config: {
           apiKeyRequired: false,
-          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-b-secret&path=',
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-b-secret',
         },
       }).callApi('same input');
 

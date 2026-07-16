@@ -33,6 +33,7 @@ import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
 import {
+  appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
   getTokenUsage,
@@ -106,6 +107,7 @@ type BackgroundRequest = {
   headers: Record<string, string>;
   body: string;
   cacheScope: string;
+  hasPerPromptAuthorization: boolean;
   signal?: AbortSignal;
 };
 const inFlightBackgroundCreations = new Map<
@@ -244,7 +246,9 @@ function getBackgroundCacheIdentity(
       !hasSensitiveUrlCredentials &&
       !hasSensitiveUrlPath &&
       !hasSensitiveHeaderValue &&
-      (sendsToOpenAiApi || !hasSensitiveHeader),
+      (sendsToOpenAiApi
+        ? !request.hasPerPromptAuthorization || hasTenantDiscriminator
+        : !hasSensitiveHeader),
   };
 }
 
@@ -255,7 +259,7 @@ async function cancelBackgroundResponse(
 ): Promise<void> {
   try {
     await fetchWithCache<OpenAIResponsesResponse>(
-      `${url}/${encodeURIComponent(responseId)}/cancel`,
+      appendOpenAiApiPath(url, `${encodeURIComponent(responseId)}/cancel`),
       { method: 'POST', headers },
       BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS,
       'json',
@@ -318,7 +322,7 @@ async function pollBackgroundResponse(
       deadlineSignal = AbortSignal.timeout(remainingMs);
       const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
       const polled = await fetchWithCache<OpenAIResponsesResponse>(
-        `${url}/${encodeURIComponent(initial.id)}`,
+        appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
         { method: 'GET', headers, signal: pollSignal },
         remainingMs,
         'json',
@@ -479,8 +483,8 @@ async function resolveBackgroundResponse(
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
   cancelOnStop: boolean,
+  deadline = Date.now() + timeout,
 ): Promise<BackgroundResponseResult> {
-  const deadline = Date.now() + timeout;
   const polled = await pollBackgroundResponse(
     initial,
     url,
@@ -548,6 +552,7 @@ async function coalesceBackgroundResponse(
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
   cancelOnStop: boolean,
+  deadline?: number,
 ): Promise<BackgroundResponseResult> {
   const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.id);
   if (!cacheIdentity.coalescable) {
@@ -560,6 +565,7 @@ async function coalesceBackgroundResponse(
       cached,
       deleteFromCache,
       cancelOnStop,
+      deadline,
     );
   }
   const cacheKey = getScopedCacheKey(cacheIdentity.key);
@@ -575,6 +581,7 @@ async function coalesceBackgroundResponse(
       cached,
       deleteFromCache,
       cancelOnStop,
+      deadline,
     );
     inFlight = { promise, controller, subscribers: 0, billed: false };
     inFlightBackgroundResponses.set(cacheKey, inFlight);
@@ -989,7 +996,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
     };
-    assertOpenAiApiModel(body.model);
+    assertOpenAiApiModel(body.model, this.getApiUrl());
 
     // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
@@ -1139,7 +1146,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let responseHeaders: Record<string, string> | undefined;
     let pollingBackground = false;
     try {
-      const url = `${this.getApiUrl()}/responses`;
+      const url = appendOpenAiApiPath(this.getApiUrl(), 'responses');
+      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
       const customHeaders = this.getOpenAiRequestHeaders(config.headers);
       const hasCustomHeader = (name: string) =>
         Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
@@ -1154,6 +1162,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         },
         body: JSON.stringify(body),
         cacheScope: this.backgroundCacheScope,
+        hasPerPromptAuthorization: Object.keys(context?.prompt?.config?.headers ?? {}).some(
+          (header) => header.toLowerCase() === 'authorization',
+        ),
         ...(abortSignal ? { signal: abortSignal } : {}),
       };
 
@@ -1382,6 +1393,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
       if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
         pollingBackground = true;
+        const cancelOnStop =
+          !isCacheEnabled() ||
+          Boolean(this.shouldBustCache(context)) ||
+          !getBackgroundCacheIdentity(url, request, data.id).cacheable;
         const polled = await coalesceBackgroundResponse(
           data,
           url,
@@ -1390,9 +1405,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           config.maxRetries,
           cached,
           deleteFromCache,
-          !isCacheEnabled() ||
-            Boolean(this.shouldBustCache(context)) ||
-            !getBackgroundCacheIdentity(url, request, data.id).cacheable,
+          cancelOnStop,
+          backgroundDeadline,
         );
         if (polled.shared) {
           cached = true;
@@ -1415,7 +1429,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           await updateCache?.(data, status, statusText, responseHeaders);
         }
         if (polled.error) {
-          if (polled.status === 0 || polled.cancelled) {
+          if ((polled.status === 0 && cancelOnStop) || polled.cancelled) {
             await deleteFromCache?.();
           }
           return {

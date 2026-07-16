@@ -431,6 +431,27 @@ describe('OpenAiVideoProvider', () => {
       }
     });
 
+    it('should append video lifecycle paths before custom gateway query credentials', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKeyRequired: false,
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret',
+        },
+      });
+      setupMocksForSuccess();
+
+      const result = await provider.callApi('Use the query-authenticated video gateway');
+
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithProxy.mock.calls.map(([url]) => String(url))).toEqual([
+        'https://gateway.example/v1/videos?api_key=tenant-secret',
+        'https://gateway.example/v1/videos/video_123?api_key=tenant-secret',
+        'https://gateway.example/v1/videos/video_123/content?api_key=tenant-secret',
+        'https://gateway.example/v1/videos/video_123/content?api_key=tenant-secret&variant=thumbnail',
+        'https://gateway.example/v1/videos/video_123/content?api_key=tenant-secret&variant=spritesheet',
+      ]);
+    });
+
     it('should handle invalid video size', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', size: '1920x1080' as any },

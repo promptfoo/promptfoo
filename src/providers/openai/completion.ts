@@ -5,6 +5,7 @@ import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import {
+  appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
   getTokenUsage,
@@ -72,14 +73,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    assertOpenAiApiModel(body.model);
+    assertOpenAiApiModel(body.model, this.getApiUrl());
 
     let data,
       cached = false,
       latencyMs: number | undefined;
     try {
       ({ data, cached, latencyMs } = (await fetchWithCache(
-        `${this.getApiUrl()}/completions`,
+        appendOpenAiApiPath(this.getApiUrl(), 'completions'),
         {
           method: 'POST',
           headers: {

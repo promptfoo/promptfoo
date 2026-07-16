@@ -199,6 +199,15 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
+    it('should detect an OpenAI Chat search model supplied through passthrough', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        id: 'search-grader',
+        config: { passthrough: { model: 'gpt-5-search-api' } },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
     it.each([
       'openai/gpt-5-search-api',
       'openai/gpt-5-search-api-2025-10-14',

@@ -46,6 +46,18 @@ export function hasSensitiveOpenAiCachePath(value: string): boolean {
     OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value)
   );
 }
+
+export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
+  const fragmentIndex = apiUrl.indexOf('#');
+  const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
+  const urlWithoutFragment = fragmentIndex === -1 ? apiUrl : apiUrl.slice(0, fragmentIndex);
+  const queryIndex = urlWithoutFragment.indexOf('?');
+  const base = queryIndex === -1 ? urlWithoutFragment : urlWithoutFragment.slice(0, queryIndex);
+  const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
+  const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
+
+  return `${base.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
+}
 type OpenAIModelCost = {
   input: number;
   output: number;
@@ -416,9 +428,19 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
 
 export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex-spark' }];
 
-export function assertOpenAiApiModel(model: unknown): void {
+export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
   if (typeof model !== 'string') {
     return;
+  }
+
+  if (apiUrl) {
+    try {
+      if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
+        return;
+      }
+    } catch {
+      return;
+    }
   }
 
   const normalizedModel = model.split('/').at(-1) ?? model;

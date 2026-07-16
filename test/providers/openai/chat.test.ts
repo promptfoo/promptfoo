@@ -470,6 +470,29 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBe(fee);
     });
 
+    it('should build and bill a Chat search request using the effective passthrough model', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        config: { passthrough: { model: 'gpt-5-search-api' } },
+      });
+
+      const result = await provider.callApi('What happened today?');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.model).toBe('gpt-5-search-api');
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('temperature');
+      expect(result.cost).toBeCloseTo(0.02125, 10);
+    });
+
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {

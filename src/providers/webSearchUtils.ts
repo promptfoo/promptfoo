@@ -83,8 +83,13 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     !isOpenAiResponsesProvider(provider, id) &&
     (id.startsWith('openai:chat:') ||
       provider.constructor?.name === 'OpenAiChatCompletionProvider');
+  const passthroughModel = provider.config?.passthrough?.model;
   const chatModelId =
-    'modelName' in provider && typeof provider.modelName === 'string' ? provider.modelName : id;
+    typeof passthroughModel === 'string'
+      ? passthroughModel
+      : 'modelName' in provider && typeof provider.modelName === 'string'
+        ? provider.modelName
+        : id;
   if (
     isOpenAiChat &&
     /(?:^|[/:])(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)

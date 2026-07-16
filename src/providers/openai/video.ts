@@ -18,6 +18,7 @@ import {
 } from '../video';
 import { OpenAiGenericProvider } from '.';
 import {
+  appendOpenAiApiPath,
   assertOpenAiApiModel,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
@@ -297,9 +298,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     prompt: string,
     config: OpenAiVideoOptions,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
-    const url = config.remix_video_id
-      ? `${this.getApiUrl()}/videos/${config.remix_video_id}/remix`
-      : `${this.getApiUrl()}/videos`;
+    const url = appendOpenAiApiPath(
+      this.getApiUrl(),
+      config.remix_video_id
+        ? `videos/${encodeURIComponent(config.remix_video_id)}/remix`
+        : 'videos',
+    );
 
     const headers = this.getAuthHeaders(config.headers);
     let body: string | FormData;
@@ -389,7 +393,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     customHeaders?: Record<string, string>,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const startTime = Date.now();
-    const url = `${this.getApiUrl()}/videos/${videoId}`;
+    const url = appendOpenAiApiPath(this.getApiUrl(), `videos/${encodeURIComponent(videoId)}`);
     const headers = this.getAuthHeaders(customHeaders);
 
     while (Date.now() - startTime < maxPollTimeMs) {
@@ -449,7 +453,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     evalId?: string,
     customHeaders?: Record<string, string>,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant === 'video' ? '' : `?variant=${variant}`}`;
+    const url = appendOpenAiApiPath(
+      this.getApiUrl(),
+      `videos/${encodeURIComponent(soraVideoId)}/content`,
+      variant === 'video' ? undefined : `variant=${variant}`,
+    );
     const headers = this.getAuthHeaders(customHeaders);
 
     try {
@@ -499,7 +507,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     const model = (config.model || this.modelName) as OpenAiVideoModel;
-    assertOpenAiApiModel(model);
+    assertOpenAiApiModel(model, this.getApiUrl());
     const size = (config.size || DEFAULT_SIZE) as OpenAiVideoCreateSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;

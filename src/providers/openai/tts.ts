@@ -11,6 +11,7 @@ import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import {
+  appendOpenAiApiPath,
   assertOpenAiApiModel,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
@@ -248,7 +249,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
     const model = body.model;
-    assertOpenAiApiModel(model);
+    assertOpenAiApiModel(model, this.getApiUrl());
     const characterCount = Array.from(body.input).length;
     const validationError = getValidationError(characterCount, model, { ...config, ...body });
     if (validationError) {
@@ -256,7 +257,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     }
 
     const startedAt = Date.now();
-    const url = `${this.getApiUrl()}/audio/speech`;
+    const url = appendOpenAiApiPath(this.getApiUrl(), 'audio/speech');
     const hasCustomHeader = (name: string) =>
       Object.keys(customHeaders).some((key) => key.toLowerCase() === name);
     const requestHeaders = {

@@ -98,7 +98,7 @@ Supported parameters include:
 
 | Parameter                | Description                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiBaseUrl`             | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                                                                                                                                                                                                                   |
+| `apiBaseUrl`             | The base URL of the OpenAI API or an OpenAI-compatible gateway. Optional path and query parameters are preserved when endpoint paths are appended; see `OPENAI_BASE_URL` below.                                                                                                                                                                             |
 | `apiHost`                | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                                                                                                                                                                                                                   |
 | `apiKey`                 | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                                                                                                                                                                                                                    |
 | `apiKeyEnvar`            | An environment variable that contains the API key                                                                                                                                                                                                                                                                                                           |
@@ -1624,8 +1624,8 @@ These OpenAI-related environment variables are supported:
 | `OPENAI_MAX_TOKENS`            | `max_tokens` parameter, defaults to 1024. Used for non-reasoning requests.                                               |
 | `OPENAI_MAX_COMPLETION_TOKENS` | `max_completion_tokens` parameter, defaults to 1024. Used by reasoning-capable chat/responses requests where applicable. |
 | `OPENAI_API_HOST`              | Hostname to use (proxy-compatible). Takes precedence over both `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL`.              |
-| `OPENAI_API_BASE_URL`          | Full base URL (protocol + host + optional port/path). Takes precedence over `OPENAI_BASE_URL`.                           |
-| `OPENAI_BASE_URL`              | Alternate full base URL. Used if `OPENAI_API_BASE_URL` is not set.                                                       |
+| `OPENAI_API_BASE_URL`          | Full base URL (protocol + host + optional port/path/query). Takes precedence over `OPENAI_BASE_URL`.                     |
+| `OPENAI_BASE_URL`              | Alternate full base URL, including any gateway path/query. Used if `OPENAI_API_BASE_URL` is not set.                     |
 | `OPENAI_API_KEY`               | OpenAI API key.                                                                                                          |
 | `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                                      |
 | `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).         |
@@ -2538,10 +2538,11 @@ Example response structure:
 Deep research models, GPT-5 pro variants, and any Responses request with `background: true`
 automatically use appropriate timeouts:
 
-- If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it will be used for the API call
+- If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it bounds the full API call, including background creation
+  and polling
 - Otherwise, these long-running requests default to a 10-minute timeout (600,000ms)
 - Regular foreground requests continue to use the standard 5-minute timeout
-- Background requests honor the overall polling deadline. Non-cached requests cancel upstream work
+- Background requests honor the overall creation and polling deadline. Non-cached requests cancel upstream work
   when an eval stops, including jobs accepted immediately before a delayed creation response
   arrives. Queued jobs in the shared persistent cache can be resumed by another eval process and
   are not cancelled when one local subscriber stops; use `--no-cache` for exclusive cancellation.

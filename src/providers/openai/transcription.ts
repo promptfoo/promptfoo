@@ -5,7 +5,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
+import { appendOpenAiApiPath, getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -183,7 +183,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
 
       try {
         ({ data, cached, status, statusText } = await fetchWithCache(
-          `${this.getApiUrl()}/audio/transcriptions`,
+          appendOpenAiApiPath(this.getApiUrl(), 'audio/transcriptions'),
           {
             method: 'POST',
             headers,
