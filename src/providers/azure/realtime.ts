@@ -1,4 +1,5 @@
 import { OpenAiRealtimeProvider } from '../openai/realtime';
+import { providerRegistry } from '../providerRegistry';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost, throwConfigurationError } from './util';
 
@@ -23,6 +24,7 @@ function getAzureRealtimeBaseUrl(baseUrl: string): string {
 
 export class AzureRealtimeProvider extends AzureGenericProvider {
   private realtimeProvider?: OpenAiRealtimeProvider;
+  private registeredForShutdown = false;
 
   constructor(deploymentName: string, options: ProviderOptions = {}) {
     super(deploymentName, options);
@@ -64,6 +66,11 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       });
     }
 
+    if (!this.registeredForShutdown) {
+      providerRegistry.register(this);
+      this.registeredForShutdown = true;
+    }
+
     const result = await this.realtimeProvider.callApi(prompt, context, callApiOptions);
     const usage = result.metadata?.usage as any;
     const inputDetails =
@@ -89,5 +96,13 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
 
   cleanup(): void {
     this.realtimeProvider?.cleanup();
+    if (this.registeredForShutdown) {
+      providerRegistry.unregister(this);
+      this.registeredForShutdown = false;
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    this.cleanup();
   }
 }

@@ -4,15 +4,21 @@ import { AzureRealtimeProvider } from '../../../src/providers/azure/realtime';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import { mockProcessEnv } from '../../util/utils';
 
-const { mockCallApi, mockCleanup } = vi.hoisted(() => ({
+const { mockCallApi, mockCleanup, mockRegister, mockUnregister } = vi.hoisted(() => ({
   mockCallApi: vi.fn(),
   mockCleanup: vi.fn(),
+  mockRegister: vi.fn(),
+  mockUnregister: vi.fn(),
 }));
 
 vi.mock('../../../src/providers/openai/realtime', () => ({
   OpenAiRealtimeProvider: vi.fn().mockImplementation(function (_modelName, options) {
     return { config: options.config, callApi: mockCallApi, cleanup: mockCleanup };
   }),
+}));
+
+vi.mock('../../../src/providers/providerRegistry', () => ({
+  providerRegistry: { register: mockRegister, unregister: mockUnregister },
 }));
 
 describe('AzureRealtimeProvider', () => {
@@ -129,6 +135,24 @@ describe('AzureRealtimeProvider', () => {
     provider.cleanup();
 
     expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockUnregister).toHaveBeenCalledWith(provider);
+  });
+
+  it('registers the delegated realtime connection for evaluator shutdown', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    await provider.callApi('hello');
+    await provider.callApi('follow up');
+
+    expect(mockRegister).toHaveBeenCalledOnce();
+    expect(mockRegister).toHaveBeenCalledWith(provider);
+
+    await provider.shutdown();
+
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockUnregister).toHaveBeenCalledWith(provider);
   });
 
   it('preserves the realtime conversation-context default across calls', async () => {
