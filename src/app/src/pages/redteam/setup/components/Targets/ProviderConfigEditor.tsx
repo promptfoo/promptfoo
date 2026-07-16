@@ -118,7 +118,7 @@ function ProviderConfigEditor({
       let cleared = false;
       try {
         cleared =
-          clearTargetConfigValidation?.(JSON.stringify(expectedTarget ?? provider)) ?? false;
+          clearTargetConfigValidation?.(JSON.stringify(expectedTarget ?? provider), false) ?? false;
       } catch {}
       if (!cleared) {
         const retainedError =

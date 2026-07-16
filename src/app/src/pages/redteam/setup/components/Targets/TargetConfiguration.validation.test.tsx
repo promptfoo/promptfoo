@@ -154,6 +154,7 @@ describe('TargetConfiguration custom configuration validation', () => {
         label: 'Coding target',
         config: { sandbox_mode: 'read-only' },
       }),
+      false,
     );
     expect(state.targetConfigDraft).toBeNull();
     const footerNext = within(screen.getByTestId('page-navigation')).getByRole('button', {

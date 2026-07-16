@@ -646,6 +646,7 @@ Application Details:
             label: 'Coding target',
             config: null as unknown as typeof defaultConfig.target.config,
           },
+          strategies: ['jailbreak:hydra'],
         },
         updateConfig: mockUpdateConfig,
         targetConfigError: 'Configuration must be a JSON object',

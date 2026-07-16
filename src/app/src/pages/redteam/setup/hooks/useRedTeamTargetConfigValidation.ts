@@ -4,6 +4,7 @@ import { targetConfigSha256 } from './targetConfigSha256';
 import type { Config } from '../types';
 
 const TARGET_CONFIG_VALIDATION_STORAGE_KEY = 'redTeamTargetConfigValidation';
+const TARGET_CONFIG_VALIDATION_ISOLATION_STORAGE_KEY = 'redTeamTargetConfigValidationIsolated';
 const REDTEAM_CONFIG_STORAGE_KEY = 'redTeamConfig';
 const TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let targetConfigValidationChannel: BroadcastChannel | null = null;
@@ -204,6 +205,17 @@ const hasDurableTargetConfigMarker = (): boolean => {
       return true;
     }
   } catch {}
+  try {
+    const sessionToken = getTargetConfigMarkerToken(
+      window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
+    );
+    if (
+      sessionToken &&
+      sessionToken === getTargetConfigMarkerToken(currentTargetConfigInvalidMarker)
+    ) {
+      return true;
+    }
+  } catch {}
   return Boolean(getTargetConfigErrorFromMarker(getTargetConfigCookieMarker()));
 };
 
@@ -220,6 +232,7 @@ const persistTargetConfigClear = (
     return false;
   }
   const invalidMarker = existingMarker ?? currentTargetConfigInvalidMarker;
+  const invalidToken = getTargetConfigMarkerToken(invalidMarker);
   const clearMessage = snapshot
     ? getClearMessage(snapshot.serialized, getTargetConfigMarkerToken(invalidMarker) ?? 'none')
     : null;
@@ -235,8 +248,6 @@ const persistTargetConfigClear = (
   try {
     if (!persistedLocally && clearMessage) {
       window.sessionStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, clearMessage);
-    } else {
-      window.sessionStorage.removeItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
     }
   } catch {}
   try {
@@ -248,6 +259,17 @@ const persistTargetConfigClear = (
   if (getPersistedTargetSnapshot()?.serialized !== snapshot?.serialized) {
     return false;
   }
+  try {
+    if (persistedLocally) {
+      window.sessionStorage.removeItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY);
+    }
+    if (
+      invalidToken &&
+      window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_ISOLATION_STORAGE_KEY) === invalidToken
+    ) {
+      window.sessionStorage.removeItem(TARGET_CONFIG_VALIDATION_ISOLATION_STORAGE_KEY);
+    }
+  } catch {}
   currentTargetConfigInvalidMarker = null;
   if (broadcast && clearMessage) {
     try {
@@ -293,6 +315,72 @@ const persistTargetConfigError = (
   }
 };
 
+const persistTargetConfigErrorInSession = (
+  error: string,
+  existingMarker?: string | null,
+  isolate = false,
+): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const marker = existingMarker ?? getTargetConfigMarkerFromError(error);
+  const token = getTargetConfigMarkerToken(marker);
+  try {
+    window.sessionStorage.setItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY, marker);
+    if (isolate && token) {
+      window.sessionStorage.setItem(TARGET_CONFIG_VALIDATION_ISOLATION_STORAGE_KEY, token);
+    }
+    currentTargetConfigInvalidMarker = marker;
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isTargetConfigDraftIsolated = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const activeToken = getTargetConfigMarkerToken(currentTargetConfigInvalidMarker);
+  if (!activeToken) {
+    return false;
+  }
+  try {
+    if (
+      window.sessionStorage.getItem(TARGET_CONFIG_VALIDATION_ISOLATION_STORAGE_KEY) !== activeToken
+    ) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  try {
+    return (
+      getTargetConfigMarkerToken(
+        window.localStorage.getItem(TARGET_CONFIG_VALIDATION_STORAGE_KEY),
+      ) !== activeToken
+    );
+  } catch {
+    return true;
+  }
+};
+
+const persistTargetConfigDraftError = (
+  error: string,
+  broadcast = true,
+  existingMarker?: string | null,
+) => {
+  if (
+    isTargetConfigDraftIsolated() &&
+    persistTargetConfigErrorInSession(error, existingMarker, true)
+  ) {
+    return;
+  }
+  persistTargetConfigError(error, broadcast, existingMarker);
+};
+
 interface RedTeamTargetConfigValidationState {
   targetConfigError: string | null;
   targetConfigDraft: string | null;
@@ -300,7 +388,10 @@ interface RedTeamTargetConfigValidationState {
   setTargetConfigError: (error: string | null) => void;
   setTargetConfigDraft: (draft: string | null) => void;
   replaceTargetConfigValidation: (error: string, draft: string) => void;
-  clearTargetConfigValidation: (expectedSerializedTarget?: string) => boolean;
+  clearTargetConfigValidation: (
+    expectedSerializedTarget?: string,
+    incrementRevision?: boolean,
+  ) => boolean;
   reassertTargetConfigValidation: () => void;
 }
 
@@ -316,7 +407,7 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
       const previousError = get().targetConfigError;
       set({ targetConfigError });
       if (previousError !== targetConfigError) {
-        persistTargetConfigError(targetConfigError);
+        persistTargetConfigDraftError(targetConfigError);
       }
     },
     setTargetConfigDraft: (targetConfigDraft) => {
@@ -324,7 +415,7 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
       set({ targetConfigDraft });
       const { targetConfigError } = get();
       if (targetConfigError && targetConfigDraft !== null && previousDraft !== targetConfigDraft) {
-        persistTargetConfigError(targetConfigError);
+        persistTargetConfigDraftError(targetConfigError);
       }
     },
     replaceTargetConfigValidation: (targetConfigError, targetConfigDraft) => {
@@ -335,7 +426,7 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
         targetConfigRevision: state.targetConfigRevision + 1,
       }));
     },
-    clearTargetConfigValidation: (expectedSerializedTarget) => {
+    clearTargetConfigValidation: (expectedSerializedTarget, incrementRevision = true) => {
       if (!persistTargetConfigClear(true, undefined, expectedSerializedTarget)) {
         const state = get();
         const targetConfigError = state.targetConfigError ?? 'Invalid JSON configuration';
@@ -348,7 +439,7 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
             targetConfigDraft = expectedSerializedTarget;
           }
         }
-        persistTargetConfigError(
+        persistTargetConfigDraftError(
           targetConfigError,
           true,
           currentTargetConfigInvalidMarker ?? undefined,
@@ -359,14 +450,27 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
       set((state) => ({
         targetConfigError: null,
         targetConfigDraft: null,
-        targetConfigRevision: state.targetConfigRevision + 1,
+        targetConfigRevision: state.targetConfigRevision + (incrementRevision ? 1 : 0),
       }));
       return true;
     },
     reassertTargetConfigValidation: () => {
       const { targetConfigError } = get();
-      if (targetConfigError && !reconcilingTargetConfig && !hasDurableTargetConfigMarker()) {
-        persistTargetConfigError(targetConfigError, true, currentTargetConfigInvalidMarker);
+      if (!targetConfigError || reconcilingTargetConfig) {
+        return;
+      }
+      if (!hasDurableTargetConfigMarker()) {
+        persistTargetConfigDraftError(targetConfigError, true, currentTargetConfigInvalidMarker);
+        return;
+      }
+      if (
+        !isTargetConfigDraftIsolated() &&
+        currentTargetConfigInvalidMarker &&
+        !getTargetConfigErrorFromMarker(getTargetConfigCookieMarker())
+      ) {
+        try {
+          document.cookie = `${TARGET_CONFIG_VALIDATION_STORAGE_KEY}=${currentTargetConfigInvalidMarker}; Max-Age=${TARGET_CONFIG_VALIDATION_COOKIE_MAX_AGE}; Path=/; SameSite=Lax`;
+        } catch {}
       }
     },
   }),
@@ -429,6 +533,34 @@ const reconcileTargetConfigClear = (clearMessage: string): boolean => {
   return true;
 };
 
+const preserveIndependentTargetConfigDraft = (incomingMarker: string | null): boolean => {
+  const incomingToken = getTargetConfigMarkerToken(incomingMarker);
+  const activeToken = getTargetConfigMarkerToken(currentTargetConfigInvalidMarker);
+  const { targetConfigError, targetConfigDraft } = useRedTeamTargetConfigValidation.getState();
+  if (
+    !targetConfigError ||
+    targetConfigDraft === null ||
+    !incomingToken ||
+    !activeToken ||
+    incomingToken === activeToken
+  ) {
+    return false;
+  }
+
+  persistTargetConfigErrorInSession(targetConfigError, currentTargetConfigInvalidMarker, true);
+  return true;
+};
+
+const persistTargetConfigErrorFromRemoteEvent = (error: string, existingMarker?: string | null) => {
+  if (
+    isTargetConfigDraftIsolated() &&
+    persistTargetConfigErrorInSession(error, existingMarker, true)
+  ) {
+    return;
+  }
+  persistTargetConfigError(error, false, existingMarker);
+};
+
 if (typeof window !== 'undefined') {
   const targetConfigWindow = window as Window & {
     __promptfooTargetConfigValidationStorageListener?: (event: StorageEvent) => void;
@@ -450,8 +582,15 @@ if (typeof window !== 'undefined') {
         getCurrentClearMessage() === event.newValue && reconcileTargetConfigClear(event.newValue);
       const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
       if (!reconciled && targetConfigError) {
-        persistTargetConfigError(targetConfigError, false, currentTargetConfigInvalidMarker);
+        persistTargetConfigErrorFromRemoteEvent(
+          targetConfigError,
+          currentTargetConfigInvalidMarker,
+        );
       }
+      return;
+    }
+
+    if (preserveIndependentTargetConfigDraft(event.newValue)) {
       return;
     }
 
@@ -470,9 +609,8 @@ if (typeof window !== 'undefined') {
         const { targetConfigError: activeTargetConfigError } =
           useRedTeamTargetConfigValidation.getState();
         if (activeTargetConfigError) {
-          persistTargetConfigError(
+          persistTargetConfigErrorFromRemoteEvent(
             activeTargetConfigError,
-            false,
             currentTargetConfigInvalidMarker,
           );
         }
@@ -499,9 +637,8 @@ if (typeof window !== 'undefined') {
         const { targetConfigError: activeTargetConfigError } =
           useRedTeamTargetConfigValidation.getState();
         if (activeTargetConfigError) {
-          persistTargetConfigError(
+          persistTargetConfigErrorFromRemoteEvent(
             activeTargetConfigError,
-            false,
             currentTargetConfigInvalidMarker,
           );
         }
@@ -512,7 +649,10 @@ if (typeof window !== 'undefined') {
     if (!event.newValue) {
       const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
       if (targetConfigError) {
-        persistTargetConfigError(targetConfigError, false, currentTargetConfigInvalidMarker);
+        persistTargetConfigErrorFromRemoteEvent(
+          targetConfigError,
+          currentTargetConfigInvalidMarker,
+        );
       }
       return;
     }
@@ -541,13 +681,19 @@ if (typeof window !== 'undefined') {
         const reconciled = reconcileTargetConfigClear(event.data);
         const { targetConfigError } = useRedTeamTargetConfigValidation.getState();
         if (!reconciled && targetConfigError) {
-          persistTargetConfigError(targetConfigError, false, currentTargetConfigInvalidMarker);
+          persistTargetConfigErrorFromRemoteEvent(
+            targetConfigError,
+            currentTargetConfigInvalidMarker,
+          );
         }
         return;
       }
 
       const targetConfigError = getTargetConfigErrorFromMarker(event.data);
       if (targetConfigError) {
+        if (preserveIndependentTargetConfigDraft(event.data)) {
+          return;
+        }
         const token = getTargetConfigMarkerToken(event.data);
         const currentClearMessage = getCurrentClearMessage();
         if (
@@ -564,9 +710,8 @@ if (typeof window !== 'undefined') {
             const { targetConfigError: activeTargetConfigError } =
               useRedTeamTargetConfigValidation.getState();
             if (activeTargetConfigError) {
-              persistTargetConfigError(
+              persistTargetConfigErrorFromRemoteEvent(
                 activeTargetConfigError,
-                false,
                 currentTargetConfigInvalidMarker,
               );
             }

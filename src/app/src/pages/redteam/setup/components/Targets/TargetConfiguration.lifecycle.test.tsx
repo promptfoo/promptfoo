@@ -137,6 +137,36 @@ describe('TargetConfiguration lifecycle validation', () => {
     });
   });
 
+  it('keeps the target editor mounted and focused across consecutive valid JSON keystrokes', async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useRedTeamConfig.setState({
+        config: {
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'openinterpreter',
+            label: 'Coding target',
+            config: { max_iterations: 1 },
+          },
+        },
+        providerType: 'openinterpreter',
+      });
+    });
+    const revision = useRedTeamTargetConfigValidation.getState().targetConfigRevision;
+    render(<TargetConfigurationHarness />);
+    const editor = screen.getByTestId('code-editor') as HTMLTextAreaElement;
+    const caret = editor.value.indexOf('1') + 1;
+    editor.focus();
+    editor.setSelectionRange(caret, caret);
+
+    await user.keyboard('23');
+
+    expect(useRedTeamConfig.getState().config.target.config.max_iterations).toBe(123);
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
+    expect(editor).toHaveFocus();
+    expect(editor.isConnected).toBe(true);
+  });
+
   it('keeps a restored unsafe config blocked through whitespace and Format until it is changed', async () => {
     const user = userEvent.setup();
     useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
