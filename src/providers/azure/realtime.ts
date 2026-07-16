@@ -44,31 +44,6 @@ function hasSameRealtimeConnection(
   return [...headerNames].every((name) => currentHeaders[name] === nextHeaders[name]);
 }
 
-function countRealtimeInputImages(prompt: string): number {
-  try {
-    const parsed = JSON.parse(prompt) as unknown;
-    const lastUserMessage = Array.isArray(parsed)
-      ? [...parsed].reverse().find((message) => message?.role === 'user')
-      : parsed;
-    const count = (value: unknown): number => {
-      if (Array.isArray(value)) {
-        return value.reduce<number>((total, item) => total + count(item), 0);
-      }
-      if (!value || typeof value !== 'object') {
-        return 0;
-      }
-      const record = value as Record<string, unknown>;
-      return (
-        (record.type === 'input_image' || record.type === 'image_url' ? 1 : 0) +
-        Object.values(record).reduce<number>((total, item) => total + count(item), 0)
-      );
-    };
-    return count(lastUserMessage);
-  } catch {
-    return 0;
-  }
-}
-
 export class AzureRealtimeProvider extends AzureGenericProvider {
   private readonly realtimeProviders = new Map<string, OpenAiRealtimeProvider>();
   private nextStatelessProviderId = 0;
@@ -187,14 +162,13 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       }
     });
     const reportedUsageEvents = result.metadata?.usageEvents;
-    const inputImageCount = countRealtimeInputImages(prompt);
     const usageEvents: any[] =
       Array.isArray(reportedUsageEvents) && reportedUsageEvents.length > 0
         ? reportedUsageEvents
         : result.metadata?.usage
           ? [result.metadata.usage]
           : [];
-    const costForUsageEvents = usageEvents.reduce<number | undefined>((total, usage, index) => {
+    const costForUsageEvents = usageEvents.reduce<number | undefined>((total, usage) => {
       const inputDetails =
         usage?.prompt_tokens_details ?? usage?.input_tokens_details ?? usage?.input_token_details;
       const outputDetails =
@@ -213,7 +187,6 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         inputDetails?.cached_tokens_details?.audio_tokens,
         inputDetails?.cached_tokens_details?.image_tokens,
         outputDetails?.image_tokens,
-        index === 0 ? inputImageCount : 0,
       );
 
       return typeof total === 'number' && typeof usageCost === 'number'
@@ -228,14 +201,6 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
             effectiveConfig,
             result.tokenUsage?.prompt,
             result.tokenUsage?.completion,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            inputImageCount,
           );
     const tokenUsage =
       usageEvents.length > 0

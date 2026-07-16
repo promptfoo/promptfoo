@@ -130,7 +130,6 @@ export function calculateAzureCost(
   cachedAudioPromptTokens?: number,
   cachedImagePromptTokens?: number,
   imageCompletionTokens?: number,
-  inputImageCount?: number,
 ): number | undefined {
   if (
     typeof promptTokens !== 'number' ||
@@ -182,10 +181,6 @@ export function calculateAzureCost(
     imageCompletionTokens,
     Math.max(completionTokens - audioOutputTokens, 0),
   );
-  const inputImages =
-    typeof inputImageCount === 'number' && Number.isFinite(inputImageCount)
-      ? Math.max(inputImageCount, 0)
-      : 0;
   const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
@@ -199,7 +194,6 @@ export function calculateAzureCost(
       cachedAudioTokens * (model.cost.cacheReadAudio ?? cacheReadCost) +
       (imageInputTokens - cachedImageTokens) * (model.cost.imageInput ?? inputCost) +
       cachedImageTokens * (model.cost.cacheReadImage ?? cacheReadCost) +
-      inputImages * (model.cost.imageInputPerImage ?? 0) +
       (completionTokens - audioOutputTokens - imageOutputTokens) * outputCost +
       audioOutputTokens * (model.cost.audioOutput ?? outputCost) +
       imageOutputTokens * (model.cost.imageOutput ?? outputCost)) *
