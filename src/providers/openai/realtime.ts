@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { OpenAiGenericProvider } from '.';
+import { hasHeaderOverride, OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { NON_CONVERSATIONAL_REALTIME_MODELS, OPENAI_REALTIME_MODELS } from './util';
 
@@ -1433,7 +1433,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // Add WebSocket options with required headers
       const wsOptions = {
         headers: {
-          Authorization: `Bearer ${this.getApiKey()}`,
+          ...(hasHeaderOverride(this.config.headers, 'api-key')
+            ? {}
+            : { Authorization: `Bearer ${this.getApiKey()}` }),
           'User-Agent': 'promptfoo Realtime API Client',
           Origin: this.getWebSocketOrigin(),
           ...this.getOpenAiRequestHeaders(),
@@ -2032,7 +2034,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     const wsOptions = {
       headers: {
-        Authorization: `Bearer ${this.getApiKey()}`,
+        ...(hasHeaderOverride(this.config.headers, 'api-key')
+          ? {}
+          : { Authorization: `Bearer ${this.getApiKey()}` }),
         'User-Agent': 'promptfoo Realtime API Client',
         Origin: this.getWebSocketOrigin(),
         ...this.getOpenAiRequestHeaders(),

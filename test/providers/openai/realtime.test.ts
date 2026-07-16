@@ -2985,6 +2985,25 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it('does not add a bearer header when a realtime API-key header is configured', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
+          apiKey: 'azure-key',
+          headers: { 'api-key': 'azure-key' },
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers['api-key']).toBe('azure-key');
+      expect(wsOptions.headers).not.toHaveProperty('Authorization');
+    });
+
     it('rejects direct WebSocket requests if the socket closes before a tool follow-up completes', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {

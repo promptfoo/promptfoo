@@ -787,7 +787,6 @@ export class GoogleLiveProvider implements ApiProvider {
             hasAudioContent = true;
             const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
             responseAudioChunks.push(audioBuffer);
-            clearTimeout(timeout);
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
@@ -860,12 +859,10 @@ export class GoogleLiveProvider implements ApiProvider {
               for (const part of serverContent.modelTurn.parts) {
                 if (part.text) {
                   response_text_total += part.text;
-                  clearTimeout(timeout);
                 }
                 if (part.inlineData?.mimeType?.includes('audio')) {
                   hasAudioContent = true;
                   responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
-                  clearTimeout(timeout);
                   if (isAudioExpected) {
                     hasAudioStreamEnded = false;
                   }
@@ -876,7 +873,6 @@ export class GoogleLiveProvider implements ApiProvider {
                 if (isAudioExpected) {
                   hasAudioContent = true;
                 }
-                clearTimeout(timeout);
               }
             } else if (serverContent.outputTranscription?.text) {
               // Handle transcription-only messages when transcription arrives separately.
@@ -884,7 +880,6 @@ export class GoogleLiveProvider implements ApiProvider {
               if (isAudioExpected) {
                 hasAudioContent = true;
               }
-              clearTimeout(timeout);
             }
 
             if (serverContent.generationComplete) {

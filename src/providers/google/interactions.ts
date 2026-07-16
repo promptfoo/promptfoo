@@ -70,19 +70,18 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
           return normalizePart(content);
         }
 
-        const messageContent = 'content' in content ? content.content : undefined;
-
-        const role = content.role;
+        const { role, content: messageContent, ...message } = content as Record<string, unknown>;
+        const normalizedContent = Array.isArray(messageContent)
+          ? messageContent.map((part) => normalizePart(part))
+          : typeof messageContent === 'string'
+            ? [{ type: 'text', text: messageContent }]
+            : messageContent && typeof messageContent === 'object'
+              ? [normalizePart(messageContent)]
+              : [];
         return {
-          ...content,
-          ...(Array.isArray(messageContent)
-            ? { content: messageContent.map((part) => normalizePart(part)) }
-            : {}),
-          ...(role === 'assistant'
-            ? { role: 'model' }
-            : role === 'system' || role === 'developer'
-              ? { role: 'user' }
-              : {}),
+          ...message,
+          type: role === 'assistant' || role === 'model' ? 'model_output' : 'user_input',
+          content: normalizedContent,
         };
       });
     }
@@ -233,6 +232,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
+      ...(config.safetySettings ? { safety_settings: config.safetySettings } : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...passthrough,
       background: false,

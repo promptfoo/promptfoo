@@ -1435,6 +1435,54 @@ describe('GoogleLiveProvider', () => {
     expect(response).toEqual({ error: 'WebSocket request timed out' });
   });
 
+  it('should keep the Live request timeout active after a partial text response', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 30,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'partial response');
+      });
+      return mockWs;
+    });
+
+    await expect(provider.callApi('test prompt')).resolves.toEqual({
+      error: 'WebSocket request timed out',
+    });
+  });
+
+  it('should keep the Live request timeout active after a partial binary-audio response', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 30,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        mockWs.onmessage?.({
+          type: 'message',
+          data: Buffer.from('partial audio'),
+          target: mockWs,
+        } as WebSocket.MessageEvent);
+      });
+      return mockWs;
+    });
+
+    await expect(provider.callApi('test prompt')).resolves.toEqual({
+      error: 'WebSocket request timed out',
+    });
+  });
+
   it('should ignore tool call messages that arrive after the websocket has closed', async () => {
     const lateCallback = vi.fn().mockResolvedValue({ ignored: true });
 

@@ -56,6 +56,9 @@ describe('GoogleInteractionsProvider', () => {
         aspectRatio: '9:16',
         previousInteractionId: 'interaction-0',
         store: true,
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
+        ],
         service_tier: 'priority',
         maxOutputTokens: 2_048,
         generationConfig: {
@@ -100,6 +103,9 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
+          safety_settings: [
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
+          ],
           generation_config: {
             max_output_tokens: 2_048,
             thinking_level: 'low',
@@ -189,19 +195,22 @@ describe('GoogleInteractionsProvider', () => {
 
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(request.body as string).input).toEqual([
-      { role: 'user', content: 'Keep the scene family friendly.' },
-      { role: 'user', content: 'Use a cinematic style.' },
-      { role: 'user', content: 'Create a city at dusk.' },
       {
-        role: 'user',
+        type: 'user_input',
+        content: [{ type: 'text', text: 'Keep the scene family friendly.' }],
+      },
+      { type: 'user_input', content: [{ type: 'text', text: 'Use a cinematic style.' }] },
+      { type: 'user_input', content: [{ type: 'text', text: 'Create a city at dusk.' }] },
+      {
+        type: 'user_input',
         content: [
           { type: 'text', text: 'Use this reference.' },
           { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' },
           { type: 'image', uri: 'https://image.example/reference.png' },
         ],
       },
-      { role: 'model', content: 'I will create that scene.' },
-      { role: 'user', content: 'Add rain.' },
+      { type: 'model_output', content: [{ type: 'text', text: 'I will create that scene.' }] },
+      { type: 'user_input', content: [{ type: 'text', text: 'Add rain.' }] },
     ]);
   });
 
