@@ -277,14 +277,21 @@ export function calculateGoogleCost(
   );
   const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
-  const cachedAudioTokens = clampCachedTokens(
+  let cachedAudioTokens = clampCachedTokens(
     cachedAudioPromptTokens,
     Math.min(cachedTokens, audioInputTokens),
   );
-  const cachedImageTokens = clampCachedTokens(
+  let cachedImageTokens = clampCachedTokens(
     cachedImagePromptTokens,
     Math.min(Math.max(cachedTokens - cachedAudioTokens, 0), imageInputTokens),
   );
+  if (cachedAudioTokens === 0 && cachedImageTokens === 0 && textInputTokens === 0) {
+    if (imageInputTokens === 0) {
+      cachedAudioTokens = Math.min(cachedTokens, audioInputTokens);
+    } else if (audioInputTokens === 0) {
+      cachedImageTokens = Math.min(cachedTokens, imageInputTokens);
+    }
+  }
   const cachedTextTokens = Math.min(
     Math.max(cachedTokens - cachedAudioTokens - cachedImageTokens, 0),
     textInputTokens,

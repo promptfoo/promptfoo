@@ -56,6 +56,7 @@ describe('AzureRealtimeProvider', () => {
           apiHost: 'example.openai.azure.com/openai',
           apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
           apiKey: 'azure-key',
+          azureApiKeyAuth: true,
           headers: { 'api-key': 'azure-key' },
         }),
       }),
@@ -455,6 +456,20 @@ describe('AzureRealtimeProvider', () => {
 
     expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
     expect(mockCallApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('treats empty Azure realtime conversation IDs as stateless', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+    const context = { test: { metadata: { conversationId: '' } } } as any;
+
+    await provider.callApi('hello', context);
+    await provider.callApi('follow up', context);
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+    expect(mockCleanup).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
   });
 
   it('isolates normal evaluator prompts that have labels but no explicit IDs', async () => {

@@ -954,6 +954,40 @@ describe('GoogleLiveProvider', () => {
     expect(response.cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
   });
 
+  it('should infer fully cached Gemini Live audio usage without cache modality details', async () => {
+    provider = new GoogleLiveProvider('gemini-live-2.5-flash-preview-native-audio-09-2025', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+        simulateMessage(mockWs, {
+          serverContent: { turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            responseTokenCount: 500,
+            totalTokenCount: 1_500,
+            cachedContentTokenCount: 1_000,
+            promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 1_000 }],
+            responseTokensDetails: [{ modality: 'AUDIO', tokenCount: 500 }],
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.tokenUsage?.cached).toBe(1_000);
+    expect(response.cost).toBeCloseTo((1_000 * 0.075 + 500 * 12) / 1e6, 12);
+  });
+
   it('should prefer closing Gemini Live usage over an interim usage frame', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {

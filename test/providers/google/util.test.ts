@@ -2928,6 +2928,18 @@ describe('util', () => {
       );
     });
 
+    it('should infer cached Gemini audio and image tokens without cache modality details', () => {
+      const model = 'gemini-live-2.5-flash-preview-native-audio-09-2025';
+      const calculateCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
+        calculateGoogleCostFromUsage(model, {}, 1_000, 0, false, {
+          promptTokensDetails: [{ modality, tokenCount: 1_000 }],
+          cachedContentTokenCount: 1_000,
+        });
+
+      expect(calculateCachedCost('AUDIO')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+      expect(calculateCachedCost('IMAGE')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+    });
+
     it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {
       const cost = calculateGoogleCost(
         'gemini-3.1-flash-live-preview',

@@ -3024,6 +3024,59 @@ describe('OpenAI Realtime Provider', () => {
       expect(wsOptions.headers).not.toHaveProperty('Authorization');
     });
 
+    it('does not add a bearer header for delegated Azure realtime proxies', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          apiBaseUrl: 'http://127.0.0.1:15500/azure/openai/v1',
+          apiKey: 'azure-key',
+          azureApiKeyAuth: true,
+          headers: { 'api-key': 'azure-key' },
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers['api-key']).toBe('azure-key');
+      expect(wsOptions.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('keeps the OpenAI bearer header when a gateway API-key header is configured', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'openai-key', headers: { 'api-key': 'gateway-key' } },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers).toMatchObject({
+        'api-key': 'gateway-key',
+        Authorization: 'Bearer openai-key',
+      });
+    });
+
+    it('keeps the OpenAI bearer header for persistent gateway connections', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'openai-key', headers: { 'api-key': 'gateway-key' } },
+      });
+
+      const connection = (provider as any).openPersistentConnection();
+      mockHandlers.open.forEach((h) => h());
+      await connection;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers).toMatchObject({
+        'api-key': 'gateway-key',
+        Authorization: 'Bearer openai-key',
+      });
+    });
+
     it('rejects direct WebSocket requests if the socket closes before a tool follow-up completes', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {

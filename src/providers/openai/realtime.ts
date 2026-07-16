@@ -140,6 +140,8 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   maxToolIterations?: number; // Max tool→follow-up rounds in a single turn (default 8)
   apiVersion?: string; // Optional API version
   maintainContext?: boolean;
+  /** Internal Azure delegate marker: API-key connections must not also send bearer auth. */
+  azureApiKeyAuth?: boolean;
 }
 
 interface WebSocketMessage {
@@ -667,6 +669,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private getWebSocketUrl(modelName: string): string {
     const wsBase = this.getWebSocketBase();
     return `${wsBase}/realtime?model=${encodeURIComponent(modelName)}`;
+  }
+
+  private shouldOmitBearerAuth(wsUrl: string): boolean {
+    if (!hasHeaderOverride(this.config.headers, 'api-key')) {
+      return false;
+    }
+    return (
+      this.config.azureApiKeyAuth === true ||
+      new URL(wsUrl).hostname.toLowerCase().endsWith('.openai.azure.com')
+    );
   }
 
   // Build WebSocket URL for client-secret based socket initialization
@@ -1443,7 +1455,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // Add WebSocket options with required headers
       const wsOptions = {
         headers: {
-          ...(hasHeaderOverride(this.config.headers, 'api-key')
+          ...(this.shouldOmitBearerAuth(wsUrl)
             ? {}
             : { Authorization: `Bearer ${this.getApiKey()}` }),
           'User-Agent': 'promptfoo Realtime API Client',
@@ -2044,7 +2056,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     const wsOptions = {
       headers: {
-        ...(hasHeaderOverride(this.config.headers, 'api-key')
+        ...(this.shouldOmitBearerAuth(wsUrl)
           ? {}
           : { Authorization: `Bearer ${this.getApiKey()}` }),
         'User-Agent': 'promptfoo Realtime API Client',

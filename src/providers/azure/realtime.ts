@@ -110,7 +110,8 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const realtimeUrl = new URL(realtimeBaseUrl);
     const conversationId = context?.test?.metadata?.conversationId;
     const hasConversationId =
-      typeof conversationId === 'string' || typeof conversationId === 'number';
+      conversationId !== '' &&
+      (typeof conversationId === 'string' || typeof conversationId === 'number');
     const realtimeConfig: OpenAiRealtimeOptions = {
       ...effectiveConfig,
       apiHost:
@@ -119,6 +120,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
           : undefined,
       apiBaseUrl: realtimeBaseUrl,
       apiKey: effectiveApiKey ?? bearerToken,
+      azureApiKeyAuth: Boolean(effectiveApiKey),
       maintainContext: hasConversationId && (effectiveConfig.maintainContext ?? true),
       headers: {
         ...inheritedAuthHeaders,

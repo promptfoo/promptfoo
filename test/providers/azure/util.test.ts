@@ -518,6 +518,17 @@ describe('calculateAzureCost', () => {
     ).toBeCloseTo((200 * 0.6 + 300 * 10 + 500 * 0.3) / 1e6, 12);
   });
 
+  it('infers cached Azure audio and image tokens when the modality breakdown is absent', () => {
+    expect(calculateAzureCost('gpt-realtime', {}, 1_000, 0, 1_000, 1_000)).toBeCloseTo(
+      (1_000 * 0.4) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost('gpt-realtime', {}, 1_000, 0, 1_000, 0, 0, 1_000)).toBeCloseTo(
+      (1_000 * 0.5) / 1e6,
+      12,
+    );
+  });
+
   it('uses the higher cached-audio rate for the 2024 realtime snapshot', () => {
     expect(
       calculateAzureCost('gpt-4o-realtime-preview-2024-10-01', {}, 1_000, 0, 500, 1_000, 0, 0, 500),
