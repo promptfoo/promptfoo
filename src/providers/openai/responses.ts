@@ -790,22 +790,23 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         if (!polled.error && (data.status === 'completed' || data.status === 'incomplete')) {
           await updateCache?.(data, status, statusText, responseHeaders);
         }
-        if (!polled.error && (data.status === 'cancelled' || data.status === 'failed')) {
-          await deleteFromCache?.();
-          const upstreamError = data.error?.message;
-          return {
-            error: upstreamError
-              ? `Background response ${data.id} ${data.status}: ${upstreamError}`
-              : `Background response ${data.id} was ${data.status}.`,
-            metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
-          };
-        }
         if (polled.error) {
           return {
             error: polled.error,
             metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
           };
         }
+      }
+
+      if (body.background && (data.status === 'cancelled' || data.status === 'failed')) {
+        await deleteFromCache?.();
+        const upstreamError = data.error?.message;
+        return {
+          error: upstreamError
+            ? `Background response ${data.id} ${data.status}: ${upstreamError}`
+            : `Background response ${data.id} was ${data.status}.`,
+          metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
+        };
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);

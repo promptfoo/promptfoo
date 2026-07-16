@@ -1037,8 +1037,8 @@ prompts:
 
 The `input_reference` accepts a `file://` path, image URL, base64-encoded image data, data URL,
 or an uploaded-file reference such as `{ file_id: file_123 }`. Promptfoo sends the documented
-`{ image_url: ... }` or `{ file_id: ... }` JSON shape to OpenAI; object references must provide
-exactly one of `image_url` or `file_id`.
+multipart creation request and encodes references as `input_reference[image_url]` or
+`input_reference[file_id]`; object references must provide exactly one of `image_url` or `file_id`.
 
 ### Video Remixing
 

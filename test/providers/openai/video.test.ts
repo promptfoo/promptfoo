@@ -536,13 +536,15 @@ describe('OpenAiVideoProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Verify the first fetch call (job creation) includes sora-2 model
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"model":"sora-2"'),
-        }),
-      );
+      const request = mockFetchWithProxy.mock.calls[0][1] as {
+        body: FormData;
+        headers: Record<string, string>;
+      };
+
+      expect(request.body).toBeInstanceOf(FormData);
+      expect(request.body.get('model')).toBe('sora-2');
+      expect(request.body.get('prompt')).toBe('test prompt');
+      expect(request.headers['Content-Type']).toBeUndefined();
       expect(result.video?.model).toBe('sora-2');
     });
 
@@ -555,18 +557,9 @@ describe('OpenAiVideoProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"size":"1792x1024"'),
-        }),
-      );
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"seconds":"12"'),
-        }),
-      );
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: FormData };
+      expect(request.body.get('size')).toBe('1792x1024');
+      expect(request.body.get('seconds')).toBe('12');
       expect(result.video?.size).toBe('1792x1024');
       expect(result.video?.duration).toBe(12);
       expect(result.cost).toBeCloseTo(6, 10);
@@ -593,13 +586,11 @@ describe('OpenAiVideoProvider', () => {
 
       setupMocksForSuccess();
       const result = await provider.callApi('test prompt');
-      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: FormData };
 
-      expect(JSON.parse(request.body)).toMatchObject({
-        model: 'sora-2-pro',
-        size: '1792x1024',
-        seconds: '12',
-      });
+      expect(request.body.get('model')).toBe('sora-2-pro');
+      expect(request.body.get('size')).toBe('1792x1024');
+      expect(request.body.get('seconds')).toBe('12');
       expect(result.cost).toBeCloseTo(6, 10);
     });
 
@@ -1268,14 +1259,9 @@ describe('OpenAiVideoProvider', () => {
 
       await provider.callApi('Animate this image');
 
-      // Verify the request body includes input_reference
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining(
-            '"input_reference":{"image_url":"data:image/png;base64,base64EncodedImageData"}',
-          ),
-        }),
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: FormData };
+      expect(request.body.get('input_reference[image_url]')).toBe(
+        'data:image/png;base64,base64EncodedImageData',
       );
     });
 
@@ -1335,13 +1321,9 @@ describe('OpenAiVideoProvider', () => {
 
       // Verify the request body includes base64 encoded data
       const expectedBase64 = Buffer.from('fake image data').toString('base64');
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining(
-            `"input_reference":{"image_url":"data:image/png;base64,${expectedBase64}"}`,
-          ),
-        }),
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: FormData };
+      expect(request.body.get('input_reference[image_url]')).toBe(
+        `data:image/png;base64,${expectedBase64}`,
       );
     });
 
@@ -1372,7 +1354,7 @@ describe('OpenAiVideoProvider', () => {
         { image_url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==' },
       ],
       ['an uploaded file ID', { file_id: 'file_123' }, { file_id: 'file_123' }],
-    ])('should preserve %s input_reference in the documented JSON shape', async (_label, input, expected) => {
+    ])('should encode %s input_reference in the documented multipart shape', async (_label, input, expected) => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: input as any },
       });
@@ -1397,8 +1379,9 @@ describe('OpenAiVideoProvider', () => {
 
       await provider.callApi('Animate this image');
 
-      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
-      expect(JSON.parse(request.body).input_reference).toEqual(expected);
+      const request = mockFetchWithProxy.mock.calls[0][1] as { body: FormData };
+      const [field, value] = Object.entries(expected)[0];
+      expect(request.body.get(`input_reference[${field}]`)).toBe(value);
     });
 
     it.each([

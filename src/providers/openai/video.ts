@@ -242,35 +242,44 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       ? `${this.getApiUrl()}/videos/${config.remix_video_id}/remix`
       : `${this.getApiUrl()}/videos`;
 
-    const body: Record<string, unknown> = { prompt };
+    const headers = this.getAuthHeaders(config.headers);
+    let body: string | FormData;
 
-    // Only include these for new videos (not remix)
-    if (!config.remix_video_id) {
-      body.model = config.model || this.modelName;
-      body.size = config.size || DEFAULT_SIZE;
-      // API requires seconds as a string ("4", "8", or "12")
-      body.seconds = String(config.seconds || DEFAULT_SECONDS);
-    }
-
-    // Handle input_reference (image-to-video)
-    if (!config.remix_video_id && config.input_reference) {
-      try {
-        body.input_reference = await normalizeInputReference(config.input_reference);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
+    if (config.remix_video_id) {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({ prompt });
+    } else {
+      // The Videos API requires multipart form data for creation requests.
+      // Leave Content-Type unset so fetch can include the multipart boundary.
+      for (const header of Object.keys(headers)) {
+        if (header.toLowerCase() === 'content-type') {
+          delete headers[header];
         }
-        return {
-          job: {} as OpenAiVideoJob,
-          error: `Input reference file not found: ${String(config.input_reference).slice(7)}`,
-        };
       }
-    }
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...this.getAuthHeaders(config.headers),
-    };
+      const formData = new FormData();
+      formData.set('prompt', prompt);
+      formData.set('model', config.model || this.modelName);
+      formData.set('size', config.size || DEFAULT_SIZE);
+      formData.set('seconds', String(config.seconds || DEFAULT_SECONDS));
+
+      if (config.input_reference) {
+        try {
+          const reference = await normalizeInputReference(config.input_reference);
+          const [field, value] = Object.entries(reference)[0];
+          formData.set(`input_reference[${field}]`, value);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+          }
+          return {
+            job: {} as OpenAiVideoJob,
+            error: `Input reference file not found: ${String(config.input_reference).slice(7)}`,
+          };
+        }
+      }
+      body = formData;
+    }
 
     try {
       logger.debug('[OpenAI Video] Creating video job', { url, model: this.modelName });
@@ -278,7 +287,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(body),
+        body,
       });
 
       if (!response.ok) {

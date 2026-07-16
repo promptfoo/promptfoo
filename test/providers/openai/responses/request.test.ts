@@ -222,6 +222,28 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(updateCache).not.toHaveBeenCalled();
   });
 
+  it('should evict a background response cancelled during creation', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_cancelled', status: 'cancelled', error: null, output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+      updateCache,
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Cancel this task immediately');
+
+    expect(result.error).toBe('Background response resp_cancelled was cancelled.');
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).not.toHaveBeenCalled();
+  });
+
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);
