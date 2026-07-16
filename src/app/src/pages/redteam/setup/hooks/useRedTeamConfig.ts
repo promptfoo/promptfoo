@@ -552,7 +552,7 @@ const isValidBrowserStep = (step: unknown): boolean => {
       if (!segment) {
         return false;
       }
-      if (segment.startsWith('//') || segment.startsWith('..')) {
+      if (/^\(*\/\//.test(segment) || segment.startsWith('..')) {
         continue;
       }
       const engineMatch = segment.match(/^([\w:-]+)=(.*)$/s);

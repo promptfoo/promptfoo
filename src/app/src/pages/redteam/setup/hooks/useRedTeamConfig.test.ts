@@ -1188,6 +1188,7 @@ describe('useRedTeamConfig', () => {
           { action: 'click', args: { selector: 'css=[data-label="a >> b"]' } },
           { action: 'click', args: { selector: '//button[@type="submit"]' } },
           { action: 'click', args: { selector: '..//button[@type="submit"]' } },
+          { action: 'click', args: { selector: '(//button[@id="send"])[1]' } },
           { action: 'click', args: { selector: '{{operationSelector}}' } },
         ],
       },
