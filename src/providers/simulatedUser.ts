@@ -1,3 +1,5 @@
+import dedent from 'dedent';
+import cliState from '../cliState';
 import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
@@ -6,12 +8,14 @@ import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { transform } from '../util/transform';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderOptions,
   ProviderResponse,
   RemoteGenerationContext,
@@ -22,6 +26,26 @@ export type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
 };
+
+const DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS = dedent`
+  You are simulating the user in a conversation with an assistant.
+  Your task is to produce only the next user message.
+  Do not answer as the assistant, do not explain your reasoning, and do not include role labels.
+  If the conversation goal is complete, include ###STOP### in your response.
+
+  User simulation instructions:
+  {{instructions}}
+`;
+
+// Sent as the sole conversation message on the first turn. Some chat APIs
+// (e.g. Anthropic) hoist the system prompt into a dedicated parameter and
+// reject an empty messages array, so the history must never be empty.
+const CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE =
+  'The conversation has not started yet. Send your first message as the user.';
+
+const SIMULATED_USER_PROVIDER_ID = 'promptfoo:simulated-user';
+const RECURSIVE_USER_PROVIDER_ERROR =
+  'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider';
 
 function providerOutputToString(output: unknown): string {
   if (output == null) {
@@ -35,7 +59,12 @@ function providerOutputToString(output: unknown): string {
 
 type AgentProviderOptions = ProviderOptions & {
   config?: {
-    userProvider?: ProviderOptions;
+    userProvider?: string | ProviderOptions;
+    /**
+     * Base path for resolving relative file:// userProvider references.
+     * Injected into config by loadApiProvider from the load context; not user-facing.
+     */
+    basePath?: string;
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
@@ -62,6 +91,10 @@ export class SimulatedUser implements ApiProvider {
   private readonly redteamGenerationContext?: RemoteGenerationContext;
   private readonly stateful: boolean;
   private readonly configInitialMessages?: Message[] | string;
+  private readonly userProvider?: string | ProviderOptions;
+  private readonly basePath?: string;
+  private readonly env?: EnvOverrides;
+  private customUserProviderPromise?: Promise<ApiProvider>;
 
   /**
    * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
@@ -69,7 +102,7 @@ export class SimulatedUser implements ApiProvider {
    */
   readonly taskId: string = 'tau';
 
-  constructor({ id, label, config }: AgentProviderOptions) {
+  constructor({ id, label, config = {}, env }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
@@ -78,6 +111,9 @@ export class SimulatedUser implements ApiProvider {
       (config.targetId ? { providerTargetIds: [], cloudTargetId: config.targetId } : undefined);
     this.stateful = config.stateful ?? false;
     this.configInitialMessages = config.initialMessages;
+    this.userProvider = config.userProvider;
+    this.basePath = typeof config.basePath === 'string' ? config.basePath : undefined;
+    this.env = env;
   }
 
   id() {
@@ -197,8 +233,19 @@ export class SimulatedUser implements ApiProvider {
 
   private async sendMessageToUser(
     messages: Message[],
-    userProvider: PromptfooSimulatedUserProvider,
-  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
+    userProvider: ApiProvider,
+    {
+      context,
+      callApiOptions,
+      systemMessage,
+      sessionId,
+    }: {
+      context: CallApiContextParams | undefined;
+      callApiOptions: CallApiOptionsParams | undefined;
+      systemMessage: string | undefined;
+      sessionId: string | undefined;
+    },
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string; sessionId?: string }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -208,7 +255,46 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+    const conversationMessages =
+      flippedMessages.length > 0
+        ? flippedMessages
+        : [{ role: 'user', content: CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE }];
+    const userPrompt = systemMessage
+      ? [{ role: 'system', content: systemMessage }, ...conversationMessages]
+      : flippedMessages;
+    const userPromptString = JSON.stringify(userPrompt);
+    const userContext = (() => {
+      if (!context) {
+        return undefined;
+      }
+      const {
+        originalProvider: _originalProvider,
+        prompt: _prompt,
+        vars,
+        ...userContextBase
+      } = context;
+      const { sessionId: _sessionId, ...varsWithoutSessionId } = vars ?? {};
+      return {
+        ...userContextBase,
+        prompt: {
+          raw: userPromptString,
+          label: 'simulated-user',
+        },
+        vars: {
+          ...varsWithoutSessionId,
+          ...(sessionId ? { sessionId } : {}),
+        },
+      };
+    })();
+
+    const response = await userProvider.callApi(userPromptString, userContext, callApiOptions);
+
+    // Nested calls bypass the evaluator's delay handling; mirror it here,
+    // including skipping the sleep for cached responses.
+    if (userProvider.delay && !response.cached) {
+      logger.debug(`[SimulatedUser] Sleeping for ${userProvider.delay}ms`);
+      await sleep(userProvider.delay);
+    }
 
     // Propagate error from remote generation disable check
     if (response.error) {
@@ -218,12 +304,85 @@ export class SimulatedUser implements ApiProvider {
       };
     }
 
+    // Nested calls bypass the evaluator, so apply the user provider's response
+    // transform here to match top-level provider behavior.
+    if (userProvider.transform && response.output != null) {
+      response.output = await transform(userProvider.transform, response.output, {
+        vars: userContext?.vars ?? {},
+        prompt: userContext?.prompt ?? {},
+      });
+    }
+
     const content = providerOutputToString(response.output);
     logger.debug(`User: ${content}`);
     return {
       messages: [...messages, { role: 'user', content }],
       tokenUsage: response.tokenUsage,
+      sessionId: response.sessionId,
     };
+  }
+
+  private async createUserProvider(
+    instructions: string,
+  ): Promise<{ provider: ApiProvider; systemMessage?: string }> {
+    if (!this.userProvider) {
+      // The hosted provider bakes the per-test rendered instructions into its
+      // request body, so it must be constructed fresh for every call.
+      return {
+        provider: new PromptfooSimulatedUserProvider(
+          { instructions, redteamGenerationContext: this.redteamGenerationContext },
+          this.taskId,
+        ),
+      };
+    }
+
+    // Custom providers are configuration-fixed for this instance's lifetime, so
+    // load once and reuse across calls to avoid re-allocating providers that
+    // hold resources (e.g. Python workers).
+    this.customUserProviderPromise ??= this.loadCustomUserProvider().catch((err) => {
+      // Don't memoize transient load failures; retry on the next call.
+      this.customUserProviderPromise = undefined;
+      throw err;
+    });
+    return {
+      provider: await this.customUserProviderPromise,
+      // Unlike the hosted provider, custom providers receive the simulated-user
+      // framing as a system message. The function replacement keeps `$`
+      // sequences in the instructions literal.
+      systemMessage: DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS.replace(
+        '{{instructions}}',
+        () => instructions,
+      ),
+    };
+  }
+
+  private async loadCustomUserProvider(): Promise<ApiProvider> {
+    invariant(this.userProvider, 'Expected config.userProvider to be set');
+    const userProviderId =
+      typeof this.userProvider === 'string' ? this.userProvider : this.userProvider.id;
+    invariant(userProviderId, 'Expected config.userProvider.id to be set');
+    if (userProviderId === SIMULATED_USER_PROVIDER_ID) {
+      throw new Error(RECURSIVE_USER_PROVIDER_ERROR);
+    }
+
+    // Avoid a static import cycle: index -> registry -> simulatedUser -> index.
+    const { loadApiProvider } = await import('./index');
+
+    const userProviderOptions =
+      typeof this.userProvider === 'string' ? undefined : this.userProvider;
+    const provider = await loadApiProvider(userProviderId, {
+      // Fall back to the active config directory so relative file:// references
+      // resolve consistently regardless of how this provider was loaded.
+      basePath: this.basePath ?? cliState.basePath,
+      env: this.env,
+      ...(userProviderOptions && { options: userProviderOptions }),
+    });
+
+    if (provider instanceof SimulatedUser) {
+      throw new Error(RECURSIVE_USER_PROVIDER_ERROR);
+    }
+
+    return provider;
   }
 
   private async sendMessageToAgent(
@@ -231,6 +390,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
 
@@ -254,14 +414,14 @@ export class SimulatedUser implements ApiProvider {
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
-    const response = await targetProvider.callApi(targetPrompt, context);
+    const response = await targetProvider.callApi(targetPrompt, context, callApiOptions);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
       context.vars.sessionId = response.sessionId;
     }
 
-    if (targetProvider.delay) {
+    if (targetProvider.delay && !response.cached) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
     }
@@ -275,17 +435,14 @@ export class SimulatedUser implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     const targetProvider = context.originalProvider;
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
-    const userProvider = new PromptfooSimulatedUserProvider(
-      { instructions, redteamGenerationContext: this.redteamGenerationContext },
-      this.taskId,
-    );
+    const { provider: userProvider, systemMessage } = await this.createUserProvider(instructions);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 
@@ -313,6 +470,8 @@ export class SimulatedUser implements ApiProvider {
     const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
+    const seededSessionId = context.vars?.sessionId;
+    let userProviderSessionId = typeof seededSessionId === 'string' ? seededSessionId : undefined;
 
     // If initial messages end with user message, agent needs to respond first to avoid consecutive user messages
     const lastInitialRole = messages.length > 0 ? messages[messages.length - 1].role : null;
@@ -320,7 +479,13 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      agentResponse = await this.sendMessageToAgent(
+        prompt,
+        messages,
+        targetProvider,
+        context,
+        callApiOptions,
+      );
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -338,7 +503,12 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const userResult = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(messages, userProvider, {
+        context,
+        callApiOptions,
+        systemMessage,
+        sessionId: userProviderSessionId,
+      });
 
       // Check for errors from remote generation disable
       if (userResult.error) {
@@ -349,6 +519,9 @@ export class SimulatedUser implements ApiProvider {
       }
 
       const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
+      if (userResult.sessionId) {
+        userProviderSessionId = userResult.sessionId;
+      }
       accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
@@ -368,6 +541,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         targetProvider,
         context,
+        callApiOptions,
       );
 
       // Check for errors from agent response

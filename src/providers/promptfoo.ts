@@ -320,6 +320,11 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       const docsUrl = isRedteamTask
         ? 'https://www.promptfoo.dev/docs/red-team/configuration#remote-generation'
         : 'https://www.promptfoo.dev/docs/providers/simulated-user#remote-generation';
+      // Non-redteam simulated-user evals can generate user messages locally
+      // with config.userProvider instead of the hosted models.
+      const remedy = isRedteamTask
+        ? `To enable, remove ${relevantFlag}`
+        : `To enable, remove ${relevantFlag} or set config.userProvider to generate simulated user messages with your own provider`;
 
       return {
         error: dedent`
@@ -327,7 +332,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
           SimulatedUser requires Promptfoo's conversation simulation models.
 
-          To enable, remove ${relevantFlag}
+          ${remedy}
 
           Learn more: ${docsUrl}
         `,

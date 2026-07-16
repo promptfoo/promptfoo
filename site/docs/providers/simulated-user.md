@@ -56,11 +56,12 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                    |
-| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
+| Option            | Type                      | Description                                                                                                                                                                           |
+| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`    | string                    | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                                                           |
+| `maxTurns`        | number                    | Maximum number of conversation turns. Defaults to 10.                                                                                                                                 |
+| `initialMessages` | Message[] or string       | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                                                        |
+| `userProvider`    | string or ProviderOptions | Optional. Provider used to generate simulated user messages instead of Promptfoo's hosted conversation models. See [Custom Simulated User Provider](#custom-simulated-user-provider). |
 
 ## Initial Messages
 
@@ -271,14 +272,44 @@ When using promptfoo as a Node library, provide the equivalent configuration:
 The conversation will automatically stop when:
 
 - The `maxTurns` limit is reached
-- The agent includes `###STOP###` anywhere in its response
+- The simulated user includes `###STOP###` anywhere in its message
 - An error occurs during the conversation
 
-The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
+The simulated user acts as a judge of whether the conversation goal has been reached: when it determines the conversation is complete (e.g., task completed, user satisfied), it emits `###STOP###` and the conversation ends. The message containing the stop marker is not included in the final transcript.
+
+## Custom Simulated User Provider
+
+By default, Simulated User uses Promptfoo's hosted conversation models to generate simulated user messages. To use your own model for the simulated user, set `config.userProvider`:
+
+```yaml
+defaultTest:
+  provider:
+    id: promptfoo:simulated-user
+    config:
+      maxTurns: 5
+      instructions: |
+        You've selected a flight and want to pay with travel certificates
+      userProvider:
+        id: openai:chat:gpt-5-mini
+        config:
+          temperature: 0.7
+```
+
+The custom user provider receives the conversation history as a JSON array of OpenAI-style chat messages with the roles flipped, so the model naturally responds as the user: the target's replies arrive as `user` messages and the simulated user's own previous messages arrive as `assistant` messages. Promptfoo prepends a system message that frames the model as the simulated user, includes your rendered `instructions`, and tells it to return only the next user message — emitting `###STOP###` once the conversation goal is complete (see [Stop Conditions](#stop-conditions)). On the first turn, when there is no history yet, Promptfoo sends a short placeholder `user` message asking the model to start the conversation, since some chat APIs (such as Anthropic) reject an empty message list.
+
+Custom user providers behave like ordinary providers: `file://` references resolve relative to the config file, response `transform`s are applied, `delay` is honored between turns (and skipped for cached responses), and a sessionful user provider keeps its own `sessionId` across turns, tracked separately from the target's session.
+
+:::note
+
+If a test supplies `vars.sessionId`, it seeds **both** the target's stateful session and the custom user provider's session. The seed is re-sent to the user provider on every turn until the user provider returns its own session ID; from then on, each provider's session is tracked independently.
+
+:::
 
 ## Remote Generation
 
 By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
+
+When [`userProvider`](#custom-simulated-user-provider) is configured, simulated user messages are generated entirely by that provider instead: no requests are sent to Promptfoo's hosted models, and the Simulated User provider works even with remote generation disabled.
 
 To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Notice](/privacy/) for details on what data is sent.
 

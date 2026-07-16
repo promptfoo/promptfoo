@@ -2339,6 +2339,11 @@ async function prepareTestCaseForEval(
   }
 }
 
+// Cache resolved defaultTest providers so every test row shares one instance
+// (matching top-level provider semantics) instead of re-loading — and
+// re-allocating resources such as Python workers — per row.
+const defaultTestProviderCache = new WeakMap<object, Promise<ApiProvider>>();
+
 async function resolveDefaultTestProvider(
   defaultTest: ReturnType<typeof getDefaultTest>,
   testCase: AtomicTestCase,
@@ -2352,12 +2357,24 @@ async function resolveDefaultTestProvider(
     return defaultProvider;
   }
   if (typeof defaultProvider === 'object' && defaultProvider.id) {
-    const { loadApiProvider } = await import('./providers');
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
-    return loadApiProvider(providerId, {
-      options: defaultProvider as ProviderOptions,
-    });
+    let providerPromise = defaultTestProviderCache.get(defaultProvider);
+    if (!providerPromise) {
+      providerPromise = (async () => {
+        const { loadApiProvider } = await import('./providers');
+        return loadApiProvider(providerId, {
+          options: defaultProvider as ProviderOptions,
+          // Resolve relative file:// references against the config directory,
+          // like top-level provider loading does.
+          basePath: cliState.basePath,
+        });
+      })();
+      defaultTestProviderCache.set(defaultProvider, providerPromise);
+      // Don't memoize transient load failures; let a later row retry.
+      providerPromise.catch(() => defaultTestProviderCache.delete(defaultProvider));
+    }
+    return providerPromise;
   }
   return defaultProvider;
 }
