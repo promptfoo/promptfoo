@@ -380,6 +380,28 @@ describe('calculateAzureCost', () => {
         500,
       ),
     ).toBeCloseTo((1.8 * (1_500 * 0.25 + 500 * 0.025 + 1_000 * 2)) / 1e6, 12);
+    expect(
+      calculateAzureCost(
+        'gpt-5.2-chat-2025-12-11',
+        { passthrough: { service_tier: 'priority' } },
+        2_000,
+        1_000,
+        500,
+      ),
+    ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+  });
+
+  it.each([
+    ['gpt-5.4-pro', 60, 6, 270],
+    ['gpt-5.4-pro-2026-03-05', 60, 6, 270],
+    ['gpt-5.4-mini', 1.5, 0.15, 6.75],
+    ['gpt-5.4-mini-2026-03-17', 1.5, 0.15, 6.75],
+    ['gpt-5.4-nano', 0.4, 0.04, 1.875],
+    ['gpt-5.4-nano-2026-03-17', 0.4, 0.04, 1.875],
+  ])('uses Foundry long-context priority pricing for %s', (id, input, cached, output) => {
+    expect(
+      calculateAzureCost(id, { passthrough: { service_tier: 'priority' } }, 272_001, 1_000, 1_000),
+    ).toBeCloseTo((2 * (271_001 * input + 1_000 * cached + 1_000 * output)) / 1e6, 12);
   });
 
   it.each([
@@ -389,6 +411,16 @@ describe('calculateAzureCost', () => {
   ])('prices Azure image-token usage for %s', (id, input, cached, imageInput, output) => {
     expect(calculateAzureCost(id, {}, 1_000, 100, 100, 0, 0, 400, 0, 100)).toBeCloseTo(
       (600 * input + 300 * imageInput + 100 * cached + 100 * output) / 1e6,
+      12,
+    );
+  });
+
+  it.each([
+    'gpt-image-2',
+    'gpt-image-2-2026-04-21',
+  ])('prices Azure image input and output tokens for %s', (id) => {
+    expect(calculateAzureCost(id, {}, 1_000, 1_000, 100, 0, 0, 400, 0, 100, 600)).toBeCloseTo(
+      (600 * 5 + 300 * 8 + 100 * 1.25 + 400 * 10 + 600 * 30) / 1e6,
       12,
     );
   });

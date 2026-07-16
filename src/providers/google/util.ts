@@ -305,30 +305,40 @@ export function calculateGoogleCost(
     config.audioInputCost ?? config.audioCost ?? modelCost.cacheRead ?? audioInputCost;
   const cachedImageInputCost = config.imageInputCost ?? modelCost.cacheRead ?? imageInputCost;
   const serviceTier =
-    (config as ProviderConfig & { service_tier?: unknown }).service_tier ??
     (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
       ?.service_tier ??
-    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier;
-  const priorityMultiplier = serviceTier === 'priority' ? (modelCost.priorityMultiplier ?? 1) : 1;
-  const priorityAdjustedAudioInputCost =
+    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
+    (config as ProviderConfig & { service_tier?: unknown }).service_tier;
+  const serviceTierMultiplier =
+    serviceTier === 'priority'
+      ? (modelCost.priorityMultiplier ?? 1)
+      : serviceTier === 'flex'
+        ? (modelCost.flexMultiplier ?? 1)
+        : 1;
+  const serviceTierAudioInputCost =
     serviceTier === 'priority' &&
     config.audioInputCost === undefined &&
     config.audioCost === undefined &&
     modelCost.priorityAudioInput !== undefined
-      ? modelCost.priorityAudioInput / priorityMultiplier
-      : audioInputCost;
+      ? modelCost.priorityAudioInput / serviceTierMultiplier
+      : serviceTier === 'flex' &&
+          config.audioInputCost === undefined &&
+          config.audioCost === undefined &&
+          modelCost.flexAudioInput !== undefined
+        ? modelCost.flexAudioInput / serviceTierMultiplier
+        : audioInputCost;
 
   return (
     ((textInputTokens - cachedTextTokens) * inputCost +
       cachedTextTokens * cachedInputCost +
-      (audioInputTokens - cachedAudioTokens) * priorityAdjustedAudioInputCost +
+      (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
       cachedAudioTokens * cachedAudioInputCost +
       (imageInputTokens - cachedImageTokens) * imageInputCost +
       cachedImageTokens * cachedImageInputCost +
       (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
       audioOutputTokens * audioOutputCost +
       videoOutputTokens * videoOutputCost) *
-    priorityMultiplier
+    serviceTierMultiplier
   );
 }
 

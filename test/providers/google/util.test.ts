@@ -2795,7 +2795,7 @@ describe('util', () => {
       );
     });
 
-    it('should use the Gemini 3.1 Flash-Lite priority audio-input rate', () => {
+    it('should preserve the Gemini 3.1 Flash-Lite audio-input rate at priority tier', () => {
       const cost = calculateGoogleCost(
         'gemini-3.1-flash-lite',
         { service_tier: 'priority' },
@@ -2811,9 +2811,53 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo(
-        (400 * 0.45 + 400 * 0.045 + 100 * 0.45 + 100 * 0.045 + 100 * 2.7) / 1e6,
+        (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.045 + 100 * 2.7) / 1e6,
         12,
       );
+    });
+
+    it('should apply Gemini 3.1 Flash-Lite flex pricing with passthrough precedence', () => {
+      const flexCost = calculateGoogleCost(
+        'gemini-3.1-flash-lite',
+        { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
+        1_000_000,
+        100_000,
+        false,
+        200_000,
+        0,
+        undefined,
+        0,
+        500_000,
+        100_000,
+      );
+
+      expect(flexCost).toBeCloseTo(
+        (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.0125 + 100_000 * 0.75) /
+          1e6,
+        12,
+      );
+    });
+
+    it.each([
+      ['gemini-flash-latest', 0.3, 0.075, 1, 2.5],
+      ['gemini-flash-lite-latest', 0.1, 0.025, 0.3, 0.4],
+      ['gemini-2.0-flash-001', 0.1, 0.025, 0.7, 0.4],
+    ])('uses AI Studio cached and audio rates for %s', (id, input, cached, audioInput, output) => {
+      expect(
+        calculateGoogleCost(id, {}, 1_000, 100, false, 200, 0, undefined, 0, 400, 100),
+      ).toBeCloseTo(
+        (500 * input + 300 * cached + 100 * audioInput + 100 * cached + 100 * output) / 1e6,
+        12,
+      );
+    });
+
+    it('prices the active Gemini 2.5 Pro TTS model at both context tiers', () => {
+      expect(
+        calculateGoogleCost('gemini-2.5-pro-preview-tts', {}, 1_000, 100, false, 200),
+      ).toBeCloseTo((800 * 1.25 + 200 * 0.7 + 100 * 10) / 1e6, 12);
+      expect(
+        calculateGoogleCost('gemini-2.5-pro-preview-tts', {}, 250_001, 1_000, false, 1_000),
+      ).toBeCloseTo((249_001 * 2.5 + 1_000 * 0.7 + 1_000 * 15) / 1e6, 12);
     });
 
     it('should forward standard Gemini usage metadata into modality-aware billing', () => {

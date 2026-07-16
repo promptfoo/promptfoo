@@ -43,17 +43,6 @@ const formatContentMessages = (
   const parts = contents[contentIndex].parts;
 
   if (useRealtimeTextInput) {
-    const videoFrameCount = parts.filter((part) => {
-      const inlineData = (part as any).inlineData ?? (part as any).inline_data;
-      const mimeType = inlineData?.mimeType ?? inlineData?.mime_type;
-      return mimeType === 'image/jpeg' || mimeType === 'image/png';
-    }).length;
-    if (videoFrameCount > 1) {
-      throw new Error(
-        'Google Live accepts at most one image/jpeg or image/png frame per user turn (maximum 1 frame per second).',
-      );
-    }
-
     const contentMessages = parts.map((part) => {
       const userPart = part as {
         text?: string;
@@ -372,7 +361,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let pendingUsageMetadata: any;
       let completedGenerations = 0;
       let completedTurns = 0;
-      let pendingGenerationTurnCompletions = 0;
+      let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
       const requestedText = config.generationConfig?.response_modalities?.includes('text') ?? false;
@@ -386,6 +375,22 @@ export class GoogleLiveProvider implements ApiProvider {
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;
+
+      const sendContentMessages = async (contentMessages: any[]) => {
+        for (const contentMessage of contentMessages) {
+          if (contentMessage.realtime_input?.video) {
+            const delayMs = Math.max(lastVideoFrameSentAt + 1_000 - Date.now(), 0);
+            if (delayMs > 0) {
+              await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+            }
+            if (isResolved) {
+              return;
+            }
+            lastVideoFrameSentAt = Date.now();
+          }
+          ws.send(JSON.stringify(contentMessage));
+        }
+      };
 
       // Extract transcription config for use in message handler
       const hasOutputTranscription =
@@ -788,9 +793,7 @@ export class GoogleLiveProvider implements ApiProvider {
             );
             contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessages)}`);
-            for (const contentMessage of contentMessages) {
-              ws.send(JSON.stringify(contentMessage));
-            }
+            await sendContentMessages(contentMessages);
           } else if (response.serverContent) {
             const { serverContent } = response;
 
@@ -836,32 +839,10 @@ export class GoogleLiveProvider implements ApiProvider {
               if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
                 hasAudioStreamEnded = true;
               }
-              if (usesRealtimeTextInput && contentIndex < contents.length) {
-                const contentMessages = formatContentMessages(
-                  contents,
-                  contentIndex,
-                  usesRealtimeTextInput,
-                );
-                contentIndex += 1;
-                pendingGenerationTurnCompletions += 1;
-                logger.debug(
-                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessages)}`,
-                );
-                for (const contentMessage of contentMessages) {
-                  ws.send(JSON.stringify(contentMessage));
-                }
-                hasTextStreamEnded = !isTextExpected;
-                hasAudioStreamEnded = !isAudioExpected;
-                return;
-              }
             }
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
               completedTurns += 1;
-              if (pendingGenerationTurnCompletions > 0) {
-                pendingGenerationTurnCompletions -= 1;
-                return;
-              }
               const contentMessages = formatContentMessages(
                 contents,
                 contentIndex,
@@ -869,9 +850,9 @@ export class GoogleLiveProvider implements ApiProvider {
               );
               contentIndex += 1;
               logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessages)}`);
-              for (const contentMessage of contentMessages) {
-                ws.send(JSON.stringify(contentMessage));
-              }
+              hasTextStreamEnded = !isTextExpected;
+              hasAudioStreamEnded = !isAudioExpected;
+              await sendContentMessages(contentMessages);
               return;
             }
 
@@ -918,11 +899,13 @@ export class GoogleLiveProvider implements ApiProvider {
                 if (functionCall?.id && functionCall.name) {
                   const toolMessage = {
                     tool_response: {
-                      function_responses: {
-                        id: functionCall.id,
-                        name: functionCall.name,
-                        response: { error: 'Tool calls are disabled for this request.' },
-                      },
+                      function_responses: [
+                        {
+                          id: functionCall.id,
+                          name: functionCall.name,
+                          response: { error: 'Tool calls are disabled for this request.' },
+                        },
+                      ],
                     },
                   };
                   ws.send(JSON.stringify(toolMessage));
@@ -978,11 +961,13 @@ export class GoogleLiveProvider implements ApiProvider {
                   }
                   const toolMessage = {
                     tool_response: {
-                      function_responses: {
-                        id: functionCall.id,
-                        name: functionName,
-                        response: callbackResponse,
-                      },
+                      function_responses: [
+                        {
+                          id: functionCall.id,
+                          name: functionName,
+                          response: callbackResponse,
+                        },
+                      ],
                     },
                   };
                   logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);

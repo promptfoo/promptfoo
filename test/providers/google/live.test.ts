@@ -411,14 +411,18 @@ describe('GoogleLiveProvider', () => {
     );
   });
 
-  it('should reject multiple Live image frames in one user turn', async () => {
+  it('should pace multiple Live image frames in one user turn', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: { apiKey: 'test-api-key', timeoutMs: 500 },
+      config: { apiKey: 'test-api-key', timeoutMs: 2_500 },
     });
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateTextMessage(mockWs, 'video received');
+          simulateCompletionMessage(mockWs);
+        }, 1_100);
       });
       return mockWs;
     });
@@ -435,9 +439,12 @@ describe('GoogleLiveProvider', () => {
       ]),
     );
 
-    expect(response.error).toContain(
-      'Google Live accepts at most one image/jpeg or image/png frame per user turn',
-    );
+    expect(response.error).toBeUndefined();
+    expect(mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string))).toEqual([
+      expect.objectContaining({ setup: expect.any(Object) }),
+      { realtime_input: { video: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } } },
+      { realtime_input: { video: { mime_type: 'image/png', data: 'ZnJhbWUy' } } },
+    ]);
   });
 
   it('should report Gemini 3.1 Live token usage and modality-aware cost', async () => {
@@ -796,6 +803,7 @@ describe('GoogleLiveProvider', () => {
             generationComplete: true,
           },
         });
+        simulateCompletionMessage(mockWs);
         simulateMessage(mockWs, {
           serverContent: {
             modelTurn: {
@@ -888,13 +896,13 @@ describe('GoogleLiveProvider', () => {
     await emit({
       serverContent: { outputTranscription: { text: 'one ' }, generationComplete: true },
     });
-    expect(mockWs.send).toHaveBeenCalledTimes(3);
+    expect(mockWs.send).toHaveBeenCalledTimes(2);
     await emit({ serverContent: { turnComplete: true } });
     expect(mockWs.send).toHaveBeenCalledTimes(3);
     await emit({
       serverContent: { outputTranscription: { text: 'two ' }, generationComplete: true },
     });
-    expect(mockWs.send).toHaveBeenCalledTimes(4);
+    expect(mockWs.send).toHaveBeenCalledTimes(3);
     await emit({ serverContent: { turnComplete: true } });
     expect(mockWs.send).toHaveBeenCalledTimes(4);
     await emit({
@@ -1589,11 +1597,13 @@ describe('GoogleLiveProvider', () => {
       .map(([message]) => JSON.parse(message as string))
       .filter((m) => m.tool_response);
     expect(toolResponses).toHaveLength(1);
-    expect(toolResponses[0].tool_response.function_responses).toEqual({
-      id: 'function-call-disabled',
-      name: 'addNumbers',
-      response: { error: 'Tool calls are disabled for this request.' },
-    });
+    expect(toolResponses[0].tool_response.function_responses).toEqual([
+      {
+        id: 'function-call-disabled',
+        name: 'addNumbers',
+        response: { error: 'Tool calls are disabled for this request.' },
+      },
+    ]);
   });
 
   it('should execute prompt-level function callbacks', async () => {
@@ -1633,6 +1643,12 @@ describe('GoogleLiveProvider', () => {
     } as any);
 
     expect(promptAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
+    const toolResponses = mockWs.send.mock.calls
+      .map(([message]) => JSON.parse(message as string))
+      .filter((message) => message.tool_response);
+    expect(toolResponses[0].tool_response.function_responses).toEqual([
+      { id: 'function-call-prompt-level', name: 'addNumbers', response: { sum: 11 } },
+    ]);
     expect(response.output).toEqual(
       expect.objectContaining({
         text: 'The sum is 11.',

@@ -327,6 +327,27 @@ describe('AzureRealtimeProvider', () => {
     expect(mockCallApi).toHaveBeenCalledTimes(3);
   });
 
+  it('isolates normal evaluator prompts that have labels but no explicit IDs', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+    const contextA = {
+      prompt: { label: 'prompt a', raw: 'first prompt template', config: {} },
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any;
+    const contextB = {
+      prompt: { label: 'prompt b', raw: 'second prompt template', config: {} },
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any;
+
+    await provider.callApi('hello a', contextA);
+    await provider.callApi('hello b', contextB);
+    await provider.callApi('follow up a', contextA);
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledTimes(3);
+  });
+
   it('applies prompt-level realtime configuration overrides', async () => {
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
       config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key', modalities: ['audio'] },
@@ -335,7 +356,13 @@ describe('AzureRealtimeProvider', () => {
     await provider.callApi('hello', {
       prompt: {
         id: 'prompt-a',
-        config: { modalities: ['text'], instructions: 'Be concise', websocketTimeout: 12_345 },
+        config: {
+          apiBaseUrl: 'http://127.0.0.1:15500/alternate/openai/v1',
+          apiKey: 'prompt-key',
+          modalities: ['text'],
+          instructions: 'Be concise',
+          websocketTimeout: 12_345,
+        },
       },
       test: { metadata: { conversationId: 'conversation-1' } },
     } as any);
@@ -343,6 +370,10 @@ describe('AzureRealtimeProvider', () => {
     const delegatedProvider = vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value;
     expect(delegatedProvider.config).toMatchObject({
       modalities: ['text'],
+      apiHost: undefined,
+      apiBaseUrl: 'http://127.0.0.1:15500/alternate/openai/v1',
+      apiKey: 'prompt-key',
+      headers: { 'api-key': 'prompt-key' },
       instructions: 'Be concise',
       websocketTimeout: 12_345,
     });

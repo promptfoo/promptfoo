@@ -141,6 +141,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
+      ...(config.generationConfig ? { generation_config: config.generationConfig } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.passthrough || {}),
       background: false,
@@ -178,7 +179,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       .filter((part) => part.type === 'text' && part.text)
       .map((part) => part.text)
       .join('');
-    const video = outputContent.find((part) => part.type === 'video');
+    const video = [...outputContent].reverse().find((part) => part.type === 'video');
     if (!video?.data && !video?.uri) {
       return { error: 'Gemini interaction did not return video output', raw: data };
     }

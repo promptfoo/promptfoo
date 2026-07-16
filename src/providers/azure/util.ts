@@ -11,6 +11,7 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
       'gpt-5',
       'gpt-5-2025-08-07',
       'gpt-5-chat',
+      'gpt-5-chat-latest',
       'gpt-5-codex',
       'gpt-5.1',
       'gpt-5.1-2025-11-13',
@@ -44,6 +45,7 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
       'gpt-5.2',
       'gpt-5.2-2025-12-11',
       'gpt-5.2-chat',
+      'gpt-5.2-chat-2025-12-11',
       'gpt-5.2-codex',
       'gpt-5.3-chat',
       'gpt-5.3-codex',
@@ -94,6 +96,7 @@ const AZURE_PRIORITY_MULTIPLIERS = new Map<string, number>([
   ['gpt-5.5-2026-04-23', 2],
   ['gpt-5.2-2025-12-11', 2],
   ['gpt-5.2-chat', 2],
+  ['gpt-5.2-chat-2025-12-11', 2],
   ['gpt-5.3-chat', 2],
   ['gpt-5.1-2025-11-13', 2],
   ['gpt-5.1-chat-2025-11-13', 2],
@@ -126,6 +129,7 @@ export function calculateAzureCost(
   imagePromptTokens?: number,
   cachedAudioPromptTokens?: number,
   cachedImagePromptTokens?: number,
+  imageCompletionTokens?: number,
 ): number | undefined {
   if (
     typeof promptTokens !== 'number' ||
@@ -173,6 +177,10 @@ export function calculateAzureCost(
     textInputTokens,
   );
   const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const imageOutputTokens = clampCachedTokens(
+    imageCompletionTokens,
+    Math.max(completionTokens - audioOutputTokens, 0),
+  );
   const serviceTier =
     (config as AzureCompletionOptions & { service_tier?: unknown }).service_tier ??
     (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
@@ -188,8 +196,9 @@ export function calculateAzureCost(
       cachedAudioTokens * (model.cost.cacheReadAudio ?? cacheReadCost) +
       (imageInputTokens - cachedImageTokens) * (model.cost.imageInput ?? inputCost) +
       cachedImageTokens * (model.cost.cacheReadImage ?? cacheReadCost) +
-      (completionTokens - audioOutputTokens) * outputCost +
-      audioOutputTokens * (model.cost.audioOutput ?? outputCost)) *
+      (completionTokens - audioOutputTokens - imageOutputTokens) * outputCost +
+      audioOutputTokens * (model.cost.audioOutput ?? outputCost) +
+      imageOutputTokens * (model.cost.imageOutput ?? outputCost)) *
     priorityMultiplier
   );
 }

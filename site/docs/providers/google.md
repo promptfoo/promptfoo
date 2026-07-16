@@ -287,6 +287,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
+- `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
+- `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (priced with the catalog's Gemini 2.5 Pro tier)
 - `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (priced with the catalog's Gemini 2.5 Flash tier)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (priced with the catalog's Gemini 2.5 Flash-Lite tier)
@@ -1082,7 +1084,7 @@ providers:
       timeoutMs: 10000
 ```
 
-Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as an individual `image/jpeg` or `image/png` frame per user turn (at most one frame per second), not as an inline video container such as `video/mp4`; finite audio inputs are automatically terminated. Promptfoo prices returned `IMAGE`, `VIDEO`, and `DOCUMENT` input-token usage at the image/video rate and honors Gemini context-cache and `service_tier: priority` rates for supported models.
+Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE`, `VIDEO`, and `DOCUMENT` input-token usage at the image/video rate and honors Gemini context-cache and `service_tier: priority` rates for supported models.
 
 ### Key Features
 

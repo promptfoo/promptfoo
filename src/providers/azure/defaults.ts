@@ -146,10 +146,13 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 30 / 1000000,
       output: 180 / 1000000,
+      cacheRead: 3 / 1000000,
+      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1000000,
         output: 270 / 1000000,
+        cacheRead: 6 / 1000000,
       },
     },
   },
@@ -158,29 +161,46 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 30 / 1000000,
       output: 180 / 1000000,
+      cacheRead: 3 / 1000000,
+      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1000000,
         output: 270 / 1000000,
+        cacheRead: 6 / 1000000,
       },
     },
   },
-  {
-    id: 'gpt-5.4-mini',
-    cost: { input: 0.75 / 1000000, output: 4.5 / 1000000 },
-  },
-  {
-    id: 'gpt-5.4-mini-2026-03-17',
-    cost: { input: 0.75 / 1000000, output: 4.5 / 1000000 },
-  },
-  {
-    id: 'gpt-5.4-nano',
-    cost: { input: 0.2 / 1000000, output: 1.25 / 1000000 },
-  },
-  {
-    id: 'gpt-5.4-nano-2026-03-17',
-    cost: { input: 0.2 / 1000000, output: 1.25 / 1000000 },
-  },
+  ...['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'].map((id) => ({
+    id,
+    cost: {
+      input: 0.75 / 1000000,
+      output: 4.5 / 1000000,
+      cacheRead: 0.075 / 1000000,
+      priorityMultiplier: 2,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 1.5 / 1000000,
+        output: 6.75 / 1000000,
+        cacheRead: 0.15 / 1000000,
+      },
+    },
+  })),
+  ...['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'].map((id) => ({
+    id,
+    cost: {
+      input: 0.2 / 1000000,
+      output: 1.25 / 1000000,
+      cacheRead: 0.02 / 1000000,
+      priorityMultiplier: 2,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 0.4 / 1000000,
+        output: 1.875 / 1000000,
+        cacheRead: 0.04 / 1000000,
+      },
+    },
+  })),
   // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
   // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 long-context is 10/45
   // above the threshold. gpt-5.2/5.3 chat and codex share 1.75/14.
@@ -239,6 +259,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
+    id: 'gpt-5.2-chat-2025-12-11',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
+  },
+  {
     id: 'gpt-5.2-codex',
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
@@ -272,6 +296,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-5-chat',
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5-chat-latest',
     cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
@@ -827,6 +855,16 @@ export const AZURE_MODELS: AzureModelCost[] = [
       imageInput: 8 / 1000000,
     },
   },
+  ...['gpt-image-2', 'gpt-image-2-2026-04-21'].map((id) => ({
+    id,
+    cost: {
+      input: 5 / 1000000,
+      output: 10 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 8 / 1000000,
+      imageOutput: 30 / 1000000,
+    },
+  })),
   {
     id: 'dall-e-3',
     cost: { input: 40 / 1000000, output: 40 / 1000000 },

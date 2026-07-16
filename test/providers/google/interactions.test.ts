@@ -26,6 +26,10 @@ describe('GoogleInteractionsProvider', () => {
         steps: [
           {
             type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'b2xk' }],
+          },
+          {
+            type: 'model_output',
             content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
           },
         ],
@@ -48,6 +52,7 @@ describe('GoogleInteractionsProvider', () => {
         aspectRatio: '9:16',
         previousInteractionId: 'interaction-0',
         store: true,
+        generationConfig: { thinking_level: 'low', video_config: { task: 'text_to_video' } } as any,
       },
     });
 
@@ -67,6 +72,7 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
+          generation_config: { thinking_level: 'low', video_config: { task: 'text_to_video' } },
           background: false,
           stream: false,
         }),

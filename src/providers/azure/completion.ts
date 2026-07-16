@@ -165,6 +165,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           data.usage?.prompt_tokens_details?.image_tokens,
           data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
           data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
+          data.usage?.completion_tokens_details?.image_tokens,
         ),
         ...(guardrailsTriggered
           ? {

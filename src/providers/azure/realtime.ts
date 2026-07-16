@@ -1,8 +1,11 @@
+import { getEnvString } from '../../envars';
+import { generateIdFromPrompt } from '../../models/prompt';
 import { OpenAiRealtimeProvider } from '../openai/realtime';
 import { providerRegistry } from '../providerRegistry';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost, throwConfigurationError } from './util';
 
+import type { EnvVarKey } from '../../envars';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -37,18 +40,39 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     await this.ensureInitialized();
 
-    const baseUrl = this.getApiBaseUrl();
+    const effectiveConfig = {
+      ...this.config,
+      ...context?.prompt?.config,
+    } as OpenAiRealtimeOptions & { apiKeyEnvar?: string };
+    const configuredHost = effectiveConfig.apiHost?.replace(/\/+$/, '');
+    const baseUrl =
+      effectiveConfig.apiBaseUrl?.replace(/\/+$/, '') ??
+      (configuredHost
+        ? /^https?:\/\//i.test(configuredHost)
+          ? configuredHost
+          : `https://${configuredHost}`
+        : this.getApiBaseUrl());
     if (!baseUrl) {
       throwConfigurationError('Azure API host or base URL must be set for realtime deployments.');
     }
 
     const bearerToken = this.authHeaders?.Authorization?.replace(/^Bearer\s+/i, '');
+    const effectiveApiKey =
+      effectiveConfig.apiKey ??
+      (effectiveConfig.apiKeyEnvar
+        ? (getEnvString(effectiveConfig.apiKeyEnvar as EnvVarKey) ??
+          this.env?.[effectiveConfig.apiKeyEnvar as keyof typeof this.env])
+        : undefined) ??
+      this.getApiKey();
+    const inheritedAuthHeaders = effectiveApiKey
+      ? Object.fromEntries(
+          Object.entries(this.authHeaders ?? {}).filter(
+            ([key]) => key.toLowerCase() !== 'authorization' && key.toLowerCase() !== 'api-key',
+          ),
+        )
+      : this.authHeaders;
     const realtimeBaseUrl = getAzureRealtimeBaseUrl(baseUrl);
     const realtimeUrl = new URL(realtimeBaseUrl);
-    const effectiveConfig = {
-      ...this.config,
-      ...context?.prompt?.config,
-    } as OpenAiRealtimeOptions;
     const realtimeConfig: OpenAiRealtimeOptions = {
       ...effectiveConfig,
       apiHost:
@@ -56,20 +80,20 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
           ? `${realtimeUrl.host}${realtimeUrl.pathname.replace(/\/v1$/i, '')}`
           : undefined,
       apiBaseUrl: realtimeBaseUrl,
-      apiKey: this.getApiKey() ?? bearerToken,
+      apiKey: effectiveApiKey ?? bearerToken,
       maintainContext: effectiveConfig.maintainContext ?? true,
       headers: {
-        ...this.authHeaders,
-        ...this.config.headers,
+        ...inheritedAuthHeaders,
         ...effectiveConfig.headers,
+        ...(effectiveApiKey ? { 'api-key': effectiveApiKey } : {}),
       },
     };
 
     const conversationId = context?.test?.metadata?.conversationId;
-    const promptId = context?.prompt?.id;
+    const promptId = context?.prompt ? generateIdFromPrompt(context.prompt) : 'default';
     const realtimeProviderKey =
       typeof conversationId === 'string' || typeof conversationId === 'number'
-        ? `prompt:${promptId ?? 'default'}:conversation:${conversationId}`
+        ? `prompt:${promptId}:conversation:${conversationId}`
         : 'stateless';
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
 
@@ -114,6 +138,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         inputDetails?.image_tokens,
         inputDetails?.cached_tokens_details?.audio_tokens,
         inputDetails?.cached_tokens_details?.image_tokens,
+        outputDetails?.image_tokens,
       );
 
       return typeof total === 'number' && typeof usageCost === 'number'
