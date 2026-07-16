@@ -1540,31 +1540,19 @@ These OpenAI-related environment variables are supported:
 
 ## OpenAI-compatible multi-model gateways
 
-The OpenAI provider can target any OpenAI-compatible Chat Completions endpoint by setting `apiBaseUrl` (or `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL`). This is useful for multi-model gateways that speak the OpenAI API shape.
-
-Example with [DaoXE](https://daoxe.com) (`https://daoxe.com/v1`):
-
-```bash
-export OPENAI_API_KEY=your_daoxe_api_key
-export OPENAI_BASE_URL=https://daoxe.com/v1
-```
+The OpenAI provider works with any server that implements the OpenAI Chat Completions API, including multi-model gateways. Set `apiBaseUrl` in the provider config, or use one of the base-URL environment variables in the table above (the config value takes precedence):
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:your-account-model-id
+  - id: openai:chat:your-model-id
     config:
-      apiBaseUrl: https://daoxe.com/v1
-      # apiKeyEnvar: OPENAI_API_KEY  # default; set to DAOXE_API_KEY if preferred
+      apiBaseUrl: https://gateway.example.com/v1
 ```
 
-Replace `your-account-model-id` with an exact model ID from your DaoXE account (`GET /v1/models` or the dashboard). Do not hardcode a static catalog — availability is account-scoped.
+Use a model ID your endpoint actually serves (`GET /v1/models`) — gateways often scope model availability per account. To keep a gateway key separate from a real OpenAI key, set `apiKeyEnvar` to a different environment variable name.
 
-Notes:
-
-- This path uses OpenAI Chat Completions. DaoXE also exposes other protocols (for example Anthropic Messages) for other clients; use those only with providers that speak those APIs.
-- DaoXE is not available in mainland China.
-- Runnable example: [`examples/openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway).
+See [vLLM](/docs/providers/vllm/), [Llamafile](/docs/providers/llamafile/), and [LiteLLM](/docs/providers/litellm/) for worked setups, or the runnable [`examples/openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway) example.
 
 ## Evaluating assistants
 

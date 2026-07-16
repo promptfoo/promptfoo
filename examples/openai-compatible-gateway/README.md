@@ -1,21 +1,17 @@
-# openai-compatible-gateway (DaoXE example)
+# openai-compatible-gateway (OpenAI-Compatible Multi-Model Gateway)
 
-Point Promptfoo's built-in OpenAI provider at a third-party OpenAI-compatible multi-model gateway.
-
-This example uses [DaoXE](https://daoxe.com) (`https://daoxe.com/v1`). Any OpenAI-compatible Chat Completions host works the same way — change `apiBaseUrl` and the model ID.
+Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Completions endpoint — a self-hosted server (vLLM, llamafile) or a hosted multi-model gateway (LiteLLM, OpenRouter, etc.). Change `apiBaseUrl` and the model ID; everything else works the same way.
 
 ## Setup
 
-1. Create an API key at [daoxe.com](https://daoxe.com).
+1. Create an API key with your gateway or endpoint provider.
 2. Export credentials:
 
    ```bash
-   export OPENAI_API_KEY=your_daoxe_api_key
-   # optional if you also set apiBaseUrl in the config:
-   export OPENAI_BASE_URL=https://daoxe.com/v1
+   export OPENAI_API_KEY=your_gateway_api_key
    ```
 
-3. Set `your-account-model-id` in `promptfooconfig.yaml` to an exact model ID available to your account (`GET /v1/models` or the dashboard).
+3. In `promptfooconfig.yaml`, set `apiBaseUrl` to your endpoint's base URL and replace `your-model-id` with an exact model ID your endpoint serves (`GET /v1/models`).
 
 4. Initialize and run the example:
 
@@ -28,14 +24,12 @@ This example uses [DaoXE](https://daoxe.com) (`https://daoxe.com/v1`). Any OpenA
 ## What this example covers
 
 - Using `openai:chat:<model>` against a custom OpenAI-compatible `apiBaseUrl`
-- Account-scoped model IDs (no static public catalog)
-- Optional `OPENAI_BASE_URL` environment variable
+- Account-scoped model IDs (many gateways have no static public catalog)
 
 ## Notes
 
-- Uses OpenAI Chat Completions only.
-- Model IDs are account-scoped; do not rely on a static public list.
-- DaoXE is not available in mainland China.
-- Contributor disclosure: this example was contributed by a DaoXE affiliate.
+- Uses the OpenAI Chat Completions API shape only.
+- Instead of `apiBaseUrl` in the config, you can set the `OPENAI_BASE_URL` environment variable — the config value takes precedence when both are set.
+- To keep your gateway key separate from a real OpenAI key, set `apiKeyEnvar` in the provider config to a different environment variable name.
 
 See also the [OpenAI provider documentation](https://www.promptfoo.dev/docs/providers/openai/) section on OpenAI-compatible multi-model gateways.
