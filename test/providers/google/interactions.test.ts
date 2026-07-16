@@ -84,12 +84,9 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
-    expect(mockFetchWithCache.mock.calls[0]?.[1]).toHaveProperty(
-      '_authHash',
-      expect.stringMatching(/^[a-f0-9]{16}$/),
-    );
+    expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
     expect(mockStoreBlob).toHaveBeenCalledWith(
       Buffer.from('video'),
       'video/mp4',
@@ -216,7 +213,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -251,7 +248,7 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -291,7 +288,7 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 });

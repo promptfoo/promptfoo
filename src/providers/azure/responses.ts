@@ -47,7 +47,13 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
           modelName,
-          config,
+          {
+            ...config,
+            passthrough: {
+              ...config?.passthrough,
+              ...(config?.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+            },
+          },
           usage?.prompt_tokens ?? usage?.input_tokens,
           usage?.completion_tokens ?? usage?.output_tokens,
           usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,

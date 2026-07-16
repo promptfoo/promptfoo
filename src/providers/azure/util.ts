@@ -181,9 +181,7 @@ export function calculateAzureCost(
     imageCompletionTokens,
     Math.max(completionTokens - audioOutputTokens, 0),
   );
-  const serviceTier =
-    (config as AzureCompletionOptions & { service_tier?: unknown }).service_tier ??
-    (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
+  const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
       ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(modelName) ?? 1)

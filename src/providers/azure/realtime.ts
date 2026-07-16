@@ -26,6 +26,24 @@ function getAzureRealtimeBaseUrl(baseUrl: string): string {
   return `${normalized}/openai/v1`;
 }
 
+function hasSameRealtimeConnection(
+  current: OpenAiRealtimeOptions,
+  next: OpenAiRealtimeOptions,
+): boolean {
+  if (
+    current.apiHost !== next.apiHost ||
+    current.apiBaseUrl !== next.apiBaseUrl ||
+    current.apiKey !== next.apiKey
+  ) {
+    return false;
+  }
+
+  const currentHeaders = current.headers ?? {};
+  const nextHeaders = next.headers ?? {};
+  const headerNames = new Set([...Object.keys(currentHeaders), ...Object.keys(nextHeaders)]);
+  return [...headerNames].every((name) => currentHeaders[name] === nextHeaders[name]);
+}
+
 export class AzureRealtimeProvider extends AzureGenericProvider {
   private readonly realtimeProviders = new Map<string, OpenAiRealtimeProvider>();
   private registeredForShutdown = false;
@@ -112,6 +130,12 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         ? `prompt:${promptId}:conversation:${conversationId}`
         : 'stateless';
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
+
+    if (realtimeProvider && !hasSameRealtimeConnection(realtimeProvider.config, realtimeConfig)) {
+      realtimeProvider.cleanup();
+      this.realtimeProviders.delete(realtimeProviderKey);
+      realtimeProvider = undefined;
+    }
 
     if (realtimeProvider) {
       realtimeProvider.config = realtimeConfig;

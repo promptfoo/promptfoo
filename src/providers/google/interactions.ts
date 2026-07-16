@@ -3,11 +3,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
-import {
-  calculateGoogleCost,
-  createAuthCacheDiscriminator,
-  mergeGoogleCompletionOptions,
-} from './util';
+import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -161,18 +157,17 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let data: InteractionResponse;
     let cached: boolean;
     try {
-      const authDiscriminator = createAuthCacheDiscriminator(headers);
       ({ data, cached } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
-          ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        context?.bustCache ?? context?.debug ?? false,
+        // Interactions API credentials must not be persisted, even as a stable cache fingerprint.
+        true,
       )) as { data: InteractionResponse; cached: boolean });
     } catch (err) {
       return { error: `Gemini Interactions API error: ${String(err)}` };

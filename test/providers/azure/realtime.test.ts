@@ -426,4 +426,30 @@ describe('AzureRealtimeProvider', () => {
       headers: { 'api-key': 'prompt-env-key' },
     });
   });
+
+  it('reconnects a persistent conversation when its endpoint or credentials change', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'base.openai.azure.com', apiKey: 'base-key' },
+    });
+    const context = {
+      prompt: { id: 'prompt-a', config: {} },
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any;
+
+    await provider.callApi('first turn', context);
+    context.prompt.config = {
+      apiHost: 'alternate.openai.azure.com',
+      apiKey: 'alternate-key',
+      headers: { 'x-tenant-id': 'tenant-b' },
+    };
+    await provider.callApi('second turn', context);
+
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(OpenAiRealtimeProvider).mock.results[1]?.value.config).toMatchObject({
+      apiBaseUrl: 'https://alternate.openai.azure.com/openai/v1',
+      apiKey: 'alternate-key',
+      headers: { 'api-key': 'alternate-key', 'x-tenant-id': 'tenant-b' },
+    });
+  });
 });

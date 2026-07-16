@@ -370,7 +370,15 @@ describe('calculateAzureCost', () => {
     ).toBeCloseTo(0.0755, 12);
     expect(
       calculateAzureCost('gpt-5.4', { service_tier: 'priority' } as any, 272_001, 1_000, 1_000),
-    ).toBeCloseTo((2 * (271_001 * 5 + 1_000 * 0.5 + 1_000 * 22.5)) / 1e6, 12);
+    ).toBeCloseTo((271_001 * 5 + 1_000 * 0.5 + 1_000 * 22.5) / 1e6, 12);
+    expect(
+      calculateAzureCost(
+        'gpt-5.4',
+        { service_tier: 'priority', passthrough: { service_tier: 'standard' } } as any,
+        1_000,
+        1_000,
+      ),
+    ).toBeCloseTo((1_000 * 2.5 + 1_000 * 15) / 1e6, 12);
     expect(
       calculateAzureCost(
         'gpt-5.1-codex-mini-2025-11-13',
@@ -407,6 +415,13 @@ describe('calculateAzureCost', () => {
   it('prices Phi-4 multimodal audio input using the Foundry audio-token rate', () => {
     expect(calculateAzureCost('Phi-4-multimodal-instruct', {}, 1_000, 1_000, 0, 1_000)).toBeCloseTo(
       (1_000 * 4 + 1_000 * 0.32) / 1e6,
+      12,
+    );
+  });
+
+  it('prices GPT-4o mini TTS text input and audio output using the current Azure rates', () => {
+    expect(calculateAzureCost('gpt-4o-mini-tts', {}, 1_000, 1_000, 0, 0, 1_000)).toBeCloseTo(
+      (1_000 * 2.5 + 1_000 * 12) / 1e6,
       12,
     );
   });
@@ -734,7 +749,7 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-audio-1.5-2026-02-23', 2.5, 10],
     ['gpt-audio-mini', 0.6, 2.4],
     ['gpt-4o-mini-transcribe', 1.25, 5],
-    ['gpt-4o-mini-tts', 0.6, 12],
+    ['gpt-4o-mini-tts', 2.5, 10],
     ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],

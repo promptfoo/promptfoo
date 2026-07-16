@@ -500,6 +500,51 @@ describe('GoogleLiveProvider', () => {
     );
   });
 
+  it('should bill Gemini 3.1 Live video frames using the per-second input rate', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateTextMessage(mockWs, 'video received');
+          simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+          simulateMessage(mockWs, {
+            serverContent: { turnComplete: true },
+            usageMetadata: {
+              promptTokenCount: 516,
+              responseTokenCount: 100,
+              totalTokenCount: 616,
+              promptTokensDetails: [{ modality: 'VIDEO', tokenCount: 516 }],
+              responseTokensDetails: [{ modality: 'TEXT', tokenCount: 100 }],
+            },
+          });
+        }, 20);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            { inline_data: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } },
+            { inline_data: { mime_type: 'image/png', data: 'ZnJhbWUy' } },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.cost).toBeCloseTo(2 * 0.000033333333333333335 + (100 * 4.5) / 1e6, 12);
+  });
+
   it('should price a documented Gemini 2.5 Live model when usage metadata is returned', async () => {
     provider = new GoogleLiveProvider('gemini-live-2.5-flash-preview-native-audio-09-2025', {
       config: {

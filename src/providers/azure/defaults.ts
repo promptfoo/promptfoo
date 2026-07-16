@@ -706,7 +706,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-4o-mini-tts',
-    cost: { input: 0.6 / 1000000, output: 12 / 1000000 },
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000, audioOutput: 12 / 1000000 },
   },
   {
     id: 'gpt-4o-mini-tts-2025-03-20',

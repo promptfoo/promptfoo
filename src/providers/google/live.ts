@@ -9,6 +9,7 @@ import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { GOOGLE_MODELS } from './shared';
 import {
   calculateGoogleCost,
   geminiFormatAndSystemInstructions,
@@ -573,19 +574,24 @@ export class GoogleLiveProvider implements ApiProvider {
               ) +
               getModalityTokenCount(
                 usage.promptTokensDetails ?? usage.prompt_tokens_details,
-                'VIDEO',
+                'DOCUMENT',
               ) +
               getModalityTokenCount(
                 usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
-                'VIDEO',
-              ) +
+                'DOCUMENT',
+              ),
+            0,
+          );
+          const videoPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
               getModalityTokenCount(
                 usage.promptTokensDetails ?? usage.prompt_tokens_details,
-                'DOCUMENT',
+                'VIDEO',
               ) +
               getModalityTokenCount(
                 usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
-                'DOCUMENT',
+                'VIDEO',
               ),
             0,
           );
@@ -613,14 +619,23 @@ export class GoogleLiveProvider implements ApiProvider {
               ) +
               getModalityTokenCount(
                 usage.cacheTokensDetails ?? usage.cache_tokens_details,
-                'VIDEO',
-              ) +
-              getModalityTokenCount(
-                usage.cacheTokensDetails ?? usage.cache_tokens_details,
                 'DOCUMENT',
               ),
             0,
           );
+          const cachedVideoPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'VIDEO',
+              ),
+            0,
+          );
+          const videoInputPerSecond = GOOGLE_MODELS.find((model) => model.id === this.modelName)
+            ?.cost?.videoInputPerSecond;
+          const billVideoPerSecond =
+            videoFrameCount > 0 && videoInputPerSecond !== undefined && videoPromptTokens > 0;
 
           result.tokenUsage = {
             prompt: promptTokens,
@@ -634,20 +649,24 @@ export class GoogleLiveProvider implements ApiProvider {
             ...(cachedPromptTokens > 0 ? { cached: cachedPromptTokens } : {}),
             ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
           };
-          result.cost = calculateGoogleCost(
+          const tokenCost = calculateGoogleCost(
             this.modelName,
             config,
-            promptTokens,
+            Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0),
             billableCompletionTokens,
             false,
             audioPromptTokens,
             audioCompletionTokens,
             undefined,
-            imagePromptTokens,
-            cachedPromptTokens,
+            imagePromptTokens + (billVideoPerSecond ? 0 : videoPromptTokens),
+            Math.max(cachedPromptTokens - (billVideoPerSecond ? cachedVideoPromptTokens : 0), 0),
             cachedAudioPromptTokens,
-            cachedImagePromptTokens,
+            cachedImagePromptTokens + (billVideoPerSecond ? 0 : cachedVideoPromptTokens),
           );
+          result.cost =
+            tokenCost === undefined
+              ? undefined
+              : tokenCost + (billVideoPerSecond ? videoFrameCount * videoInputPerSecond : 0);
         }
 
         if (hasAudioContent) {
