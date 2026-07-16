@@ -1044,6 +1044,11 @@ exactly one of `image_url` or `file_id`.
 Reusable Sora characters can be supplied with `characters: [{ id: char_123 }]`; at most two
 characters can be used in one generation, and the character name should also appear in the prompt.
 
+Credential-bearing image URLs, such as signed URLs or URLs with access tokens, bypass the persistent
+video cache unless a non-secret tenant discriminator such as `headers: { X-Tenant-Id: tenant-a }`
+is configured. Provider and per-prompt headers are sent for video creation, status polling, and
+content downloads so routed gateways can authorize the full job lifecycle.
+
 ### Video Remixing
 
 Remix an existing Sora video with a new prompt using `remix_video_id`:
@@ -1854,7 +1859,8 @@ The legacy models are billed at $15 and $30 per million characters, respectively
 is billed using input and audio-output tokens; the binary speech response does not expose usage, so
 promptfoo leaves `cost` unset instead of estimating it.
 
-For authenticated custom speech gateways, provide a non-secret tenant discriminator such as
+For custom speech gateways authenticated through headers or URL credentials, provide a non-secret
+tenant discriminator such as
 `headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
 the speech cache to prevent responses from being shared across gateway tenants.
 

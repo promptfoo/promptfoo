@@ -164,10 +164,15 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         formData.append('response_format', responseFormat);
       }
 
-      const headers = {
+      const headers: Record<string, string> = {
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         ...this.getOpenAiRequestHeaders(config.headers),
       };
+      for (const header of Object.keys(headers)) {
+        if (header.toLowerCase() === 'content-type') {
+          delete headers[header];
+        }
+      }
 
       let data: any, status: number, statusText: string;
       let cached = false;

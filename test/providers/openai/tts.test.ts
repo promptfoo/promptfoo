@@ -101,6 +101,22 @@ describe('OpenAiTtsProvider', () => {
     );
   });
 
+  it('lets lowercase custom headers replace the default speech headers', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'default-key',
+        headers: { authorization: 'Bearer gateway-key', 'content-type': 'application/json' },
+      },
+    });
+
+    await provider.callApi('Use the gateway credentials');
+
+    const headers = new Headers(mockedFetch.mock.calls[0][1]?.headers);
+    expect(headers.get('authorization')).toBe('Bearer gateway-key');
+    expect(headers.get('content-type')).toBe('application/json');
+  });
+
   it('does not create speech for an already-aborted eval', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -464,6 +480,49 @@ describe('OpenAiTtsProvider', () => {
     expect(second.cached).toBe(false);
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('does not share query-authenticated custom speech endpoints without a tenant discriminator', async () => {
+    const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: '' });
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (url) => {
+      const token = new URL(String(url)).searchParams.get('api_key');
+      return audioResponse(new TextEncoder().encode(`audio-for-${token}`));
+    });
+
+    try {
+      const first = await new OpenAiTtsProvider('tts-1', {
+        config: {
+          apiKeyRequired: false,
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-a-secret&path=',
+        },
+      }).callApi('same input');
+      const second = await new OpenAiTtsProvider('tts-1', {
+        config: {
+          apiKeyRequired: false,
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-b-secret&path=',
+        },
+      }).callApi('same input');
+
+      expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe(
+        'audio-for-tenant-a-secret',
+      );
+      expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe(
+        'audio-for-tenant-b-secret',
+      );
+      expect(first.cached).toBe(false);
+      expect(second.cached).toBe(false);
+      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(cache.set).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
+    }
   });
 
   const invalidCases: Array<

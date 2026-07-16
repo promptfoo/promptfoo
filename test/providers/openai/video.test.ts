@@ -375,6 +375,30 @@ describe('OpenAiVideoProvider', () => {
       );
     });
 
+    it('should propagate per-prompt headers through video polling and downloads', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key' },
+      });
+      setupMocksForSuccess();
+
+      const result = await provider.callApi('A routed video request', {
+        prompt: {
+          raw: 'A routed video request',
+          label: 'routed-video',
+          config: { headers: { 'X-Route-Token': 'per-prompt-route' } },
+        },
+        vars: {},
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(5);
+      for (const [, options] of mockFetchWithProxy.mock.calls) {
+        expect(options.headers).toEqual(
+          expect.objectContaining({ 'X-Route-Token': 'per-prompt-route' }),
+        );
+      }
+    });
+
     it('should handle invalid video size', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', size: '1920x1080' as any },
@@ -946,7 +970,7 @@ describe('OpenAiVideoProvider', () => {
       expect(first).not.toBe(differentImage);
     });
 
-    it('should keep tenant-scoped authenticated image references isolated', () => {
+    it('should avoid fingerprinting tenant tokens in video cache keys', () => {
       const base = {
         provider: 'openai',
         prompt: 'animate the reference image',
@@ -960,12 +984,75 @@ describe('OpenAiVideoProvider', () => {
           ...base,
           inputReference: 'https://assets.example/start.png?tenant_token=tenantA-secret',
         }),
-      ).not.toBe(
+      ).toBe(
         generateVideoCacheKey({
           ...base,
           inputReference: 'https://assets.example/start.png?tenant_token=tenantB-secret',
         }),
       );
+    });
+
+    it('should not fingerprint URL userinfo or generic access tokens in video cache keys', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+
+      expect(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://alice:password-one@assets.example/start.png',
+        }),
+      ).toBe(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://alice:password-two@assets.example/start.png',
+        }),
+      );
+      expect(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://assets.example/start.png?access_token=secret-one',
+        }),
+      ).toBe(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://assets.example/start.png?access_token=secret-two',
+        }),
+      );
+    });
+
+    it('should canonicalize equivalent data-URL image-reference forms', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+      const image = 'data:image/png;base64,AA==';
+
+      expect(generateVideoCacheKey({ ...base, inputReference: image })).toBe(
+        generateVideoCacheKey({ ...base, inputReference: { image_url: image } }),
+      );
+    });
+
+    it('should isolate explicit non-secret video cache scopes', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+        inputReference: 'https://assets.example/start.png?signature=rotating-secret',
+      };
+
+      expect(
+        generateVideoCacheKey({ ...base, cacheScope: { 'x-tenant-id': 'tenant-a' } }),
+      ).not.toBe(generateVideoCacheKey({ ...base, cacheScope: { 'x-tenant-id': 'tenant-b' } }));
     });
 
     it('should ignore all rotating Azure Blob SAS parameters', () => {
@@ -1289,6 +1376,33 @@ describe('OpenAiVideoProvider', () => {
   });
 
   describe('input_reference (image-to-video)', () => {
+    it('should bypass the persistent video cache for authenticated image references without a tenant scope', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          input_reference: 'https://assets.example/start.png?signature=tenant-a-secret',
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Animate a private reference');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
     it('should wrap base64 input_reference in the documented image_url object', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: 'base64EncodedImageData' },

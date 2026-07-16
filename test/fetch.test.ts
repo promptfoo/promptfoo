@@ -1607,6 +1607,21 @@ describe('fetchWithRetries', () => {
       // Should not retry on abort
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
+
+    it('should preserve AbortError semantics when a signal uses a custom Error reason', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockImplementationOnce(async () => {
+        controller.abort(new Error('caller cancelled'));
+        throw controller.signal.reason;
+      });
+
+      await expect(
+        fetchWithRetries('https://example.com', { signal: controller.signal }, 1000, 3),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled' });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
   });
 
   describe('HttpRateLimitError classification', () => {

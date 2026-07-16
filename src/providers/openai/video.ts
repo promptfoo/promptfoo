@@ -4,6 +4,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import {
   buildStorageRefUrl,
@@ -139,6 +140,24 @@ function hasValidCharacters(characters: OpenAiVideoOptions['characters']): boole
           character && typeof character.id === 'string' && character.id.trim().length > 0,
       ))
   );
+}
+
+function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_reference']): boolean {
+  const imageUrl =
+    typeof reference === 'string'
+      ? reference
+      : reference && 'image_url' in reference
+        ? reference.image_url
+        : undefined;
+  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+    return false;
+  }
+  try {
+    const normalizedUrl = new URL(imageUrl).toString();
+    return sanitizeUrl(normalizedUrl) !== normalizedUrl;
+  } catch {
+    return true;
+  }
 }
 
 // =============================================================================
@@ -341,10 +360,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     videoId: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    customHeaders?: Record<string, string>,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const startTime = Date.now();
     const url = `${this.getApiUrl()}/videos/${videoId}`;
-    const headers = this.getAuthHeaders();
+    const headers = this.getAuthHeaders(customHeaders);
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
@@ -401,9 +421,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     variant: OpenAiVideoVariant,
     cacheKey: string,
     evalId?: string,
+    customHeaders?: Record<string, string>,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
     const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant === 'video' ? '' : `?variant=${variant}`}`;
-    const headers = this.getAuthHeaders();
+    const headers = this.getAuthHeaders(customHeaders);
 
     try {
       const response = await fetchWithProxy(url, { method: 'GET', headers });
@@ -478,6 +499,19 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
+    const cacheScope = Object.fromEntries(
+      Object.entries(this.getOpenAiRequestHeaders(config.headers))
+        .filter(
+          ([key, value]) =>
+            /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
+            typeof value === 'string' &&
+            value.trim().length > 0,
+        )
+        .map(([key, value]) => [key.toLowerCase(), value])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const canCacheVideo =
+      !hasAuthenticatedInputReference(config.input_reference) || Object.keys(cacheScope).length > 0;
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
       prompt,
@@ -486,12 +520,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       seconds,
       inputReference: config.remix_video_id ? null : config.input_reference,
       characters: config.remix_video_id ? undefined : config.characters,
+      cacheScope,
     });
 
     // Check for cached video (skip for remix operations)
-    const cachedVideoKey = config.remix_video_id
-      ? null
-      : await checkVideoCache(cacheKey, PROVIDER_NAME);
+    const cachedVideoKey =
+      config.remix_video_id || !canCacheVideo
+        ? null
+        : await checkVideoCache(cacheKey, PROVIDER_NAME);
     if (cachedVideoKey) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 
@@ -562,6 +598,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       videoId,
       pollIntervalMs,
       maxPollTimeMs,
+      config.headers,
     );
 
     if (pollError) {
@@ -580,6 +617,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       'video',
       cacheKey,
       evalId,
+      config.headers,
     );
 
     if (videoDownloadError || !videoRef) {
@@ -594,6 +632,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         'thumbnail',
         cacheKey,
         evalId,
+        config.headers,
       );
       if (error) {
         logger.warn(`[OpenAI Video] Failed to download thumbnail: ${error}`);
@@ -610,6 +649,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         'spritesheet',
         cacheKey,
         evalId,
+        config.headers,
       );
       if (error) {
         logger.warn(`[OpenAI Video] Failed to download spritesheet: ${error}`);
@@ -627,13 +667,15 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(completedModel, completedSeconds, false, completedSize);
 
     // Store cache mapping for future lookups
-    await storeCacheMapping(
-      cacheKey,
-      videoRef.key,
-      thumbnailRef?.key,
-      spritesheetRef?.key,
-      PROVIDER_NAME,
-    );
+    if (canCacheVideo) {
+      await storeCacheMapping(
+        cacheKey,
+        videoRef.key,
+        thumbnailRef?.key,
+        spritesheetRef?.key,
+        PROVIDER_NAME,
+      );
+    }
 
     // Build storage ref URLs
     const videoUrl = buildStorageRefUrl(videoRef.key);

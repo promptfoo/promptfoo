@@ -659,6 +659,13 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
+      if (options.signal?.aborted) {
+        const abortError = new Error(
+          error instanceof Error ? error.message : 'Request was aborted',
+        );
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
 
       // Structured rate-limit errors are already final (quota fail-fast or
       // retries exhausted) and carry retry-after / reset metadata. Don't

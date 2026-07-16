@@ -582,6 +582,17 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
+    'openai:assistant:gpt-5-codex-mini',
+    'openai:assistant:gpt-5.3-codex-spark',
+    'openai:agents:gpt-5-codex-mini',
+    'openai:agents:gpt-5.3-codex-spark',
+    'openai:chatkit:gpt-5-codex-mini',
+    'openai:chatkit:gpt-5.3-codex-spark',
+  ])('should allow Codex-like names on identifier-based route %s', async (route) => {
+    await expect(loadApiProvider(route)).resolves.toBeDefined();
+  });
+
+  it.each([
     'gpt-5-search-api',
     'gpt-5-search-api-2025-10-14',
   ])('should auto-route bare Chat Completions search model %s to Chat Completions', async (model) => {

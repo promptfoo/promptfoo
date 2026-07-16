@@ -955,7 +955,10 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      if (OPENAI_CODEX_ONLY_MODELS.some((model) => model.id === requestedApiModel)) {
+      if (
+        !['agents', 'chatkit', 'assistant'].includes(modelType) &&
+        OPENAI_CODEX_ONLY_MODELS.some((model) => model.id === requestedApiModel)
+      ) {
         throw new Error(
           `OpenAI model ${requestedApiModel} is only available through openai:codex-sdk with eligible Codex authentication.`,
         );

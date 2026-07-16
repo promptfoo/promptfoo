@@ -221,6 +221,24 @@ describe('OpenAiTranscriptionProvider', () => {
       });
     });
 
+    it('should strip case-insensitive Content-Type overrides from transcription uploads', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          headers: { 'content-type': 'application/json', 'X-Gateway-Token': 'gateway-token' },
+        },
+      });
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<
+        string,
+        string
+      >;
+      expect(Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')).toBe(false);
+      expect(headers['X-Gateway-Token']).toBe('gateway-token');
+    });
+
     it('should use cached response', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },

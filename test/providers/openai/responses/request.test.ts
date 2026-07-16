@@ -240,6 +240,75 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should coalesce and bill concurrent consumers of the same background response once', async () => {
+    let creates = 0;
+    let polls = 0;
+    let creation: Promise<any> | undefined;
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        if (!creation) {
+          creates++;
+          creation = new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  data: { id: 'resp_shared', status: 'queued', output: [], usage: null },
+                  cached: false,
+                  status: 200,
+                  statusText: 'OK',
+                  updateCache,
+                }),
+              5,
+            );
+          });
+        }
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_shared') && options?.method === 'GET') {
+        polls++;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          data: {
+            id: 'resp_shared',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Shared background result' }],
+              },
+            ],
+            usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const results = await Promise.all([
+      provider.callApi('Share this task'),
+      provider.callApi('Share this task'),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(polls).toBe(1);
+    expect(results.map((result) => result.output)).toEqual([
+      'Shared background result',
+      'Shared background result',
+    ]);
+    expect(results.filter((result) => result.cached === false)).toHaveLength(1);
+    expect(results.filter((result) => result.cached === true)).toHaveLength(1);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
   it('should return a clear error and evict a cancelled background response', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);

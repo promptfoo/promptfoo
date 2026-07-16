@@ -202,10 +202,13 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
     const startedAt = Date.now();
     const url = `${this.getApiUrl()}/audio/speech`;
+    const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+    const hasCustomHeader = (name: string) =>
+      Object.keys(customHeaders).some((key) => key.toLowerCase() === name);
     const requestHeaders = {
-      'Content-Type': 'application/json',
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      ...this.getOpenAiRequestHeaders(config.headers),
+      ...(hasCustomHeader('content-type') ? {} : { 'Content-Type': 'application/json' }),
+      ...(apiKey && !hasCustomHeader('authorization') ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...customHeaders,
     };
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
@@ -227,8 +230,16 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     } catch {
       // Leave malformed custom URLs to the request path to validate.
     }
+    let hasSensitiveUrlCredentials = false;
+    try {
+      const normalizedUrl = new URL(url).toString();
+      hasSensitiveUrlCredentials = sanitizeUrl(normalizedUrl) !== normalizedUrl;
+    } catch {
+      hasSensitiveUrlCredentials = true;
+    }
     const usesAuthenticatedCustomEndpoint =
-      !sendsToOpenAiApi && Object.keys(requestHeaders).some(isSensitiveCacheHeader);
+      !sendsToOpenAiApi &&
+      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
     const cacheEnabled =
       isCacheEnabled() &&
       !(

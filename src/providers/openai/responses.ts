@@ -6,6 +6,7 @@ import {
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -79,10 +80,14 @@ interface BackgroundResponseResult {
   error?: string;
   retried?: boolean;
   cancelled?: boolean;
+  shared?: boolean;
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
 const BACKGROUND_STREAM_ABORT_GRACE_MS = 1_000;
+const inFlightBackgroundResponses = new Map<string, Promise<BackgroundResponseResult>>();
+const backgroundAbortSignalIds = new WeakMap<AbortSignal, number>();
+let nextBackgroundAbortSignalId = 0;
 
 async function cancelBackgroundResponse(
   responseId: string,
@@ -257,6 +262,54 @@ async function resolveBackgroundResponse(
     headers: retried.headers,
     retried: true,
   };
+}
+
+async function coalesceBackgroundResponse(
+  initial: OpenAIResponsesResponse,
+  url: string,
+  request: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
+  timeout: number,
+  maxRetries: number | undefined,
+  cached: boolean,
+  deleteFromCache: (() => Promise<void>) | undefined,
+): Promise<BackgroundResponseResult> {
+  let signalId: number | undefined;
+  if (request.signal) {
+    signalId = backgroundAbortSignalIds.get(request.signal);
+    if (signalId === undefined) {
+      signalId = ++nextBackgroundAbortSignalId;
+      backgroundAbortSignalIds.set(request.signal, signalId);
+    }
+  }
+  const cacheKey = sha256(
+    JSON.stringify({
+      url,
+      id: initial.id,
+      headers: Object.entries(request.headers).sort(([left], [right]) => left.localeCompare(right)),
+      signalId,
+    }),
+  );
+  const inFlight = inFlightBackgroundResponses.get(cacheKey);
+  if (inFlight) {
+    const result = await inFlight;
+    return result.error ? result : { ...result, shared: true };
+  }
+
+  const pending = resolveBackgroundResponse(
+    initial,
+    url,
+    request,
+    timeout,
+    maxRetries,
+    cached,
+    deleteFromCache,
+  );
+  inFlightBackgroundResponses.set(cacheKey, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlightBackgroundResponses.delete(cacheKey);
+  }
 }
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
@@ -907,7 +960,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
       if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
         pollingBackground = true;
-        const polled = await resolveBackgroundResponse(
+        const polled = await coalesceBackgroundResponse(
           data,
           url,
           request,
@@ -916,7 +969,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cached,
           deleteFromCache,
         );
-        if (
+        if (polled.shared) {
+          cached = true;
+        } else if (
           polled.retried ||
           (!polled.error &&
             (polled.data.status === 'completed' || polled.data.status === 'incomplete'))
