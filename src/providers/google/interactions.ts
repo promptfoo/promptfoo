@@ -93,6 +93,15 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
   }
 }
 
+function normalizeInteractionSafetySettings(
+  safetySettings: NonNullable<CompletionOptions['safetySettings']>,
+) {
+  return safetySettings.map(({ category, threshold }) => ({
+    type: category.replace(/^HARM_CATEGORY_/i, '').toLowerCase(),
+    ...(threshold ? { threshold: threshold.toLowerCase() } : {}),
+  }));
+}
+
 function getVideoTokenCount(usage: InteractionResponse['usage']): number {
   return (usage?.output_tokens_by_modality || [])
     .filter((detail) => detail.modality?.toLowerCase() === 'video')
@@ -232,7 +241,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
-      ...(config.safetySettings ? { safety_settings: config.safetySettings } : {}),
+      ...(config.safetySettings
+        ? { safety_settings: normalizeInteractionSafetySettings(config.safetySettings) }
+        : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...passthrough,
       background: false,

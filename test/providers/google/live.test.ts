@@ -287,11 +287,12 @@ describe('GoogleLiveProvider', () => {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
         languageCode: 'en-US',
       },
-      enableAffectiveDialog: true,
-      proactivity: { proactiveAudio: true },
     });
     expect(setup.outputAudioTranscription).toEqual({ includeTextualContent: true });
     expect(setup.inputAudioTranscription).toEqual({ autoDetectLanguage: true });
+    expect(setup.generationConfig).not.toHaveProperty('enableAffectiveDialog');
+    expect(setup.generationConfig).not.toHaveProperty('proactivity');
+    expect(setup).not.toHaveProperty('proactivity');
     expect(setup).not.toHaveProperty('generation_config');
     expect(setup).not.toHaveProperty('output_audio_transcription');
     expect(setup).not.toHaveProperty('input_audio_transcription');

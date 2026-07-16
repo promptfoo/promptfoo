@@ -731,11 +731,8 @@ export class GoogleLiveProvider implements ApiProvider {
         }
 
         let formattedProactivity;
-        if (proactivity) {
-          formattedProactivity = {
-            [usesRealtimeTextInput ? 'proactiveAudio' : 'proactive_audio']:
-              proactivity.proactiveAudio,
-          };
+        if (proactivity && !usesRealtimeTextInput) {
+          formattedProactivity = { proactive_audio: proactivity.proactiveAudio };
         }
 
         const setupMessage = {
@@ -762,11 +759,8 @@ export class GoogleLiveProvider implements ApiProvider {
                       formattedSpeechConfig,
                   }
                 : {}),
-              ...(enableAffectiveDialog
-                ? {
-                    [usesRealtimeTextInput ? 'enableAffectiveDialog' : 'enable_affective_dialog']:
-                      enableAffectiveDialog,
-                  }
+              ...(enableAffectiveDialog && !usesRealtimeTextInput
+                ? { enable_affective_dialog: enableAffectiveDialog }
                 : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },

@@ -103,9 +103,7 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
-          safety_settings: [
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
-          ],
+          safety_settings: [{ type: 'hate_speech', threshold: 'block_low_and_above' }],
           generation_config: {
             max_output_tokens: 2_048,
             thinking_level: 'low',
