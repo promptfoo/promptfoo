@@ -201,6 +201,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
             effectiveConfig,
             result.tokenUsage?.prompt,
             result.tokenUsage?.completion,
+            result.tokenUsage?.cached,
           );
     const tokenUsage =
       usageEvents.length > 0

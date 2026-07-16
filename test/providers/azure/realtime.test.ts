@@ -264,10 +264,10 @@ describe('AzureRealtimeProvider', () => {
     expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 0, numRequests: 2 });
   });
 
-  it('falls back to token usage when a realtime response does not include metadata usage', async () => {
+  it('preserves cached token usage when a realtime response does not include metadata usage', async () => {
     mockCallApi.mockResolvedValueOnce({
       output: 'hello',
-      tokenUsage: { prompt: 1_000, completion: 500, total: 1_500 },
+      tokenUsage: { prompt: 1_000, completion: 500, total: 1_500, cached: 250 },
       metadata: {},
     });
     const provider = new AzureRealtimeProvider('gpt-realtime-mini-2025-10-06', {
@@ -276,7 +276,7 @@ describe('AzureRealtimeProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    expect(result.cost).toBeCloseTo((1_000 * 0.6 + 500 * 2.4) / 1e6, 12);
+    expect(result.cost).toBeCloseTo((750 * 0.6 + 250 * 0.06 + 500 * 2.4) / 1e6, 12);
   });
 
   it('cleans up the delegated realtime connection', async () => {

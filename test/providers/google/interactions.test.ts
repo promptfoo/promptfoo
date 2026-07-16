@@ -30,7 +30,7 @@ describe('GoogleInteractionsProvider', () => {
           },
           {
             type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+            content: [{ type: 'video', mime_type: 'video/webm', data: 'dmlkZW8=' }],
           },
         ],
         usage: {
@@ -64,6 +64,16 @@ describe('GoogleInteractionsProvider', () => {
           negative_prompt: 'do not include text',
           system_instruction: 'unsupported',
         } as any,
+        passthrough: {
+          generation_config: {
+            seed: 42,
+            temperature: 0.4,
+            negative_prompt: 'unsupported passthrough prompt',
+          },
+          generationConfig: { temperature: 0.6 },
+          system_instruction: { parts: [{ text: 'unsupported passthrough instruction' }] },
+          temperature: 0.8,
+        },
       },
     });
 
@@ -87,6 +97,7 @@ describe('GoogleInteractionsProvider', () => {
             max_output_tokens: 2_048,
             thinking_level: 'low',
             video_config: { task: 'text_to_video' },
+            seed: 42,
           },
           background: false,
           stream: false,
@@ -99,13 +110,13 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
     expect(mockStoreBlob).toHaveBeenCalledWith(
       Buffer.from('video'),
-      'video/mp4',
+      'video/webm',
       expect.objectContaining({ evalId: 'eval-1', kind: 'video' }),
     );
     expect(result.video).toMatchObject({
       id: 'interaction-1',
       url: 'blob://video/omni',
-      format: 'mp4',
+      format: 'webm',
       model: 'gemini-omni-flash-preview',
       aspectRatio: '9:16',
     });

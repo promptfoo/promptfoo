@@ -145,16 +145,30 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'system_instruction',
       'systemInstruction',
     ]);
+    const passthroughGenerationConfig = config.passthrough?.generation_config;
     const generationConfig = {
       ...(config.maxOutputTokens === undefined
         ? {}
         : { max_output_tokens: config.maxOutputTokens }),
       ...Object.fromEntries(
-        Object.entries(config.generationConfig || {}).filter(
-          ([field]) => !unsupportedGenerationFields.has(field),
-        ),
+        Object.entries({
+          ...(config.generationConfig || {}),
+          ...(passthroughGenerationConfig &&
+          typeof passthroughGenerationConfig === 'object' &&
+          !Array.isArray(passthroughGenerationConfig)
+            ? passthroughGenerationConfig
+            : {}),
+        }).filter(([field]) => !unsupportedGenerationFields.has(field)),
       ),
     };
+    const passthrough = Object.fromEntries(
+      Object.entries(config.passthrough || {}).filter(
+        ([field]) =>
+          field !== 'generation_config' &&
+          field !== 'generationConfig' &&
+          !unsupportedGenerationFields.has(field),
+      ),
+    );
     const body = {
       model: this.modelName,
       input: parseInteractionInput(prompt),
@@ -168,7 +182,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(config.store === undefined ? {} : { store: config.store }),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
-      ...(config.passthrough || {}),
+      ...passthrough,
       background: false,
       stream: false,
     };
@@ -212,13 +226,17 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let blobRef;
     if (video.data) {
       try {
-        ({ ref: blobRef } = await storeBlob(Buffer.from(video.data, 'base64'), 'video/mp4', {
-          evalId: context?.evaluationId,
-          kind: 'video',
-          location: 'response.video',
-          promptIdx: context?.promptIdx,
-          testIdx: context?.testIdx,
-        }));
+        ({ ref: blobRef } = await storeBlob(
+          Buffer.from(video.data, 'base64'),
+          video.mime_type || 'video/mp4',
+          {
+            evalId: context?.evaluationId,
+            kind: 'video',
+            location: 'response.video',
+            promptIdx: context?.promptIdx,
+            testIdx: context?.testIdx,
+          },
+        ));
       } catch (err) {
         return { error: `Failed to store Gemini interaction video: ${String(err)}` };
       }
