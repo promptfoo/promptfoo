@@ -189,7 +189,7 @@ strategies:
 
 :::note
 
-The global `excludeTargetOutputFromAgenticAttackGeneration` option removes target responses from the main follow-up attack prompt across strategies, not just custom. GOAT failure extraction and optional unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`) can still send prior target responses remotely. Disable unblocking and avoid GOAT for sensitive targets, or choose a strategy that supports local generation.
+The global `excludeTargetOutputFromAgenticAttackGeneration` option removes target responses from the main follow-up attack prompt across strategies, not just custom. GOAT failure extraction, optional unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`), and remote graders can still send target responses remotely. For sensitive targets, disable unblocking, avoid GOAT, and use a strategy and grader that both run locally.
 
 :::
 
