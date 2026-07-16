@@ -47,7 +47,7 @@ describe('AzureRealtimeProvider', () => {
       'gpt-realtime-1.5-2026-02-23',
       expect.objectContaining({
         config: expect.objectContaining({
-          apiHost: undefined,
+          apiHost: 'example.openai.azure.com/openai',
           apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
           apiKey: 'azure-key',
           headers: { 'api-key': 'azure-key' },
@@ -71,7 +71,30 @@ describe('AzureRealtimeProvider', () => {
       'gpt-realtime-1.5-2026-02-23',
       expect.objectContaining({
         config: expect.objectContaining({
+          apiHost: 'example.openai.azure.com/openai',
           apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
+        }),
+      }),
+    );
+  });
+
+  it('does not allow OPENAI_API_HOST to override the Azure realtime endpoint', async () => {
+    mockProcessEnv({ OPENAI_API_HOST: 'wrong.example' });
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: {
+        apiBaseUrl: 'https://proxy.example/azure/openai/v1',
+        apiKey: 'azure-key',
+      },
+    });
+
+    await provider.callApi('hello');
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(
+      'gpt-realtime-1.5-2026-02-23',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiHost: 'proxy.example/azure/openai',
+          apiBaseUrl: 'https://proxy.example/azure/openai/v1',
         }),
       }),
     );
@@ -106,5 +129,20 @@ describe('AzureRealtimeProvider', () => {
     provider.cleanup();
 
     expect(mockCleanup).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the realtime conversation-context default across calls', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    await provider.callApi('hello');
+    await provider.callApi('follow up', {
+      test: { metadata: { conversationId: 'conversation-1' } },
+    } as any);
+
+    const delegatedProvider = vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value;
+    expect(delegatedProvider.config.maintainContext).toBe(true);
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
   });
 });

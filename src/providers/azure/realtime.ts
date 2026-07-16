@@ -41,11 +41,14 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     }
 
     const bearerToken = this.authHeaders?.Authorization?.replace(/^Bearer\s+/i, '');
+    const realtimeBaseUrl = getAzureRealtimeBaseUrl(baseUrl);
+    const realtimeUrl = new URL(realtimeBaseUrl);
     const realtimeConfig: OpenAiRealtimeOptions = {
       ...(this.config as OpenAiRealtimeOptions),
-      apiHost: undefined,
-      apiBaseUrl: getAzureRealtimeBaseUrl(baseUrl),
+      apiHost: `${realtimeUrl.host}${realtimeUrl.pathname.replace(/\/v1$/i, '')}`,
+      apiBaseUrl: realtimeBaseUrl,
       apiKey: this.getApiKey() ?? bearerToken,
+      maintainContext: (this.config as OpenAiRealtimeOptions).maintainContext ?? true,
       headers: {
         ...this.authHeaders,
         ...this.config.headers,
