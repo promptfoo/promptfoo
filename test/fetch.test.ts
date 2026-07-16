@@ -1622,6 +1622,60 @@ describe('fetchWithRetries', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(sleep).not.toHaveBeenCalled();
     });
+
+    it('should stop promptly when a request is aborted during exponential backoff', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('temporary network failure'));
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        'https://example.com',
+        { signal: controller.signal },
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('caller cancelled backoff'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'caller cancelled backoff' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    });
+
+    it('should stop promptly when a request is aborted during Retry-After backoff', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        createMockResponse({ status: 429, headers: new Headers({ 'Retry-After': '60' }) }),
+      );
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        'https://example.com',
+        { signal: controller.signal },
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('caller cancelled rate limit'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'caller cancelled rate limit' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    });
   });
 
   describe('HttpRateLimitError classification', () => {

@@ -239,6 +239,17 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(headers['X-Gateway-Token']).toBe('gateway-token');
     });
 
+    it('should let lowercase Authorization replace the default transcription credential', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'default-key', headers: { authorization: 'Bearer gateway-key' } },
+      });
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as any);
+      expect(headers.get('authorization')).toBe('Bearer gateway-key');
+    });
+
     it('should use cached response', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },

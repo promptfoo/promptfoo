@@ -164,9 +164,13 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         formData.append('response_format', responseFormat);
       }
 
+      const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+      const hasAuthorizationOverride = Object.keys(customHeaders).some(
+        (header) => header.toLowerCase() === 'authorization',
+      );
       const headers: Record<string, string> = {
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        ...this.getOpenAiRequestHeaders(config.headers),
+        ...(apiKey && !hasAuthorizationOverride ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...customHeaders,
       };
       for (const header of Object.keys(headers)) {
         if (header.toLowerCase() === 'content-type') {

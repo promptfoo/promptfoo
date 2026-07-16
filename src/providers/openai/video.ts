@@ -4,7 +4,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import {
   buildStorageRefUrl,
@@ -160,6 +160,22 @@ function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_ref
   }
 }
 
+function isSensitiveCacheHeader(key: string): boolean {
+  return (
+    isSecretField(key) ||
+    /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(key)
+  );
+}
+
+function hasSensitiveCacheValue(value: string): boolean {
+  return (
+    looksLikeSecret(value) ||
+    /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
+      value,
+    )
+  );
+}
+
 // =============================================================================
 // Validation Functions (using shared validator)
 // =============================================================================
@@ -258,9 +274,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
    * Build authorization headers for API requests
    */
   private getAuthHeaders(customHeaders?: Record<string, string>): Record<string, string> {
+    const resolvedHeaders = this.getOpenAiRequestHeaders(customHeaders);
+    const hasAuthorizationOverride = Object.keys(resolvedHeaders).some(
+      (header) => header.toLowerCase() === 'authorization',
+    );
+    const apiKey = this.getApiKey();
     return {
-      Authorization: `Bearer ${this.getApiKey()}`,
-      ...this.getOpenAiRequestHeaders(customHeaders),
+      ...(apiKey && !hasAuthorizationOverride ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...resolvedHeaders,
     };
   }
 
@@ -499,19 +520,42 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
-    const cacheScope = Object.fromEntries(
+    const apiUrl = this.getApiUrl();
+    const requestHeaders = this.getAuthHeaders(config.headers);
+    let sendsToOpenAiApi = false;
+    let hasSensitiveUrlCredentials = false;
+    try {
+      const normalizedApiUrl = new URL(apiUrl).toString();
+      sendsToOpenAiApi = new URL(apiUrl).hostname.toLowerCase() === 'api.openai.com';
+      hasSensitiveUrlCredentials = sanitizeUrl(normalizedApiUrl) !== normalizedApiUrl;
+    } catch {
+      hasSensitiveUrlCredentials = true;
+    }
+    const tenantCacheScope = Object.fromEntries(
       Object.entries(this.getOpenAiRequestHeaders(config.headers))
         .filter(
           ([key, value]) =>
             /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key) &&
+            !isSensitiveCacheHeader(key) &&
             typeof value === 'string' &&
-            value.trim().length > 0,
+            value.trim().length > 0 &&
+            !hasSensitiveCacheValue(value),
         )
         .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
+    const cacheScope = {
+      ...tenantCacheScope,
+      ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
+    };
+    const usesAuthenticatedCustomEndpoint =
+      !sendsToOpenAiApi &&
+      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
     const canCacheVideo =
-      !hasAuthenticatedInputReference(config.input_reference) || Object.keys(cacheScope).length > 0;
+      (!hasAuthenticatedInputReference(config.input_reference) &&
+        !usesAuthenticatedCustomEndpoint &&
+        !hasSensitiveCacheValue(prompt)) ||
+      Object.keys(tenantCacheScope).length > 0;
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
       prompt,

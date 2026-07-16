@@ -7,7 +7,7 @@ import {
   isAbortError,
 } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TTS_MODELS } from './util';
@@ -33,6 +33,29 @@ function isSensitiveCacheHeader(key: string): boolean {
   );
 }
 
+function hasSensitiveCacheValue(value: unknown, fieldName?: string): boolean {
+  if (fieldName && isSensitiveCacheHeader(fieldName)) {
+    return value !== undefined && value !== null && value !== '';
+  }
+  if (typeof value === 'string') {
+    return (
+      looksLikeSecret(value) ||
+      /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
+        value,
+      )
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSensitiveCacheValue(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, nestedValue]) =>
+      hasSensitiveCacheValue(nestedValue, key),
+    );
+  }
+  return false;
+}
+
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
   voice?: string | { id: string };
@@ -41,6 +64,7 @@ export type OpenAiTtsOptions = OpenAiSharedOptions & {
   format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   speed?: number;
+  passthrough?: object;
 };
 
 function getValidationError(
@@ -198,6 +222,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ...(config.format ? { format: config.format } : {}),
       ...(config.response_format ? { response_format: config.response_format } : {}),
       ...(config.speed === undefined ? {} : { speed: config.speed }),
+      ...(config.passthrough || {}),
     };
 
     const startedAt = Date.now();
@@ -213,7 +238,11 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
         .filter(([key]) => !isSensitiveCacheHeader(key))
+        .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const hasSensitiveHeaderValue = Object.entries(requestHeaders).some(
+      ([key, value]) => !isSensitiveCacheHeader(key) && hasSensitiveCacheValue(value, key),
     );
     const cacheKey = `openai:tts:${sha256(
       JSON.stringify({ url: sanitizeUrl(url), body, headers: cacheHeaders }),
@@ -242,6 +271,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
     const cacheEnabled =
       isCacheEnabled() &&
+      !hasSensitiveCacheValue(body) &&
+      !hasSensitiveHeaderValue &&
       !(
         (usesAuthenticatedCustomEndpoint ||
           (typeof config.voice === 'object' && config.voice !== null)) &&

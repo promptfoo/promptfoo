@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
@@ -89,6 +89,16 @@ const inFlightBackgroundResponses = new Map<string, Promise<BackgroundResponseRe
 const backgroundAbortSignalIds = new WeakMap<AbortSignal, number>();
 let nextBackgroundAbortSignalId = 0;
 
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
 async function cancelBackgroundResponse(
   responseId: string,
   url: string,
@@ -131,12 +141,13 @@ async function pollBackgroundResponse(
   let responseHeaders: Record<string, string> | undefined;
   const deadline = Date.now() + timeout;
   let firstPoll = true;
+  let deadlineSignal: AbortSignal | undefined;
 
   try {
     while (data.status === 'queued' || data.status === 'in_progress') {
       signal?.throwIfAborted();
       if (!firstPoll) {
-        await sleep(1000);
+        await sleep(Math.min(1000, Math.max(0, deadline - Date.now())));
         signal?.throwIfAborted();
       }
       firstPoll = false;
@@ -152,9 +163,11 @@ async function pollBackgroundResponse(
         };
       }
 
+      deadlineSignal = AbortSignal.timeout(remainingMs);
+      const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
       const polled = await fetchWithCache<OpenAIResponsesResponse>(
         `${url}/${encodeURIComponent(initial.id)}`,
-        { method: 'GET', headers, ...(signal ? { signal } : {}) },
+        { method: 'GET', headers, signal: pollSignal },
         remainingMs,
         'json',
         true,
@@ -185,7 +198,7 @@ async function pollBackgroundResponse(
       await cancelBackgroundResponse(initial.id, url, headers);
       throw error;
     }
-    if (Date.now() >= deadline) {
+    if (deadlineSignal?.aborted || Date.now() >= deadline) {
       await cancelBackgroundResponse(initial.id, url, headers);
       return {
         data,
@@ -198,6 +211,60 @@ async function pollBackgroundResponse(
   }
 
   return { data, status, statusText, headers: responseHeaders };
+}
+
+async function createBackgroundResponseWithCancellation(
+  url: string,
+  request: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
+  timeout: number,
+  bustCache: boolean | undefined,
+  maxRetries: number | undefined,
+): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
+  const signal = request.signal;
+  const creation = fetchWithCache<OpenAIResponsesResponse>(
+    url,
+    { method: request.method, headers: request.headers, body: request.body },
+    timeout,
+    'json',
+    bustCache,
+    maxRetries,
+  );
+  if (!signal) {
+    return creation;
+  }
+
+  let onAbort: (() => void) | undefined;
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      void creation
+        .then(async (created) => {
+          if (
+            created.data.id &&
+            (created.data.status === 'queued' || created.data.status === 'in_progress')
+          ) {
+            await cancelBackgroundResponse(created.data.id, url, request.headers);
+          }
+          await created.deleteFromCache?.();
+        })
+        .catch((error) => {
+          logger.warn(`Failed to clean up an aborted background response: ${String(error)}`);
+        });
+      reject(getAbortError(signal));
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+  try {
+    return await Promise.race([creation, cancellation]);
+  } finally {
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
 }
 
 async function resolveBackgroundResponse(
@@ -803,12 +870,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let pollingBackground = false;
     try {
       const url = `${this.getApiUrl()}/responses`;
+      const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+      const hasCustomHeader = (name: string) =>
+        Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
       const request = {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-          ...this.getOpenAiRequestHeaders(config.headers),
+          ...(hasCustomHeader('content-type') ? {} : { 'Content-Type': 'application/json' }),
+          ...(this.getApiKey() && !hasCustomHeader('authorization')
+            ? { Authorization: `Bearer ${this.getApiKey()}` }
+            : {}),
+          ...customHeaders,
         },
         body: JSON.stringify(body),
         ...(abortSignal ? { signal: abortSignal } : {}),
@@ -915,14 +987,22 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           deleteFromCache,
           updateCache,
           headers: responseHeaders,
-        } = await fetchWithCache<OpenAIResponsesResponse>(
-          url,
-          request,
-          timeout,
-          'json',
-          this.shouldBustCache(context),
-          config.maxRetries,
-        ));
+        } = body.background
+          ? await createBackgroundResponseWithCancellation(
+              url,
+              request,
+              timeout,
+              this.shouldBustCache(context),
+              config.maxRetries,
+            )
+          : await fetchWithCache<OpenAIResponsesResponse>(
+              url,
+              request,
+              timeout,
+              'json',
+              this.shouldBustCache(context),
+              config.maxRetries,
+            ));
       }
 
       if (status < 200 || status >= 300) {

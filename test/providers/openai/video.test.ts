@@ -399,6 +399,20 @@ describe('OpenAiVideoProvider', () => {
       }
     });
 
+    it('should let lowercase Authorization replace the default video credential across the lifecycle', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'default-key', headers: { authorization: 'Bearer gateway-key' } },
+      });
+      setupMocksForSuccess();
+
+      const result = await provider.callApi('A gateway video request');
+
+      expect(result.error).toBeUndefined();
+      for (const [, options] of mockFetchWithProxy.mock.calls) {
+        expect(new Headers(options.headers).get('authorization')).toBe('Bearer gateway-key');
+      }
+    });
+
     it('should handle invalid video size', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', size: '1920x1080' as any },
@@ -1397,6 +1411,117 @@ describe('OpenAiVideoProvider', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
 
       const result = await provider.callApi('Animate a private reference');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should bypass the persistent video cache for an authenticated custom gateway without a tenant scope', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'tenant-secret',
+          apiBaseUrl: 'https://gateway.example/v1',
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_gateway', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_gateway', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Private gateway video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should not treat credential-like tenant headers as a safe video cache scope', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          input_reference: 'https://assets.example/start.png?signature=private-reference',
+          headers: { 'X-Tenant-Token': 'tenant-secret' },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_scope', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_scope', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Private reference video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should not treat secret-valued tenant headers as a safe video cache scope', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          input_reference: 'https://assets.example/start.png?signature=private-reference',
+          headers: { 'X-Tenant-Id': 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_secret_scope', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_secret_scope', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Private reference video');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should not persist video prompts containing embedded credentials', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', download_thumbnail: false, download_spritesheet: false },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_secret_prompt', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_secret_prompt', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi(
+        'Render this API key: sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
 
       expect(result.error).toBeUndefined();
       expect(result.cached).toBe(false);

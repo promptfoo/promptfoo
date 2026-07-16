@@ -117,6 +117,19 @@ describe('OpenAiTtsProvider', () => {
     expect(headers.get('content-type')).toBe('application/json');
   });
 
+  it('forwards passthrough speech options', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', passthrough: { custom_gateway_option: 'must-arrive' } } as any,
+    });
+
+    await provider.callApi('Forward this option');
+
+    expect(JSON.parse(mockedFetch.mock.calls[0][1]?.body as string)).toMatchObject({
+      custom_gateway_option: 'must-arrive',
+    });
+  });
+
   it('does not create speech for an already-aborted eval', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -523,6 +536,62 @@ describe('OpenAiTtsProvider', () => {
     } finally {
       restoreEnv();
     }
+  });
+
+  it('does not persist speech prompts containing embedded credentials', async () => {
+    const cache = { get: vi.fn(), set: vi.fn() };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+
+    const prompt = 'Read this API key aloud: sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    await provider.callApi(prompt);
+    await provider.callApi(prompt);
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('canonicalizes case-insensitive speech headers for the persistent cache key', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+
+    const first = await new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', headers: { 'X-Tenant-Id': 'tenant-a' } },
+    }).callApi('same input');
+    const second = await new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', headers: { 'x-tenant-id': 'tenant-a' } },
+    }).callApi('same input');
+
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(true);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not persist secret-valued speech tenant headers', async () => {
+    const cache = { get: vi.fn(), set: vi.fn() };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: {
+        apiKey: 'test-key',
+        headers: { 'X-Tenant-Id': 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      },
+    });
+
+    await provider.callApi('same input');
+
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   const invalidCases: Array<

@@ -74,6 +74,23 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.tokenUsage?.total).toBe(30);
   });
 
+  it('should let lowercase Authorization replace the default Responses credential', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { status: 'completed', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'default-key', headers: { authorization: 'Bearer gateway-key' } },
+    });
+
+    await provider.callApi('Use the gateway credential');
+
+    const headers = new Headers(vi.mocked(cache.fetchWithCache).mock.calls[0]![1]!.headers as any);
+    expect(headers.get('authorization')).toBe('Bearer gateway-key');
+  });
+
   it('should poll a queued background response until it is ready to grade', async () => {
     const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
@@ -373,7 +390,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(cache.fetchWithCache).not.toHaveBeenCalled();
   });
 
-  it('should forward the eval abort signal to background creation and polling', async () => {
+  it('should keep background creation alive and forward the eval abort signal to polling', async () => {
     const controller = new AbortController();
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
@@ -411,7 +428,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining('/responses'),
-      expect.objectContaining({ method: 'POST', signal: controller.signal }),
+      expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
       undefined,
@@ -420,12 +437,13 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('/responses/resp_cancellable'),
-      expect.objectContaining({ method: 'GET', signal: controller.signal }),
+      expect.objectContaining({ method: 'GET', signal: expect.any(AbortSignal) }),
       expect.any(Number),
       'json',
       true,
       undefined,
     );
+    expect(vi.mocked(cache.fetchWithCache).mock.calls[0]![1]).not.toHaveProperty('signal');
   });
 
   it('should cancel and evict an upstream background response when the eval is aborted', async () => {
@@ -465,6 +483,93 @@ describe('OpenAiResponsesProvider request building', () => {
       'json',
       true,
       0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should cancel an accepted background job when creation is aborted before the response arrives', async () => {
+    const controller = new AbortController();
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return await new Promise<any>((resolve, reject) => {
+          setTimeout(
+            () =>
+              resolve({
+                data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+                deleteFromCache,
+              }),
+            20,
+          );
+          options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+      if (String(url).endsWith('/responses/resp_accepted/cancel')) {
+        return { data: {}, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+    });
+
+    const pending = provider.callApi('Accept and then cancel', undefined, {
+      abortSignal: controller.signal,
+    });
+    setTimeout(() => controller.abort(new Error('caller cancelled creation')), 5);
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_accepted/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should bound polling retries by the overall background deadline', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return {
+          data: { id: 'resp_deadline', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
+      }
+      if (String(url).endsWith('/responses/resp_deadline/cancel')) {
+        return { data: {}, cached: false, status: 200, statusText: 'OK' };
+      }
+      return await new Promise<any>((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+          once: true,
+        });
+      });
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 3 },
+    });
+
+    const result = await Promise.race([
+      provider.callApi('Bound the polling deadline'),
+      new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 150)),
+    ]);
+
+    expect(result).not.toBe('unbounded');
+    expect((result as any).error).toContain(
+      'Background response resp_deadline timed out after 20ms.',
     );
     expect(deleteFromCache).toHaveBeenCalledOnce();
   });
