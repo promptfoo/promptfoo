@@ -480,7 +480,7 @@ When `ui-providers.yaml` exists:
 
 :::caution Security - Credentials
 
-**DO NOT store API keys in ui-providers.yaml**. Use environment variables with Nunjucks syntax:
+**DO NOT store API keys in ui-providers.yaml**. The catalog is served verbatim to every UI user via `GET /api/providers`, so any literal credential in the file is visible to anyone who can reach the web UI. Use environment variables with Nunjucks syntax:
 
 ```yaml
 # ui-providers.yaml

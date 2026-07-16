@@ -161,16 +161,6 @@ vi.stubGlobal(
   vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const { method, pathname, urlString } = getFetchRequestDetails(input, init);
 
-    if (method === 'GET' && pathname.endsWith('/api/providers')) {
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({
-          success: true,
-          data: { providers: [], hasCustomConfig: false },
-        }),
-      } as Response);
-    }
-
     if (method === 'GET' && pathname.endsWith('/api/providers/config-status')) {
       return Promise.resolve({
         ok: true,

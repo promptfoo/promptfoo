@@ -5,7 +5,13 @@ import { ProvidersListSection } from './ProvidersListSection';
 import type { ProviderOptions } from '@promptfoo/types';
 
 vi.mock('./AddProviderDialog', () => ({
-  default: vi.fn(() => null),
+  default: vi.fn(({ open, availableProviders }) =>
+    open ? (
+      <div data-testid="mock-add-provider-dialog">
+        {availableProviders?.map((p: ProviderOptions) => p.id).join(',') ?? 'built-in-catalog'}
+      </div>
+    ) : null,
+  ),
 }));
 
 describe('ProvidersListSection', () => {
@@ -20,11 +26,67 @@ describe('ProvidersListSection', () => {
   });
 
   it('disables provider creation until the server catalog is ready', () => {
-    render(
+    const { rerender } = render(
       <ProvidersListSection providers={[]} onChange={onChange} isProviderCatalogReady={false} />,
     );
 
     expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
+
+    // The second Add Provider button (rendered once providers exist) gates too.
+    rerender(
+      <ProvidersListSection
+        providers={providers}
+        onChange={onChange}
+        isProviderCatalogReady={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
+  });
+
+  it('forwards the configured catalog to the add provider dialog', async () => {
+    const user = userEvent.setup();
+    const availableProviders: ProviderOptions[] = [
+      { id: 'http://llm-gateway.internal', label: 'Approved Gateway' },
+    ];
+
+    render(
+      <ProvidersListSection
+        providers={[]}
+        onChange={onChange}
+        availableProviders={availableProviders}
+        isProviderCatalogReady={true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+    expect(screen.getByTestId('mock-add-provider-dialog')).toHaveTextContent(
+      'http://llm-gateway.internal',
+    );
+  });
+
+  it('forwards the configured catalog to the edit provider dialog', async () => {
+    const user = userEvent.setup();
+    const availableProviders: ProviderOptions[] = [
+      { id: 'http://llm-gateway.internal', label: 'Approved Gateway' },
+    ];
+
+    render(
+      <ProvidersListSection
+        providers={providers}
+        onChange={onChange}
+        availableProviders={availableProviders}
+        isProviderCatalogReady={true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Edit Primary model' }));
+
+    // A restricted catalog must also constrain the edit flow - otherwise
+    // Edit -> Back reopens the unrestricted built-in selector.
+    expect(screen.getByTestId('mock-add-provider-dialog')).toHaveTextContent(
+      'http://llm-gateway.internal',
+    );
   });
 
   it('asks for confirmation before deleting a provider', async () => {

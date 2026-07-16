@@ -205,6 +205,7 @@ export function ProvidersListSection({
           onClose={() => setEditingIndex(null)}
           onSave={(provider) => handleEditProvider(editingIndex, provider)}
           initialProvider={providers[editingIndex]}
+          availableProviders={availableProviders}
         />
       )}
 

@@ -29,16 +29,7 @@ import { countTests, normalizePrompts, normalizeProviders } from './setupReadine
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
-
-type ProviderCatalogResponse =
-  | {
-      success: true;
-      data: {
-        providers: ProviderOptions[];
-        hasCustomConfig: boolean;
-      };
-    }
-  | { success: false; error: string };
+import type { ProviderCatalogResponse } from '@promptfoo/types/api/providers';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -118,7 +109,7 @@ const EvaluateTestSuiteCreator = () => {
         }
         const result = (await response.json()) as ProviderCatalogResponse;
         if (!result.success) {
-          throw new Error(result.error);
+          throw new Error(result.error || 'Unexpected response from server');
         }
         if (isMounted) {
           setHasCustomConfig(result.data.hasCustomConfig);

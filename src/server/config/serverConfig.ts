@@ -155,9 +155,10 @@ export function getAvailableProviders(): ProviderOptions[] {
       continue;
     }
 
-    // Ensure id is present (required for providers even though schema makes it optional)
-    if (!result.data.id) {
-      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
+    // Ensure id is a non-empty string (required for providers even though the
+    // schema allows other shapes) so one bad entry cannot 500 the catalog route.
+    if (typeof result.data.id !== 'string' || !result.data.id) {
+      logger.warn('Provider missing required string "id" field in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,
       });
