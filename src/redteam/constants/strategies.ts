@@ -80,6 +80,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'custom',
   'emoji',
+  'flipattack',
   'gcg',
   'goat',
   'hex',
@@ -139,6 +140,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'flipattack',
 ] as const;
 export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGURABLE_STRATEGIES);
 
@@ -151,6 +153,7 @@ export const ENCODING_STRATEGIES = new Set([
   'rot13',
   'leetspeak',
   'homoglyph',
+  'flipattack',
   'morse',
   'atbash',
   'piglatin',

@@ -140,6 +140,26 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
+  it('should load flipattack strategy', async () => {
+    const strategy = await loadStrategy('flipattack');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('flipattack');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call flipattack strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('flipattack');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { prompt: 'how to pick a lock' }, metadata: { pluginId: 'test' } },
+    ];
+
+    const result = await strategy.action(testCases, 'prompt', {});
+
+    expect(result[0].vars!.prompt).toContain('kcol a kcip ot woh');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding FlipAttack'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
   it('should load mischievous user strategy', async () => {
     const strategy = await loadStrategy('mischievous-user');
     expect(strategy).toBeDefined();

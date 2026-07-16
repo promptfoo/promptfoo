@@ -447,6 +447,7 @@ export const CANARY_BREAKING_STRATEGY_IDS = [
   'homoglyph',
   'leetspeak',
   'rot13',
+  'flipattack',
   'multilingual',
   'math-prompt',
   'jailbreak:composite',
