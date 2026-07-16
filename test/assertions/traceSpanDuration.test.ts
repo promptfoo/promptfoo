@@ -394,6 +394,43 @@ describe('handleTraceSpanDuration', () => {
     });
   });
 
+  it('should accept the boundary percentile of 0', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: 0 } },
+      renderedValue: { max: 1000, percentile: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    // Percentile 0 resolves to the minimum duration (5ms in this fixture).
+    const result = handleTraceSpanDuration(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: '0th percentile duration (5ms) is within threshold 1000ms',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should throw error for a non-finite percentile', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: Number.NaN } },
+      renderedValue: { max: 1000, percentile: Number.NaN },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be a number between 0 and 100',
+    );
+  });
+
   it('should handle edge case with single span for percentile', () => {
     const params: AssertionParams = {
       ...defaultParams,
