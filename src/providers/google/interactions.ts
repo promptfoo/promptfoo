@@ -46,7 +46,30 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
         }
 
         const normalizePart = (part: unknown) => {
-          if (!part || typeof part !== 'object' || !('type' in part)) {
+          if (!part || typeof part !== 'object') {
+            return part;
+          }
+          if (!('type' in part)) {
+            const geminiPart = part as {
+              text?: string;
+              inlineData?: { mimeType?: string; data?: string };
+              fileData?: { mimeType?: string; fileUri?: string };
+            };
+            if (typeof geminiPart.text === 'string') {
+              return { type: 'text', text: geminiPart.text };
+            }
+            const media = geminiPart.inlineData || geminiPart.fileData;
+            const mimeType = media?.mimeType;
+            if (mimeType) {
+              const type = mimeType.startsWith('video/')
+                ? 'video'
+                : mimeType.startsWith('audio/')
+                  ? 'audio'
+                  : 'image';
+              return geminiPart.inlineData
+                ? { type, mime_type: mimeType, data: geminiPart.inlineData.data }
+                : { type, mime_type: mimeType, uri: geminiPart.fileData?.fileUri };
+            }
             return part;
           }
           const imagePart = part as { type?: string; image_url?: string | { url?: string } };
@@ -70,13 +93,19 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
           return normalizePart(content);
         }
 
-        const { role, content: messageContent, ...message } = content as Record<string, unknown>;
-        const normalizedContent = Array.isArray(messageContent)
-          ? messageContent.map((part) => normalizePart(part))
-          : typeof messageContent === 'string'
-            ? [{ type: 'text', text: messageContent }]
-            : messageContent && typeof messageContent === 'object'
-              ? [normalizePart(messageContent)]
+        const {
+          role,
+          content: messageContent,
+          parts,
+          ...message
+        } = content as Record<string, unknown>;
+        const interactionContent = messageContent ?? parts;
+        const normalizedContent = Array.isArray(interactionContent)
+          ? interactionContent.map((part) => normalizePart(part))
+          : typeof interactionContent === 'string'
+            ? [{ type: 'text', text: interactionContent }]
+            : interactionContent && typeof interactionContent === 'object'
+              ? [normalizePart(interactionContent)]
               : [];
         return {
           ...message,
@@ -203,7 +232,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
     if (
       (Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools)) ||
-      Boolean(config.passthrough?.tools) ||
+      (Array.isArray(config.passthrough?.tools)
+        ? config.passthrough.tools.length > 0
+        : Boolean(config.passthrough?.tools)) ||
       Boolean(config.mcp?.enabled)
     ) {
       return {

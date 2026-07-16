@@ -302,19 +302,42 @@ export function calculateGoogleCost(
     Math.max(completionTokens - audioOutputTokens, 0),
   );
   const audioInputCost =
-    config.audioInputCost ?? config.audioCost ?? modelCost.audioInput ?? inputCost;
+    config.audioInputCost ??
+    config.audioCost ??
+    config.inputCost ??
+    config.cost ??
+    modelCost.audioInput ??
+    inputCost;
   const audioOutputCost =
-    config.audioOutputCost ?? config.audioCost ?? modelCost.audioOutput ?? outputCost;
-  const videoOutputCost = config.videoOutputCost ?? modelCost.videoOutput ?? outputCost;
-  const imageInputCost = config.imageInputCost ?? modelCost.imageInput ?? inputCost;
+    config.audioOutputCost ??
+    config.audioCost ??
+    config.outputCost ??
+    config.cost ??
+    modelCost.audioOutput ??
+    outputCost;
+  const videoOutputCost =
+    config.videoOutputCost ??
+    config.outputCost ??
+    config.cost ??
+    modelCost.videoOutput ??
+    outputCost;
+  const imageInputCost =
+    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
   const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
+    config.inputCost ??
+    config.cost ??
     modelCost.cacheReadAudio ??
     modelCost.cacheRead ??
     audioInputCost;
-  const cachedImageInputCost = config.imageInputCost ?? modelCost.cacheRead ?? imageInputCost;
+  const cachedImageInputCost =
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    modelCost.cacheRead ??
+    imageInputCost;
   const serviceTier =
     (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
       ?.service_tier ??
@@ -330,11 +353,15 @@ export function calculateGoogleCost(
     serviceTier === 'priority' &&
     config.audioInputCost === undefined &&
     config.audioCost === undefined &&
+    config.inputCost === undefined &&
+    config.cost === undefined &&
     modelCost.priorityAudioInput !== undefined
       ? modelCost.priorityAudioInput / serviceTierMultiplier
       : serviceTier === 'flex' &&
           config.audioInputCost === undefined &&
           config.audioCost === undefined &&
+          config.inputCost === undefined &&
+          config.cost === undefined &&
           modelCost.flexAudioInput !== undefined
         ? modelCost.flexAudioInput / serviceTierMultiplier
         : audioInputCost;

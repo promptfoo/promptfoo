@@ -1631,6 +1631,12 @@ describe('AIStudioChatProvider', () => {
             },
             { googleSearch: {} },
           ],
+          passthrough: {
+            tools: [
+              { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { googleSearch: {} },
+            ],
+          },
           [key]: value,
         } as any,
       });

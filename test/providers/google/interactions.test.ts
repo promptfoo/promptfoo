@@ -217,6 +217,49 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
+  it('normalizes native Gemini chat parts for the Omni Interactions API', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            { text: 'Create a city at dusk using these references.' },
+            { inlineData: { mimeType: 'image/jpeg', data: 'aW1hZ2U=' } },
+            { fileData: { mimeType: 'video/mp4', fileUri: 'https://video.example/reference' } },
+          ],
+        },
+      ]),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).input).toEqual([
+      {
+        type: 'user_input',
+        content: [
+          { type: 'text', text: 'Create a city at dusk using these references.' },
+          { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' },
+          { type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/reference' },
+        ],
+      },
+    ]);
+  });
+
   it('returns only the latest Omni turn and stores authenticated URI-delivered video', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -569,7 +612,10 @@ describe('GoogleInteractionsProvider', () => {
     }
   });
 
-  it('allows an empty Omni tools list', async () => {
+  it.each([
+    { tools: [] },
+    { passthrough: { tools: [] } },
+  ])('allows an empty Omni tools list: %j', async (toolConfig) => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
@@ -583,7 +629,7 @@ describe('GoogleInteractionsProvider', () => {
       cached: false,
     } as any);
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: { apiKey: 'test-key', tools: [] },
+      config: { apiKey: 'test-key', ...toolConfig },
     });
 
     const result = await provider.callApi('A city at dusk');

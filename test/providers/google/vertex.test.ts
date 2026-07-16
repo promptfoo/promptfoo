@@ -453,6 +453,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
     provider = new VertexChatProvider('gemini-pro', {
       config: {
         tools,
+        passthrough: {
+          tools: [
+            { functionDeclarations: [{ name: 'passthrough_function' }] },
+            { googleSearch: {} },
+          ],
+        },
         [key]: value,
       } as any,
     });

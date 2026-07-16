@@ -330,7 +330,15 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
-    const { service_tier: passthroughServiceTier, ...passthrough } = config.passthrough || {};
+    const {
+      service_tier: passthroughServiceTier,
+      tools: passthroughTools,
+      ...passthrough
+    } = config.passthrough || {};
+    const requestPassthroughTools =
+      toolsDisabled && Array.isArray(passthroughTools)
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
 
     const body: Record<string, any> = {
       contents,
@@ -362,6 +370,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
       ...passthrough,
+      ...(requestPassthroughTools === undefined ? {} : { tools: requestPassthroughTools }),
       ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
 

@@ -1258,6 +1258,12 @@ describe('GoogleProvider', () => {
               ],
             },
           ],
+          passthrough: {
+            tools: [
+              { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { googleSearch: {} },
+            ],
+          },
           functionToolCallbacks: { test_function: callback },
           ...toolDisableConfig,
         } as any,
@@ -1290,7 +1296,7 @@ describe('GoogleProvider', () => {
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-      expect(body.tools).toBeUndefined();
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
       expect(callback).not.toHaveBeenCalled();
       expect(result.output).toBe(
         JSON.stringify({ functionCall: { name: 'test_function', args: {} } }),

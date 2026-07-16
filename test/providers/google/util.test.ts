@@ -3106,6 +3106,71 @@ describe('util', () => {
       expect(cost).toBeCloseTo(2.5, 10);
     });
 
+    it('should apply generic and modality-specific cost overrides to multimodal tokens', () => {
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { cost: 0.01 },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(5, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { inputCost: 0.02, outputCost: 0.03 },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(13, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          {
+            inputCost: 0.02,
+            outputCost: 0.03,
+            audioInputCost: 0.04,
+            audioOutputCost: 0.05,
+            imageInputCost: 0.06,
+            videoOutputCost: 0.07,
+          },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(25, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { inputCost: 0.02 },
+          200,
+          0,
+          false,
+          100,
+          0,
+          0,
+          100,
+          200,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(4, 10);
+    });
+
     it('should respect separate custom costs for tiered pricing', () => {
       const config = { inputCost: 0.001, outputCost: 0.003 };
       const cost = calculateGoogleCost('gemini-2.5-pro', config, 250000, 50000);
