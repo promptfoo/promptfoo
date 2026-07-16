@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getProviderType } from '../components/Targets/helpers';
 import {
+  getCurrentTargetConfigInvalidMarker,
   registerTargetConfigReconciler,
   useRedTeamTargetConfigValidation,
 } from './useRedTeamTargetConfigValidation';
@@ -45,6 +46,50 @@ const isPersistedNonObjectTargetDraft = (draft: string | null): boolean => {
   } catch {
     return false;
   }
+};
+
+const prepareTargetConfigValidationClear = (): (() => void) => {
+  const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
+  const targetConfigInvalidMarker = getCurrentTargetConfigInvalidMarker();
+  return () => {
+    const currentTargetConfigValidation = useRedTeamTargetConfigValidation.getState();
+    if (
+      currentTargetConfigValidation.targetConfigError ===
+        targetConfigValidation.targetConfigError &&
+      currentTargetConfigValidation.targetConfigDraft ===
+        targetConfigValidation.targetConfigDraft &&
+      getCurrentTargetConfigInvalidMarker() === targetConfigInvalidMarker
+    ) {
+      currentTargetConfigValidation.clearTargetConfigValidation();
+    }
+  };
+};
+
+const prepareNonObjectTargetRecovery = (
+  effectiveTargetConfig: unknown,
+  replacedTargetConfig?: unknown,
+): (() => void) | null => {
+  const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
+  const targetConfigInvalidMarker = getCurrentTargetConfigInvalidMarker();
+  let replacedMatchingNonObjectTarget = false;
+  if (replacedTargetConfig !== undefined && !isPlainObject(replacedTargetConfig)) {
+    try {
+      replacedMatchingNonObjectTarget =
+        (JSON.stringify(replacedTargetConfig) ?? 'null') ===
+        targetConfigValidation.targetConfigDraft;
+    } catch {}
+  }
+  if (
+    !isPlainObject(effectiveTargetConfig) ||
+    targetConfigValidation.targetConfigError !== 'Configuration must be a JSON object' ||
+    !targetConfigInvalidMarker ||
+    (!replacedMatchingNonObjectTarget &&
+      !isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft))
+  ) {
+    return null;
+  }
+
+  return prepareTargetConfigValidationClear();
 };
 export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
   persist(
@@ -295,22 +340,19 @@ export const EXAMPLE_CONFIG: Config = {
 
 export const useRedTeamConfig = create<RedTeamConfigState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       config: defaultConfig,
       providerType: undefined,
       updateConfig: (section, value) => {
-        let replacedNonObjectTarget = false;
-        const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
-        const replacedPersistedNonObjectTarget =
-          section === 'target' &&
-          isPlainObject((value as Config['target'] | undefined)?.config) &&
-          targetConfigValidation.targetConfigError === 'Configuration must be a JSON object' &&
-          isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft);
+        const effectiveTargetConfig =
+          section === 'target'
+            ? (value as Config['target'] | undefined)?.config
+            : get().config.target?.config;
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
+          effectiveTargetConfig,
+          section === 'target' ? get().config.target?.config : undefined,
+        );
         set((state) => {
-          replacedNonObjectTarget =
-            section === 'target' &&
-            !isPlainObject(state.config.target?.config) &&
-            isPlainObject((value as Config['target'] | undefined)?.config);
           return {
             config: {
               ...state.config,
@@ -318,15 +360,12 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             },
           };
         });
-        if (
-          (replacedNonObjectTarget || replacedPersistedNonObjectTarget) &&
-          useRedTeamTargetConfigValidation.getState().targetConfigError ===
-            'Configuration must be a JSON object'
-        ) {
-          useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
-        }
+        finishNonObjectTargetRecovery?.();
       },
-      updatePlugins: (plugins) =>
+      updatePlugins: (plugins) => {
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
+          get().config.target?.config,
+        );
         set((state) => {
           // First compute the merged plugins
           const newPlugins = plugins.map((plugin) => {
@@ -365,7 +404,9 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
               plugins: newPlugins,
             },
           };
-        }),
+        });
+        finishNonObjectTargetRecovery?.();
+      },
       setFullConfig: (config) => {
         const providerType = getProviderType(config.target?.id);
         const normalizedConfig =
@@ -387,19 +428,24 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           set({ config: normalizedConfig, providerType });
           return;
         }
+        const finishTargetConfigValidationClear = prepareTargetConfigValidationClear();
         set({ config: normalizedConfig, providerType });
-        targetConfigValidation.clearTargetConfigValidation();
+        finishTargetConfigValidationClear();
       },
       resetConfig: () => {
+        const finishTargetConfigValidationClear = prepareTargetConfigValidationClear();
         set({
           config: defaultConfig,
           providerType: undefined,
         });
-        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+        finishTargetConfigValidationClear();
         // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
         window.location.reload();
       },
-      updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>
+      updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => {
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
+          get().config.target?.config,
+        );
         set((state) => {
           const newApplicationDefinition = {
             ...(state.config.applicationDefinition ?? {}),
@@ -413,8 +459,16 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
               purpose: newPurpose,
             },
           };
-        }),
-      setProviderType: (providerType) => set({ providerType }),
+        });
+        finishNonObjectTargetRecovery?.();
+      },
+      setProviderType: (providerType) => {
+        const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(
+          get().config.target?.config,
+        );
+        set({ providerType });
+        finishNonObjectTargetRecovery?.();
+      },
     }),
     {
       name: 'redTeamConfig',

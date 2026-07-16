@@ -12,6 +12,9 @@ let reconcilingTargetConfig = false;
 let currentTargetConfigInvalidMarker: string | null = null;
 let targetConfigMarkerSequence = 0;
 
+export const getCurrentTargetConfigInvalidMarker = (): string | null =>
+  currentTargetConfigInvalidMarker;
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -321,7 +324,10 @@ const reconcileTargetConfigClear = (clearMessage: string): boolean => {
   } finally {
     reconcilingTargetConfig = false;
   }
-  if (!reconciled) {
+  if (
+    !reconciled ||
+    getTargetConfigMarkerToken(currentTargetConfigInvalidMarker) !== currentToken
+  ) {
     return false;
   }
 
