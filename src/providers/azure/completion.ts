@@ -92,13 +92,16 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         };
       }
 
-      const choice = data.choices[0];
+      // Optional-chain choices so an empty array or a degenerate 200 response
+      // with no `choices` takes the graceful no-output path instead of throwing,
+      // matching the chat path (#9867).
+      const choice = data.choices?.[0];
       const finishReason = normalizeFinishReason(choice?.finish_reason);
 
       // Check if content was filtered based on finish_reason
       const contentFilterTriggered = finishReason === 'content_filter';
 
-      let output = choice.text;
+      let output = choice?.text;
       if (output == null) {
         if (contentFilterTriggered) {
           output =
