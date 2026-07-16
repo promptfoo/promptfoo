@@ -869,6 +869,16 @@ describe('useRedTeamConfig', () => {
       { steps: [{ action: 'click', args: { selector: 'text=' } }] },
     ],
     [
+      'browser with an unknown XPath engine',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'xpath-invalid=//button' } }] },
+    ],
+    [
+      'browser with multiple capture selectors',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: '*css=button >> *text=Submit' } }] },
+    ],
+    [
       'browser waitForNewChildren with invalid timing',
       'browser',
       {

@@ -548,6 +548,7 @@ const isValidBrowserStep = (step: unknown): boolean => {
       return true;
     }
     selectorSegments.push(selector.slice(segmentStart));
+    let hasCapture = false;
     for (const rawSegment of selectorSegments) {
       const segment = rawSegment.trim();
       if (!segment) {
@@ -555,6 +556,11 @@ const isValidBrowserStep = (step: unknown): boolean => {
       }
       const engineMatch = segment.match(/^(\*?[\w:-]+)=(.*)$/s);
       const engineName = engineMatch?.[1].replace(/^\*/, '');
+      const isCapture = engineMatch?.[1].startsWith('*') ?? false;
+      if (isCapture && hasCapture) {
+        return false;
+      }
+      hasCapture ||= isCapture;
       const isQuotedText =
         segment.length > 1 &&
         ((segment.startsWith('"') && segment.endsWith('"')) ||
@@ -563,7 +569,7 @@ const isValidBrowserStep = (step: unknown): boolean => {
         continue;
       }
       const isImplicitXPath = /^\(*\/\//.test(segment) || segment.startsWith('..');
-      const isExplicitXPath = engineName?.startsWith('xpath') ?? false;
+      const isExplicitXPath = engineName === 'xpath' || engineName === 'xpath:light';
       if (isImplicitXPath || isExplicitXPath) {
         const xpathSelector = isExplicitXPath ? engineMatch?.[2].trim() : segment;
         if (!xpathSelector) {
