@@ -10,7 +10,7 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { callApi } from '@app/utils/api';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
 import { within } from '@testing-library/dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
@@ -513,6 +513,61 @@ describe('TestCaseGenerationProvider', () => {
       expect(callApiMock).not.toHaveBeenCalledWith('/providers/test', expect.anything());
       expect(callApiMock).not.toHaveBeenCalledWith('/redteam/generate-test', expect.anything());
       expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+    });
+
+    it('does not continue a multi-turn preview after the target configuration becomes invalid', async () => {
+      const user = userEvent.setup();
+      const Start = () => {
+        const { generateTestCase } = useTestCaseGeneration();
+        return (
+          <button
+            onClick={() =>
+              generateTestCase(
+                { id: 'harmful:hate', config: {}, isStatic: false },
+                { id: 'goat', config: { maxTurns: 1 }, isStatic: false },
+              )
+            }
+          >
+            start
+          </button>
+        );
+      };
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: {
+                id: 'openinterpreter',
+                config: { sandbox_mode: 'danger-full-access' },
+              },
+            }}
+          >
+            <Start />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'start' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
+      expect(
+        callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
+      ).toHaveLength(1);
+      expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(1);
+
+      act(() => {
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigError('Invalid JSON configuration');
+      });
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+      expect(screen.getByText('Invalid JSON configuration')).toBeInTheDocument();
+      expect(
+        callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
+      ).toHaveLength(1);
+      expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(1);
     });
 
     it('should execute a test case against a target', async () => {

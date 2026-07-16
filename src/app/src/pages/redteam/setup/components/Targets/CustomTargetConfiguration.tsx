@@ -476,8 +476,8 @@ const CustomTargetConfiguration = ({
         return;
       }
 
-      onConfigErrorChange?.(null);
       updateCustomTarget('config', parsedConfig);
+      onConfigErrorChange?.(null);
     } catch {
       onConfigErrorChange?.('Invalid JSON configuration');
     }

@@ -270,6 +270,15 @@ export const TestCaseGenerationProvider: React.FC<{
         return;
       }
 
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        setIsGenerating(false);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
       try {
         recordEvent('feature_used', {
           feature: 'redteam_generate_test_case',
@@ -358,10 +367,12 @@ export const TestCaseGenerationProvider: React.FC<{
         return;
       }
 
-      if (targetConfigError) {
-        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
         setIsGenerating(false);
-        onErrorRef.current?.(new Error(targetConfigError));
+        onErrorRef.current?.(new Error(currentTargetConfigError));
         return;
       }
 
@@ -410,7 +421,7 @@ export const TestCaseGenerationProvider: React.FC<{
         setIsRunningTest(false);
       }
     },
-    [generatedTestCases, redTeamConfig, targetConfigError, toast],
+    [generatedTestCases, redTeamConfig, toast],
   );
 
   const resetState = useCallback(() => {
@@ -656,11 +667,22 @@ export const TestCaseGenerationProvider: React.FC<{
     ],
   );
 
-  const handleContinue = useCallback((additionalTurns: number) => {
-    setMaxTurns((prev) => prev + additionalTurns);
-    setCurrentTurn((prev) => prev + 1);
-    setIsGenerating(true);
-  }, []);
+  const handleContinue = useCallback(
+    (additionalTurns: number) => {
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
+      setMaxTurns((prev) => prev + additionalTurns);
+      setCurrentTurn((prev) => prev + 1);
+      setIsGenerating(true);
+    },
+    [toast],
+  );
 
   // ===================================================================
   // Effects

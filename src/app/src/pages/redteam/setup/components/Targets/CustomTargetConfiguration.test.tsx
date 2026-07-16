@@ -130,6 +130,33 @@ describe('CustomTargetConfiguration', () => {
     expect(onConfigErrorChange).not.toHaveBeenCalled();
   });
 
+  it('keeps the validation error when a valid correction cannot be persisted', () => {
+    const updateCustomTarget = vi.fn(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    const onConfigErrorChange = vi.fn();
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson={'{"sandbox_mode":"read-only",}'}
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('code-editor'), {
+      target: { value: '{"sandbox_mode":"read-only"}' },
+    });
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('config', { sandbox_mode: 'read-only' });
+    expect(onConfigErrorChange).not.toHaveBeenCalledWith(null);
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
+  });
+
   describe('file:// prefix handling', () => {
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();
