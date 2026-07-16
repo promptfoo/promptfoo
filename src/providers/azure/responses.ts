@@ -50,6 +50,10 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           config,
           usage?.prompt_tokens ?? usage?.input_tokens,
           usage?.completion_tokens ?? usage?.output_tokens,
+          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
+          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
+          usage?.completion_tokens_details?.audio_tokens ??
+            usage?.output_tokens_details?.audio_tokens,
         ) ?? 0,
     });
 

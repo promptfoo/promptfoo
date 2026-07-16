@@ -530,6 +530,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens,
+          data.usage?.prompt_tokens_details?.audio_tokens,
+          data.usage?.completion_tokens_details?.audio_tokens,
         ),
         guardrails: {
           flagged: flaggedInput || flaggedOutput,

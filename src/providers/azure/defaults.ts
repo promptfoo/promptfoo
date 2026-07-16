@@ -77,10 +77,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 5 / 1000000,
       output: 30 / 1000000,
+      cacheRead: 0.5 / 1000000,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 10 / 1000000,
         output: 45 / 1000000,
+        cacheRead: 1 / 1000000,
       },
     },
   })),
@@ -89,10 +91,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 2.5 / 1000000,
       output: 15 / 1000000,
+      cacheRead: 0.25 / 1000000,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 5 / 1000000,
         output: 22.5 / 1000000,
+        cacheRead: 0.5 / 1000000,
       },
     },
   },
@@ -101,10 +105,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 1 / 1000000,
       output: 6 / 1000000,
+      cacheRead: 0.1 / 1000000,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 2 / 1000000,
         output: 9 / 1000000,
+        cacheRead: 0.2 / 1000000,
       },
     },
   },
@@ -204,10 +210,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 30 / 1000000,
       output: 180 / 1000000,
+      cacheRead: 3 / 1000000,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1000000,
         output: 270 / 1000000,
+        cacheRead: 6 / 1000000,
       },
     },
   })),
@@ -490,7 +498,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-realtime-1.5-2026-02-23',
-    cost: { input: 4 / 1000000, output: 16 / 1000000 },
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-mini',
@@ -510,7 +523,12 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-audio-1.5-2026-02-23',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-mini',

@@ -12,6 +12,7 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
+  clampCachedTokens,
   type ProviderConfig,
   parseChatPrompt,
   transformToolChoice,
@@ -223,6 +224,8 @@ export function stripExecutableToolFileReferences(
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
+ * @param audioPromptTokens - Number of audio tokens included in the prompt token count
+ * @param audioCompletionTokens - Number of audio tokens included in the completion token count
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -231,27 +234,45 @@ export function calculateGoogleCost(
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
+  audioPromptTokens?: number,
+  audioCompletionTokens?: number,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
-  // Check for tiered pricing (higher rates above token threshold)
-  if (promptTokens != null && completionTokens != null) {
-    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
-
-    // Use Vertex-specific pricing when available
-    if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
+  if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
+    return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
   }
 
-  // Use standard calculation for non-tiered pricing
-  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  const modelCost =
+    model?.tieredCost && promptTokens > model.tieredCost.threshold
+      ? model.tieredCost.above
+      : isVertexMode && model?.vertexCost
+        ? model.vertexCost
+        : model?.cost;
+  if (!modelCost) {
+    return undefined;
+  }
+
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
+  const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const audioInputCost =
+    config.audioInputCost ?? config.audioCost ?? modelCost.audioInput ?? inputCost;
+  const audioOutputCost =
+    config.audioOutputCost ?? config.audioCost ?? modelCost.audioOutput ?? outputCost;
+
+  return (
+    (promptTokens - audioInputTokens) * inputCost +
+    audioInputTokens * audioInputCost +
+    (completionTokens - audioOutputTokens) * outputCost +
+    audioOutputTokens * audioOutputCost
+  );
 }
 
 const ajv = getAjv();

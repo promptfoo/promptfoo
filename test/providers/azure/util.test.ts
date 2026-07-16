@@ -98,6 +98,102 @@ describe('calculateAzureCost', () => {
     );
   });
 
+  it.each([
+    {
+      id: 'gpt-5.6',
+      input: 5,
+      cached: 0.5,
+      output: 30,
+      longInput: 10,
+      longCached: 1,
+      longOutput: 45,
+    },
+    {
+      id: 'gpt-5.6-sol',
+      input: 5,
+      cached: 0.5,
+      output: 30,
+      longInput: 10,
+      longCached: 1,
+      longOutput: 45,
+    },
+    {
+      id: 'gpt-5.6-terra',
+      input: 2.5,
+      cached: 0.25,
+      output: 15,
+      longInput: 5,
+      longCached: 0.5,
+      longOutput: 22.5,
+    },
+    {
+      id: 'gpt-5.6-luna',
+      input: 1,
+      cached: 0.1,
+      output: 6,
+      longInput: 2,
+      longCached: 0.2,
+      longOutput: 9,
+    },
+    {
+      id: 'gpt-5.5-pro',
+      input: 30,
+      cached: 3,
+      output: 180,
+      longInput: 60,
+      longCached: 6,
+      longOutput: 270,
+    },
+    {
+      id: 'gpt-5.5-pro-2026-04-23',
+      input: 30,
+      cached: 3,
+      output: 180,
+      longInput: 60,
+      longCached: 6,
+      longOutput: 270,
+    },
+  ])('uses the correct cached-input rate for $id', ({
+    id,
+    input,
+    cached,
+    output,
+    longInput,
+    longCached,
+    longOutput,
+  }) => {
+    expect(calculateAzureCost(id, {}, 2_000, 1_000, 500)).toBeCloseTo(
+      (1_500 * input + 500 * cached + 1_000 * output) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost(id, {}, 272_001, 1_000, 1_000)).toBeCloseTo(
+      (271_001 * longInput + 1_000 * longCached + 1_000 * longOutput) / 1e6,
+      12,
+    );
+  });
+
+  it.each([
+    { id: 'gpt-realtime-1.5-2026-02-23', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
+    { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+  ])('uses the correct audio-token rates for $id', ({
+    id,
+    input,
+    output,
+    audioInput,
+    audioOutput,
+  }) => {
+    expect(calculateAzureCost(id, {}, 1_000, 500, 0, 200, 100)).toBeCloseTo(
+      (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
+      12,
+    );
+  });
+
+  it('clamps invalid cached and audio token counts to the reported totals', () => {
+    expect(
+      calculateAzureCost('gpt-audio-1.5-2026-02-23', {}, 1_000, 500, -10, 2_000, 1_000),
+    ).toBeCloseTo((1_000 * 40 + 500 * 80) / 1e6, 12);
+  });
+
   it('calculates cost for Claude Fable 5', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });

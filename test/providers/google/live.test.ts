@@ -289,6 +289,50 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should report Gemini 3.1 Live token usage and modality-aware cost', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: { modelTurn: { parts: [{ text: 'hello' }] }, turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            responseTokenCount: 500,
+            totalTokenCount: 1_500,
+            promptTokensDetails: [
+              { modality: 'TEXT', tokenCount: 800 },
+              { modality: 'AUDIO', tokenCount: 200 },
+            ],
+            responseTokensDetails: [
+              { modality: 'TEXT', tokenCount: 400 },
+              { modality: 'AUDIO', tokenCount: 100 },
+            ],
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.tokenUsage).toEqual({
+      prompt: 1_000,
+      completion: 500,
+      total: 1_500,
+      numRequests: 1,
+    });
+    expect(response.cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
+  });
+
   it('should advance Gemini 3.1 multi-turn prompts after generationComplete', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {

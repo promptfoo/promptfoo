@@ -5,6 +5,8 @@
 export interface GoogleModelCost {
   input: number;
   output: number;
+  audioInput?: number;
+  audioOutput?: number;
 }
 
 export interface GoogleModelTieredCost {
@@ -70,7 +72,12 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   ),
   {
     id: 'gemini-3.1-flash-live-preview',
-    cost: { input: 0.75 / 1e6, output: 4.5 / 1e6 },
+    cost: {
+      input: 0.75 / 1e6,
+      output: 4.5 / 1e6,
+      audioInput: 3.0 / 1e6,
+      audioOutput: 12.0 / 1e6,
+    },
   },
 
   // Gemini 3.0 models (Preview)
