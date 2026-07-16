@@ -80,6 +80,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -388,9 +389,11 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
-        if (deploymentName === 'gpt-realtime-whisper') {
+        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
           throw new Error(
-            'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.',
+            deploymentName === 'gpt-realtime-whisper'
+              ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'
+              : `azure:realtime:${deploymentName} is translation-only and requires a separate Realtime translation-session endpoint not yet supported by promptfoo.`,
           );
         }
         return new AzureRealtimeProvider(deploymentName, providerOptions);

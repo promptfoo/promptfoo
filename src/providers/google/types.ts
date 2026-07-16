@@ -118,6 +118,15 @@ export type ClaudeThinkingConfig =
   | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
   | { type: 'disabled' };
 
+export interface GoogleSpeechConfig {
+  voiceConfig?: {
+    prebuiltVoiceConfig?: {
+      voiceName?: string;
+    };
+  };
+  languageCode?: string;
+}
+
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
@@ -211,6 +220,9 @@ export interface CompletionOptions {
   // Live API websocket timeout
   timeoutMs?: number;
 
+  // Live API top-level speech configuration
+  speechConfig?: GoogleSpeechConfig;
+
   generationConfig?: {
     context?: string;
     examples?: { input: string; output: string }[];
@@ -231,14 +243,7 @@ export interface CompletionOptions {
     responseModalities?: string[];
 
     // Speech configuration
-    speechConfig?: {
-      voiceConfig?: {
-        prebuiltVoiceConfig?: {
-          voiceName?: string;
-        };
-      };
-      languageCode?: string;
-    };
+    speechConfig?: GoogleSpeechConfig;
 
     // Transcription configuration
     outputAudioTranscription?: Record<string, any>;

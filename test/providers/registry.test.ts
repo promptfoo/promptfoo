@@ -565,6 +565,9 @@ describe('Provider Registry', () => {
       await expect(
         factory!.create('azure:realtime:gpt-realtime-whisper', mockProviderOptions, mockContext),
       ).rejects.toThrow(/transcription-only/);
+      await expect(
+        factory!.create('azure:realtime:gpt-realtime-translate', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/translation-only/);
 
       const imageProvider = await factory!.create(
         'azure:image:mai-image-2-5',

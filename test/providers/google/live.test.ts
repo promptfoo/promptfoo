@@ -298,6 +298,36 @@ describe('GoogleLiveProvider', () => {
     expect(setup).not.toHaveProperty('input_audio_transcription');
   });
 
+  it('should honor the documented top-level Gemini Live speech configuration', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Charon' } },
+          languageCode: 'en-US',
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
+
+    const setup = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup;
+    expect(setup.generationConfig.speechConfig).toEqual({
+      voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Charon' } },
+      languageCode: 'en-US',
+    });
+  });
+
   it('should send mixed text and image parts as Gemini 3.1 realtime input', async () => {
     const debugSpy = vi.spyOn(logger, 'debug');
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {

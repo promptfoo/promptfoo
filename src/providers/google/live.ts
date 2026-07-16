@@ -701,7 +701,7 @@ export class GoogleLiveProvider implements ApiProvider {
       ws.onopen = () => {
         logger.debug('WebSocket connection is opening...');
         const {
-          speechConfig,
+          speechConfig: generationSpeechConfig,
           response_modalities: _responseModalities,
           responseModalities: _camelResponseModalities,
           outputAudioTranscription: configuredOutputAudioTranscription,
@@ -710,6 +710,7 @@ export class GoogleLiveProvider implements ApiProvider {
           proactivity,
           ...restGenerationConfig
         } = config.generationConfig || {};
+        const speechConfig = generationSpeechConfig ?? config.speechConfig;
         const outputAudioTranscription =
           configuredOutputAudioTranscription ??
           (usesRealtimeTextInput && requestedText ? {} : undefined);
