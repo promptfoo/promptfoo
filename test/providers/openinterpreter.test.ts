@@ -534,15 +534,42 @@ describe('OpenInterpreterProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenInterpreterProvider({
       config: {
-        skip_git_repo_check: true,
-        sandbox_mode: '{% if writable %}workspace-write{% else %}read-only{% endif %}',
-        network_access_enabled: '{% if network %}true{% else %}false{% endif %}',
+        skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+        sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
+        network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+        turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
       } as any,
     });
 
     const resultPromise = provider.callApi('conditional config', {
-      vars: { writable: false, network: false },
+      vars: { writable: false, network: false, skipGitCheck: true, timeout: true },
       prompt: { raw: 'conditional config', label: 'conditional template' },
+    } as any);
+    const { turnStart } = await startTurn(server);
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders block-style Nunjucks statement templates in typed row options', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider();
+
+    const resultPromise = provider.callApi('conditional row config', {
+      vars: { writable: false, network: false, skipGitCheck: true, timeout: true },
+      prompt: {
+        raw: 'conditional row config',
+        label: 'conditional row template',
+        config: {
+          skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+          sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
+          network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+          turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
+        },
+      },
     } as any);
     const { turnStart } = await startTurn(server);
 
@@ -614,7 +641,11 @@ describe('OpenInterpreterProvider', () => {
         raw: 'templated permissions',
         label: 'permissions template',
         config: {
-          server_request_policy: { permissions: { strict_auto_review: '{{strict}}' } },
+          server_request_policy: {
+            permissions: {
+              strict_auto_review: '{% if strict %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+            },
+          },
         },
       },
     } as any);

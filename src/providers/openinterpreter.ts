@@ -156,13 +156,19 @@ function coerceRenderedPromptOption(
   nestedTyped = false,
   optionPath: string[] = [key],
 ): unknown {
+  const typedValue =
+    typeof value === 'string' &&
+    ((optionPath.length === 1 && TYPED_PROMPT_OPTION_KEYS.has(key)) ||
+      (nestedTyped && isSchemaDefinedBooleanPath(optionPath)))
+      ? value.trim()
+      : value;
   if (
     optionPath.length === 1 &&
     NUMERIC_PROMPT_OPTION_KEYS.has(key) &&
-    typeof value === 'string' &&
-    value.trim()
+    typeof typedValue === 'string' &&
+    typedValue
   ) {
-    const numericValue = Number(value);
+    const numericValue = Number(typedValue);
     if (Number.isFinite(numericValue)) {
       return numericValue;
     }
@@ -170,9 +176,9 @@ function coerceRenderedPromptOption(
   if (
     ((optionPath.length === 1 && BOOLEAN_PROMPT_OPTION_KEYS.has(key)) ||
       (nestedTyped && isSchemaDefinedBooleanPath(optionPath))) &&
-    (value === 'true' || value === 'false')
+    (typedValue === 'true' || typedValue === 'false')
   ) {
-    return value === 'true';
+    return typedValue === 'true';
   }
   if (Array.isArray(value) && nestedTyped) {
     return value.map((entry, index) =>
@@ -187,7 +193,7 @@ function coerceRenderedPromptOption(
       ]),
     );
   }
-  return value;
+  return typedValue;
 }
 
 function parseOpenInterpreterConfig(
