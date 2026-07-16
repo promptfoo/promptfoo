@@ -1540,7 +1540,7 @@ These OpenAI-related environment variables are supported:
 
 ## OpenAI-compatible multi-model gateways
 
-The OpenAI provider works with any server that implements the OpenAI Chat Completions API, including multi-model gateways. Set `apiBaseUrl` in the provider config, or use one of the base-URL environment variables in the table above (the config value takes precedence):
+The OpenAI provider works with any server that implements the OpenAI Chat Completions API, including multi-model gateways. Set `apiBaseUrl` in the provider config, or use one of the base-URL environment variables in the table above:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -1548,9 +1548,22 @@ providers:
   - id: openai:chat:your-model-id
     config:
       apiBaseUrl: https://gateway.example.com/v1
+      # Recommended: keep the gateway key out of OPENAI_API_KEY
+      apiKeyEnvar: GATEWAY_API_KEY
 ```
 
-Use a model ID your endpoint actually serves (`GET /v1/models`) — gateways often scope model availability per account. To keep a gateway key separate from a real OpenAI key, set `apiKeyEnvar` to a different environment variable name.
+URL resolution order for this provider is:
+
+1. `config.apiHost` / `OPENAI_API_HOST` (host only; Promptfoo builds `https://<host>/v1`)
+2. `config.apiBaseUrl`
+3. `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL`
+4. the default OpenAI API host
+
+If `OPENAI_API_HOST` is set in your environment, it wins over `apiBaseUrl`. Unset it (or set `apiHost` intentionally) when pointing at a gateway.
+
+Key resolution still falls through to `OPENAI_API_KEY` when `apiKey` / `apiKeyEnvar` is missing or empty. Set `apiKeyEnvar` (and that env var) when you need the gateway key kept separate from a real OpenAI key — otherwise a leftover `OPENAI_API_KEY` can be sent to the gateway host.
+
+Use a model ID your endpoint actually serves (`GET /v1/models`) — gateways often scope model availability per account.
 
 See [vLLM](/docs/providers/vllm/), [Llamafile](/docs/providers/llamafile/), and [LiteLLM](/docs/providers/litellm/) for worked setups, or the runnable [`examples/openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway) example.
 
