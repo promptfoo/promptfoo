@@ -422,7 +422,12 @@ const isValidA2AAuth = (auth: unknown): boolean => {
     return false;
   }
   if (auth.grantType === 'password') {
-    return typeof auth.username === 'string' && typeof auth.password === 'string';
+    return (
+      typeof auth.username === 'string' &&
+      typeof auth.password === 'string' &&
+      (auth.clientId === undefined || typeof auth.clientId === 'string') &&
+      (auth.clientSecret === undefined || typeof auth.clientSecret === 'string')
+    );
   }
   return (
     (auth.grantType === undefined || auth.grantType === 'client_credentials') &&
@@ -483,6 +488,61 @@ const isValidA2AConfig = (config: Record<string, unknown>): boolean => {
         Number.isFinite(config.polling.timeoutMs) &&
         config.polling.timeoutMs >= 1))
   );
+};
+
+const playwrightSelectorExtension =
+  /:(?:text-matches|text-is|has-text|nth-match|right-of|left-of|above|below|near|visible|text)(?=\(|\b)/;
+const playwrightQuotedString = `(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')`;
+const invalidPlaywrightTextSelector = new RegExp(
+  `:(?:has-text|text|text-is)\\(\\s*(?!${playwrightQuotedString}\\s*\\))`,
+);
+const invalidPlaywrightRegexSelector = new RegExp(
+  `:text-matches\\(\\s*(?!${playwrightQuotedString}(?:\\s*,\\s*${playwrightQuotedString})?\\s*\\))`,
+);
+
+const isValidPlaywrightSelectorExtension = (selector: string): boolean =>
+  !/:(?:text-matches|text-is|has-text|nth-match|right-of|left-of|above|below|near|text)(?![\w-]|\()/.test(
+    selector,
+  ) &&
+  !/:(?:has-text|text|text-is|text-matches|visible|nth-match|right-of|left-of|above|below|near)\(\s*\)/.test(
+    selector,
+  ) &&
+  !invalidPlaywrightTextSelector.test(selector) &&
+  !invalidPlaywrightRegexSelector.test(selector) &&
+  !/:visible\s*\(/.test(selector) &&
+  !/:nth-match\([^)]*,\s*(?:0|-\d+)\s*\)/.test(selector);
+
+const maskPlaywrightQuotedStrings = (selector: string): string =>
+  selector.replace(
+    /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g,
+    (value) => `${value[0]}${' '.repeat(Math.max(0, value.length - 2))}${value[value.length - 1]}`,
+  );
+
+const stripPlaywrightSelectorExtensions = (selector: string, maskedSelector: string): string => {
+  const extension = new RegExp(playwrightSelectorExtension.source, 'g');
+  let nativeSelector = '';
+  let cursor = 0;
+  let match = extension.exec(maskedSelector);
+
+  while (match) {
+    nativeSelector += selector.slice(cursor, match.index);
+    let end = match.index + match[0].length;
+    if (maskedSelector[end] === '(') {
+      let depth = 1;
+      for (end++; end < maskedSelector.length && depth > 0; end++) {
+        if (maskedSelector[end] === '(') {
+          depth++;
+        } else if (maskedSelector[end] === ')') {
+          depth--;
+        }
+      }
+    }
+    cursor = end;
+    extension.lastIndex = end;
+    match = extension.exec(maskedSelector);
+  }
+
+  return `${nativeSelector}${selector.slice(cursor)}`.trim() || '*';
 };
 
 const isValidBrowserStep = (step: unknown): boolean => {
@@ -615,15 +675,21 @@ const isValidBrowserStep = (step: unknown): boolean => {
         }
       }
       const cssSelector = engineMatch ? engineMatch[2].trim() : segment;
-      if (
-        /:(?:has-text|text|text-is|text-matches|visible|nth-match|right-of|left-of|above|below|near)(?:\(|\b)/.test(
-          cssSelector,
-        )
-      ) {
-        continue;
+      const maskedCssSelector = maskPlaywrightQuotedStrings(cssSelector);
+      const hasPlaywrightExtension = playwrightSelectorExtension.test(maskedCssSelector);
+      if (hasPlaywrightExtension) {
+        if (!isValidPlaywrightSelectorExtension(maskedCssSelector)) {
+          return false;
+        }
       }
       try {
-        document.createDocumentFragment().querySelector(cssSelector);
+        document
+          .createDocumentFragment()
+          .querySelector(
+            hasPlaywrightExtension
+              ? stripPlaywrightSelectorExtensions(cssSelector, maskedCssSelector)
+              : cssSelector,
+          );
       } catch {
         return false;
       }

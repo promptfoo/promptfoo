@@ -50,8 +50,36 @@ const getPersistedTargetSnapshot = (): {
   }
 };
 
-const getClearMessage = (serialized: string, token = 'none'): string =>
-  `clear:${token}:${serialized.length.toString(36)}:${targetConfigSha256(serialized)}`;
+const redactTargetCredentials = (value: unknown, parentKey?: string): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactTargetCredentials(item, parentKey));
+  }
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const redactAllValues = parentKey?.toLowerCase().endsWith('headers') ?? false;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, child]) => {
+        const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
+        const isCredential =
+          redactAllValues ||
+          /^(?:apikey|authorization|bearer|cookie|credential(?:s)?|password|secret|token|accesstoken|refreshtoken|clientsecret)$/.test(
+            normalizedKey,
+          ) ||
+          (parentKey === 'auth' &&
+            !['type', 'granttype', 'placement', 'keyname'].includes(normalizedKey));
+        return [key, isCredential ? '[REDACTED]' : redactTargetCredentials(child, key)];
+      }),
+  );
+};
+
+const getClearMessage = (serialized: string, token = 'none'): string => {
+  const credentialFreeTarget = JSON.stringify(redactTargetCredentials(JSON.parse(serialized)));
+  return `clear:${token}:${credentialFreeTarget.length.toString(36)}:${targetConfigSha256(credentialFreeTarget)}`;
+};
 
 const isClearMessage = (value: string | null): value is string =>
   value !== null && /^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/.test(value);

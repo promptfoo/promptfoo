@@ -16,7 +16,11 @@ it('consumes a corrected local clear marker before restoring a quota-fallback se
     label: 'Corrected target',
     config: { sandbox_mode: 'read-only' },
   };
-  const serializedTarget = JSON.stringify(target);
+  const serializedTarget = JSON.stringify({
+    config: target.config,
+    id: target.id,
+    label: target.label,
+  });
   const token = 'fallback-token';
   window.localStorage.setItem('redTeamConfig', JSON.stringify({ state: { config: { target } } }));
   window.sessionStorage.setItem('redTeamTargetConfigValidation', `invalid-json:${token}`);

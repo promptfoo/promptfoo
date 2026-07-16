@@ -768,6 +768,32 @@ describe('useRedTeamConfig', () => {
       },
     ],
     [
+      'A2A with invalid password OAuth client id',
+      'a2a:https://agent.example/a2a',
+      {
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          username: 'user',
+          password: 'secret',
+          clientId: 42,
+        },
+      },
+    ],
+    [
+      'A2A with invalid password OAuth client secret',
+      'a2a:https://agent.example/a2a',
+      {
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          username: 'user',
+          password: 'secret',
+          clientSecret: 42,
+        },
+      },
+    ],
+    [
       'A2A with invalid message parts',
       'a2a:https://agent.example/a2a',
       { message: { parts: 'bad' } },
@@ -800,6 +826,55 @@ describe('useRedTeamConfig', () => {
       'browser click with invalid balanced selector',
       'browser',
       { steps: [{ action: 'click', args: { selector: 'div:' } }] },
+    ],
+    [
+      'browser click with empty Playwright pseudo-selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:has-text()' } }] },
+    ],
+    [
+      'browser click with missing Playwright pseudo-selector argument list',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:has-text' } }] },
+    ],
+    [
+      'browser click with malformed Playwright pseudo-selector argument',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:has-text(Submit)' } }] },
+    ],
+    [
+      'browser click with extra Playwright text argument',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:has-text("Submit", "Cancel")' } }] },
+    ],
+    [
+      'browser click with extra Playwright regex argument',
+      'browser',
+      {
+        steps: [
+          { action: 'click', args: { selector: 'button:text-matches("^Submit$", "i", "g")' } },
+        ],
+      },
+    ],
+    [
+      'browser click with malformed Playwright visible selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:visible()' } }] },
+    ],
+    [
+      'browser click with invalid Playwright nth-match index',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:nth-match(div, 0)' } }] },
+    ],
+    [
+      'browser click with empty Playwright layout selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:right-of()' } }] },
+    ],
+    [
+      'browser click with malformed CSS after a Playwright pseudo-selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:has-text("Submit"):' } }] },
     ],
     [
       'browser click with invalid prefixed selector',
@@ -1207,10 +1282,16 @@ describe('useRedTeamConfig', () => {
           { action: 'navigate', args: { url: '{{url}}' } },
           { action: 'navigate', args: { url: 'https://{{ prompt }}.test' } },
           { action: 'click', args: { selector: 'button:has-text("Submit")' } },
+          { action: 'click', args: { selector: 'button:text("Submit")' } },
+          { action: 'click', args: { selector: 'button:text-is("Submit")' } },
+          { action: 'click', args: { selector: 'button:text-matches("^Submit$", "i")' } },
           { action: 'click', args: { selector: 'button:visible' } },
+          { action: 'click', args: { selector: 'button:nth-match(div, 1)' } },
+          { action: 'click', args: { selector: 'button:right-of(div)' } },
           { action: 'click', args: { selector: 'css:light=button' } },
           { action: 'click', args: { selector: 'role=button[name="Submit"]' } },
           { action: 'click', args: { selector: 'css=[data-label="a >> b"]' } },
+          { action: 'click', args: { selector: 'css=[data-label=":has-text(Submit)"]' } },
           { action: 'click', args: { selector: '//button[@type="submit"]' } },
           { action: 'click', args: { selector: '..//button[@type="submit"]' } },
           { action: 'click', args: { selector: '(//button[@id="send"])[1]' } },
@@ -3809,6 +3890,71 @@ describe('useRedTeamConfig', () => {
     } finally {
       setItem.mockRestore();
       restoreBrowserMocks();
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+    }
+  });
+
+  it('does not derive durable reconciliation markers from target credentials', () => {
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    const clearWithCredentials = (credential: string, sandboxMode = 'read-only'): string => {
+      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+      persistedConfig.state.config.target.config = {
+        sandbox_mode: sandboxMode,
+        apiKey: credential,
+        headers: {
+          Authorization: `Bearer ${credential}`,
+          'X-Custom-Secret': credential,
+          Cookie: `session=${credential}`,
+        },
+        auth: { type: 'basic', username: credential, password: credential },
+      };
+      originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+      const marker = document.cookie
+        .split(';')
+        .map((cookie) => cookie.trim())
+        .find((cookie) => cookie.startsWith('redTeamTargetConfigValidation='))
+        ?.slice('redTeamTargetConfigValidation='.length);
+      return marker ?? '';
+    };
+
+    try {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'read-only' },
+        },
+      });
+
+      const firstMarker = clearWithCredentials('candidate-a');
+      const secondMarker = clearWithCredentials('candidate-b');
+      const changedTargetMarker = clearWithCredentials('candidate-b', 'danger-full-access');
+
+      expect(firstMarker).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      expect(secondMarker).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      expect(changedTargetMarker).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      expect(firstMarker.split(':').slice(2)).toEqual(secondMarker.split(':').slice(2));
+      expect(secondMarker.split(':').slice(2)).not.toEqual(changedTargetMarker.split(':').slice(2));
+      expect(firstMarker).not.toContain('candidate-a');
+      expect(secondMarker).not.toContain('candidate-b');
+    } finally {
+      setItem.mockRestore();
       useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     }
   });
