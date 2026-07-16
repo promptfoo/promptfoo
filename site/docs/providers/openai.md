@@ -2550,7 +2550,7 @@ automatically use appropriate timeouts:
   `OpenAI-Organization` alone does not isolate project API keys. When multiple eval processes
   resume the same persisted job, its completed usage is attributed exactly once.
 - Background streams preserve `stream: true`; promptfoo captures the response ID and cancels
-  upstream work when an eval stops
+  upstream work when an eval stops, including IDs that arrive shortly after the eval timeout
 
 Example:
 

@@ -1637,6 +1637,74 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should not claim replacement background usage until a transient polling failure recovers', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const claimCacheKeyOnce = vi.spyOn(cache, 'claimCacheKeyOnce');
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_expired_before_outage', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response not found' } },
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_replacement_after_outage', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Temporary retrieval outage' } },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_replacement_after_outage', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_replacement_after_outage',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered replacement result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+
+    const failed = await provider.callApi('Recover a replacement task');
+    expect(failed.error).toContain('503 Service Unavailable');
+    expect(claimCacheKeyOnce).not.toHaveBeenCalled();
+
+    const recovered = await provider.callApi('Recover a replacement task');
+    expect(recovered.error).toBeUndefined();
+    expect(recovered.output).toBe('Recovered replacement result');
+    expect(recovered.cached).toBe(false);
+    expect(claimCacheKeyOnce).toHaveBeenCalledOnce();
+  });
+
   it('should preserve the overall deadline while replacing a stale cached background job', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '100' });
     const originalNow = Date.now;
@@ -2305,6 +2373,56 @@ describe('OpenAiResponsesProvider request building', () => {
       'json',
       true,
       0,
+    );
+  });
+
+  it('should cancel a streamed background job whose response ID arrives after the eval timeout', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            const timer = setTimeout(() => {
+              streamController.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({
+                    type: 'response.created',
+                    response: { id: 'resp_stream_late_timeout', status: 'in_progress' },
+                  })}\n\n`,
+                ),
+              );
+            }, 50);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              streamController.error(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_stream_late_timeout', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    }).callApi('Time out before the stream ID arrives');
+
+    expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+    await vi.waitFor(() =>
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/responses/resp_stream_late_timeout/cancel'),
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+        'json',
+        true,
+        0,
+      ),
     );
   });
 

@@ -155,8 +155,12 @@ function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_ref
     return false;
   }
   try {
-    const normalizedUrl = new URL(imageUrl).toString();
-    return sanitizeUrl(normalizedUrl) !== normalizedUrl;
+    const parsedUrl = new URL(imageUrl);
+    const normalizedUrl = parsedUrl.toString();
+    return (
+      sanitizeUrl(normalizedUrl) !== normalizedUrl ||
+      hasSensitiveCacheValue(decodeURIComponent(parsedUrl.pathname))
+    );
   } catch {
     return true;
   }
@@ -586,9 +590,9 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       model,
       size,
       seconds,
-      inputReference: config.remix_video_id ? null : config.input_reference,
-      characters: config.remix_video_id ? undefined : config.characters,
-      cacheScope,
+      inputReference: config.remix_video_id || !canCacheVideo ? null : config.input_reference,
+      characters: config.remix_video_id || !canCacheVideo ? undefined : config.characters,
+      cacheScope: canCacheVideo ? cacheScope : undefined,
     });
 
     // Check for cached video (skip for remix operations)

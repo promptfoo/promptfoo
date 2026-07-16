@@ -65,6 +65,13 @@ vi.mock('../../../src/logger', () => ({
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
+vi.mock('../../../src/providers/video', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/providers/video')>();
+  return {
+    ...actual,
+    generateVideoCacheKey: vi.fn(actual.generateVideoCacheKey),
+  };
+});
 
 describe('OpenAiVideoProvider', () => {
   it('should reject a per-prompt Codex-only video model override before dispatch', async () => {
@@ -1485,6 +1492,38 @@ describe('OpenAiVideoProvider', () => {
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
     });
 
+    it('should not persist an image-reference credential embedded in the URL path', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          input_reference:
+            'https://assets.example/sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/start.png',
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_path_reference', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_path_reference', status: 'completed' }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Animate a private path reference');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      expect(generateVideoCacheKey).toHaveBeenCalledWith(
+        expect.objectContaining({ inputReference: null, cacheScope: undefined }),
+      );
+    });
+
     it.each([
       ['character', { characters: [{ id: 'char-private' }] }],
       ['file reference', { input_reference: { file_id: 'file-private' } }],
@@ -1608,6 +1647,9 @@ describe('OpenAiVideoProvider', () => {
       expect(result.cached).toBe(false);
       expect(fsPromises.readFile).not.toHaveBeenCalled();
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      expect(generateVideoCacheKey).toHaveBeenCalledWith(
+        expect.objectContaining({ cacheScope: undefined }),
+      );
     });
 
     it('should not treat secret-valued tenant headers as a safe video cache scope', async () => {

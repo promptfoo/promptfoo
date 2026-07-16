@@ -91,6 +91,8 @@ interface BackgroundResponseResult {
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
+const BACKGROUND_STREAM_CREATION_GRACE_MIN_MS = 1_000;
+const BACKGROUND_STREAM_CREATION_GRACE_MAX_MS = 30_000;
 let nextBackgroundProviderScope = 0;
 
 type BackgroundRequest = {
@@ -1160,12 +1162,31 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
       if (body.stream && body.background) {
         let backgroundResponseId: string | undefined;
+        let streamAccepted = false;
+        let streamTimedOut = false;
+        let streamCreationGraceHandle: ReturnType<typeof setTimeout> | undefined;
         const controller = new AbortController();
-        const timeoutHandle = setTimeout(() => controller.abort(), timeout);
         let rejectPendingCreation: ((reason: Error) => void) | undefined;
         const pendingCreationCancellation = new Promise<never>((_resolve, reject) => {
           rejectPendingCreation = reject;
         });
+        const timeoutHandle = setTimeout(() => {
+          streamTimedOut = true;
+          if (streamAccepted && !backgroundResponseId) {
+            rejectPendingCreation?.(
+              new Error(`OpenAI streaming response timed out after ${timeout}ms`),
+            );
+            streamCreationGraceHandle = setTimeout(
+              () => controller.abort(),
+              Math.min(
+                Math.max(timeout, BACKGROUND_STREAM_CREATION_GRACE_MIN_MS),
+                BACKGROUND_STREAM_CREATION_GRACE_MAX_MS,
+              ),
+            );
+            return;
+          }
+          controller.abort();
+        }, timeout);
         const abortStream = () => {
           if (backgroundResponseId) {
             controller.abort(abortSignal?.reason);
@@ -1196,6 +1217,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             );
             let responseData: OpenAIResponsesResponse;
             if (response.status >= 200 && response.status < 300) {
+              streamAccepted = true;
               responseData = await readResponsesStream(
                 response,
                 'OpenAI',
@@ -1203,8 +1225,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 (streamedResponse) => {
                   if (typeof streamedResponse.id === 'string') {
                     backgroundResponseId = streamedResponse.id;
-                    if (abortSignal?.aborted) {
-                      controller.abort(abortSignal.reason);
+                    if (abortSignal?.aborted || streamTimedOut) {
+                      controller.abort(abortSignal?.reason);
                     }
                   }
                 },
@@ -1233,6 +1255,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             throw err;
           } finally {
             clearTimeout(timeoutHandle);
+            clearTimeout(streamCreationGraceHandle);
             abortSignal?.removeEventListener('abort', abortStream);
           }
         })();
@@ -1359,9 +1382,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         if (polled.shared) {
           cached = true;
         } else if (
-          polled.retried ||
-          (!polled.error &&
-            (polled.data.status === 'completed' || polled.data.status === 'incomplete'))
+          !polled.error &&
+          (polled.data.status === 'completed' || polled.data.status === 'incomplete')
         ) {
           const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
           cached =
