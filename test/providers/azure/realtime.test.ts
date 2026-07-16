@@ -84,6 +84,28 @@ describe('AzureRealtimeProvider', () => {
     );
   });
 
+  it('preserves an explicitly configured HTTP realtime proxy URL', async () => {
+    mockProcessEnv({ OPENAI_API_HOST: 'wrong.example' });
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: {
+        apiBaseUrl: 'http://127.0.0.1:15500/proxy/openai/v1',
+        apiKey: 'azure-key',
+      },
+    });
+
+    await provider.callApi('hello');
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(
+      'gpt-realtime-1.5-2026-02-23',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiHost: undefined,
+          apiBaseUrl: 'http://127.0.0.1:15500/proxy/openai/v1',
+        }),
+      }),
+    );
+  });
+
   it('does not allow OPENAI_API_HOST to override the Azure realtime endpoint', async () => {
     mockProcessEnv({ OPENAI_API_HOST: 'wrong.example' });
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
@@ -123,6 +145,37 @@ describe('AzureRealtimeProvider', () => {
           headers: { Authorization: 'Bearer entra-token' },
         }),
       }),
+    );
+  });
+
+  it('prices cached audio and image tokens from realtime usage details', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      output: 'hello',
+      tokenUsage: { prompt: 1_030, completion: 30, total: 1_060 },
+      metadata: {
+        usage: {
+          input_tokens: 1_030,
+          input_token_details: {
+            text_tokens: 1_000,
+            audio_tokens: 20,
+            image_tokens: 10,
+            cached_tokens: 100,
+            cached_tokens_details: { text_tokens: 70, audio_tokens: 20, image_tokens: 10 },
+          },
+          output_tokens: 30,
+          output_token_details: { text_tokens: 20, audio_tokens: 10 },
+        },
+      },
+    });
+    const provider = new AzureRealtimeProvider('gpt-realtime-mini-2025-10-06', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBeCloseTo(
+      (930 * 0.6 + 70 * 0.06 + 20 * 0.3 + 10 * 0.08 + 20 * 2.4 + 10 * 20) / 1e6,
+      12,
     );
   });
 

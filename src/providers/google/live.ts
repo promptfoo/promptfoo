@@ -55,6 +55,14 @@ const formatContentMessages = (
       const inlineData = userPart.inlineData ?? userPart.inline_data;
       if (inlineData) {
         const mimeType = 'mimeType' in inlineData ? inlineData.mimeType : inlineData.mime_type;
+        if (mimeType.startsWith('video/')) {
+          throw new Error(
+            'Google Live video input must be sent as individual image/jpeg or image/png frames (maximum 1 frame per second).',
+          );
+        }
+        if (!mimeType.startsWith('audio/') && !mimeType.startsWith('image/')) {
+          throw new Error(`Unsupported Google Live realtime input MIME type: ${mimeType}`);
+        }
         const mediaType = mimeType.startsWith('audio/') ? 'audio' : 'video';
         return {
           realtime_input: {
@@ -487,6 +495,22 @@ export class GoogleLiveProvider implements ApiProvider {
               getModalityTokenCount(
                 usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
                 'IMAGE',
+              ) +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'VIDEO',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'VIDEO',
+              ) +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'DOCUMENT',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'DOCUMENT',
               ),
             0,
           );
@@ -930,9 +954,10 @@ export class GoogleLiveProvider implements ApiProvider {
             }
           }
         } catch (err) {
-          logger.error(`Failed to process WebSocket response: ${JSON.stringify(err)}`);
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error(`Failed to process WebSocket response: ${message}`);
           ws.close();
-          safeResolve({ error: `Failed to process WebSocket response: ${JSON.stringify(err)}` });
+          safeResolve({ error: `Failed to process WebSocket response: ${message}` });
         }
       };
 

@@ -2,11 +2,8 @@ import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import { getRequestTimeoutMs } from '../shared';
-import {
-  calculateGoogleCost,
-  createAuthCacheDiscriminator,
-  mergeGoogleCompletionOptions,
-} from './util';
+import { GoogleAuthManager } from './auth';
+import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -75,15 +72,20 @@ export class GoogleInteractionsProvider implements ApiProvider {
   modelName: string;
   config: CompletionOptions;
   env?: EnvOverrides;
+  private providerId?: string;
 
-  constructor(modelName: string, options: { config?: CompletionOptions; env?: EnvOverrides } = {}) {
+  constructor(
+    modelName: string,
+    options: { config?: CompletionOptions; env?: EnvOverrides; id?: string } = {},
+  ) {
     this.modelName = modelName;
     this.config = options.config || {};
     this.env = options.env;
+    this.providerId = options.id;
   }
 
   id(): string {
-    return `google:${this.modelName}`;
+    return this.providerId || `google:${this.modelName}`;
   }
 
   toString(): string {
@@ -100,17 +102,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     );
     const apiKey =
-      config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
+      GoogleAuthManager.getApiKey(config, this.env).apiKey ||
       this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY');
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
     if (!apiKey) {
       return {
         error:
-          'Gemini Interactions API requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY, or add apiKey to the provider config.',
+          'Gemini Interactions API requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.',
       };
     }
 
@@ -121,7 +119,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'x-goog-api-key': apiKey,
       ...config.headers,
     };
-    const authDiscriminator = createAuthCacheDiscriminator(headers);
     const body = {
       model: this.modelName,
       input: parseInteractionInput(prompt),
@@ -146,7 +143,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
-          ...(authDiscriminator ? { _authHash: authDiscriminator } : {}),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',

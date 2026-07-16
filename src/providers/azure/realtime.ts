@@ -47,7 +47,10 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const realtimeUrl = new URL(realtimeBaseUrl);
     const realtimeConfig: OpenAiRealtimeOptions = {
       ...(this.config as OpenAiRealtimeOptions),
-      apiHost: `${realtimeUrl.host}${realtimeUrl.pathname.replace(/\/v1$/i, '')}`,
+      apiHost:
+        realtimeUrl.protocol === 'https:'
+          ? `${realtimeUrl.host}${realtimeUrl.pathname.replace(/\/v1$/i, '')}`
+          : undefined,
       apiBaseUrl: realtimeBaseUrl,
       apiKey: this.getApiKey() ?? bearerToken,
       maintainContext: (this.config as OpenAiRealtimeOptions).maintainContext ?? true,
@@ -90,6 +93,9 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         inputDetails?.cached_tokens,
         inputDetails?.audio_tokens,
         outputDetails?.audio_tokens,
+        inputDetails?.image_tokens,
+        inputDetails?.cached_tokens_details?.audio_tokens,
+        inputDetails?.cached_tokens_details?.image_tokens,
       ),
     };
   }

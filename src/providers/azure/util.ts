@@ -26,6 +26,9 @@ export function calculateAzureCost(
   cachedPromptTokens?: number,
   audioPromptTokens?: number,
   audioCompletionTokens?: number,
+  imagePromptTokens?: number,
+  cachedAudioPromptTokens?: number,
+  cachedImagePromptTokens?: number,
 ): number | undefined {
   if (
     typeof promptTokens !== 'number' ||
@@ -49,16 +52,33 @@ export function calculateAzureCost(
   const outputCost = longContext?.output ?? model.cost.output;
   const cacheReadCost = longContext?.cacheRead ?? model.cost.cacheRead ?? inputCost;
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
-  const audioInputTokens = clampCachedTokens(
-    audioPromptTokens,
-    Math.max(promptTokens - cachedTokens, 0),
+  const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
+  const imageInputTokens = clampCachedTokens(
+    imagePromptTokens,
+    Math.max(promptTokens - audioInputTokens, 0),
+  );
+  const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
+  const cachedAudioTokens = clampCachedTokens(
+    cachedAudioPromptTokens,
+    Math.min(cachedTokens, audioInputTokens),
+  );
+  const cachedImageTokens = clampCachedTokens(
+    cachedImagePromptTokens,
+    Math.min(Math.max(cachedTokens - cachedAudioTokens, 0), imageInputTokens),
+  );
+  const cachedTextTokens = Math.min(
+    Math.max(cachedTokens - cachedAudioTokens - cachedImageTokens, 0),
+    textInputTokens,
   );
   const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
 
   return (
-    (promptTokens - cachedTokens - audioInputTokens) * inputCost +
-    cachedTokens * cacheReadCost +
-    audioInputTokens * (model.cost.audioInput ?? inputCost) +
+    (textInputTokens - cachedTextTokens) * inputCost +
+    cachedTextTokens * cacheReadCost +
+    (audioInputTokens - cachedAudioTokens) * (model.cost.audioInput ?? inputCost) +
+    cachedAudioTokens * (model.cost.cacheReadAudio ?? cacheReadCost) +
+    (imageInputTokens - cachedImageTokens) * (model.cost.imageInput ?? inputCost) +
+    cachedImageTokens * (model.cost.cacheReadImage ?? cacheReadCost) +
     (completionTokens - audioOutputTokens) * outputCost +
     audioOutputTokens * (model.cost.audioOutput ?? outputCost)
   );

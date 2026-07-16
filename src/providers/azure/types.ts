@@ -122,8 +122,11 @@ export interface AzureModelCost {
     input: number;
     output: number;
     cacheRead?: number;
+    cacheReadAudio?: number;
+    cacheReadImage?: number;
     audioInput?: number;
     audioOutput?: number;
+    imageInput?: number;
     longContext?: {
       threshold: number;
       input: number;

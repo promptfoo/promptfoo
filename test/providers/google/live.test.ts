@@ -335,6 +335,29 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should return a clear error for an unsupported inline video container', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: { apiKey: 'test-api-key', timeoutMs: 500 },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        { role: 'user', parts: [{ inline_data: { mime_type: 'video/mp4', data: 'dmlkZW8=' } }] },
+      ]),
+    );
+
+    expect(response.error).toContain(
+      'Google Live video input must be sent as individual image/jpeg or image/png frames',
+    );
+  });
+
   it('should report Gemini 3.1 Live token usage and modality-aware cost', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {
@@ -357,9 +380,10 @@ describe('GoogleLiveProvider', () => {
             responseTokenCount: 500,
             totalTokenCount: 1_500,
             promptTokensDetails: [
-              { modality: 'TEXT', tokenCount: 700 },
+              { modality: 'TEXT', tokenCount: 600 },
               { modality: 'AUDIO', tokenCount: 200 },
               { modality: 'IMAGE', tokenCount: 100 },
+              { modality: 'VIDEO', tokenCount: 100 },
             ],
             responseTokensDetails: [
               { modality: 'TEXT', tokenCount: 400 },
@@ -380,9 +404,41 @@ describe('GoogleLiveProvider', () => {
       numRequests: 1,
     });
     expect(response.cost).toBeCloseTo(
-      (700 * 0.75 + 200 * 3 + 100 * 1 + 400 * 4.5 + 100 * 12) / 1e6,
+      (600 * 0.75 + 200 * 3 + 200 * 1 + 400 * 4.5 + 100 * 12) / 1e6,
       12,
     );
+  });
+
+  it('should price a documented Gemini 2.5 Live model when usage metadata is returned', async () => {
+    provider = new GoogleLiveProvider('gemini-live-2.5-flash-preview-native-audio-09-2025', {
+      config: {
+        generationConfig: { response_modalities: ['audio'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+        simulateMessage(mockWs, {
+          serverContent: { turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            responseTokenCount: 500,
+            totalTokenCount: 1_500,
+            promptTokensDetails: [{ modality: 'TEXT', tokenCount: 1_000 }],
+            responseTokensDetails: [{ modality: 'AUDIO', tokenCount: 500 }],
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.cost).toBeCloseTo((1_000 * 0.3 + 500 * 12) / 1e6, 12);
   });
 
   it('should prefer closing Gemini Live usage over an interim usage frame', async () => {

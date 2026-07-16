@@ -215,6 +215,62 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(1_000 * (0.06 / 1e6), 12);
   });
 
+  it.each([
+    {
+      id: 'gpt-realtime-mini-2025-10-06',
+      input: 0.6,
+      cachedText: 0.06,
+      cachedAudio: 0.3,
+      cachedImage: 0.08,
+      output: 2.4,
+      audioOutput: 20,
+    },
+    {
+      id: 'gpt-realtime-1.5-2026-02-23',
+      input: 4,
+      cachedText: 0.4,
+      cachedAudio: 0.4,
+      cachedImage: 0.5,
+      output: 16,
+      audioOutput: 64,
+    },
+  ])('prices cached realtime modalities separately for $id', ({
+    id,
+    input,
+    cachedText,
+    cachedAudio,
+    cachedImage,
+    output,
+    audioOutput,
+  }) => {
+    expect(calculateAzureCost(id, {}, 1_030, 30, 100, 20, 10, 10, 20, 10)).toBeCloseTo(
+      (930 * input +
+        70 * cachedText +
+        20 * cachedAudio +
+        10 * cachedImage +
+        20 * output +
+        10 * audioOutput) /
+        1e6,
+      12,
+    );
+  });
+
+  it.each([
+    ['gpt-realtime-mini-2025-10-06', 0.8],
+    ['gpt-realtime-1.5-2026-02-23', 5],
+  ])('prices uncached realtime image tokens for %s', (id, imageInput) => {
+    expect(calculateAzureCost(id, {}, 100, 0, 0, 0, 0, 100)).toBeCloseTo(
+      (100 * imageInput) / 1e6,
+      12,
+    );
+  });
+
+  it('does not misclassify cached realtime audio as cached text', () => {
+    expect(
+      calculateAzureCost('gpt-realtime-mini-2025-10-06', {}, 1_000, 0, 500, 800, 0, 0, 500),
+    ).toBeCloseTo((200 * 0.6 + 300 * 10 + 500 * 0.3) / 1e6, 12);
+  });
+
   it('calculates cost for Claude Fable 5', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });

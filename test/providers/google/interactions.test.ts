@@ -75,6 +75,7 @@ describe('GoogleInteractionsProvider', () => {
       'json',
       false,
     );
+    expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
     expect(mockStoreBlob).toHaveBeenCalledWith(
       Buffer.from('video'),
       'video/mp4',
@@ -171,6 +172,38 @@ describe('GoogleInteractionsProvider', () => {
       error: expect.stringContaining('Gemini Interactions API requires an API key'),
     });
     expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('preserves a configured provider id and supports the legacy PALM API key', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/palm' }],
+          },
+        ],
+      },
+      cached: true,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      id: 'omni-vertical',
+      env: { PALM_API_KEY: 'legacy-palm-key' },
+    });
+
+    await provider.callApi('A city at dusk');
+
+    expect(provider.id()).toBe('omni-vertical');
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'legacy-palm-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      false,
+    );
   });
 
   it.each([
