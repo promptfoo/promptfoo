@@ -3,7 +3,11 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
+import {
+  calculateGoogleCost,
+  createAuthCacheDiscriminator,
+  mergeGoogleCompletionOptions,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -130,6 +134,12 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'x-goog-api-key': apiKey,
       ...config.headers,
     };
+    const generationConfig = {
+      ...(config.maxOutputTokens === undefined
+        ? {}
+        : { max_output_tokens: config.maxOutputTokens }),
+      ...(config.generationConfig || {}),
+    };
     const body = {
       model: this.modelName,
       input: parseInteractionInput(prompt),
@@ -141,7 +151,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
-      ...(config.generationConfig ? { generation_config: config.generationConfig } : {}),
+      ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.passthrough || {}),
       background: false,
@@ -151,17 +161,18 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let data: InteractionResponse;
     let cached: boolean;
     try {
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       ({ data, cached } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        // Authentication headers must never contribute to a persistent cache key.
-        true,
+        context?.bustCache ?? context?.debug ?? false,
       )) as { data: InteractionResponse; cached: boolean });
     } catch (err) {
       return { error: `Gemini Interactions API error: ${String(err)}` };

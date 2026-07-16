@@ -394,14 +394,21 @@ describe('calculateAzureCost', () => {
   it.each([
     ['gpt-5.4-pro', 60, 6, 270],
     ['gpt-5.4-pro-2026-03-05', 60, 6, 270],
-    ['gpt-5.4-mini', 1.5, 0.15, 6.75],
-    ['gpt-5.4-mini-2026-03-17', 1.5, 0.15, 6.75],
-    ['gpt-5.4-nano', 0.4, 0.04, 1.875],
-    ['gpt-5.4-nano-2026-03-17', 0.4, 0.04, 1.875],
-  ])('uses Foundry long-context priority pricing for %s', (id, input, cached, output) => {
+    ['gpt-5.4-mini', 0.75, 0.075, 4.5],
+    ['gpt-5.4-mini-2026-03-17', 0.75, 0.075, 4.5],
+    ['gpt-5.4-nano', 0.2, 0.02, 1.25],
+    ['gpt-5.4-nano-2026-03-17', 0.2, 0.02, 1.25],
+  ])('uses the supported Azure tier rates without a priority surcharge for %s', (id, input, cached, output) => {
     expect(
       calculateAzureCost(id, { passthrough: { service_tier: 'priority' } }, 272_001, 1_000, 1_000),
-    ).toBeCloseTo((2 * (271_001 * input + 1_000 * cached + 1_000 * output)) / 1e6, 12);
+    ).toBeCloseTo((271_001 * input + 1_000 * cached + 1_000 * output) / 1e6, 12);
+  });
+
+  it('prices Phi-4 multimodal audio input using the Foundry audio-token rate', () => {
+    expect(calculateAzureCost('Phi-4-multimodal-instruct', {}, 1_000, 1_000, 0, 1_000)).toBeCloseTo(
+      (1_000 * 4 + 1_000 * 0.32) / 1e6,
+      12,
+    );
   });
 
   it.each([
@@ -718,6 +725,7 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.4-pro', 30, 180],
     ['gpt-5.4-mini', 0.75, 4.5],
     ['gpt-5.4-nano', 0.2, 1.25],
+    ['Phi-4-multimodal-instruct', 0.08, 0.32],
     ['claude-haiku-4-5', 1, 5],
     ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],

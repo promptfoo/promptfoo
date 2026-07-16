@@ -52,6 +52,7 @@ describe('GoogleInteractionsProvider', () => {
         aspectRatio: '9:16',
         previousInteractionId: 'interaction-0',
         store: true,
+        maxOutputTokens: 2_048,
         generationConfig: { thinking_level: 'low', video_config: { task: 'text_to_video' } } as any,
       },
     });
@@ -72,16 +73,23 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
-          generation_config: { thinking_level: 'low', video_config: { task: 'text_to_video' } },
+          generation_config: {
+            max_output_tokens: 2_048,
+            thinking_level: 'low',
+            video_config: { task: 'text_to_video' },
+          },
           background: false,
           stream: false,
         }),
       }),
       expect.any(Number),
       'json',
-      true,
+      false,
     );
-    expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
+    expect(mockFetchWithCache.mock.calls[0]?.[1]).toHaveProperty(
+      '_authHash',
+      expect.stringMatching(/^[a-f0-9]{16}$/),
+    );
     expect(mockStoreBlob).toHaveBeenCalledWith(
       Buffer.from('video'),
       'video/mp4',
@@ -208,7 +216,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      false,
     );
   });
 
@@ -243,7 +251,7 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      true,
+      false,
     );
   });
 
@@ -283,7 +291,7 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'json',
-      true,
+      false,
     );
   });
 });

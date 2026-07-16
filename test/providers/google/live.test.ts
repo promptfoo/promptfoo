@@ -444,7 +444,9 @@ describe('GoogleLiveProvider', () => {
       expect.objectContaining({ setup: expect.any(Object) }),
       { realtime_input: { video: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } } },
       { realtime_input: { video: { mime_type: 'image/png', data: 'ZnJhbWUy' } } },
+      { client_content: { turn_complete: true } },
     ]);
+    expect(mockSetTimeout).toHaveBeenCalledWith(expect.any(Function), 3_500);
   });
 
   it('should report Gemini 3.1 Live token usage and modality-aware cost', async () => {
@@ -1190,7 +1192,7 @@ describe('GoogleLiveProvider', () => {
 
     const toolResponses = mockWs.send.mock.calls
       .map(([message]) => JSON.parse(message as string))
-      .filter((message) => message.tool_response);
+      .filter((message) => message.toolResponse);
     expect(toolResponses).toHaveLength(0);
   });
 
@@ -1595,9 +1597,9 @@ describe('GoogleLiveProvider', () => {
     // complete its turn instead of stalling until the websocket times out.
     const toolResponses = mockWs.send.mock.calls
       .map(([message]) => JSON.parse(message as string))
-      .filter((m) => m.tool_response);
+      .filter((m) => m.toolResponse);
     expect(toolResponses).toHaveLength(1);
-    expect(toolResponses[0].tool_response.function_responses).toEqual([
+    expect(toolResponses[0].toolResponse.functionResponses).toEqual([
       {
         id: 'function-call-disabled',
         name: 'addNumbers',
@@ -1645,8 +1647,8 @@ describe('GoogleLiveProvider', () => {
     expect(promptAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
     const toolResponses = mockWs.send.mock.calls
       .map(([message]) => JSON.parse(message as string))
-      .filter((message) => message.tool_response);
-    expect(toolResponses[0].tool_response.function_responses).toEqual([
+      .filter((message) => message.toolResponse);
+    expect(toolResponses[0].toolResponse.functionResponses).toEqual([
       { id: 'function-call-prompt-level', name: 'addNumbers', response: { sum: 11 } },
     ]);
     expect(response.output).toEqual(

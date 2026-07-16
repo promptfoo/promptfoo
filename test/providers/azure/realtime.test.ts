@@ -378,4 +378,52 @@ describe('AzureRealtimeProvider', () => {
       websocketTimeout: 12_345,
     });
   });
+
+  it('prefers a prompt-level API host over an inherited base URL', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiBaseUrl: 'https://base.openai.azure.com/openai/v1', apiKey: 'azure-key' },
+    });
+
+    await provider.callApi('hello', {
+      prompt: {
+        id: 'prompt-host',
+        config: { apiHost: 'prompt.openai.azure.com', apiKey: 'prompt-key' },
+      },
+    } as any);
+
+    const delegatedProvider = vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value;
+    expect(delegatedProvider.config).toMatchObject({
+      apiHost: 'prompt.openai.azure.com/openai',
+      apiBaseUrl: 'https://prompt.openai.azure.com/openai/v1',
+      apiKey: 'prompt-key',
+      headers: { 'api-key': 'prompt-key' },
+    });
+  });
+
+  it('accepts prompt-only API-key environment overrides when base Entra initialization fails', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPT_AZURE_REALTIME_KEY: 'prompt-env-key' });
+    vi.spyOn(AzureGenericProvider.prototype, 'getAccessToken').mockRejectedValue(
+      new Error('Azure CLI is unavailable'),
+    );
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com' },
+    });
+
+    try {
+      await provider.callApi('hello', {
+        prompt: {
+          id: 'prompt-key-envar',
+          config: { apiKeyEnvar: 'PROMPT_AZURE_REALTIME_KEY' },
+        },
+      } as any);
+    } finally {
+      restoreEnv();
+    }
+
+    const delegatedProvider = vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value;
+    expect(delegatedProvider.config).toMatchObject({
+      apiKey: 'prompt-env-key',
+      headers: { 'api-key': 'prompt-env-key' },
+    });
+  });
 });

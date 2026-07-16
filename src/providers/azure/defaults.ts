@@ -147,7 +147,6 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 30 / 1000000,
       output: 180 / 1000000,
       cacheRead: 3 / 1000000,
-      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1000000,
@@ -162,7 +161,6 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 30 / 1000000,
       output: 180 / 1000000,
       cacheRead: 3 / 1000000,
-      priorityMultiplier: 2,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1000000,
@@ -177,13 +175,6 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 0.75 / 1000000,
       output: 4.5 / 1000000,
       cacheRead: 0.075 / 1000000,
-      priorityMultiplier: 2,
-      longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 1.5 / 1000000,
-        output: 6.75 / 1000000,
-        cacheRead: 0.15 / 1000000,
-      },
     },
   })),
   ...['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'].map((id) => ({
@@ -192,13 +183,6 @@ export const AZURE_MODELS: AzureModelCost[] = [
       input: 0.2 / 1000000,
       output: 1.25 / 1000000,
       cacheRead: 0.02 / 1000000,
-      priorityMultiplier: 2,
-      longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 0.4 / 1000000,
-        output: 1.875 / 1000000,
-        cacheRead: 0.04 / 1000000,
-      },
     },
   })),
   // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
@@ -1139,7 +1123,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'Phi-4-multimodal-instruct',
-    cost: { input: 0.07 / 1000000, output: 0.14 / 1000000 },
+    cost: { input: 0.08 / 1000000, output: 0.32 / 1000000, audioInput: 4 / 1000000 },
   },
   {
     id: 'Phi-3.5-MoE-instruct',

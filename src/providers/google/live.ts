@@ -78,6 +78,11 @@ const formatContentMessages = (
     });
     if (contentMessages.some((message) => 'audio' in message.realtime_input)) {
       contentMessages.push({ realtime_input: { audio_stream_end: true } } as any);
+    } else if (
+      contentMessages.some((message) => 'video' in message.realtime_input) &&
+      !contentMessages.some((message) => 'text' in message.realtime_input)
+    ) {
+      contentMessages.push({ client_content: { turn_complete: true } } as any);
     }
     return contentMessages;
   }
@@ -397,12 +402,29 @@ export class GoogleLiveProvider implements ApiProvider {
         !!config.generationConfig?.outputAudioTranscription ||
         (usesRealtimeTextInput && requestedText);
 
-      // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
-      const timeout = setTimeout(() => {
-        logger.error('WebSocket connection timed out after 30 seconds');
-        ws.close();
-        safeResolve({ error: 'WebSocket request timed out' });
-      }, config.timeoutMs || 30000);
+      const videoFrameCount = contents.reduce(
+        (total, content) =>
+          total +
+          content.parts.filter((part) => {
+            const inlineData =
+              (part as { inlineData?: { mimeType?: string; mime_type?: string } }).inlineData ??
+              (part as { inline_data?: { mimeType?: string; mime_type?: string } }).inline_data;
+            const mimeType = inlineData?.mimeType ?? inlineData?.mime_type;
+            return mimeType === 'image/jpeg' || mimeType === 'image/png';
+          }).length,
+        0,
+      );
+      const framePacingAllowanceMs = Math.max(videoFrameCount - 1, 0) * 1_000;
+
+      // Preserve the response timeout after all rate-limited video frames have been sent.
+      const timeout = setTimeout(
+        () => {
+          logger.error('WebSocket connection timed out after 30 seconds');
+          ws.close();
+          safeResolve({ error: 'WebSocket request timed out' });
+        },
+        (config.timeoutMs || 30000) + framePacingAllowanceMs,
+      );
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
@@ -898,8 +920,8 @@ export class GoogleLiveProvider implements ApiProvider {
               for (const functionCall of response.toolCall.functionCalls) {
                 if (functionCall?.id && functionCall.name) {
                   const toolMessage = {
-                    tool_response: {
-                      function_responses: [
+                    toolResponse: {
+                      functionResponses: [
                         {
                           id: functionCall.id,
                           name: functionCall.name,
@@ -960,8 +982,8 @@ export class GoogleLiveProvider implements ApiProvider {
                     return;
                   }
                   const toolMessage = {
-                    tool_response: {
-                      function_responses: [
+                    toolResponse: {
+                      functionResponses: [
                         {
                           id: functionCall.id,
                           name: functionName,

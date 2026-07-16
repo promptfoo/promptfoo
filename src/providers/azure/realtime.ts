@@ -6,6 +6,7 @@ import { AzureGenericProvider } from './generic';
 import { calculateAzureCost, throwConfigurationError } from './util';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -38,14 +39,36 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    await this.ensureInitialized();
-
+    const promptConfig = context?.prompt?.config as
+      | (OpenAiRealtimeOptions & { apiKeyEnvar?: string })
+      | undefined;
     const effectiveConfig = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     } as OpenAiRealtimeOptions & { apiKeyEnvar?: string };
+    const promptApiKey =
+      promptConfig?.apiKey ??
+      (promptConfig?.apiKeyEnvar
+        ? (getEnvString(promptConfig.apiKeyEnvar as EnvVarKey) ??
+          this.env?.[promptConfig.apiKeyEnvar as keyof EnvOverrides])
+        : undefined);
+    const effectiveApiKey = promptApiKey ?? this.getApiKey();
+
+    if (promptApiKey) {
+      await this.ensureInitialized().catch(() => undefined);
+    } else {
+      await this.ensureInitialized();
+    }
+
+    const promptHost = promptConfig?.apiHost?.replace(/\/+$/, '');
     const configuredHost = effectiveConfig.apiHost?.replace(/\/+$/, '');
     const baseUrl =
+      promptConfig?.apiBaseUrl?.replace(/\/+$/, '') ??
+      (promptHost
+        ? /^https?:\/\//i.test(promptHost)
+          ? promptHost
+          : `https://${promptHost}`
+        : undefined) ??
       effectiveConfig.apiBaseUrl?.replace(/\/+$/, '') ??
       (configuredHost
         ? /^https?:\/\//i.test(configuredHost)
@@ -57,13 +80,6 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     }
 
     const bearerToken = this.authHeaders?.Authorization?.replace(/^Bearer\s+/i, '');
-    const effectiveApiKey =
-      effectiveConfig.apiKey ??
-      (effectiveConfig.apiKeyEnvar
-        ? (getEnvString(effectiveConfig.apiKeyEnvar as EnvVarKey) ??
-          this.env?.[effectiveConfig.apiKeyEnvar as keyof typeof this.env])
-        : undefined) ??
-      this.getApiKey();
     const inheritedAuthHeaders = effectiveApiKey
       ? Object.fromEntries(
           Object.entries(this.authHeaders ?? {}).filter(
