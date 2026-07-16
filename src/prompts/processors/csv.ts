@@ -10,21 +10,16 @@ type CsvParseOptionsWithColumns<T> = Omit<Options<T>, 'columns'> & {
 };
 
 /**
- * Builds a row's label, disambiguating a shared `basePrompt.label` across
- * multiple rows (mirroring jsonl.ts's `containsMultiple` pattern) so distinct
- * rows don't collapse onto the same label -- and therefore the same
- * `generateIdFromPrompt`-derived prompt id.
+ * Builds a row's label. Prompt ids are derived from the label, so a shared
+ * `basePrompt.label` must be disambiguated when a file yields multiple rows
+ * (mirroring jsonl.ts's `containsMultiple` pattern).
  */
 function buildCsvRowLabel(
-  rowLabel: string | undefined,
   baseLabel: string | undefined,
   content: string,
   index: number,
   hasMultipleRows: boolean,
 ): string {
-  if (rowLabel) {
-    return rowLabel;
-  }
   if (baseLabel) {
     return hasMultipleRows ? `${baseLabel}: ${content}` : baseLabel;
   }
@@ -61,7 +56,7 @@ export async function processCsvPrompts(
     return promptLines.map((line, index) => ({
       ...basePrompt,
       raw: line,
-      label: buildCsvRowLabel(undefined, basePrompt.label, line, index, hasMultipleRows),
+      label: buildCsvRowLabel(basePrompt.label, line, index, hasMultipleRows),
     }));
   }
 
@@ -83,7 +78,7 @@ export async function processCsvPrompts(
       return {
         ...basePrompt,
         raw: row.prompt,
-        label: buildCsvRowLabel(row.label, basePrompt.label, row.prompt, index, hasMultipleRows),
+        label: row.label || buildCsvRowLabel(basePrompt.label, row.prompt, index, hasMultipleRows),
       };
     });
   } catch {
@@ -96,7 +91,7 @@ export async function processCsvPrompts(
     return promptLines.map((line, index) => ({
       ...basePrompt,
       raw: line,
-      label: buildCsvRowLabel(undefined, basePrompt.label, line, index, hasMultipleRows),
+      label: buildCsvRowLabel(basePrompt.label, line, index, hasMultipleRows),
     }));
   }
 }

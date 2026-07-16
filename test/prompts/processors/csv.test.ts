@@ -171,6 +171,42 @@ describe('processCsvPrompts', () => {
     ]);
   });
 
+  it('should disambiguate base prompt label in the parsed-CSV branch while row labels win', async () => {
+    const csvContent = dedent`
+      prompt,label
+      Tell me about {{topic}},Basic Query
+      Explain {{topic}} in simple terms,
+      Write a poem about {{topic}},
+    `;
+
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+    const result = await processCsvPrompts('prompts.csv', { label: 'My Labeled Prompts' });
+
+    expect(result.map((r) => r.label)).toEqual([
+      'Basic Query',
+      'My Labeled Prompts: Explain {{topic}} in simple terms',
+      'My Labeled Prompts: Write a poem about {{topic}}',
+    ]);
+  });
+
+  it('should disambiguate base prompt label in the malformed-CSV fallback branch', async () => {
+    const csvContent = dedent`
+      prompt
+      "Malformed CSV with a quote problem
+      Another prompt line
+    `;
+
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+    const result = await processCsvPrompts('prompts.csv', { label: 'My Labeled Prompts' });
+
+    expect(result.map((r) => r.label)).toEqual([
+      'My Labeled Prompts: "Malformed CSV with a quote problem',
+      'My Labeled Prompts: Another prompt line',
+    ]);
+  });
+
   it('should skip rows with missing prompt values', async () => {
     const csvContent = dedent`
       prompt,label
