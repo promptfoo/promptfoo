@@ -312,6 +312,88 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
+  it('should cancel and evict an upstream background response when the eval is aborted', async () => {
+    const controller = new AbortController();
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancellable', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancellable', status: 'cancelled', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await expect(
+      provider.callApi('Cancel the upstream task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('/responses/resp_cancellable/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should cancel and evict an upstream background response when polling times out', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_timeout', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_timeout', status: 'in_progress', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_timeout', status: 'cancelled', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Time out the upstream task');
+
+    expect(result.error).toContain('Background response resp_timeout timed out after 10ms.');
+    expect(cache.fetchWithCache).toHaveBeenLastCalledWith(
+      expect.stringContaining('/responses/resp_timeout/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);

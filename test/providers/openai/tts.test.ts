@@ -314,6 +314,35 @@ describe('OpenAiTtsProvider', () => {
     expect(results.filter((result) => result.cost === 0)).toHaveLength(2);
   });
 
+  it('does not coalesce independently cancellable speech requests', async () => {
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      return await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => resolve(audioResponse()), 20);
+        options?.signal?.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      });
+    });
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+    const first = new AbortController();
+    const second = new AbortController();
+
+    const resultsPromise = Promise.allSettled([
+      provider.callApi('same input', undefined, { abortSignal: first.signal }),
+      provider.callApi('same input', undefined, { abortSignal: second.signal }),
+    ]);
+    setTimeout(() => first.abort(), 5);
+    const results = await resultsPromise;
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(results[0]).toMatchObject({ status: 'rejected', reason: { name: 'AbortError' } });
+    expect(results[1]).toMatchObject({ status: 'fulfilled', value: { cached: false } });
+    expect(second.signal.aborted).toBe(false);
+  });
+
   it('does not coalesce concurrent speech requests across repeat cache namespaces', async () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);

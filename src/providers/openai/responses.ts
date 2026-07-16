@@ -75,6 +75,27 @@ interface BackgroundResponseResult {
   retried?: boolean;
 }
 
+const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
+
+async function cancelBackgroundResponse(
+  responseId: string,
+  url: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  try {
+    await fetchWithCache<OpenAIResponsesResponse>(
+      `${url}/${encodeURIComponent(responseId)}/cancel`,
+      { method: 'POST', headers },
+      BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS,
+      'json',
+      true,
+      0,
+    );
+  } catch (error) {
+    logger.warn(`Failed to cancel background response ${responseId}: ${String(error)}`);
+  }
+}
+
 async function pollBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
@@ -99,16 +120,55 @@ async function pollBackgroundResponse(
   const deadline = Date.now() + timeout;
   let firstPoll = true;
 
-  while (data.status === 'queued' || data.status === 'in_progress') {
-    signal?.throwIfAborted();
-    if (!firstPoll) {
-      await sleep(1000);
+  try {
+    while (data.status === 'queued' || data.status === 'in_progress') {
       signal?.throwIfAborted();
-    }
-    firstPoll = false;
+      if (!firstPoll) {
+        await sleep(1000);
+        signal?.throwIfAborted();
+      }
+      firstPoll = false;
 
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        await cancelBackgroundResponse(initial.id, url, headers);
+        return {
+          data,
+          status: 0,
+          statusText: 'Error',
+          error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+        };
+      }
+
+      const polled = await fetchWithCache<OpenAIResponsesResponse>(
+        `${url}/${encodeURIComponent(initial.id)}`,
+        { method: 'GET', headers, ...(signal ? { signal } : {}) },
+        remainingMs,
+        'json',
+        true,
+        maxRetries,
+      );
+      data = polled.data;
+      status = polled.status;
+      statusText = polled.statusText;
+      responseHeaders = polled.headers;
+      if (status < 200 || status >= 300) {
+        return {
+          data,
+          status,
+          statusText,
+          headers: responseHeaders,
+          error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
+        };
+      }
+    }
+  } catch (error) {
+    if (signal?.aborted) {
+      await cancelBackgroundResponse(initial.id, url, headers);
+      throw error;
+    }
+    if (Date.now() >= deadline) {
+      await cancelBackgroundResponse(initial.id, url, headers);
       return {
         data,
         status: 0,
@@ -116,28 +176,7 @@ async function pollBackgroundResponse(
         error: `Background response ${initial.id} timed out after ${timeout}ms.`,
       };
     }
-
-    const polled = await fetchWithCache<OpenAIResponsesResponse>(
-      `${url}/${encodeURIComponent(initial.id)}`,
-      { method: 'GET', headers, ...(signal ? { signal } : {}) },
-      remainingMs,
-      'json',
-      true,
-      maxRetries,
-    );
-    data = polled.data;
-    status = polled.status;
-    statusText = polled.statusText;
-    responseHeaders = polled.headers;
-    if (status < 200 || status >= 300) {
-      return {
-        data,
-        status,
-        statusText,
-        headers: responseHeaders,
-        error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
-      };
-    }
+    throw error;
   }
 
   return { data, status, statusText, headers: responseHeaders };
@@ -818,6 +857,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           await updateCache?.(data, status, statusText, responseHeaders);
         }
         if (polled.error) {
+          if (polled.status === 0) {
+            await deleteFromCache?.();
+          }
           return {
             error: polled.error,
             metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
@@ -836,7 +878,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
-      if (isAbortError(err)) {
+      if (isAbortError(err) || abortSignal?.aborted) {
+        if (pollingBackground) {
+          await deleteFromCache?.();
+        }
         throw err;
       }
       logger.error(`API call error: ${String(err)}`);

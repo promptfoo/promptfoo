@@ -23,6 +23,8 @@ import type { OpenAiSharedOptions } from './types';
 const VALID_RESPONSE_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
 const MAX_INPUT_CHARACTERS = 4096;
 const inFlightRequests = new Map<string, Promise<ProviderResponse>>();
+const abortSignalIds = new WeakMap<AbortSignal, number>();
+let nextAbortSignalId = 0;
 
 function isSensitiveCacheHeader(key: string): boolean {
   return (
@@ -126,6 +128,19 @@ async function coalesceRequest(
   } finally {
     inFlightRequests.delete(cacheKey);
   }
+}
+
+function getInFlightCacheKey(cacheKey: string, signal?: AbortSignal): string {
+  if (!signal) {
+    return cacheKey;
+  }
+
+  let signalId = abortSignalIds.get(signal);
+  if (signalId === undefined) {
+    signalId = ++nextAbortSignalId;
+    abortSignalIds.set(signal, signalId);
+  }
+  return `${cacheKey}:signal:${signalId}`;
 }
 
 export class OpenAiTtsProvider extends OpenAiGenericProvider {
@@ -267,7 +282,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
 
         return result;
       } catch (error) {
-        if (isAbortError(error)) {
+        if (isAbortError(error) || callApiOptions?.abortSignal?.aborted) {
           throw error;
         }
         if (error instanceof HttpRateLimitError) {
@@ -288,7 +303,10 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     };
 
     return cacheEnabled && !this.shouldBustCache(context)
-      ? coalesceRequest(getScopedCacheKey(cacheKey), requestSpeech)
+      ? coalesceRequest(
+          getInFlightCacheKey(getScopedCacheKey(cacheKey), callApiOptions?.abortSignal),
+          requestSpeech,
+        )
       : requestSpeech();
   }
 }
