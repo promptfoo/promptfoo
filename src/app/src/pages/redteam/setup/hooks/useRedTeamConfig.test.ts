@@ -932,6 +932,12 @@ describe('useRedTeamConfig', () => {
       'http',
       { request: 'TRACE /chat HTTP/1.1\nHost: example.test' },
     ],
+    ['HTTP with unknown raw method', 'http', { request: 'FOO /chat HTTP/1.1\nHost: example.test' }],
+    [
+      'HTTP with lowercase raw method',
+      'http',
+      { request: 'post /chat HTTP/1.1\nHost: example.test' },
+    ],
     ['HTTP with invalid raw host', 'http', { request: 'POST /chat HTTP/1.1\nHost: bad host' }],
     [
       'HTTP with credentialed raw host',
@@ -1173,13 +1179,42 @@ describe('useRedTeamConfig', () => {
       config: {
         steps: [
           { action: 'navigate', args: { url: 'https://example.test' } },
+          { action: 'navigate', args: { url: '{{url}}' } },
           { action: 'click', args: { selector: 'button:has-text("Submit")' } },
           { action: 'click', args: { selector: 'button:visible' } },
           { action: 'click', args: { selector: 'css:light=button' } },
           { action: 'click', args: { selector: 'role=button[name="Submit"]' } },
           { action: 'click', args: { selector: 'css=[data-label="a >> b"]' } },
+          { action: 'click', args: { selector: '{{operationSelector}}' } },
         ],
       },
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+  });
+
+  it.each([
+    [
+      'HTTP templated method',
+      { url: 'https://example.test/chat', method: '{{method}}', body: '{{prompt}}' },
+    ],
+    [
+      'HTTP templated raw method',
+      { request: '{{method}} /chat HTTP/1.1\nHost: example.test\n\n{{prompt}}' },
+    ],
+  ])('recovers an imported %s target', (_case, config) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'http',
+        label: 'Imported target',
+        config: null as unknown as Config['target']['config'],
+      },
+    });
+
+    useRedTeamConfig.getState().updateConfig('target', {
+      ...useRedTeamConfig.getState().config.target,
+      config,
     });
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();

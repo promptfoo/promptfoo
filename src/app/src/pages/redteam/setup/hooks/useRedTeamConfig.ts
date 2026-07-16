@@ -135,6 +135,45 @@ const isValidHttpUrlOrTemplate = (value: unknown): boolean => {
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
+const isSimpleNunjucksInterpolation = (value: unknown): boolean =>
+  typeof value === 'string' && /^{{\s*[A-Za-z_][\w-]*\s*}}$/.test(value);
+
+const RAW_HTTP_METHODS = new Set([
+  'ACL',
+  'BIND',
+  'CHECKOUT',
+  'COPY',
+  'DELETE',
+  'GET',
+  'HEAD',
+  'LINK',
+  'LOCK',
+  'M-SEARCH',
+  'MERGE',
+  'MKACTIVITY',
+  'MKCALENDAR',
+  'MKCOL',
+  'MOVE',
+  'NOTIFY',
+  'OPTIONS',
+  'PATCH',
+  'POST',
+  'PROPFIND',
+  'PROPPATCH',
+  'PURGE',
+  'PUT',
+  'QUERY',
+  'REBIND',
+  'REPORT',
+  'SEARCH',
+  'SOURCE',
+  'SUBSCRIBE',
+  'UNBIND',
+  'UNLINK',
+  'UNLOCK',
+  'UNSUBSCRIBE',
+]);
+
 const isSafeBrowserNavigateUrl = (value: unknown): boolean => {
   if (!isNonEmptyString(value)) {
     return false;
@@ -172,12 +211,12 @@ const isValidRawHttpRequest = (value: unknown): boolean => {
   }
   const lines = value.trim().split(/\r?\n/);
   const requestLine = lines.shift() ?? '';
-  const requestLineMatch = requestLine.match(
-    /^([!#$%&'*+\-.^_\x60|~\dA-Za-z]+)\s+(\S+)\s+HTTP\/\d(?:\.\d)?$/i,
-  );
+  const requestLineMatch = requestLine.match(/^(\S+)\s+(\S+)\s+HTTP\/\d(?:\.\d)?$/i);
+  const requestMethod = requestLineMatch?.[1];
   if (
     !requestLineMatch ||
-    ['CONNECT', 'TRACE', 'TRACK'].includes(requestLineMatch[1].toUpperCase())
+    !requestMethod ||
+    (!RAW_HTTP_METHODS.has(requestMethod) && !isSimpleNunjucksInterpolation(requestMethod))
   ) {
     return false;
   }
@@ -279,7 +318,8 @@ const isValidHttpConfig = (config: Record<string, unknown>): boolean => {
         config.maxRetries < 0)) ||
     (config.method !== undefined &&
       (typeof config.method !== 'string' ||
-        !/^[!#$%&'*+\-.^_\x60|~\dA-Za-z]+$/.test(config.method) ||
+        (!/^[!#$%&'*+\-.^_\x60|~\dA-Za-z]+$/.test(config.method) &&
+          !isSimpleNunjucksInterpolation(config.method)) ||
         ['CONNECT', 'TRACE', 'TRACK'].includes(config.method.toUpperCase()))) ||
     (config.queryParams !== undefined && !isStringRecord(config.queryParams)) ||
     (config.request !== undefined && typeof config.request !== 'string') ||
@@ -445,6 +485,9 @@ const isValidBrowserStep = (step: unknown): boolean => {
     if (!isNonEmptyString(selector)) {
       return false;
     }
+    if (isSimpleNunjucksInterpolation(selector)) {
+      return true;
+    }
     const stack: string[] = [];
     const selectorSegments: string[] = [];
     let quote: string | null = null;
@@ -547,7 +590,7 @@ const isValidBrowserStep = (step: unknown): boolean => {
 
   switch (step.action) {
     case 'navigate':
-      return isSafeBrowserNavigateUrl(args.url);
+      return isSafeBrowserNavigateUrl(args.url) || isSimpleNunjucksInterpolation(args.url);
     case 'click':
       return isValidSelector(args.selector);
     case 'type':
@@ -629,6 +672,22 @@ const containsUnsafeNunjucksTemplate = (value: unknown): boolean => {
   return isPlainObject(value) && Object.values(value).some(containsUnsafeNunjucksTemplate);
 };
 
+const containsRemoteToolEndpoint = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.some(containsRemoteToolEndpoint);
+  }
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  return (
+    value.type === 'mcp' ||
+    value.server_url !== undefined ||
+    value.serverUrl !== undefined ||
+    value.connector_id !== undefined ||
+    Object.values(value).some(containsRemoteToolEndpoint)
+  );
+};
+
 const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolean => {
   if (!target || !isPlainObject(target.config)) {
     return true;
@@ -661,6 +720,7 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
     containsExecutableCallback(target.config) ||
     containsUnsafeNunjucksTemplate(target.id) ||
     containsUnsafeNunjucksTemplate(target.config) ||
+    containsRemoteToolEndpoint(target.config.tools) ||
     target.config.functionToolCallbacks !== undefined ||
     containsNunjucksTemplate(target.config.responseSchema) ||
     containsNunjucksTemplate(target.config.tools) ||
@@ -672,9 +732,18 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
     (STRUCTURED_FOUNDATION_PROVIDER_TYPES.includes(getProviderType(target.id) ?? '') &&
       (target.id.startsWith('openai:transcription') ||
         (target.env !== undefined && Object.keys(target.env).length > 0) ||
-        ['apiBaseUrl', 'apiHost', 'baseURL', 'baseUrl', 'base_url', 'endpoint', 'projectUrl'].some(
-          (field) => target.config[field] !== undefined,
-        ) ||
+        [
+          'apiBaseUrl',
+          'apiHost',
+          'baseURL',
+          'baseUrl',
+          'base_url',
+          'endpoint',
+          'projectUrl',
+          'azureAuthorityHost',
+          'webhook_url',
+          'webhookUrl',
+        ].some((field) => target.config[field] !== undefined) ||
         Object.keys(target.config).some((field) => field.toLowerCase().endsWith('envar')))) ||
     (isPlainObject(target.config.auth) && target.config.auth.type === 'file') ||
     target.config.tls !== undefined ||
