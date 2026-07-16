@@ -6,7 +6,12 @@ import {
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { isAbortError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isAbortError,
+} from '../../util/fetch/errors';
+import { fetchWithRetries } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -73,9 +78,11 @@ interface BackgroundResponseResult {
   headers?: Record<string, string>;
   error?: string;
   retried?: boolean;
+  cancelled?: boolean;
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
+const BACKGROUND_STREAM_ABORT_GRACE_MS = 1_000;
 
 async function cancelBackgroundResponse(
   responseId: string,
@@ -153,12 +160,18 @@ async function pollBackgroundResponse(
       statusText = polled.statusText;
       responseHeaders = polled.headers;
       if (status < 200 || status >= 300) {
+        const shouldCancel =
+          status >= 400 && status < 500 && ![404, 408, 409, 410, 425, 429].includes(status);
+        if (shouldCancel) {
+          await cancelBackgroundResponse(initial.id, url, headers);
+        }
         return {
           data,
           status,
           statusText,
           headers: responseHeaders,
           error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
+          cancelled: shouldCancel,
         };
       }
     }
@@ -748,7 +761,64 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ...(abortSignal ? { signal: abortSignal } : {}),
       };
 
-      if (body.stream) {
+      if (body.stream && body.background) {
+        let backgroundResponseId: string | undefined;
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+        let abortGraceHandle: ReturnType<typeof setTimeout> | undefined;
+        const abortStream = () => {
+          if (backgroundResponseId) {
+            controller.abort(abortSignal?.reason);
+            return;
+          }
+          abortGraceHandle = setTimeout(
+            () => controller.abort(abortSignal?.reason),
+            BACKGROUND_STREAM_ABORT_GRACE_MS,
+          );
+        };
+        abortSignal?.addEventListener('abort', abortStream, { once: true });
+        try {
+          const response = await fetchWithRetries(
+            url,
+            { ...request, signal: controller.signal },
+            timeout,
+            config.maxRetries,
+          );
+          status = response.status;
+          statusText = response.statusText;
+          responseHeaders = Object.fromEntries(response.headers.entries());
+          if (status >= 200 && status < 300) {
+            data = await readResponsesStream(response, 'OpenAI', logger, (streamedResponse) => {
+              if (typeof streamedResponse.id === 'string') {
+                backgroundResponseId = streamedResponse.id;
+                if (abortSignal?.aborted) {
+                  clearTimeout(abortGraceHandle);
+                  controller.abort(abortSignal.reason);
+                }
+              }
+            });
+          } else {
+            const text = await response.text();
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = text as OpenAIResponsesResponse;
+            }
+          }
+        } catch (err) {
+          if (backgroundResponseId && (controller.signal.aborted || abortSignal?.aborted)) {
+            await cancelBackgroundResponse(backgroundResponseId, url, request.headers);
+          }
+          if (controller.signal.aborted && !abortSignal?.aborted) {
+            throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+          clearTimeout(abortGraceHandle);
+          abortSignal?.removeEventListener('abort', abortStream);
+        }
+      } else if (body.stream) {
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeout);
         const signal = abortSignal
@@ -761,7 +831,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             timeout,
             'text',
             true,
-            this.config.maxRetries,
+            config.maxRetries,
           );
           status = response.status;
           statusText = response.statusText;
@@ -798,7 +868,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           timeout,
           'json',
           this.shouldBustCache(context),
-          this.config.maxRetries,
+          config.maxRetries,
         ));
       }
 
@@ -846,7 +916,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cached,
           deleteFromCache,
         );
-        if (polled.retried) {
+        if (
+          polled.retried ||
+          (!polled.error &&
+            (polled.data.status === 'completed' || polled.data.status === 'incomplete'))
+        ) {
           cached = false;
         }
         data = polled.data;
@@ -857,7 +931,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           await updateCache?.(data, status, statusText, responseHeaders);
         }
         if (polled.error) {
-          if (polled.status === 0) {
+          if (polled.status === 0 || polled.cancelled) {
             await deleteFromCache?.();
           }
           return {
@@ -883,6 +957,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           await deleteFromCache?.();
         }
         throw err;
+      }
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? {},
+            },
+          },
+        };
       }
       logger.error(`API call error: ${String(err)}`);
       if (!pollingBackground) {

@@ -946,6 +946,28 @@ describe('OpenAiVideoProvider', () => {
       expect(first).not.toBe(differentImage);
     });
 
+    it('should keep tenant-scoped authenticated image references isolated', () => {
+      const base = {
+        provider: 'openai',
+        prompt: 'animate the reference image',
+        model: 'sora-2',
+        size: '1280x720',
+        seconds: 8,
+      };
+
+      expect(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://assets.example/start.png?tenant_token=tenantA-secret',
+        }),
+      ).not.toBe(
+        generateVideoCacheKey({
+          ...base,
+          inputReference: 'https://assets.example/start.png?tenant_token=tenantB-secret',
+        }),
+      );
+    });
+
     it('should ignore all rotating Azure Blob SAS parameters', () => {
       const base = {
         provider: 'openai',

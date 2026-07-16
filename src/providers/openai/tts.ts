@@ -37,6 +37,8 @@ export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
   voice?: string | { id: string };
   instructions?: string;
+  language?: string;
+  format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   speed?: number;
 };
@@ -51,6 +53,9 @@ function getValidationError(
   }
   if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
     return `Invalid response_format: ${config.response_format}.`;
+  }
+  if (config.format && !VALID_RESPONSE_FORMATS.has(config.format)) {
+    return `Invalid format: ${config.format}.`;
   }
   if (
     config.speed !== undefined &&
@@ -189,6 +194,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       input: prompt,
       voice: config.voice || 'alloy',
       ...(config.instructions ? { instructions: config.instructions } : {}),
+      ...(config.language ? { language: config.language } : {}),
+      ...(config.format ? { format: config.format } : {}),
       ...(config.response_format ? { response_format: config.response_format } : {}),
       ...(config.speed === undefined ? {} : { speed: config.speed }),
     };
@@ -263,14 +270,15 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         }
 
         const audioBytes = Buffer.from(await response.arrayBuffer());
-        const isPcm = config.response_format === 'pcm';
+        const audioFormat = config.format || config.response_format || 'mp3';
+        const isPcm = audioFormat === 'pcm';
         const audio = (isPcm ? convertPcm16ToWav(audioBytes) : audioBytes).toString('base64');
         const isHd = model === 'tts-1-hd' || model === 'tts-1-hd-1106';
         const isLegacy = model === 'tts-1' || model === 'tts-1-1106' || isHd;
 
         const result: ProviderResponse = {
           output: `Generated ${characterCount} characters of speech`,
-          audio: { data: audio, format: isPcm ? 'wav' : config.response_format || 'mp3' },
+          audio: { data: audio, format: isPcm ? 'wav' : audioFormat },
           ...(isLegacy ? { cost: (characterCount * (isHd ? 30 : 15)) / 1e6 } : {}),
           cached: false,
           latencyMs: Date.now() - startedAt,

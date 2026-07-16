@@ -11,7 +11,6 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { getConfigDirectoryPath } from '../../util/config/manage';
-import { sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 
 import type { MediaMetadata, MediaStorageRef } from '../../storage/types';
@@ -68,9 +67,8 @@ export function generateVideoCacheKey(params: {
   let inputReference: typeof params.inputReference = params.inputReference || null;
 
   if (rawReference && /^https?:\/\//i.test(rawReference)) {
-    const safeReference = sanitizeUrl(rawReference);
     try {
-      const safeUrl = new URL(safeReference);
+      const safeUrl = new URL(rawReference);
       for (const key of Array.from(safeUrl.searchParams.keys())) {
         if (
           /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|policy$|key-pair-id$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i.test(
@@ -83,7 +81,7 @@ export function generateVideoCacheKey(params: {
       safeUrl.searchParams.sort();
       inputReference = safeUrl.toString();
     } catch {
-      inputReference = safeReference;
+      inputReference = rawReference;
     }
   }
 

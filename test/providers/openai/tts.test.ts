@@ -169,6 +169,29 @@ describe('OpenAiTtsProvider', () => {
     });
   });
 
+  it('forwards the current custom-voice language and format controls', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: {
+        apiKey: 'test-key',
+        voice: { id: 'voice_123' },
+        language: 'fr',
+        format: 'wav',
+      },
+    });
+
+    const result = await provider.callApi('Bienvenue');
+
+    expect(JSON.parse(mockedFetch.mock.calls[0][1]?.body as string)).toEqual({
+      model: 'gpt-4o-mini-tts',
+      input: 'Bienvenue',
+      voice: { id: 'voice_123' },
+      language: 'fr',
+      format: 'wav',
+    });
+    expect(result.audio?.format).toBe('wav');
+  });
+
   it('wraps raw PCM16 speech in WAV so the results UI can play it', async () => {
     mockedFetch.mockResolvedValue(audioResponse(new Uint8Array([1, 0, 2, 0, 3, 0, 4, 0])));
     const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
@@ -448,6 +471,7 @@ describe('OpenAiTtsProvider', () => {
   > = [
     ['an overlong input', { input: 'a'.repeat(4097) }, '4096 characters'],
     ['an invalid format', { config: { response_format: 'ogg' } }, 'response_format'],
+    ['an invalid custom-voice format', { config: { format: 'ogg' } }, 'format'],
     ['a speed below range', { config: { speed: 0.2 } }, '0.25 and 4'],
     ['a speed above range', { config: { speed: 4.1 } }, '0.25 and 4'],
     ['a non-finite speed', { config: { speed: Number.NaN } }, '0.25 and 4'],

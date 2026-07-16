@@ -5,6 +5,8 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
+import { fetchWithRetries } from '../../../../src/util/fetch/index';
 import { setOpenAiEnv } from './setup';
 
 describe('OpenAiResponsesProvider request building', () => {
@@ -187,6 +189,51 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.output).toBe('Partial but usable output');
     expect(updateCache).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'resp_background', status: 'incomplete' }),
+      200,
+      'OK',
+      undefined,
+    );
+  });
+
+  it('should bill a completed background job resumed from a queued cache entry', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered and billable result' }],
+            },
+          ],
+          usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Recover this task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Recovered and billable result');
+    expect(result.cached).toBe(false);
+    expect(result.cost).toBeGreaterThan(0);
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'completed' }),
       200,
       'OK',
       undefined,
@@ -394,6 +441,47 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(deleteFromCache).toHaveBeenCalledOnce();
   });
 
+  it('should cancel and evict an upstream background response after a permanent polling failure', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_forbidden', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response retrieval is forbidden' } },
+        cached: false,
+        status: 403,
+        statusText: 'Forbidden',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_forbidden', status: 'cancelled', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Stop the inaccessible task');
+
+    expect(result.error).toContain('403 Forbidden');
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('/responses/resp_forbidden/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);
@@ -512,7 +600,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(first.error).toContain('503 Service Unavailable');
     expect(second.error).toBeUndefined();
     expect(second.output).toBe('Recovered background result');
-    expect(second.cached).toBe(true);
+    expect(second.cached).toBe(false);
     expect(deleteFromCache).not.toHaveBeenCalled();
     expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
       4,
@@ -544,6 +632,225 @@ describe('OpenAiResponsesProvider request building', () => {
 
     expect(result.error).toContain('Temporary network failure');
     expect(deleteFromCache).not.toHaveBeenCalled();
+  });
+
+  it('should preserve Retry-After metadata when background polling exhausts retries', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_rate_limited', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          statusText: 'Too Many Requests',
+          code: 'rate_limit_exceeded',
+          retryAfterMs: 120000,
+          headers: { 'retry-after': '120' },
+        }),
+      );
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Poll later');
+
+    expect(result.error).toContain('Rate limit exceeded');
+    expect(result.metadata).toEqual({
+      rateLimitKind: 'rate_limit',
+      http: {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '120' },
+      },
+    });
+    expect(deleteFromCache).not.toHaveBeenCalled();
+  });
+
+  it('should honor a prompt-level retry limit when creating a background response', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: {
+        id: 'resp_no_retry',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Completed once' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 2 },
+    });
+
+    await provider.callApi('Create this once', {
+      prompt: { raw: 'Create this once', label: 'no-retry', config: { maxRetries: 0 } },
+      vars: {},
+    } as any);
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      undefined,
+      0,
+    );
+  });
+
+  it('should consume a completed streamed background response', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        `data: ${JSON.stringify({
+          type: 'response.completed',
+          response: {
+            id: 'resp_stream_background',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Streamed background result' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+        })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    });
+
+    const result = await provider.callApi('Stream the background task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Streamed background result');
+    expect(result.cached).toBe(false);
+    expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"stream":true') }),
+      expect.any(Number),
+      0,
+    );
+  });
+
+  it('should cancel a streamed background request when the eval is aborted', async () => {
+    const controller = new AbortController();
+    let streamStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      streamStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      const stream = new ReadableStream({
+        start(streamController) {
+          streamController.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({
+                type: 'response.created',
+                response: { id: 'resp_stream_background', status: 'in_progress' },
+              })}\n\n`,
+            ),
+          );
+          signal?.addEventListener('abort', () => {
+            streamController.error(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+          streamStarted?.();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_stream_background', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    });
+
+    const result = provider.callApi('Cancel this streamed background task', undefined, {
+      abortSignal: controller.signal,
+    });
+    await started;
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]?.body as string)).toMatchObject({
+      background: true,
+      stream: true,
+    });
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_stream_background/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should cancel a streamed background request when it times out after response creation', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      const stream = new ReadableStream({
+        start(streamController) {
+          streamController.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({
+                type: 'response.created',
+                response: { id: 'resp_stream_timeout', status: 'in_progress' },
+              })}\n\n`,
+            ),
+          );
+          signal?.addEventListener('abort', () => {
+            streamController.error(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_stream_timeout', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    });
+
+    const result = await provider.callApi('Time out this streamed background task');
+
+    expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_stream_timeout/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
   });
 
   it('should handle system prompts correctly', async () => {

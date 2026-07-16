@@ -1838,10 +1838,21 @@ providers:
 ```
 
 Speech input is limited to 4,096 characters. `instructions` is supported by GPT-4o mini TTS,
-not `tts-1` or `tts-1-hd`. Custom voices can be provided as `voice: { id: voice_123 }`. The legacy
-models are billed at $15 and $30 per million characters, respectively. GPT-4o mini TTS is billed
-using input and audio-output tokens; the binary speech
-response does not expose usage, so promptfoo leaves `cost` unset instead of estimating it.
+not `tts-1` or `tts-1-hd`. Custom voices can be provided as `voice: { id: voice_123 }` and support
+the current `language` and `format` fields:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:tts:gpt-4o-mini-tts
+    config:
+      voice: { id: voice_123 }
+      language: fr
+      format: wav
+```
+
+The legacy models are billed at $15 and $30 per million characters, respectively. GPT-4o mini TTS
+is billed using input and audio-output tokens; the binary speech response does not expose usage, so
+promptfoo leaves `cost` unset instead of estimating it.
 
 For authenticated custom speech gateways, provide a non-secret tenant discriminator such as
 `headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
@@ -2500,6 +2511,8 @@ automatically use appropriate timeouts:
 - If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it will be used for the API call
 - Otherwise, these long-running requests default to a 10-minute timeout (600,000ms)
 - Regular foreground requests continue to use the standard 5-minute timeout
+- Background streams preserve `stream: true`; promptfoo captures the response ID and cancels
+  upstream work when an eval stops
 
 Example:
 
