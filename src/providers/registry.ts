@@ -115,6 +115,7 @@ import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
 import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
+import { createZhipuProvider } from './zhipu';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
@@ -1412,6 +1413,19 @@ export const providerMap: ProviderFactory[] = [
       return createXAIProvider(providerPath, {
         config: providerOptions,
         env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('zhipu:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createZhipuProvider(providerPath, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
       });
     },
   },

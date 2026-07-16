@@ -110,6 +110,7 @@ providers:
 | [Simulated User](./simulated-user.md)                   | Custom - Conversation simulator                                  | `promptfoo:simulated-user`                                                                                            |
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
 | [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-1.0` |
+| [Zhipu (GLM)](./zhipu.md)                               | OpenAI-compatible Zhipu GLM chat models                          | `zhipu:glm-5.2`, `zhipu:glm-4.6`                                                                                      |
 
 ## Provider Syntax
 
