@@ -1332,7 +1332,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         usageEvents.length > 0
           ? {
               ...result.tokenUsage,
-              total: usageEvents.reduce((total, usage) => total + (usage?.total_tokens ?? 0), 0),
+              total: usageEvents.reduce(
+                (total, usage) =>
+                  total +
+                  (usage?.total_tokens ??
+                    (usage?.input_tokens ?? usage?.prompt_tokens ?? 0) +
+                      (usage?.output_tokens ?? usage?.completion_tokens ?? 0)),
+                0,
+              ),
               prompt: usageEvents.reduce(
                 (total, usage) => total + (usage?.input_tokens ?? usage?.prompt_tokens ?? 0),
                 0,

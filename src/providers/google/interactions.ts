@@ -229,6 +229,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
         headers = {
           'Content-Type': 'application/json',
+          'Api-Revision': '2026-05-20',
           Authorization: `Bearer ${token}`,
           ...config.headers,
         };

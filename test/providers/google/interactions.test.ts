@@ -506,7 +506,10 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).toHaveBeenCalledWith(
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+        headers: expect.objectContaining({
+          'Api-Revision': '2026-05-20',
+          Authorization: 'Bearer vertex-token',
+        }),
         body: JSON.stringify({
           model: 'gemini-omni-flash-preview',
           input: [{ type: 'text', text: 'A city at dusk' }],

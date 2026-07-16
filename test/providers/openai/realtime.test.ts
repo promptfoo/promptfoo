@@ -1253,9 +1253,8 @@ describe('OpenAI Realtime Provider', () => {
               type: 'response.done',
               response: {
                 usage: {
-                  total_tokens: 8,
-                  input_tokens: 5,
-                  output_tokens: 3,
+                  prompt_tokens: 5,
+                  completion_tokens: 3,
                 },
               },
             }),
@@ -1322,7 +1321,7 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.metadata?.functionCallOccurred).toBe(true);
       expect(response.metadata?.functionCallResults).toEqual(['{"call_status":"callback"}']);
       expect(response.metadata?.usageEvents).toEqual([
-        { total_tokens: 8, input_tokens: 5, output_tokens: 3 },
+        { prompt_tokens: 5, completion_tokens: 3 },
         { total_tokens: 11, input_tokens: 7, output_tokens: 4 },
       ]);
       expect(response.tokenUsage).toEqual({
