@@ -281,7 +281,7 @@ describe('GoogleInteractionsProvider', () => {
       .mockResolvedValueOnce(
         new Response(null, {
           status: 302,
-          headers: { location: 'https://storage.example/signed-video' },
+          headers: { location: 'https://storage.googleapis.com/signed-video' },
         }) as any,
       )
       .mockResolvedValueOnce(new Response(Buffer.from('redirected video')) as any);
@@ -302,7 +302,7 @@ describe('GoogleInteractionsProvider', () => {
     );
     expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
       2,
-      'https://storage.example/signed-video',
+      'https://storage.googleapis.com/signed-video',
       { method: 'GET', redirect: 'manual' },
       expect.any(Number),
     );
@@ -311,6 +311,44 @@ describe('GoogleInteractionsProvider', () => {
       'video/mp4',
       expect.any(Object),
     );
+  });
+
+  it('refuses an untrusted video-download redirect before making a second request', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [
+              {
+                type: 'video',
+                mime_type: 'video/mp4',
+                uri: 'https://generativelanguage.googleapis.com/v1beta/files/video-3:download?alt=media',
+              },
+            ],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'http://169.254.169.254/latest/meta-data' },
+      }) as any,
+    );
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('a city at dusk');
+
+    expect(result.error).toBe(
+      'Refusing untrusted Gemini interaction video redirect: http://169.254.169.254',
+    );
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 
   it('does not reuse an Omni video from a previous interaction turn', async () => {

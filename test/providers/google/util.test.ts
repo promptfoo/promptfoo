@@ -2730,9 +2730,12 @@ describe('util', () => {
       expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
     });
 
-    it('should apply cached, audio, and priority pricing for Gemini 3.5 Flash', () => {
+    it.each([
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
+    ])('should apply cached, audio, and priority pricing for %s', (modelId) => {
       const cost = calculateGoogleCost(
-        'gemini-3.5-flash',
+        modelId,
         { passthrough: { service_tier: 'priority' } },
         1_000,
         500,
@@ -2751,9 +2754,12 @@ describe('util', () => {
       );
     });
 
-    it('should apply long-context cached and priority pricing for Gemini 3.1 Pro', () => {
+    it.each([
+      'gemini-3.1-pro-preview',
+      'gemini-pro-latest',
+    ])('should apply long-context cached and priority pricing for %s', (modelId) => {
       const cost = calculateGoogleCost(
-        'gemini-3.1-pro-preview',
+        modelId,
         { service_tier: 'priority' } as any,
         250_001,
         1_000,
@@ -2795,9 +2801,12 @@ describe('util', () => {
       );
     });
 
-    it('should preserve the Gemini 3.1 Flash-Lite audio-input rate at priority tier', () => {
+    it.each([
+      'gemini-3.1-flash-lite',
+      'gemini-flash-lite-latest',
+    ])('should preserve the %s audio-input rate at priority tier', (modelId) => {
       const cost = calculateGoogleCost(
-        'gemini-3.1-flash-lite',
+        modelId,
         { service_tier: 'priority' },
         1_000,
         100,
@@ -2816,9 +2825,12 @@ describe('util', () => {
       );
     });
 
-    it('should apply Gemini 3.1 Flash-Lite flex pricing with passthrough precedence', () => {
+    it.each([
+      'gemini-3.1-flash-lite',
+      'gemini-flash-lite-latest',
+    ])('should apply %s flex pricing with passthrough precedence', (modelId) => {
       const flexCost = calculateGoogleCost(
-        'gemini-3.1-flash-lite',
+        modelId,
         { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
         1_000_000,
         100_000,
@@ -2839,8 +2851,8 @@ describe('util', () => {
     });
 
     it.each([
-      ['gemini-flash-latest', 0.3, 0.03, 1, 2.5],
-      ['gemini-flash-lite-latest', 0.1, 0.01, 0.3, 0.4],
+      ['gemini-flash-latest', 1.5, 0.15, 1, 9],
+      ['gemini-flash-lite-latest', 0.25, 0.025, 0.5, 1.5],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.7, 0.4],
     ])('uses AI Studio cached and audio rates for %s', (id, input, cached, audioInput, output) => {
       expect(
@@ -2923,12 +2935,12 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.002, 10);
     });
 
-    it('should apply catalog tiered pricing for the gemini-pro-latest alias', () => {
+    it('should apply resolved-model tiered pricing for the gemini-pro-latest alias', () => {
       const costBelowThreshold = calculateGoogleCost('gemini-pro-latest', {}, 100000, 50000);
-      expect(costBelowThreshold).toBeCloseTo(0.625, 10);
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
 
       const costAboveThreshold = calculateGoogleCost('gemini-pro-latest', {}, 250000, 50000);
-      expect(costAboveThreshold).toBeCloseTo(1.375, 10);
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
     });
 
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
@@ -2992,14 +3004,14 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
-    it('should calculate catalog cost for gemini-flash-latest', () => {
+    it('should calculate resolved-model cost for gemini-flash-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.00155, 10);
+      expect(cost).toBeCloseTo(0.006, 10);
     });
 
-    it('should calculate catalog cost for gemini-flash-lite-latest', () => {
+    it('should calculate resolved-model cost for gemini-flash-lite-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0003, 10);
+      expect(cost).toBeCloseTo(0.001, 10);
     });
 
     it('should return undefined for shutdown models', () => {

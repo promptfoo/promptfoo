@@ -300,6 +300,17 @@ export class GoogleInteractionsProvider implements ApiProvider {
           const redirectLocation = response.headers.get('location');
           if (response.status >= 300 && response.status < 400 && redirectLocation) {
             const redirectUrl = new URL(redirectLocation, downloadUrl);
+            const isTrustedRedirect =
+              redirectUrl.origin === downloadUrl.origin ||
+              (redirectUrl.protocol === 'https:' &&
+                (redirectUrl.hostname === 'storage.googleapis.com' ||
+                  redirectUrl.hostname.endsWith('.storage.googleapis.com') ||
+                  redirectUrl.hostname.endsWith('.googleusercontent.com')));
+            if (!isTrustedRedirect) {
+              return {
+                error: `Refusing untrusted Gemini interaction video redirect: ${redirectUrl.origin}`,
+              };
+            }
             response = await fetchWithTimeout(
               redirectUrl.toString(),
               {

@@ -593,6 +593,19 @@ export const AZURE_MODELS: AzureModelCost[] = [
     },
   },
   {
+    id: 'gpt-realtime-1.5',
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
+      cacheReadImage: 0.5 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+      imageInput: 5 / 1000000,
+    },
+  },
+  {
     id: 'gpt-realtime-1.5-2026-02-23',
     cost: {
       input: 4 / 1000000,
@@ -647,6 +660,15 @@ export const AZURE_MODELS: AzureModelCost[] = [
       output: 10 / 1000000,
       audioInput: 40 / 1000000,
       audioOutput: 80 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-audio-1.5',
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
     },
   },
   {

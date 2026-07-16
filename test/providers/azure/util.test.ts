@@ -232,6 +232,7 @@ describe('calculateAzureCost', () => {
   it.each([
     { id: 'gpt-realtime', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-realtime-2025-08-28', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
+    { id: 'gpt-realtime-1.5', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-realtime-1.5-2026-02-23', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-realtime-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
     {
@@ -243,6 +244,7 @@ describe('calculateAzureCost', () => {
     },
     { id: 'gpt-audio', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-audio-2025-08-28', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-audio-1.5', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
     { id: 'gpt-audio-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
     { id: 'gpt-audio-mini-2025-10-06', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
@@ -461,6 +463,15 @@ describe('calculateAzureCost', () => {
       audioOutput: 20,
     },
     {
+      id: 'gpt-realtime-1.5',
+      input: 4,
+      cachedText: 0.4,
+      cachedAudio: 0.4,
+      cachedImage: 0.5,
+      output: 16,
+      audioOutput: 64,
+    },
+    {
       id: 'gpt-realtime-1.5-2026-02-23',
       input: 4,
       cachedText: 4,
@@ -492,6 +503,7 @@ describe('calculateAzureCost', () => {
 
   it.each([
     ['gpt-realtime-mini-2025-10-06', 0.8],
+    ['gpt-realtime-1.5', 5],
     ['gpt-realtime-1.5-2026-02-23', 5],
   ])('prices uncached realtime image tokens for %s', (id, imageInput) => {
     expect(calculateAzureCost(id, {}, 100, 0, 0, 0, 0, 100)).toBeCloseTo(
@@ -754,8 +766,10 @@ describe('AZURE_MODELS cost coverage', () => {
     ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],
     ['gpt-realtime', 4, 16],
+    ['gpt-realtime-1.5', 4, 16],
     ['gpt-realtime-1.5-2026-02-23', 4, 16],
     ['gpt-audio-1.5-2026-02-23', 2.5, 10],
+    ['gpt-audio-1.5', 2.5, 10],
     ['gpt-audio-mini', 0.6, 2.4],
     ['gpt-4o-mini-transcribe', 1.25, 5],
     ['gpt-4o-mini-tts', 2.5, 10],

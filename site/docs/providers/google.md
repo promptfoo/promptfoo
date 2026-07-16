@@ -289,9 +289,9 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
 - `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
 - `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
-- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (priced with the catalog's Gemini 2.5 Pro tier)
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (priced with the catalog's Gemini 2.5 Flash tier)
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (priced with the catalog's Gemini 2.5 Flash-Lite tier)
+- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
+- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
 
 ### Embedding Models
 
