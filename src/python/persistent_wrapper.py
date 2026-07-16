@@ -8,8 +8,13 @@ via a simple control protocol over stdin/stdout.
 Protocol:
   - Node sends: "CALL|<function_name>|<request_file>|<response_file>\n"
   - Worker executes function, writes response to file
-  - Worker sends: "DONE|<response_file>\n"
+  - Worker sends: "\nDONE|<response_file>\n"
   - Node sends: "SHUTDOWN\n" to exit
+
+Control messages (READY, DONE|) are matched line-anchored by Node, so they are
+emitted with a leading newline: user code may leave stdout mid-line (a write
+without a trailing newline), and a control marker glued onto that partial line
+would never match.
 
 Data transfer uses files (proven UTF-8 handling), control uses stdin/stdout.
 Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:).
@@ -341,8 +346,9 @@ def main():
         print(traceback.format_exc(), file=sys.stderr, flush=True)
         sys.exit(1)
 
-    # Signal ready
-    print("READY", flush=True)
+    # Signal ready. Leading newline: the user module may have left stdout
+    # mid-line during import (same rationale as the \nDONE| signals below).
+    print("\nREADY", flush=True)
 
     # Main loop - wait for commands
     while True:
