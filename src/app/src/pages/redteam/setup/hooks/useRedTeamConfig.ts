@@ -1,3 +1,8 @@
+import {
+  looksLikeCredentialHeader,
+  looksLikeCredentialValue,
+  looksLikeRequestCredentialParameter,
+} from '@app/stores/evalConfig';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -46,6 +51,13 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:codex-desktop',
   'openai:codex-sdk',
   'openai:agents',
+  'openai:chatkit',
+  'openai:assistant',
+  'azure:assistant',
+  'azure:foundry-agent',
+  'bedrock:agents',
+  'bedrock:kb',
+  'bedrock:knowledge-base',
   'openinterpreter',
   'opencode',
   'opencode:sdk',
@@ -687,7 +699,13 @@ const containsRemoteToolEndpoint = (value: unknown): boolean => {
     return false;
   }
   return (
-    value.type === 'mcp' ||
+    (typeof value.type === 'string' &&
+      /^(?:mcp|(?:web_(?:search(?:_preview)?|fetch)|(?:code|computer)_(?:interpreter|execution|use)(?:_preview)?|computer|bash|text_editor|memory)(?:_\d+(?:_\d+)*)?|x_search|(?:file|collections)_search|(?:local_)?shell|apply_patch|image_generation)$/i.test(
+        value.type,
+      )) ||
+    Object.keys(value).some((name) =>
+      /^(?:google[-_]?search(?:[-_]?retrieval)?|code[-_]?execution)$/i.test(name),
+    ) ||
     value.server_url !== undefined ||
     value.serverUrl !== undefined ||
     value.connector_id !== undefined ||
@@ -695,11 +713,102 @@ const containsRemoteToolEndpoint = (value: unknown): boolean => {
   );
 };
 
-const containsCredentialHeader = (value: unknown): boolean =>
-  isPlainObject(value) &&
-  Object.keys(value).some((name) =>
-    /(?:authorization|api[-_]?key|token|secret|cookie|credential|signature)/i.test(name),
+const containsRemoteA2APushCallback = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.some(containsRemoteA2APushCallback);
+  }
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  return (
+    Object.keys(value).some((name) => /(?:task)?push[-_]?notification[-_]?config/i.test(name)) ||
+    Object.values(value).some(containsRemoteA2APushCallback)
   );
+};
+
+const looksLikeRequestCredentialField = (name: string): boolean =>
+  looksLikeRequestCredentialParameter(name) ||
+  /^(?:x[-_]?)?session(?:[-_]?(?:id|data))?$/i.test(name);
+
+const OPAQUE_CREDENTIAL_FIELDS = new Set([
+  'tools',
+  'functions',
+  'tool_choice',
+  'response_format',
+  'responseformat',
+  'response_schema',
+  'responseschema',
+  'output_schema',
+  'json_schema',
+]);
+
+const containsCredentialHeader = (value: unknown): boolean =>
+  isPlainObject(value) && Object.keys(value).some(looksLikeCredentialHeader);
+
+const containsCredentialRawHeader = (value: unknown): boolean => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const [, ...lines] = value.trim().split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.trim()) {
+      break;
+    }
+    const separator = line.indexOf(':');
+    if (separator > 0 && looksLikeCredentialHeader(line.slice(0, separator))) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const containsCredentialRequestData = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    if (
+      looksLikeCredentialValue(value.trim()) ||
+      value.split(/[\s,"'=&{}[\]()<>/?;:]+/).some((part) => looksLikeCredentialValue(part.trim()))
+    ) {
+      return true;
+    }
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (typeof parsed !== 'string' && containsCredentialRequestData(parsed)) {
+        return true;
+      }
+    } catch {}
+    const fields = value.matchAll(
+      /(?:^|[?&{,\s])(?:["']?([^"'&=:,\s{}]+)["']?\s*[:=]|name\s*=\s*["']?([^"'&=:,\s{}]+))/gi,
+    );
+    return [...fields].some((match) => {
+      const name = match[1] ?? match[2] ?? '';
+      try {
+        return looksLikeRequestCredentialField(decodeURIComponent(name.replace(/\+/g, ' ')));
+      } catch {
+        return looksLikeRequestCredentialField(name);
+      }
+    });
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsCredentialRequestData);
+  }
+  if (
+    isPlainObject(value) &&
+    value.kind === 'field' &&
+    typeof value.name === 'string' &&
+    looksLikeRequestCredentialField(value.name)
+  ) {
+    return true;
+  }
+  return (
+    isPlainObject(value) &&
+    Object.entries(value).some(
+      ([name, nested]) =>
+        looksLikeRequestCredentialField(name) ||
+        (!OPAQUE_CREDENTIAL_FIELDS.has(name.replace(/-/g, '_').toLowerCase()) &&
+          containsCredentialRequestData(nested)),
+    )
+  );
+};
 
 const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolean => {
   if (!target || !isPlainObject(target.config)) {
@@ -734,8 +843,17 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
     containsUnsafeNunjucksTemplate(target.id) ||
     containsUnsafeNunjucksTemplate(target.config) ||
     containsRemoteToolEndpoint(target.config.tools) ||
+    containsRemoteA2APushCallback(target.config.configuration) ||
+    target.config.passthrough !== undefined ||
+    target.config.extra_body !== undefined ||
+    target.config.search_parameters !== undefined ||
+    target.config.compound_custom !== undefined ||
+    (Array.isArray(target.config.connectors) && target.config.connectors.length > 0) ||
     target.config.auth !== undefined ||
+    Object.keys(target.config).some(looksLikeRequestCredentialField) ||
     containsCredentialHeader(target.config.headers) ||
+    containsCredentialRawHeader(target.config.request) ||
+    containsCredentialRequestData([target.id, target.config]) ||
     target.config.functionToolCallbacks !== undefined ||
     containsNunjucksTemplate(target.config.responseSchema) ||
     containsNunjucksTemplate(target.config.tools) ||

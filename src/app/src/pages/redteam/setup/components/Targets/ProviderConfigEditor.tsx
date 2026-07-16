@@ -91,6 +91,10 @@ function ProviderConfigEditor({
     clearTargetConfigValidation,
   } = useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
+  const isTargetConfigInvalid = useCallback(
+    () => isRedTeam && Boolean(useRedTeamTargetConfigValidation.getState().targetConfigError),
+    [isRedTeam],
+  );
   const structuredProvider = useMemo(() => getStructuredProvider(provider), [provider]);
   const preserveConfigErrorOnUnchangedConfig =
     isRedTeam &&
@@ -526,6 +530,7 @@ function ProviderConfigEditor({
           setUrlError={setUrlError}
           onTargetTested={onTargetTested}
           onSessionTested={onSessionTested}
+          isTargetConfigInvalid={isTargetConfigInvalid}
         />
       )}
 

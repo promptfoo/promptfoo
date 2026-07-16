@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { callApi } from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ import TargetConfiguration from './TargetConfiguration';
 import type { Config } from '../../types';
 
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 vi.mock('../Prompts', () => ({ default: () => null }));
 vi.mock('./CommonConfigurationOptions', () => ({ default: () => null }));
 vi.mock('react-simple-code-editor', () => ({
@@ -36,7 +38,9 @@ const replaceText = async (
   value: string,
 ) => {
   await user.click(element);
-  await user.keyboard('{Control>}a{/Control}');
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    element.setSelectionRange(0, element.value.length);
+  }
   await user.paste(value);
 };
 
@@ -194,7 +198,12 @@ describe('TargetConfiguration lifecycle validation', () => {
     render(<TargetConfigurationHarness />);
     const url = screen.getByRole('textbox', { name: label }) as HTMLInputElement;
 
-    await user.type(url, value.slice(0, 1));
+    await user.click(url);
+    if (id.startsWith('http://') || id.startsWith('https://')) {
+      url.setSelectionRange(0, url.value.length);
+    }
+
+    await user.type(url, value.slice(0, 1), { skipClick: true });
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
       'Configuration must be a JSON object',
@@ -366,6 +375,65 @@ describe('TargetConfiguration lifecycle validation', () => {
     expect(next).toBeEnabled();
     await user.click(next);
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['without config.url', { method: 'POST', body: '{"message":"{{prompt}}"}' }],
+    ['with an empty config.url', { url: '', method: 'POST', body: '{"message":"{{prompt}}"}' }],
+  ])('keeps an imported HTTP URL target visible and testable %s', (_case, config) => {
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'https://example.test/generate',
+          label: 'Imported URL target',
+          config,
+        },
+      });
+    });
+    render(<TargetConfigurationHarness />);
+
+    expect(screen.getByLabelText(/^URL/i)).toHaveValue('https://example.test/generate');
+    expect(screen.getByRole('button', { name: /Test Target/i })).toBeEnabled();
+    expect(
+      screen.queryByText(/Please configure the target URL or request before testing/i),
+    ).toBeNull();
+  });
+
+  it('blocks every HTTP test action while a preserved target configuration is invalid', async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'http',
+          label: 'Blocked target',
+          config: {
+            url: 'https://example.test/chat',
+            method: 'POST',
+            body: '{{prompt}}',
+            stateful: true,
+            transformRequest: 'return prompt',
+            transformResponse: 'return json',
+          },
+        },
+      });
+    });
+    render(<TargetConfigurationHarness />);
+    act(() => {
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+    });
+
+    expect(screen.getByRole('button', { name: /Test Target/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Test Session/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Test$/i })).toBeDisabled();
+    await user.click(screen.getByRole('tab', { name: /Request Transform/i }));
+    expect(screen.getAllByRole('button', { name: /^Test$/i })).toSatisfy((buttons: HTMLElement[]) =>
+      buttons.every((button) => button.hasAttribute('disabled')),
+    );
+    expect(callApi).not.toHaveBeenCalled();
   });
 
   it.each([

