@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -16,7 +17,6 @@ import {
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
-import { fingerprintOpenAiCacheValue } from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -554,19 +554,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       ([key, value]) =>
         !isSensitiveCacheHeader(key) && typeof value === 'string' && hasSensitiveCacheValue(value),
     );
-    const tenantCacheScope = Object.fromEntries(
-      Object.entries(safeCacheHeaders).filter(([key]) =>
-        /(?:^|[-_])(?:organization|org|project|tenant|account)(?:[-_]|$)/i.test(key),
-      ),
-    );
-    const credentialCacheScope = Object.fromEntries(
-      Object.entries(requestHeaders)
-        .filter(([key, value]) => isSensitiveCacheHeader(key) && value.trim().length > 0)
-        .map(([key, value]) => [key.toLowerCase(), fingerprintOpenAiCacheValue(value)]),
-    );
     const cacheScope = {
       ...safeCacheHeaders,
-      ...credentialCacheScope,
       ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
     };
     const usesAuthenticatedCustomEndpoint =
@@ -576,12 +565,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       !hasSensitiveCacheValue(prompt) &&
       !hasSensitiveHeaderValue &&
       !hasSensitiveUrlPath &&
-      ((!hasAuthenticatedInputReference(config.input_reference) &&
-        !usesAuthenticatedCustomEndpoint) ||
-        Object.keys(tenantCacheScope).length > 0);
+      !hasAuthenticatedInputReference(config.input_reference) &&
+      !usesAuthenticatedCustomEndpoint;
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
-      prompt: hasSensitiveCacheValue(prompt) ? fingerprintOpenAiCacheValue(prompt) : prompt,
+      prompt: canCacheVideo ? prompt : randomUUID(),
       model,
       size,
       seconds,

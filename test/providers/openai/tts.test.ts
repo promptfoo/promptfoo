@@ -321,7 +321,7 @@ describe('OpenAiTtsProvider', () => {
     expect(second).toMatchObject({ cached: true, cost: 0, audio: first.audio });
     expect(busted.cached).toBe(false);
     expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(cache.set).toHaveBeenCalledTimes(2);
+    expect(cache.set).toHaveBeenCalledOnce();
   });
 
   it('keeps custom-header tenants isolated without using secret auth headers in the cache key', async () => {
@@ -363,8 +363,8 @@ describe('OpenAiTtsProvider', () => {
     expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe('audio-for-tenant-a');
     expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe('audio-for-tenant-b');
     expect(second.cached).toBe(false);
-    expect(rotated.cached).toBe(false);
-    expect(mockedFetch).toHaveBeenCalledTimes(3);
+    expect(rotated.cached).toBe(true);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
 
   it('isolates speech cached with different per-prompt gateway credentials in one tenant', async () => {
@@ -397,7 +397,8 @@ describe('OpenAiTtsProvider', () => {
       'audio-for-Bearer user-b',
     );
     expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(cache.set.mock.calls[0]?.[0]).not.toBe(cache.set.mock.calls[1]?.[0]);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   it('does not persist speech containing an embedded credential-bearing URL', async () => {

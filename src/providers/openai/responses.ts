@@ -31,7 +31,7 @@ import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { fingerprintOpenAiCacheValue, formatOpenAiError, getTokenUsage } from './util';
+import { formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -181,10 +181,8 @@ function getBackgroundCacheIdentity(
   responseId?: string,
 ): { key: string; cacheable: boolean } {
   const cacheHeaders = Object.entries(request.headers)
-    .map(([key, value]) => [
-      key.toLowerCase(),
-      isSensitiveBackgroundCacheHeader(key) ? fingerprintOpenAiCacheValue(value) : value,
-    ])
+    .filter(([key]) => !isSensitiveBackgroundCacheHeader(key))
+    .map(([key, value]) => [key.toLowerCase(), value])
     .sort(([left], [right]) => left.localeCompare(right));
   const hasSensitiveHeader = Object.entries(request.headers).some(
     ([key, value]) => isSensitiveBackgroundCacheHeader(key) && value.trim().length > 0,
@@ -196,11 +194,13 @@ function getBackgroundCacheIdentity(
   );
   const sanitizedUrl = sanitizeUrl(url);
   const hasSensitiveUrlCredentials = sanitizedUrl !== url;
+  let sendsToOpenAiApi = false;
   let hasSensitiveUrlPath = false;
   try {
     hasSensitiveUrlPath = hasSensitiveBackgroundCacheValue(
       decodeURIComponent(new URL(url).pathname),
     );
+    sendsToOpenAiApi = new URL(url).hostname.toLowerCase() === 'api.openai.com';
   } catch {
     hasSensitiveUrlPath = true;
   }
@@ -226,7 +226,11 @@ function getBackgroundCacheIdentity(
   );
   return {
     key,
-    cacheable: !hasSensitiveBody && !hasSensitiveUrlCredentials && !hasSensitiveUrlPath,
+    cacheable:
+      !hasSensitiveBody &&
+      !hasSensitiveUrlCredentials &&
+      !hasSensitiveUrlPath &&
+      !(!sendsToOpenAiApi && hasSensitiveHeader),
   };
 }
 
@@ -544,7 +548,7 @@ async function coalesceBackgroundResponse(
       cancelOnStop,
     );
   }
-  const cacheKey = cacheIdentity.key;
+  const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
   if (!inFlight) {
     const controller = new AbortController();
@@ -1133,7 +1137,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             : {}),
           ...customHeaders,
         },
-        body: JSON.stringify(canonicalizeBackgroundCacheValue(body)),
+        body: JSON.stringify(body),
         cacheScope: this.backgroundCacheScope,
         ...(abortSignal ? { signal: abortSignal } : {}),
       };
@@ -1276,7 +1280,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             )
           : await fetchWithCache<OpenAIResponsesResponse>(
               url,
-              request,
+              {
+                method: request.method,
+                headers: request.headers,
+                body: request.body,
+                ...(request.signal ? { signal: request.signal } : {}),
+              },
               timeout,
               'json',
               this.shouldBustCache(context),

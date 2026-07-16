@@ -574,6 +574,8 @@ describe('loadApiProvider', () => {
     ['gpt-5.3-codex-spark', 'openai:speech:gpt-5.3-codex-spark'],
     ['gpt-5.3-codex-spark', 'openai:video:gpt-5.3-codex-spark'],
     ['gpt-5.3-codex-spark', 'openai:image:gpt-5.3-codex-spark'],
+    ['openai/gpt-5.3-codex-spark', 'openai:responses:openai/gpt-5.3-codex-spark'],
+    ['github/openai/gpt-5.3-codex-spark', 'openai:chat:github/openai/gpt-5.3-codex-spark'],
   ])('should reject Codex-only model %s for API route %s', async (model, route) => {
     await expect(loadApiProvider(route)).rejects.toThrow(
       `OpenAI model ${model} is only available through openai:codex-sdk`,

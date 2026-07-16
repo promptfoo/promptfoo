@@ -1044,11 +1044,10 @@ exactly one of `image_url` or `file_id`.
 Reusable Sora characters can be supplied with `characters: [{ id: char_123 }]`; at most two
 characters can be used in one generation, and the character name should also appear in the prompt.
 
-Credential-bearing image URLs and authenticated custom video gateways bypass the persistent video
-cache unless a non-secret tenant discriminator such as `headers: { X-Tenant-Id: tenant-a }` is
-configured. Authentication headers are represented by a one-way cache fingerprint so different
-gateway credentials cannot share generated media. Prompts, tenant headers, and gateway URL paths
-containing credentials always bypass persistent caching.
+Credential-bearing image URLs and authenticated custom video gateways always bypass the persistent
+video cache. Promptfoo does not place authentication headers or their fingerprints in long-lived
+cache keys. Prompts, tenant headers, and gateway URL paths containing credentials also bypass
+persistent caching.
 Provider and per-prompt headers are sent for video creation, status polling, and content downloads
 so routed gateways can authorize the full job lifecycle.
 
@@ -1867,15 +1866,12 @@ promptfoo leaves `cost` unset instead of estimating it.
 Use `passthrough` to send experimental speech fields or gateway-specific request options that do
 not yet have a dedicated provider setting.
 
-For custom speech gateways authenticated through headers or URL credentials, provide a non-secret
-tenant discriminator such as
-`headers: { X-Tenant-Id: tenant-a }` to enable safe response caching. Without one, promptfoo skips
-the speech cache to prevent responses from being shared across gateway tenants. Authentication
-headers are represented by a one-way cache fingerprint, preventing differently authenticated calls
-within a tenant from sharing audio. Speech inputs, instructions, passthrough values, tenant
-headers, and gateway URL paths containing credentials always bypass persistent caching. Header
-credentials such as `authorization` or `x-api-key` satisfy the provider's authentication
-requirement; a separate OpenAI API key is not needed.
+Custom speech gateways authenticated through headers or URL credentials always bypass the speech
+cache. Promptfoo does not place authentication headers or their fingerprints in long-lived cache
+keys, preventing differently authenticated calls from sharing audio. Speech inputs, instructions,
+passthrough values, tenant headers, and gateway URL paths containing credentials also bypass
+persistent caching. Header credentials such as `authorization` or `x-api-key` satisfy the
+provider's authentication requirement; a separate OpenAI API key is not needed.
 
 ### Audio transcription
 

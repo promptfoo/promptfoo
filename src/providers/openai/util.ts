@@ -1,5 +1,3 @@
-import { createHmac } from 'node:crypto';
-
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
@@ -11,15 +9,6 @@ import type { ProviderConfig } from '../shared';
 const ajv = getAjv();
 
 const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
-const OPENAI_CACHE_SECRET_HMAC_KEY = 'promptfoo:openai:cache-secret:v1';
-
-export function fingerprintOpenAiCacheValue(value: unknown): string {
-  const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-  return createHmac('sha256', OPENAI_CACHE_SECRET_HMAC_KEY)
-    .update(serialized ?? String(value))
-    .digest('hex');
-}
-
 type OpenAIModelCost = {
   input: number;
   output: number;

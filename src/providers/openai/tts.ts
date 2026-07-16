@@ -10,7 +10,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { fingerprintOpenAiCacheValue, OPENAI_TTS_MODELS } from './util';
+import { OPENAI_TTS_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -267,10 +267,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     };
     const cacheHeaders = Object.fromEntries(
       Object.entries(requestHeaders)
-        .map(([key, value]) => [
-          key.toLowerCase(),
-          isSensitiveCacheHeader(key) ? fingerprintOpenAiCacheValue(value) : value,
-        ])
+        .filter(([key]) => !isSensitiveCacheHeader(key))
+        .map(([key, value]) => [key.toLowerCase(), value])
         .sort(([left], [right]) => left.localeCompare(right)),
     );
     const hasSensitiveHeaderValue = Object.entries(requestHeaders).some(
@@ -281,7 +279,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       JSON.stringify(
         canonicalizeCacheValue({
           url: sanitizeUrl(url),
-          body: hasSensitiveBody ? fingerprintOpenAiCacheValue(body) : body,
+          body: hasSensitiveBody ? '[sensitive]' : body,
           headers: cacheHeaders,
         }),
       ),
@@ -317,11 +315,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       !hasSensitiveBody &&
       !hasSensitiveHeaderValue &&
       !hasSensitiveUrlPath &&
-      !(
-        (usesAuthenticatedCustomEndpoint ||
-          (typeof body.voice === 'object' && body.voice !== null)) &&
-        !hasTenantDiscriminator
-      );
+      !usesAuthenticatedCustomEndpoint &&
+      !(typeof body.voice === 'object' && body.voice !== null && !hasTenantDiscriminator);
 
     if (cacheEnabled && !this.shouldBustCache(context)) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);
@@ -370,7 +365,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
           latencyMs: Date.now() - startedAt,
         };
 
-        if (cacheEnabled) {
+        if (cacheEnabled && !this.shouldBustCache(context)) {
           await cacheResponse(cacheKey, result);
         }
 

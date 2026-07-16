@@ -73,6 +73,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('This is a test response');
     expect(result.tokenUsage?.total).toBe(30);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]).not.toHaveProperty('cacheScope');
   });
 
   it('should let lowercase Authorization replace the default Responses credential', async () => {
@@ -1021,6 +1022,46 @@ describe('OpenAiResponsesProvider request building', () => {
       'Completed resp_repeat_1',
       'Completed resp_repeat_2',
     ]);
+  });
+
+  it('should isolate background polling across repeat cache namespaces when upstream reuses an ID', async () => {
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return {
+          data: { id: 'resp_same_id', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_same_id') && options?.method === 'GET') {
+        polls++;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          data: {
+            id: 'resp_same_id',
+            status: 'completed',
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'Idempotency-Key': 'fixed' } },
+    });
+
+    await Promise.all([
+      cache.withCacheNamespace('repeat:0', () => provider.callApi('Repeated background task')),
+      cache.withCacheNamespace('repeat:1', () => provider.callApi('Repeated background task')),
+    ]);
+
+    expect(polls).toBe(2);
   });
 
   it('should return a clear error and evict a cancelled background response', async () => {
@@ -2488,9 +2529,10 @@ describe('OpenAiResponsesProvider request building', () => {
           schema: {
             type: 'object' as const,
             properties: {
-              result: { type: 'string' },
+              z_last: { type: 'string' },
+              a_first: { type: 'string' },
             },
-            required: ['result'],
+            required: ['z_last', 'a_first'],
             additionalProperties: false,
           },
         },
@@ -2512,6 +2554,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(body.text.format.name).toBe('TestSchema');
     expect(body.text.format.schema).toBeDefined();
     expect(body.text.format.strict).toBe(true);
+    expect(Object.keys(body.text.format.schema.properties)).toEqual(['z_last', 'a_first']);
   });
 
   it('should handle JSON object prompt correctly', async () => {

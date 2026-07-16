@@ -1651,7 +1651,7 @@ describe('OpenAiVideoProvider', () => {
       expect(fsPromises.writeFile).not.toHaveBeenCalled();
     });
 
-    it('should include non-secret routed-gateway headers in the video cache identity', async () => {
+    it('should not persist videos from authenticated routed gateways', async () => {
       const config = {
         apiKey: 'gateway-secret',
         apiBaseUrl: 'https://gateway.example/v1',
@@ -1684,10 +1684,8 @@ describe('OpenAiVideoProvider', () => {
         config: { ...config, headers: { ...config.headers, 'X-User-Id': 'bob', 'X-Route': 'red' } },
       }).callApi('Same routed prompt');
 
-      expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(fsPromises.writeFile).mock.calls[0]![0]).not.toBe(
-        vi.mocked(fsPromises.writeFile).mock.calls[1]![0],
-      );
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
     });
     it('should wrap base64 input_reference in the documented image_url object', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
