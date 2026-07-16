@@ -29,7 +29,16 @@ import { countTests, normalizePrompts, normalizeProviders } from './setupReadine
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
-import type { ProviderCatalogResponse } from '@promptfoo/types/api/providers';
+
+type ProviderCatalogResponse =
+  | {
+      success: true;
+      data: {
+        providers: ProviderOptions[];
+        hasCustomConfig: boolean;
+      };
+    }
+  | { success: false; error: string };
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
