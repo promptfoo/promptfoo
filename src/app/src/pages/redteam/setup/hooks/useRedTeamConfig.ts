@@ -17,6 +17,23 @@ interface RecentlyUsedPlugins {
 }
 
 const NUM_RECENT_PLUGINS = 6;
+const STRUCTURED_FOUNDATION_PROVIDER_TYPES = [
+  'openai',
+  'anthropic',
+  'google',
+  'vertex',
+  'mistral',
+  'cohere',
+  'groq',
+  'deepseek',
+  'azure',
+  'bedrock',
+  'openrouter',
+  'perplexity',
+  'cerebras',
+];
+let recoverableNonObjectTargetMarker: string | null = null;
+let recoverableValidImportTargetMarker: string | null = null;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== 'object' || value === null) {
@@ -48,6 +65,46 @@ const isPersistedNonObjectTargetDraft = (draft: string | null): boolean => {
   }
 };
 
+const isValidMultipartConfig = (multipart: unknown): boolean => {
+  if (
+    !isPlainObject(multipart) ||
+    !Array.isArray(multipart.parts) ||
+    multipart.parts.length === 0
+  ) {
+    return false;
+  }
+
+  return multipart.parts.every((part: unknown) => {
+    if (!isPlainObject(part) || typeof part.name !== 'string') {
+      return false;
+    }
+    if (part.kind === 'field') {
+      return ['string', 'number', 'boolean'].includes(typeof part.value);
+    }
+    if (part.kind !== 'file' || !isPlainObject(part.source)) {
+      return false;
+    }
+    if (
+      ['filename', 'filenameTemplate', 'contentType'].some(
+        (key) => part[key] !== undefined && typeof part[key] !== 'string',
+      )
+    ) {
+      return false;
+    }
+    if (part.source.type === 'path') {
+      return typeof part.source.path === 'string';
+    }
+    return (
+      part.source.type === 'generated' &&
+      (part.source.generator === undefined || part.source.generator === 'basic-document') &&
+      (part.source.format === undefined ||
+        (typeof part.source.format === 'string' &&
+          ['pdf', 'png', 'jpeg', 'jpg'].includes(part.source.format))) &&
+      (part.source.text === undefined || typeof part.source.text === 'string')
+    );
+  });
+};
+
 const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolean => {
   const providerType = getProviderType(target?.id);
   const isHttpTarget = providerType === 'http' || providerType === 'https';
@@ -60,11 +117,24 @@ const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolea
     return false;
   }
 
+  if (isHttpTarget && target.config.multipart) {
+    const method = target.config.method;
+    if (
+      !isValidMultipartConfig(target.config.multipart) ||
+      target.config.request ||
+      target.config.body != null ||
+      (method !== undefined && typeof method !== 'string') ||
+      (typeof method === 'string' && ['GET', 'HEAD'].includes(method.toUpperCase()))
+    ) {
+      return false;
+    }
+  }
+
   if (isHttpTarget && target.config.request !== undefined) {
     return typeof target.config.request === 'string' && target.config.request.trim().length > 0;
   }
 
-  const url = target.config.url;
+  const url = target.config.url || target.id;
   if (typeof url !== 'string' || !url.trim()) {
     return false;
   }
@@ -122,10 +192,30 @@ const prepareNonObjectTargetRecovery = (
 ): (() => void) | null => {
   const targetConfigValidation = useRedTeamTargetConfigValidation.getState();
   const targetConfigInvalidMarker = getCurrentTargetConfigInvalidMarker();
+  if (!targetConfigValidation.targetConfigError || !targetConfigInvalidMarker) {
+    return null;
+  }
   const providerType = getProviderType(effectiveTarget?.id);
   const isStructuredEndpointTarget = ['http', 'https', 'websocket', 'ws', 'wss'].includes(
     providerType ?? '',
   );
+  const isRecoverableStructuredTarget =
+    isStructuredEndpointTarget || STRUCTURED_FOUNDATION_PROVIDER_TYPES.includes(providerType ?? '');
+  const isNonObjectTargetError =
+    targetConfigValidation.targetConfigError === 'Configuration must be a JSON object';
+  let matchesValidImportDraft = false;
+  if (
+    targetConfigValidation.targetConfigError === 'Invalid JSON configuration' &&
+    isPlainObject(replacedTargetConfig) &&
+    targetConfigValidation.targetConfigDraft !== null
+  ) {
+    try {
+      const parsedDraft = JSON.parse(targetConfigValidation.targetConfigDraft);
+      matchesValidImportDraft =
+        isPlainObject(parsedDraft) &&
+        JSON.stringify(parsedDraft) === JSON.stringify(replacedTargetConfig);
+    } catch {}
+  }
   let replacedMatchingNonObjectTarget = false;
   if (replacedTargetConfig !== undefined && !isPlainObject(replacedTargetConfig)) {
     try {
@@ -134,13 +224,56 @@ const prepareNonObjectTargetRecovery = (
         targetConfigValidation.targetConfigDraft;
     } catch {}
   }
+  const matchesPersistedNonObjectTarget =
+    !replacedMatchingNonObjectTarget &&
+    isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft);
+  if (
+    targetConfigInvalidMarker &&
+    (replacedMatchingNonObjectTarget || matchesPersistedNonObjectTarget)
+  ) {
+    recoverableNonObjectTargetMarker = targetConfigInvalidMarker;
+  }
+  if (targetConfigInvalidMarker && matchesValidImportDraft) {
+    recoverableValidImportTargetMarker = targetConfigInvalidMarker;
+  }
+  const canRetryValidImport =
+    replacedTargetConfig !== undefined &&
+    recoverableValidImportTargetMarker === targetConfigInvalidMarker &&
+    targetConfigValidation.targetConfigError === 'Invalid JSON configuration';
+  let targetConfigChanged = false;
+  try {
+    targetConfigChanged =
+      replacedTargetConfig !== undefined &&
+      JSON.stringify(effectiveTarget?.config) !== JSON.stringify(replacedTargetConfig);
+  } catch {}
+  const canRecoverHydratedInvalidTarget =
+    replacedTargetConfig !== undefined &&
+    targetConfigChanged &&
+    isRecoverableStructuredTarget &&
+    targetConfigValidation.targetConfigError === 'Invalid JSON configuration' &&
+    targetConfigValidation.targetConfigDraft === null &&
+    targetConfigInvalidMarker?.startsWith('invalid-import-json:') === true;
+  const canRecoverHydratedNonObjectTarget =
+    replacedTargetConfig !== undefined &&
+    targetConfigChanged &&
+    isRecoverableStructuredTarget &&
+    isNonObjectTargetError &&
+    targetConfigValidation.targetConfigDraft === null &&
+    targetConfigInvalidMarker?.startsWith('non-object-json:') === true;
   if (
     !isPlainObject(effectiveTarget?.config) ||
-    targetConfigValidation.targetConfigError !== 'Configuration must be a JSON object' ||
+    (!isNonObjectTargetError &&
+      !matchesValidImportDraft &&
+      !canRetryValidImport &&
+      !canRecoverHydratedInvalidTarget) ||
     !targetConfigInvalidMarker ||
-    (!replacedMatchingNonObjectTarget &&
-      !isPersistedNonObjectTargetDraft(targetConfigValidation.targetConfigDraft) &&
-      !isStructuredEndpointTarget) ||
+    (isNonObjectTargetError &&
+      !replacedMatchingNonObjectTarget &&
+      !matchesPersistedNonObjectTarget &&
+      (replacedTargetConfig === undefined ||
+        recoverableNonObjectTargetMarker !== targetConfigInvalidMarker) &&
+      !(isStructuredEndpointTarget && targetConfigValidation.targetConfigDraft !== null) &&
+      !canRecoverHydratedNonObjectTarget) ||
     !isValidStructuredEndpoint(effectiveTarget)
   ) {
     return null;
@@ -490,7 +623,12 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           set({ config: normalizedConfig, providerType });
         } catch (error) {
           const currentTargetConfigValidation = useRedTeamTargetConfigValidation.getState();
-          if (!currentTargetConfigValidation.targetConfigError) {
+          if (
+            currentTargetConfigValidation.targetConfigError ===
+            'Configuration must be a JSON object'
+          ) {
+            recoverableNonObjectTargetMarker = getCurrentTargetConfigInvalidMarker();
+          } else {
             let targetConfigDraft = 'null';
             try {
               targetConfigDraft =
@@ -499,6 +637,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             currentTargetConfigValidation.replaceTargetConfigValidation(
               'Invalid JSON configuration',
               targetConfigDraft,
+              'import',
             );
           }
           throw error;
@@ -557,9 +696,12 @@ useRedTeamConfig.subscribe(() => {
 });
 
 registerTargetConfigReconciler((config) => {
-  useRedTeamConfig.setState({
-    config,
-    providerType: getProviderType(config.target?.id),
-  });
-  return true;
+  void useRedTeamConfig.persist.rehydrate();
+  try {
+    return (
+      JSON.stringify(useRedTeamConfig.getState().config.target) === JSON.stringify(config.target)
+    );
+  } catch {
+    return false;
+  }
 });

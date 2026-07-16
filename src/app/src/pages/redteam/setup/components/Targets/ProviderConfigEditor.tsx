@@ -109,6 +109,18 @@ function ProviderConfigEditor({
     isRedTeam ? (targetConfigError ?? null) : null,
   );
   const previousProviderType = useRef(providerType);
+  const providerRef = useRef(provider);
+
+  useEffect(() => {
+    providerRef.current = provider;
+  }, [provider]);
+
+  useEffect(() => {
+    if (isRedTeam && !targetConfigError && customConfigError) {
+      setCustomConfigError(null);
+      setError?.(null);
+    }
+  }, [isRedTeam, targetConfigError, customConfigError, setError]);
 
   const handleCustomConfigErrorChange = (
     error: string | null,
@@ -198,14 +210,15 @@ function ProviderConfigEditor({
     // Shallow-clone the config along with the target so subsequent
     // assignments and `delete` don't mutate the original provider object
     // by reference (which is React state owned by our parent).
+    const currentProvider = providerRef.current;
     const updatedTarget = {
-      ...provider,
-      config: { ...structuredProvider.config },
+      ...currentProvider,
+      config: { ...getStructuredProvider(currentProvider).config },
     } as ProviderOptions;
 
     if (field === 'id') {
       updatedTarget.id = value as string;
-      if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
+      if (shouldRemoveMcpConfig(currentProvider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
       }
     } else if (field === 'url') {
@@ -280,13 +293,15 @@ function ProviderConfigEditor({
       updatedTarget.config[field] = value;
     }
 
+    providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
 
   const updateWebSocketTarget = (field: string, value: unknown) => {
+    const currentProvider = providerRef.current;
     const updatedTarget = {
-      ...provider,
-      config: { ...structuredProvider.config },
+      ...currentProvider,
+      config: { ...getStructuredProvider(currentProvider).config },
     } as ProviderOptions;
     if (field === 'url') {
       updatedTarget.config.url = value as string;
@@ -307,6 +322,7 @@ function ProviderConfigEditor({
     } else if (field === 'label') {
       updatedTarget.label = value as string;
     }
+    providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
 
@@ -317,7 +333,8 @@ function ProviderConfigEditor({
       // Check if we're in raw mode (using request field) or structured mode (using url field)
       if (structuredProvider.config.request === undefined) {
         // Structured mode: validate URL
-        if (!structuredProvider.config.url || !validateUrl(structuredProvider.config.url)) {
+        const url = structuredProvider.config.url || provider.id;
+        if (!url || !validateUrl(url)) {
           errors.push('Valid URL is required');
         }
       } else {
@@ -331,10 +348,8 @@ function ProviderConfigEditor({
         errors.push(bodyError);
       }
     } else if (providerType === 'websocket') {
-      if (
-        !structuredProvider.config.url ||
-        !validateUrl(structuredProvider.config.url, 'websocket')
-      ) {
+      const url = structuredProvider.config.url || provider.id;
+      if (!url || !validateUrl(url, 'websocket')) {
         errors.push('Valid WebSocket URL is required');
       }
     } else if (

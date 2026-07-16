@@ -97,14 +97,21 @@ export const registerTargetConfigReconciler = (reconciler: (config: Config) => b
   reconcileTargetConfig = reconciler;
 };
 
-const getTargetConfigMarkerFromError = (error: string): string => {
-  const kind = error === 'Configuration must be a JSON object' ? 'non-object-json' : 'invalid-json';
+const getTargetConfigMarkerFromError = (error: string, source?: 'import'): string => {
+  const kind =
+    error === 'Configuration must be a JSON object'
+      ? 'non-object-json'
+      : source === 'import'
+        ? 'invalid-import-json'
+        : 'invalid-json';
   const token = `${Date.now().toString(36)}-${(targetConfigMarkerSequence++).toString(36)}-${Math.random().toString(36).slice(2)}`;
   return `${kind}:${token}`;
 };
 
 const getTargetConfigMarkerToken = (marker: string | null): string | null => {
-  const match = marker?.match(/^(?:invalid-json|non-object-json)(?::([a-z0-9-]+))?$/);
+  const match = marker?.match(
+    /^(?:invalid-json|invalid-import-json|non-object-json)(?::([a-z0-9-]+))?$/,
+  );
   return match ? (match[1] ?? 'legacy') : null;
 };
 
@@ -115,7 +122,9 @@ const getTargetConfigErrorFromMarker = (marker: string | null): string | null =>
   if (marker?.startsWith('non-object-json')) {
     return 'Configuration must be a JSON object';
   }
-  return marker?.startsWith('invalid-json') ? 'Invalid JSON configuration' : null;
+  return marker?.startsWith('invalid-json') || marker?.startsWith('invalid-import-json')
+    ? 'Invalid JSON configuration'
+    : null;
 };
 
 const getTargetConfigCookieMarker = (): string | null => {
@@ -153,7 +162,7 @@ const getStoredTargetConfigError = (): string | null => {
   const snapshot = getPersistedTargetSnapshot();
   const consumedTokens = new Set<string>();
   if (snapshot) {
-    for (const marker of markers.slice(1)) {
+    for (const marker of markers) {
       if (!isClearMessage(marker)) {
         continue;
       }
@@ -300,6 +309,7 @@ const persistTargetConfigError = (
   error: string | null,
   broadcast = true,
   existingMarker?: string | null,
+  source?: 'import',
 ) => {
   if (typeof window === 'undefined') {
     return;
@@ -310,7 +320,7 @@ const persistTargetConfigError = (
     return;
   }
 
-  const marker = existingMarker ?? getTargetConfigMarkerFromError(error);
+  const marker = existingMarker ?? getTargetConfigMarkerFromError(error, source);
   currentTargetConfigInvalidMarker = marker;
   let persistedLocally = false;
   try {
@@ -404,7 +414,7 @@ interface RedTeamTargetConfigValidationState {
   targetConfigRevision: number;
   setTargetConfigError: (error: string | null) => void;
   setTargetConfigDraft: (draft: string | null) => void;
-  replaceTargetConfigValidation: (error: string, draft: string) => void;
+  replaceTargetConfigValidation: (error: string, draft: string, source?: 'import') => void;
   clearTargetConfigValidation: (
     expectedSerializedTarget?: string,
     incrementRevision?: boolean,
@@ -435,8 +445,8 @@ export const useRedTeamTargetConfigValidation = create<RedTeamTargetConfigValida
         persistTargetConfigDraftError(targetConfigError);
       }
     },
-    replaceTargetConfigValidation: (targetConfigError, targetConfigDraft) => {
-      persistTargetConfigError(targetConfigError);
+    replaceTargetConfigValidation: (targetConfigError, targetConfigDraft, source) => {
+      persistTargetConfigError(targetConfigError, true, undefined, source);
       set((state) => ({
         targetConfigError,
         targetConfigDraft,

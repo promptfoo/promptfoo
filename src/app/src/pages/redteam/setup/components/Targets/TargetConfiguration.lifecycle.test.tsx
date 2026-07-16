@@ -315,6 +315,7 @@ describe('TargetConfiguration lifecycle validation', () => {
 
   it('recovers an imported foundation target after a structured field replaces its null config', async () => {
     const user = userEvent.setup();
+    const onNext = vi.fn();
     act(() => {
       useRedTeamConfig.getState().setFullConfig({
         ...useRedTeamConfig.getState().config,
@@ -325,7 +326,7 @@ describe('TargetConfiguration lifecycle validation', () => {
         },
       });
     });
-    render(<TargetConfigurationHarness />);
+    render(<TargetConfigurationHarness onNext={onNext} />);
     expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
 
     await replaceText(user, screen.getByLabelText(/Model ID/i), 'openai:gpt-5-mini');
@@ -337,7 +338,73 @@ describe('TargetConfiguration lifecycle validation', () => {
     });
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
-    expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
+    const next = screen.getByRole('button', { name: /Next/i });
+    expect(next).toBeEnabled();
+    await user.click(next);
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      'HTTP URL target',
+      'https://example.test/generate',
+      { method: 'POST', body: '{"message":"{{prompt}}"}' },
+    ],
+    ['WebSocket URL target', 'wss://example.test/socket', { messageTemplate: '{{prompt}}' }],
+  ])('allows a valid imported %s whose endpoint is stored in the provider ID', async (_case, id, targetConfig) => {
+    const user = userEvent.setup();
+    const onNext = vi.fn();
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: { id, label: 'Imported URL target', config: targetConfig },
+      });
+    });
+    render(<TargetConfigurationHarness onNext={onNext} />);
+
+    const next = screen.getByRole('button', { name: /Next/i });
+    expect(next).toBeEnabled();
+    await user.click(next);
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      'enabling',
+      {
+        url: 'wss://example.test/socket',
+        messageTemplate: '{{prompt}}',
+        transformResponse: 'data.message',
+      },
+      'streamResponse',
+      'transformResponse',
+    ],
+    [
+      'disabling',
+      {
+        url: 'wss://example.test/socket',
+        messageTemplate: '{{prompt}}',
+        streamResponse: '(acc, event) => [acc, true]',
+      },
+      'transformResponse',
+      'streamResponse',
+    ],
+  ])('persists both WebSocket config updates when %s streaming', async (_case, targetConfig, populatedField, clearedField) => {
+    const user = userEvent.setup();
+    act(() => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: { id: 'websocket', label: 'WebSocket target', config: targetConfig },
+      });
+    });
+    render(<TargetConfigurationHarness />);
+
+    await user.click(screen.getByRole('switch', { name: /Stream Response/i }));
+
+    expect(useRedTeamConfig.getState().config.target.config[populatedField]).toEqual(
+      expect.any(String),
+    );
+    expect(useRedTeamConfig.getState().config.target.config[clearedField]).toBeUndefined();
   });
 
   it.each([
