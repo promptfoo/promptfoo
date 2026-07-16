@@ -173,8 +173,22 @@ describe('calculateAzureCost', () => {
   });
 
   it.each([
+    { id: 'gpt-realtime', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
+    { id: 'gpt-realtime-2025-08-28', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-realtime-1.5-2026-02-23', input: 4, output: 16, audioInput: 32, audioOutput: 64 },
+    { id: 'gpt-realtime-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
+    {
+      id: 'gpt-realtime-mini-2025-10-06',
+      input: 0.6,
+      output: 2.4,
+      audioInput: 10,
+      audioOutput: 20,
+    },
+    { id: 'gpt-audio', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-audio-2025-08-28', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
     { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-audio-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
+    { id: 'gpt-audio-mini-2025-10-06', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
   ])('uses the correct audio-token rates for $id', ({
     id,
     input,

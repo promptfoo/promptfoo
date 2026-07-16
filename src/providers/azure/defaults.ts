@@ -490,11 +490,21 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-realtime',
-    cost: { input: 4 / 1000000, output: 16 / 1000000 },
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-2025-08-28',
-    cost: { input: 4 / 1000000, output: 16 / 1000000 },
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-1.5-2026-02-23',
@@ -507,19 +517,39 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-realtime-mini',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-mini-2025-10-06',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-audio',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-2025-08-28',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-1.5-2026-02-23',
@@ -532,11 +562,21 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-audio-mini',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-mini-2025-10-06',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
 
   // =============================================================================
