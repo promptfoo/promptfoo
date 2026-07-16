@@ -44,6 +44,28 @@ function hasSameRealtimeConnection(
   return [...headerNames].every((name) => currentHeaders[name] === nextHeaders[name]);
 }
 
+function countRealtimeInputImages(prompt: string): number {
+  try {
+    const parsed = JSON.parse(prompt) as unknown;
+    const count = (value: unknown): number => {
+      if (Array.isArray(value)) {
+        return value.reduce<number>((total, item) => total + count(item), 0);
+      }
+      if (!value || typeof value !== 'object') {
+        return 0;
+      }
+      const record = value as Record<string, unknown>;
+      return (
+        (record.type === 'input_image' || record.type === 'image_url' ? 1 : 0) +
+        Object.values(record).reduce<number>((total, item) => total + count(item), 0)
+      );
+    };
+    return count(parsed);
+  } catch {
+    return 0;
+  }
+}
+
 export class AzureRealtimeProvider extends AzureGenericProvider {
   private readonly realtimeProviders = new Map<string, OpenAiRealtimeProvider>();
   private registeredForShutdown = false;
@@ -107,6 +129,9 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       : this.authHeaders;
     const realtimeBaseUrl = getAzureRealtimeBaseUrl(baseUrl);
     const realtimeUrl = new URL(realtimeBaseUrl);
+    const conversationId = context?.test?.metadata?.conversationId;
+    const hasConversationId =
+      typeof conversationId === 'string' || typeof conversationId === 'number';
     const realtimeConfig: OpenAiRealtimeOptions = {
       ...effectiveConfig,
       apiHost:
@@ -115,7 +140,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
           : undefined,
       apiBaseUrl: realtimeBaseUrl,
       apiKey: effectiveApiKey ?? bearerToken,
-      maintainContext: effectiveConfig.maintainContext ?? true,
+      maintainContext: hasConversationId && (effectiveConfig.maintainContext ?? true),
       headers: {
         ...inheritedAuthHeaders,
         ...effectiveConfig.headers,
@@ -123,12 +148,10 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       },
     };
 
-    const conversationId = context?.test?.metadata?.conversationId;
     const promptId = context?.prompt ? generateIdFromPrompt(context.prompt) : 'default';
-    const realtimeProviderKey =
-      typeof conversationId === 'string' || typeof conversationId === 'number'
-        ? `prompt:${promptId}:conversation:${conversationId}`
-        : 'stateless';
+    const realtimeProviderKey = hasConversationId
+      ? `prompt:${promptId}:conversation:${conversationId}`
+      : 'stateless';
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
 
     if (realtimeProvider && !hasSameRealtimeConnection(realtimeProvider.config, realtimeConfig)) {
@@ -154,6 +177,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
 
     const result = await realtimeProvider.callApi(prompt, context, callApiOptions);
     const reportedUsageEvents = result.metadata?.usageEvents;
+    const inputImageCount = countRealtimeInputImages(prompt);
     const usageEvents: any[] =
       Array.isArray(reportedUsageEvents) && reportedUsageEvents.length > 0
         ? reportedUsageEvents
@@ -179,6 +203,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
         inputDetails?.cached_tokens_details?.audio_tokens,
         inputDetails?.cached_tokens_details?.image_tokens,
         outputDetails?.image_tokens,
+        inputImageCount,
       );
 
       return typeof total === 'number' && typeof usageCost === 'number'
@@ -193,6 +218,14 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
             effectiveConfig,
             result.tokenUsage?.prompt,
             result.tokenUsage?.completion,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            inputImageCount,
           );
     const tokenUsage =
       usageEvents.length > 0

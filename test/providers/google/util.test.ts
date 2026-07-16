@@ -3012,6 +3012,7 @@ describe('util', () => {
         'gemini-2.5-flash-preview-05-20',
         'gemini-2.5-flash-preview-09-2025',
         'gemini-2.5-flash-lite-preview-09-2025',
+        'gemini-2.5-flash-lite-preview-06-17',
         'gemini-2.0-pro',
         'gemini-2.0-flash-exp',
         'gemini-2.0-flash-thinking-exp',

@@ -287,6 +287,47 @@ describe('AzureRealtimeProvider', () => {
     expect(mockCallApi).toHaveBeenCalledTimes(2);
   });
 
+  it('does not retain context across stateless realtime evaluations', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key', maintainContext: true },
+    });
+
+    await provider.callApi('first independent prompt');
+    await provider.callApi('second independent prompt');
+
+    expect(vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value.config.maintainContext).toBe(
+      false,
+    );
+  });
+
+  it('prices a realtime input image once instead of once per image token', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      output: 'an image',
+      tokenUsage: { prompt: 100, completion: 0, total: 100 },
+      metadata: {
+        usage: {
+          input_tokens: 100,
+          input_token_details: { text_tokens: 0, image_tokens: 100 },
+          output_tokens: 0,
+        },
+      },
+    });
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+
+    const result = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [{ type: 'input_image', image_url: 'data:image/jpeg;base64,aW1hZ2U=' }],
+        },
+      ]),
+    );
+
+    expect(result.cost).toBeCloseTo(5 / 1e6, 12);
+  });
+
   it('isolates persistent realtime delegates by conversation ID', async () => {
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
       config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },

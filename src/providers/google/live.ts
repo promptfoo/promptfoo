@@ -44,7 +44,7 @@ const formatContentMessages = (
   const parts = contents[contentIndex].parts;
 
   if (useRealtimeTextInput) {
-    const contentMessages = parts.map((part) => {
+    const mappedMessages = parts.map((part) => {
       const userPart = part as {
         text?: string;
         inlineData?: { mimeType: string; data: string };
@@ -77,14 +77,17 @@ const formatContentMessages = (
       }
       throw new Error('Unsupported part in Google Live realtime input.');
     });
+    const textMessages = mappedMessages.filter((message) => 'text' in message.realtime_input);
+    const contentMessages = mappedMessages.filter((message) => !('text' in message.realtime_input));
     if (contentMessages.some((message) => 'audio' in message.realtime_input)) {
       contentMessages.push({ realtime_input: { audio_stream_end: true } } as any);
     } else if (
       contentMessages.some((message) => 'video' in message.realtime_input) &&
-      !contentMessages.some((message) => 'text' in message.realtime_input)
+      textMessages.length === 0
     ) {
       contentMessages.push({ client_content: { turn_complete: true } } as any);
     }
+    contentMessages.push(...textMessages);
     return contentMessages;
   }
 
@@ -634,8 +637,7 @@ export class GoogleLiveProvider implements ApiProvider {
           );
           const videoInputPerSecond = GOOGLE_MODELS.find((model) => model.id === this.modelName)
             ?.cost?.videoInputPerSecond;
-          const billVideoPerSecond =
-            videoFrameCount > 0 && videoInputPerSecond !== undefined && videoPromptTokens > 0;
+          const billVideoPerSecond = videoFrameCount > 0 && videoInputPerSecond !== undefined;
 
           result.tokenUsage = {
             prompt: promptTokens,

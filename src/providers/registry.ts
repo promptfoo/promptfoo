@@ -388,6 +388,11 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
+        if (deploymentName === 'gpt-realtime-whisper') {
+          throw new Error(
+            'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.',
+          );
+        }
         return new AzureRealtimeProvider(deploymentName, providerOptions);
       }
       if (modelType === 'video') {

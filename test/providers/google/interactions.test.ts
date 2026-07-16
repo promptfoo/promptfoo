@@ -217,6 +217,38 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
+  it('renders a configured Gemini API-key template before authentication', async () => {
+    vi.stubEnv('GOOGLE_API_KEY', 'rendered-google-key');
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/5' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: '{{ env.GOOGLE_API_KEY }}' },
+    });
+
+    await provider.callApi('A city at dusk');
+
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'rendered-google-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+    vi.unstubAllEnvs();
+  });
+
   it.each([
     [{ GOOGLE_API_HOST: 'proxy-host.example' }, 'https://proxy-host.example/v1beta/interactions'],
     [

@@ -282,8 +282,8 @@ describe('GoogleLiveProvider', () => {
 
     const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
     expect(sentMessages.slice(1)).toEqual([
-      { realtime_input: { text: 'Describe this image.' } },
       { realtime_input: { video: { mime_type: 'image/jpeg', data: 'aW1hZ2U=' } } },
+      { realtime_input: { text: 'Describe this image.' } },
     ]);
   });
 
@@ -543,6 +543,39 @@ describe('GoogleLiveProvider', () => {
     );
 
     expect(response.cost).toBeCloseTo(2 * 0.000033333333333333335 + (100 * 4.5) / 1e6, 12);
+  });
+
+  it('should bill Gemini 3.1 Live video frames when modality-token details are absent', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateTextMessage(mockWs, 'video received');
+          simulateMessage(mockWs, { serverContent: { generationComplete: true } });
+          simulateMessage(mockWs, {
+            serverContent: { turnComplete: true },
+            usageMetadata: { promptTokenCount: 10, responseTokenCount: 100, totalTokenCount: 110 },
+          });
+        }, 20);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        { role: 'user', parts: [{ inline_data: { mime_type: 'image/jpeg', data: 'ZnJhbWU=' } }] },
+      ]),
+    );
+
+    expect(response.cost).toBeCloseTo(0.000033333333333333335 + (10 * 0.75 + 100 * 4.5) / 1e6, 12);
   });
 
   it('should price a documented Gemini 2.5 Live model when usage metadata is returned', async () => {

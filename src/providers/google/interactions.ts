@@ -1,6 +1,7 @@
 import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
+import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
@@ -112,10 +113,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     );
-    const apiKey =
+    const rawApiKey =
       GoogleAuthManager.getApiKey(config, this.env).apiKey ||
       this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
       getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
+    const apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
     if (!apiKey) {
       return {
         error:

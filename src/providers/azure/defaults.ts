@@ -576,7 +576,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
-      imageInput: 5 / 1000000,
+      imageInputPerImage: 5 / 1000000,
     },
   },
   {
@@ -589,7 +589,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
-      imageInput: 5 / 1000000,
+      imageInputPerImage: 5 / 1000000,
     },
   },
   {
@@ -602,7 +602,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
-      imageInput: 5 / 1000000,
+      imageInputPerImage: 5 / 1000000,
     },
   },
   {
@@ -615,7 +615,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       cacheReadImage: 0.08 / 1000000,
       audioInput: 10 / 1000000,
       audioOutput: 20 / 1000000,
-      imageInput: 0.8 / 1000000,
+      imageInputPerImage: 0.8 / 1000000,
     },
   },
   {
@@ -628,7 +628,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
       cacheReadImage: 0.08 / 1000000,
       audioInput: 10 / 1000000,
       audioOutput: 20 / 1000000,
-      imageInput: 0.8 / 1000000,
+      imageInputPerImage: 0.8 / 1000000,
     },
   },
   {
