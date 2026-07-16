@@ -31,6 +31,12 @@ const STRUCTURED_FOUNDATION_PROVIDER_TYPES = [
   'openrouter',
   'perplexity',
   'cerebras',
+  'xai',
+  'cloudflare-ai',
+  'ai21',
+  'voyage',
+  'fireworks',
+  'huggingface',
 ];
 const AGENTIC_PROVIDER_IDS = [
   'anthropic:claude-agent-sdk',
@@ -121,14 +127,15 @@ const isValidHttpUrlOrTemplate = (value: unknown): boolean => {
   if (typeof value !== 'string' || !value.trim()) {
     return false;
   }
-  if (/{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value)) {
-    return true;
-  }
+  const containsTemplate = /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
+  const normalizedValue = containsTemplate
+    ? value.replace(/{{[\s\S]*?}}|{%[\s\S]*?%}|{#[\s\S]*?#}/g, 'placeholder')
+    : value;
   try {
-    const url = new URL(value);
+    const url = new URL(normalizedValue);
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
   } catch {
-    return false;
+    return containsTemplate && /^(?:{{|{%|{#)/.test(value.trim());
   }
 };
 
@@ -688,6 +695,12 @@ const containsRemoteToolEndpoint = (value: unknown): boolean => {
   );
 };
 
+const containsCredentialHeader = (value: unknown): boolean =>
+  isPlainObject(value) &&
+  Object.keys(value).some((name) =>
+    /(?:authorization|api[-_]?key|token|secret|cookie|credential|signature)/i.test(name),
+  );
+
 const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolean => {
   if (!target || !isPlainObject(target.config)) {
     return true;
@@ -721,6 +734,8 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
     containsUnsafeNunjucksTemplate(target.id) ||
     containsUnsafeNunjucksTemplate(target.config) ||
     containsRemoteToolEndpoint(target.config.tools) ||
+    target.config.auth !== undefined ||
+    containsCredentialHeader(target.config.headers) ||
     target.config.functionToolCallbacks !== undefined ||
     containsNunjucksTemplate(target.config.responseSchema) ||
     containsNunjucksTemplate(target.config.tools) ||
@@ -735,6 +750,7 @@ const hasExecutableTargetConfig = (target: Config['target'] | undefined): boolea
         [
           'apiBaseUrl',
           'apiHost',
+          'apiEndpoint',
           'baseURL',
           'baseUrl',
           'base_url',
@@ -864,7 +880,7 @@ const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolea
 
   if (isHttpTarget) {
     return (
-      (isTemplatedHttpUrl ||
+      ((isTemplatedHttpUrl && isValidHttpUrlOrTemplate(url)) ||
         (['http:', 'https:'].includes(protocol ?? '') && !hasUrlCredentials)) &&
       Boolean(target.config.body || target.config.multipart || target.config.method === 'GET')
     );
@@ -905,6 +921,7 @@ const isValidStructuredEndpoint = (target: Config['target'] | undefined): boolea
   }
   return (
     ['ws:', 'wss:'].includes(protocol ?? '') &&
+    !hasUrlCredentials &&
     typeof target.config.messageTemplate === 'string' &&
     target.config.messageTemplate.trim().length > 0 &&
     (target.config.headers === undefined || isValidHeaders(target.config.headers)) &&

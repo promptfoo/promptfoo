@@ -247,6 +247,16 @@ it.each([
     'browser',
     { steps: [{ action: 'navigate', args: { url: 'https://example.test' } }], headless: true },
   ],
+  ['xAI', 'xai:responses:grok-4.3', { temperature: 0.2 }],
+  ['Cloudflare AI', 'cloudflare-ai:chat:@cf/meta/llama-3', { temperature: 0.2 }],
+  ['AI21', 'ai21:jamba-1.5-mini', { temperature: 0.2 }],
+  ['Voyage', 'voyage:voyage-3', { inputType: 'document' }],
+  [
+    'Fireworks',
+    'fireworks:chat:accounts/fireworks/models/llama-v3p1-8b-instruct',
+    { temperature: 0.2 },
+  ],
+  ['Hugging Face', 'huggingface:text-generation:gpt2', { temperature: 0.2 }],
 ])('recovers a %s target after a non-object import fails and the tab reloads', async (_case, id, config) => {
   const { useRedTeamConfig } = await import('./useRedTeamConfig');
   useRedTeamConfig.getState().setFullConfig({
@@ -300,6 +310,16 @@ it.each([
     'browser',
     { steps: [{ action: 'navigate', args: { url: 'https://example.test' } }], headless: true },
   ],
+  ['xAI', 'xai:responses:grok-4.3', { temperature: 0.2 }],
+  ['Cloudflare AI', 'cloudflare-ai:chat:@cf/meta/llama-3', { temperature: 0.2 }],
+  ['AI21', 'ai21:jamba-1.5-mini', { temperature: 0.2 }],
+  ['Voyage', 'voyage:voyage-3', { inputType: 'document' }],
+  [
+    'Fireworks',
+    'fireworks:chat:accounts/fireworks/models/llama-v3p1-8b-instruct',
+    { temperature: 0.2 },
+  ],
+  ['Hugging Face', 'huggingface:text-generation:gpt2', { temperature: 0.2 }],
 ])('recovers a %s target after a valid import fails and the tab reloads', async (_case, id, config) => {
   const { useRedTeamConfig } = await import('./useRedTeamConfig');
   useRedTeamConfig.getState().setFullConfig({
@@ -392,6 +412,60 @@ it.each([
     },
   ],
   ['HTTP raw request file', 'http', { request: 'file:///tmp/request.txt' }],
+  [
+    'HTTP templated URL credentials',
+    'http',
+    {
+      url: 'https://user:secret@attacker.test/chat/{{prompt}}',
+      body: '{{prompt}}',
+      method: 'POST',
+    },
+  ],
+  [
+    'A2A templated URL credentials',
+    'a2a:https://user:secret@attacker.test/a2a/{{prompt}}',
+    { url: 'https://user:secret@attacker.test/a2a/{{prompt}}' },
+  ],
+  [
+    'HTTP templated raw-host credentials',
+    'http',
+    { request: 'POST /chat HTTP/1.1\nHost: user:secret@attacker.test/{{prompt}}\n\n{{prompt}}' },
+  ],
+  [
+    'WebSocket URL credentials',
+    'websocket',
+    { url: 'wss://alice:secret@attacker.test/chat', messageTemplate: '{{prompt}}' },
+  ],
+  [
+    'HTTP bearer auth',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      auth: { type: 'bearer', token: 'sk-secret' },
+    },
+  ],
+  [
+    'HTTP authorization header',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      headers: { Authorization: 'Bearer sk-secret' },
+    },
+  ],
+  [
+    'HTTP basic auth',
+    'http',
+    {
+      url: 'https://attacker.test/chat',
+      method: 'POST',
+      body: '{{prompt}}',
+      auth: { type: 'basic', username: 'alice', password: 'secret' },
+    },
+  ],
   [
     'HTTP environment header',
     'http',
@@ -611,6 +685,36 @@ it.each([
     'anthropic:messages:claude-sonnet-4-5',
     { apiBaseUrl: 'https://attacker.test/v1' },
   ],
+  [
+    'xAI credential endpoint override',
+    'xai:responses:grok-4.3',
+    { apiBaseUrl: 'https://attacker.test/v1' },
+  ],
+  [
+    'Cloudflare AI credential endpoint override',
+    'cloudflare-ai:chat:@cf/meta/llama-3',
+    { apiBaseUrl: 'https://attacker.test/v1' },
+  ],
+  [
+    'AI21 credential endpoint override',
+    'ai21:jamba-1.5-mini',
+    { apiBaseUrl: 'https://attacker.test/v1' },
+  ],
+  [
+    'Voyage credential endpoint override',
+    'voyage:voyage-3',
+    { apiBaseUrl: 'https://attacker.test/v1' },
+  ],
+  [
+    'Fireworks credential endpoint override',
+    'fireworks:chat:accounts/fireworks/models/llama-v3p1-8b-instruct',
+    { apiBaseUrl: 'https://attacker.test/v1' },
+  ],
+  [
+    'Hugging Face credential endpoint override',
+    'huggingface:text-generation:gpt2',
+    { apiEndpoint: 'https://attacker.test/inference' },
+  ],
   ['Google credential endpoint override', 'google:gemini-3-pro', { apiHost: 'attacker.test' }],
   [
     'Bedrock credential endpoint override',
@@ -808,6 +912,20 @@ it.each([
     { ANTHROPIC_BASE_URL: 'https://attacker.test/v1' },
   ],
   ['Google', 'google:gemini-3-pro', { GOOGLE_API_HOST: 'attacker.test' }],
+  ['xAI', 'xai:responses:grok-4.3', { XAI_API_BASE_URL: 'https://attacker.test/v1' }],
+  [
+    'Cloudflare AI',
+    'cloudflare-ai:chat:@cf/meta/llama-3',
+    { CLOUDFLARE_API_BASE_URL: 'https://attacker.test/v1' },
+  ],
+  ['AI21', 'ai21:jamba-1.5-mini', { AI21_API_BASE_URL: 'https://attacker.test/v1' }],
+  ['Voyage', 'voyage:voyage-3', { VOYAGE_API_BASE_URL: 'https://attacker.test/v1' }],
+  [
+    'Fireworks',
+    'fireworks:chat:accounts/fireworks/models/llama-v3p1-8b-instruct',
+    { FIREWORKS_API_BASE_URL: 'https://attacker.test/v1' },
+  ],
+  ['Hugging Face', 'huggingface:text-generation:gpt2', { HF_TOKEN: 'secret' }],
 ])('does not unlock a hydrated %s target with a top-level environment endpoint override', async (_case, id, env) => {
   const { useRedTeamConfig } = await import('./useRedTeamConfig');
   useRedTeamConfig.getState().setFullConfig({
