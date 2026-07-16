@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Zhipu AI (GLM) provider demo
+
+prompts:
+  - 'In one sentence, summarise: {{passage}}'
+
+providers:
+  - id: zhipu:glm-5.2
+    label: 'GLM-5.2 (reasoning on)'
+    config:
+      max_tokens: 2048
+      thinking:
+        type: enabled
+      showThinking: true
+
+  - id: zhipu:glm-4.6
+    label: 'GLM-4.6 (reasoning off)'
+    config:
+      max_tokens: 1024
+      thinking:
+        type: disabled
+
+tests:
+  - vars:
+      passage: |
+        On the surface, the Antikythera mechanism was a corroded lump of bronze pulled from a Roman-era
+        shipwreck off Greece in 1901. Decades of x-ray and tomographic analysis revealed it to be an
+        intricate analogue computer, with dozens of geared dials that tracked the Sun and Moon, predicted
+        eclipses, and modelled the irregular motion of the lunar orbit using an epicyclic gear train.
+    assert:
+      - type: icontains-any
+        value: [Antikythera, mechanism, computer, gears, astronomical]
+  - vars:
+      passage: |
+        Edsger Dijkstra argued that programs should be derived from their specifications through a
+        chain of small, verifiable steps. He took particular issue with the unrestricted use of GOTO,
+        which he believed encouraged jumping around in code in ways that made formal reasoning about
+        program correctness much harder than it needed to be.
+    assert:
+      - type: icontains-any
+        value: [Dijkstra, GOTO, correctness, specification]

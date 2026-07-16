@@ -214,6 +214,7 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   // Meta's Model API documents MODEL_API_KEY as its official env var.
   meta: 'MODEL_API_KEY',
   moonshot: 'MOONSHOT_API_KEY',
+  zhipu: 'ZHIPU_API_KEY',
   perplexity: 'PERPLEXITY_API_KEY',
   hyperbolic: 'HYPERBOLIC_API_KEY',
   cerebras: 'CEREBRAS_API_KEY',
