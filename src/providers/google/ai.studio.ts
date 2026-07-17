@@ -370,11 +370,19 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
       ...passthrough,
-      ...(Array.isArray(requestPassthroughTools)
-        ? { tools: [...requestTools, ...requestPassthroughTools] }
-        : requestPassthroughTools === undefined
-          ? {}
-          : { tools: requestPassthroughTools }),
+      // Normalize a single-object passthrough `tools` value to a one-element array and
+      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
+      // stays the array shape the Gemini API requires.
+      ...(requestPassthroughTools === undefined
+        ? {}
+        : {
+            tools: [
+              ...requestTools,
+              ...(Array.isArray(requestPassthroughTools)
+                ? requestPassthroughTools
+                : [requestPassthroughTools]),
+            ],
+          }),
       ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
 

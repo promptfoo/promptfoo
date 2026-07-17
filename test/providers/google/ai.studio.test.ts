@@ -1706,6 +1706,45 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toEqual([{ codeExecution: {} }]);
     });
 
+    it('merges a single-object passthrough tool with config tools instead of dropping them', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ googleSearch: {} }],
+          // Tools enabled + a single-object (non-array) passthrough.tools value: this must
+          // still send `tools` as an array and keep the config googleSearch tool.
+          passthrough: {
+            tools: { codeExecution: {} },
+          },
+        } as any,
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(Array.isArray(body.tools)).toBe(true);
+      expect(body.tools).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
+    });
+
     it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
