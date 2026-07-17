@@ -286,19 +286,16 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         value.trim().length > 0,
     );
     let sendsToOpenAiApi = false;
-    try {
-      sendsToOpenAiApi = new URL(url).hostname.toLowerCase() === 'api.openai.com';
-    } catch {
-      // Leave malformed custom URLs to the request path to validate.
-    }
     let hasSensitiveUrlCredentials = false;
     let hasSensitiveUrlPath = false;
     try {
       const parsedUrl = new URL(url);
+      sendsToOpenAiApi = parsedUrl.hostname.toLowerCase() === 'api.openai.com';
       const normalizedUrl = parsedUrl.toString();
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedUrl) !== normalizedUrl;
       hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname));
     } catch {
+      // Treat a malformed URL as non-OpenAI and sensitive; the request path validates it.
       hasSensitiveUrlCredentials = true;
       hasSensitiveUrlPath = true;
     }

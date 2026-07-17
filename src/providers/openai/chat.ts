@@ -250,10 +250,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const capabilityModelName =
-      typeof config.passthrough?.model === 'string'
-        ? config.passthrough.model.replace(/(^|\/)ft:/, '$1')
-        : this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    const passthroughModel =
+      typeof config.passthrough?.model === 'string' ? config.passthrough.model : undefined;
+    const capabilityModelName = (passthroughModel ?? this.getCapabilityModelName()).replace(
+      /(^|\/)ft:/,
+      '$1',
+    );
     const isGPT5Model =
       this.isGPT5Model() ||
       capabilityModelName.startsWith('gpt-5') ||
@@ -266,7 +268,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isPassthroughReasoningModel =
-      typeof config.passthrough?.model === 'string' && (isGPT5Model || isOSeriesModel);
+      passthroughModel !== undefined && (isGPT5Model || isOSeriesModel);
     const isReasoningModel = this.isReasoningModel() || isGPT5Model || isOSeriesModel;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
