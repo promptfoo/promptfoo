@@ -22,7 +22,9 @@ import {
   withCacheNamespace,
 } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
@@ -450,6 +452,200 @@ describe('fetchWithCache', () => {
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
+    it('should defer cache writes until the caller commits a validated response', async () => {
+      const invalidSignal = new AbortController().signal;
+      const validSignal = new AbortController().signal;
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(
+            true,
+            JSON.stringify({ result: [{ vars: { prompt: 'valid' } }] }),
+          ),
+        );
+
+      const [invalidResult, validResult] = await Promise.all([
+        fetchWithCache<string>(url, { signal: invalidSignal }, 1000, 'text', {
+          deferCacheWrite: true,
+        }),
+        fetchWithCache<string>(url, { signal: validSignal }, 1000, 'text', {
+          deferCacheWrite: true,
+        }),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(invalidResult.data).toBe('not-json');
+      expect(invalidResult.commitToCache).toBeInstanceOf(Function);
+      await validResult.commitToCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: validResult.data });
+    });
+
+    it('should not let an older deferred response overwrite a newer commit', async () => {
+      const olderSignal = new AbortController().signal;
+      const newerSignal = new AbortController().signal;
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'older', 'text/plain'))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'newer', 'text/plain'));
+
+      const olderResult = await fetchWithCache<string>(url, { signal: olderSignal }, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      const newerResult = await fetchWithCache<string>(url, { signal: newerSignal }, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+
+      await newerResult.commitToCache?.();
+      await olderResult.commitToCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: 'newer' });
+    });
+
+    it('should not let an older deferred response overwrite a newer immediate write', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'older-deferred', 'text/plain'))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'newer-immediate', 'text/plain'));
+
+      const olderResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      await fetchWithCache<string>(url, {}, 1000, 'text');
+      await olderResult.commitToCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: 'newer-immediate' });
+    });
+
+    it('should not let an older immediate response overwrite a newer deferred commit', async () => {
+      let markOlderStarted: () => void = () => {};
+      let resolveOlderResponse: (response: Response) => void = () => {};
+      const olderStarted = new Promise<void>((resolve) => {
+        markOlderStarted = resolve;
+      });
+      const olderResponse = new Promise<Response>((resolve) => {
+        resolveOlderResponse = resolve;
+      });
+      mockFetchWithRetries
+        .mockImplementationOnce(async () => {
+          markOlderStarted();
+          return olderResponse;
+        })
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'newer-deferred', 'text/plain'));
+
+      const olderResultPromise = fetchWithCache<string>(url, {}, 1000, 'text');
+      await olderStarted;
+      const newerResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      await newerResult.commitToCache?.();
+      resolveOlderResponse(mockFetchWithRetriesResponse(true, 'older-immediate', 'text/plain'));
+      await olderResultPromise;
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: 'newer-deferred' });
+    });
+
+    it('should serialize stale eviction with a newer deferred commit', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(true, JSON.stringify({ result: ['valid'] })),
+        )
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'));
+
+      const validResult = await fetchWithCache<string>(
+        url,
+        { signal: new AbortController().signal },
+        1000,
+        'text',
+        { deferCacheWrite: true },
+      );
+      await fetchWithCache<string>(url, {}, 1000, 'text');
+      const staleInvalidResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      const cache = getCache();
+      const originalGet = cache.get;
+      const originalSet = cache.set;
+      let releaseGet: () => void = () => {};
+      let markGetStarted: () => void = () => {};
+      const getStarted = new Promise<void>((resolve) => {
+        markGetStarted = resolve;
+      });
+      const getBlocked = new Promise<void>((resolve) => {
+        releaseGet = resolve;
+      });
+      const getMock = vi.fn(async (key: string) => {
+        const value = await originalGet.call(cache, key);
+        markGetStarted();
+        await getBlocked;
+        return value;
+      });
+      const setMock = vi.fn((...args: Parameters<typeof cache.set>) =>
+        originalSet.apply(cache, args),
+      );
+      Object.assign(cache, { get: getMock, set: setMock });
+
+      try {
+        const staleEviction = staleInvalidResult.deleteFromCache?.();
+        await getStarted;
+        const setCallsBeforeCommit = setMock.mock.calls.length;
+        const validCommit = validResult.commitToCache?.();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(setMock).toHaveBeenCalledTimes(setCallsBeforeCommit);
+
+        releaseGet();
+        await Promise.all([staleEviction, validCommit]);
+      } finally {
+        Object.assign(cache, { get: originalGet, set: originalSet });
+      }
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: validResult.data });
+    });
+
+    it('should refetch a text response after the caller evicts it', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(true, JSON.stringify({ result: ['recovered'] })),
+        );
+
+      const firstResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      await firstResult.deleteFromCache?.();
+      const secondResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult).toMatchObject({ cached: false, data: 'not-json' });
+      expect(secondResult).toMatchObject({
+        cached: false,
+        data: JSON.stringify({ result: ['recovered'] }),
+      });
+    });
+
+    it('should not log cached response bodies', async () => {
+      const sensitiveResponse = JSON.stringify({ apiKey: 'cache-response-secret' });
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, sensitiveResponse),
+      );
+
+      try {
+        await fetchWithCache<string>(url, {}, 1000, 'text');
+        await fetchWithCache<string>(url, {}, 1000, 'text');
+
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('cache-response-secret');
+      } finally {
+        debugSpy.mockRestore();
+      }
+    });
+
     it('should return cached false to all concurrent callers on a cache miss', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValue(mockResponse);
@@ -475,6 +671,64 @@ describe('fetchWithCache', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult.data).toEqual(response);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should isolate concurrent requests with different retry budgets', async () => {
+      let resolveFirst: ((response: Response) => void) | undefined;
+      let resolveSecond: ((response: Response) => void) | undefined;
+      mockFetchWithRetries
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+
+      const noRetry = withFetchRetryContext(0, () =>
+        fetchWithCache(url, { retryOnStatusCodes: [503] }, 1000),
+      );
+      const retryOnce = withFetchRetryContext(1, () =>
+        fetchWithCache(url, { retryOnStatusCodes: [503] }, 1000),
+      );
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(2));
+      resolveFirst?.(mockFetchWithRetriesResponse(true, { data: 'no retry' }));
+      resolveSecond?.(mockFetchWithRetriesResponse(true, { data: 'retry once' }));
+
+      await expect(Promise.all([noRetry, retryOnce])).resolves.toHaveLength(2);
+    });
+
+    it('should isolate concurrent requests with different retry status policies', async () => {
+      let resolveFirst: ((response: Response) => void) | undefined;
+      let resolveSecond: ((response: Response) => void) | undefined;
+      mockFetchWithRetries
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+
+      const retry500 = fetchWithCache(url, { retryOnStatusCodes: [500] }, 1000);
+      const retry503 = fetchWithCache(url, { retryOnStatusCodes: [503] }, 1000);
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(2));
+      resolveFirst?.(mockFetchWithRetriesResponse(true, { data: 'retry 500' }));
+      resolveSecond?.(mockFetchWithRetriesResponse(true, { data: 'retry 503' }));
+
+      await expect(Promise.all([retry500, retry503])).resolves.toHaveLength(2);
     });
 
     it('should isolate in-flight fetch deduping by namespace', async () => {
@@ -1181,6 +1435,63 @@ describe('fetchWithCache', () => {
         cached: true,
         data: { data: 'ordered-options' },
       });
+    });
+
+    it('should cache requests with canonicalized retry status policies', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'retry-policy' }),
+      );
+
+      const firstResult = await fetchWithCache(url, { retryOnStatusCodes: [503, 500, 503] }, 1000);
+      const secondResult = await fetchWithCache(url, { retryOnStatusCodes: [500, 503] }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(firstResult.cached).toBe(false);
+      expect(secondResult).toMatchObject({
+        cached: true,
+        data: { data: 'retry-policy' },
+      });
+    });
+
+    it('should treat empty and omitted retry status policies as equivalent', async () => {
+      mockFetchWithRetries.mockResolvedValue(
+        mockFetchWithRetriesResponse(true, { data: 'default retry policy' }),
+      );
+
+      const omitted = await fetchWithCache(url, {}, 1000);
+      const empty = await fetchWithCache(url, { retryOnStatusCodes: [] }, 1000);
+      const explicitUndefined = await fetchWithCache(url, { retryOnStatusCodes: undefined }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(omitted.cached).toBe(false);
+      expect(empty.cached).toBe(true);
+      expect(explicitUndefined.cached).toBe(true);
+    });
+
+    it('should reuse successful cached responses across retry status policies', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'successful response' }),
+      );
+
+      const firstResult = await fetchWithCache(url, { retryOnStatusCodes: [500] }, 1000);
+      const secondResult = await fetchWithCache(url, { retryOnStatusCodes: [501] }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(firstResult).toMatchObject({ cached: false, data: { data: 'successful response' } });
+      expect(secondResult).toMatchObject({ cached: true, data: { data: 'successful response' } });
+    });
+
+    it('should reject invalid retry status policies before consulting a warm cache', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'cached response' }),
+      );
+      await fetchWithCache(url, {}, 1000);
+
+      await expect(fetchWithCache(url, { retryOnStatusCodes: null } as any, 1000)).rejects.toThrow(
+        'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
     });
 
     it('should isolate cached responses by requested response format', async () => {

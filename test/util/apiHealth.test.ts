@@ -64,6 +64,53 @@ describe('API Health Utilities', () => {
   });
 
   describe('checkRemoteHealth', () => {
+    it('should propagate cancellation without starting a health request', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(checkRemoteHealth('https://test.api/health', controller.signal)).rejects.toBe(
+        controller.signal.reason,
+      );
+      expect(mockedFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it('should propagate cancellation during an in-flight health request', async () => {
+      const controller = new AbortController();
+      mockedFetchWithTimeout.mockImplementationOnce(async (_url, options) => {
+        return new Promise<Response>((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      });
+
+      const healthPromise = checkRemoteHealth('https://test.api/health', controller.signal);
+      controller.abort();
+
+      await expect(healthPromise).rejects.toBe(controller.signal.reason);
+      expect(mockedFetchWithTimeout).toHaveBeenCalledWith(
+        'https://test.api/health',
+        expect.objectContaining({ signal: controller.signal }),
+        5000,
+      );
+    });
+
+    it('should preserve late cancellation when response parsing also fails', async () => {
+      const controller = new AbortController();
+      const abortReason = new DOMException('Cancelled', 'AbortError');
+      mockedFetchWithTimeout.mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          controller.abort(abortReason);
+          throw new SyntaxError('Invalid JSON');
+        },
+      } as unknown as Response);
+
+      await expect(checkRemoteHealth('https://test.api/health', controller.signal)).rejects.toBe(
+        abortReason,
+      );
+    });
+
     it('should return OK status when API is healthy', async () => {
       mockIsEnabled.mockReturnValue(false);
       mockedFetchWithTimeout.mockResolvedValueOnce({

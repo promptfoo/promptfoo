@@ -505,13 +505,53 @@ The fifth argument accepts either the legacy boolean cache-bust flag or an optio
 ```typescript
 export async function fetchWithCache<T>(
   url: string,
-  options?: RequestInit,
+  options?: FetchOptions,
   timeout?: number,
   format?: 'json' | 'text',
-  bustOrOptions?: boolean | { bust?: boolean; repeatIndex?: number },
+  bustOrOptions?:
+    | boolean
+    | {
+        bust?: boolean;
+        deferCacheWrite?: boolean;
+        repeatIndex?: number;
+      },
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>>;
+
+interface FetchOptions extends RequestInit {
+  compress?: boolean;
+  disableTransientRetries?: boolean;
+  retryOnStatusCodes?: readonly number[];
+}
+
+interface FetchWithCacheResult<T> {
+  data: T;
+  cached: boolean;
+  status: number;
+  statusText: string;
+  headers?: Record<string, string>;
+  latencyMs?: number;
+  commitToCache?: () => Promise<void>;
+  deleteFromCache?: () => Promise<void>;
+}
 ```
+
+`retryOnStatusCodes` explicitly opts selected HTTP statuses into the shared retry budget, including
+for non-idempotent methods when the request body is replayable. Use it only when an endpoint's
+contract makes replay safe.
+
+`maxRetries` is normalized to a non-negative integer. Non-finite values fall back to the default of
+4 retries.
+
+Set `deferCacheWrite` when the caller must validate a successful HTTP response before caching it.
+On a cacheable miss, call the optional callback with `await result.commitToCache?.()` only after
+validation succeeds. The callback is absent for cache hits, bypassed caching, and responses that
+cannot be cached. If validation rejects an existing cached response, call
+`await result.deleteFromCache?.()` before retrying; deletion is conditional and will not remove a
+newer response written concurrently by another call in the same process. For overlapping calls in
+one process, an older response does not replace a newer committed response while that newer cache
+entry remains, whether either write is deferred or immediate. Ordering is not coordinated across
+processes and resets when the cache entry expires or is evicted.
 
 **Example:**
 

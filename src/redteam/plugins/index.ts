@@ -5,6 +5,13 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import {
+  type ApiProvider,
+  type PluginActionParams,
+  type PluginConfig,
+  type TestCase,
+  TestCaseSchema,
+} from '../../types/index';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
@@ -80,7 +87,6 @@ import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
@@ -98,6 +104,44 @@ type PluginClass<T extends PluginConfig> = new (
 ) => RedteamPluginBase;
 
 const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
+
+class RemoteGenerationFailure extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RemoteGenerationFailure';
+  }
+}
+
+async function suppressRemoteGenerationFailure(
+  operation: () => Promise<TestCase[]>,
+): Promise<TestCase[]> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof RemoteGenerationFailure) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function evictCachedRemoteResponse(
+  cached: boolean,
+  deleteFromCache: (() => Promise<void>) | undefined,
+): Promise<void> {
+  if (cached) {
+    await deleteFromCache?.();
+  }
+}
+
+function isRemoteGeneratedTestCase(value: unknown, injectVar: string): value is TestCase {
+  if (!TestCaseSchema.safeParse(value).success) {
+    return false;
+  }
+
+  const vars = (value as TestCase).vars;
+  return vars !== undefined && Object.hasOwn(vars, injectVar);
+}
 
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).
@@ -288,17 +332,31 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
     action: async (params: PluginActionParams) => {
       const maxCharsPerMessage = getMaxCharsPerMessageFromConfig(params.config);
       if (!maxCharsPerMessage) {
-        return pluginFactory.action(params);
+        return suppressRemoteGenerationFailure(() => pluginFactory.action(params));
       }
 
       let retryInstructions: string | undefined;
+      let remoteGenerationFailed = false;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
+        if (remoteGenerationFailed) {
+          return [];
+        }
+
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
-        const generatedTestCases = await pluginFactory.action({
-          ...params,
-          n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
-        });
+        let generatedTestCases: TestCase[];
+        try {
+          generatedTestCases = await pluginFactory.action({
+            ...params,
+            n: Math.max(params.n - currentTestCases.length, 0),
+            config: retryConfig,
+          });
+        } catch (error) {
+          if (error instanceof RemoteGenerationFailure) {
+            remoteGenerationFailed = true;
+            return [];
+          }
+          throw error;
+        }
 
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
@@ -345,20 +403,25 @@ async function fetchRemoteTestCases(
   n: number,
   config: PluginConfig,
   redteamGenerationContext?: RedteamGenerationContext | string,
+  abortSignal?: AbortSignal,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
+  abortSignal?.throwIfAborted();
+
   // Health check remote before generating test cases
   const remoteHealth = await checkRemoteHealth(
     getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
+    abortSignal,
   );
+  abortSignal?.throwIfAborted();
 
   if (remoteHealth.status !== 'OK') {
     logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
-    return [];
+    throw new RemoteGenerationFailure(`Remote health check failed for ${key}`);
   }
 
   // Strip graderExamples before sending - they're not used during generation,
@@ -385,32 +448,110 @@ async function fetchRemoteTestCases(
   });
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
+    error?: unknown;
     result?: TestCase[];
   }
 
   try {
-    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
+    const {
+      cached,
+      commitToCache,
+      data: responseText,
+      deleteFromCache,
+      status,
+      statusText,
+    } = await fetchWithCache<string>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),
         body,
+        signal: abortSignal,
+        // Retry this endpoint's bounded task/gateway failure set. This is at-least-once:
+        // an ambiguous failure can duplicate remote generation work.
+        retryOnStatusCodes: [500, 502, 503, 504, 524],
       },
       getRequestTimeoutMs(),
+      'text',
+      { deferCacheWrite: true },
     );
-    if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
-      return [];
+    if (status !== 200) {
+      await evictCachedRemoteResponse(cached, deleteFromCache);
+      abortSignal?.throwIfAborted();
+      logger.error(`Error generating test cases for ${key}`, { status, statusText });
+      throw new RemoteGenerationFailure(`Remote generation returned HTTP ${status} for ${key}`);
+    }
+
+    let data: PluginGenerationResponse;
+    try {
+      data = JSON.parse(responseText) as PluginGenerationResponse;
+    } catch {
+      await evictCachedRemoteResponse(cached, deleteFromCache);
+      abortSignal?.throwIfAborted();
+      logger.error(`Error generating test cases for ${key}`, {
+        status,
+        statusText,
+        responseFormat: 'invalid-json',
+      });
+      throw new RemoteGenerationFailure(`Remote generation returned invalid JSON for ${key}`);
+    }
+
+    if (data?.error) {
+      await evictCachedRemoteResponse(cached, deleteFromCache);
+      abortSignal?.throwIfAborted();
+      logger.error(`Error generating test cases for ${key}`, {
+        status,
+        statusText,
+        responseFormat: 'error-envelope',
+      });
+      throw new RemoteGenerationFailure(`Remote generation returned an error for ${key}`);
+    }
+
+    if (
+      !data ||
+      !Array.isArray(data.result) ||
+      !Array.from(data.result).every((testCase) => isRemoteGeneratedTestCase(testCase, injectVar))
+    ) {
+      await evictCachedRemoteResponse(cached, deleteFromCache);
+      abortSignal?.throwIfAborted();
+      logger.error(`Error generating test cases for ${key}`, {
+        status,
+        statusText,
+        resultType: Array.isArray(data?.result) ? 'invalid-array' : typeof data?.result,
+      });
+      throw new RemoteGenerationFailure(`Remote generation returned an invalid result for ${key}`);
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
-      assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+      try {
+        assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+      } catch (error) {
+        await evictCachedRemoteResponse(cached, deleteFromCache);
+        abortSignal?.throwIfAborted();
+        throw error;
+      }
     }
     const ret = data.result;
+    abortSignal?.throwIfAborted();
+    await commitToCache?.();
+    abortSignal?.throwIfAborted();
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
-    logger.error(`Error generating test cases for ${key}: ${err}`);
-    return [];
+    if (abortSignal?.aborted) {
+      abortSignal.throwIfAborted();
+    }
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw err;
+    }
+    if (err instanceof RemoteGenerationFailure) {
+      throw err;
+    }
+    logger.error(`Error generating test cases for ${key}`, { error: err });
+    const failure = new RemoteGenerationFailure(`Remote generation failed for ${key}`) as Error & {
+      cause?: unknown;
+    };
+    failure.cause = err;
+    throw failure;
   }
 }
 
@@ -429,6 +570,7 @@ function createPluginFactory<T extends PluginConfig>(
       n,
       delayMs,
       config,
+      abortSignal,
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
@@ -452,6 +594,7 @@ function createPluginFactory<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
+        abortSignal,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
@@ -578,6 +721,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.n,
         params.config ?? {},
         params.targetId,
+        params.abortSignal,
       );
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
@@ -620,6 +764,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.n,
       params.config ?? {},
       params.targetId,
+      params.abortSignal,
     );
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
@@ -648,6 +793,7 @@ function createRemotePlugin<T extends PluginConfig>(
       injectVar,
       n,
       config,
+      abortSignal,
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
@@ -665,6 +811,7 @@ function createRemotePlugin<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
+        abortSignal,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({

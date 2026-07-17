@@ -20,8 +20,8 @@ import {
   isRateLimited,
   isTransientError,
 } from '../src/util/fetch/index';
-import { withFetchRetryContext } from '../src/util/fetch/retryContext';
-import { sleep } from '../src/util/time';
+import { resolveFetchRetryMaxRetries, withFetchRetryContext } from '../src/util/fetch/retryContext';
+import { sleep, sleepWithAbort } from '../src/util/time';
 import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
 const FETCH_TEST_ENV_KEYS = [
@@ -43,6 +43,7 @@ let restoreFetchTestEnv = () => {};
 
 vi.mock('../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
+  sleepWithAbort: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../src/logger', () => ({
@@ -976,6 +977,27 @@ describe('fetchWithProxy', () => {
         }),
       );
     });
+
+    it('should use a Request-carried signal to cancel transient retry backoff', async () => {
+      const abortController = new AbortController();
+      const abortReason = new DOMException('cancelled during backoff', 'AbortError');
+      const request = new Request('https://example.com/api', {
+        signal: abortController.signal,
+      });
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        createMockResponse({ status: 503, statusText: 'Service Unavailable' }),
+      );
+      vi.mocked(sleepWithAbort).mockImplementationOnce(async (_ms, signal) => {
+        expect(signal).toBe(request.signal);
+        abortController.abort(abortReason);
+        throw abortReason;
+      });
+
+      await expect(fetchWithProxy(request)).rejects.toBe(abortReason);
+
+      expect(global.fetch).toHaveBeenCalledOnce();
+      expect(sleepWithAbort).toHaveBeenCalledOnce();
+    });
   });
 });
 
@@ -1025,6 +1047,42 @@ describe('fetchWithTimeout', () => {
         signal: expect.any(Object),
       }),
     );
+  });
+
+  it('should combine a Request-carried signal with the timeout signal', async () => {
+    const userAbortController = new AbortController();
+    const request = new Request('https://example.com', {
+      signal: userAbortController.signal,
+    });
+    const mockResponse = createMockResponse({ ok: true });
+    let observedSignal: AbortSignal | null | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url, options) => {
+      observedSignal = options?.signal;
+      return mockResponse;
+    });
+
+    await expect(fetchWithTimeout(request, {}, 5000)).resolves.toBe(mockResponse);
+    expect(observedSignal?.aborted).toBe(false);
+
+    userAbortController.abort(new DOMException('cancelled', 'AbortError'));
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it('should let an explicit null signal clear a Request-carried signal', async () => {
+    const userAbortController = new AbortController();
+    userAbortController.abort(new DOMException('inherited abort', 'AbortError'));
+    const request = new Request('https://example.com', {
+      signal: userAbortController.signal,
+    });
+    const mockResponse = createMockResponse({ ok: true });
+    let observedSignal: AbortSignal | null | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url, options) => {
+      observedSignal = options?.signal;
+      return mockResponse;
+    });
+
+    await expect(fetchWithTimeout(request, { signal: null }, 5000)).resolves.toBe(mockResponse);
+    expect(observedSignal?.aborted).toBe(false);
   });
 });
 
@@ -1267,8 +1325,28 @@ describe('computeRateLimitWaitMs', () => {
 describe('fetchWithRetries', () => {
   beforeEach(() => {
     vi.mocked(sleep).mockClear();
+    vi.mocked(sleepWithAbort).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        return process.env.PROMPTFOO_RETRY_5XX === 'true';
+      }
+      return defaultValue;
+    });
+    vi.mocked(getEnvInt).mockImplementation((key: string, defaultValue: number = 0) => {
+      if (key === 'REQUEST_TIMEOUT_MS') {
+        return Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10);
+      }
+      return defaultValue;
+    });
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(sleepWithAbort).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvInt).mockReset();
   });
 
   it('should make exactly one attempt when retries is 0', async () => {
@@ -1289,6 +1367,62 @@ describe('fetchWithRetries', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ])('should use the default retry budget for non-finite value %s', async (maxRetries) => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, maxRetries)).rejects.toThrow(
+      'Request failed after 4 retries: Error: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+    expect(sleep).toHaveBeenCalledTimes(4);
+  });
+
+  it('should preserve huge finite retry budgets for public API compatibility', () => {
+    expect(resolveFetchRetryMaxRetries(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it.each([
+    null,
+    '503',
+    [Number.NaN],
+    [99],
+    [600],
+    [503.5],
+  ])('should reject invalid retry status policy %j before sending a request', async (retryOnStatusCodes) => {
+    await expect(
+      fetchWithRetries(
+        'https://example.com',
+        { method: 'POST', body: '{}', retryOnStatusCodes } as any,
+        1000,
+        2,
+      ),
+    ).rejects.toThrow(
+      'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should reject sparse retry status policies before sending a request', async () => {
+    const retryOnStatusCodes: number[] = [];
+    retryOnStatusCodes.length = 1;
+    retryOnStatusCodes.push(503);
+
+    await expect(
+      fetchWithRetries('https://example.com', { retryOnStatusCodes }, 1000, 0),
+    ).rejects.toThrow(
+      'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('should honor retry context maxRetries when explicit argument is omitted', async () => {
@@ -1375,6 +1509,397 @@ describe('fetchWithRetries', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return recognized transient responses unless the caller opts in', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toBe(transientResponse);
+  });
+
+  it('should not block retries while a response body cancellation is pending', async () => {
+    let resolveCancellation: (() => void) | undefined;
+    const cancel = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCancellation = resolve;
+        }),
+    );
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    Object.assign(transientResponse, { body: { cancel } });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+
+    const resultPromise = fetchWithRetries(
+      'https://example.com',
+      { retryOnStatusCodes: [503] },
+      1000,
+      1,
+    );
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      resolveCancellation?.();
+    }
+
+    await expect(resultPromise).resolves.toBe(successResponse);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('should honor an AbortSignal carried by a Request during response retries', async () => {
+    const controller = new AbortController();
+    const request = new Request('https://example.com', { signal: controller.signal });
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockImplementationOnce(async () => {
+      controller.abort();
+      return transientResponse;
+    });
+
+    await expect(
+      fetchWithRetries(request, { retryOnStatusCodes: [503] }, 1000, 1),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('should let an explicit null signal clear a Request-carried signal during retries', async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException('inherited abort', 'AbortError'));
+    const request = new Request('https://example.com', { signal: controller.signal });
+    const successResponse = createMockResponse({ ok: true });
+    let observedSignal: AbortSignal | null | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url, options) => {
+      observedSignal = options?.signal;
+      return successResponse;
+    });
+
+    await expect(fetchWithRetries(request, { signal: null }, 1000, 0)).resolves.toBe(
+      successResponse,
+    );
+    expect(observedSignal?.aborted).toBe(false);
+  });
+
+  it('should return the final recognized transient response after retries are exhausted', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { retryOnStatusCodes: [503] },
+      1000,
+      2,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(result).toBe(transientResponse);
+  });
+
+  it('should retry caller-specified status codes without retrying unrelated 5xx responses', async () => {
+    const serverError = createMockResponse({
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(serverError)
+      .mockResolvedValueOnce(successResponse);
+
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { method: 'POST', retryOnStatusCodes: [500] },
+      1000,
+      2,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+
+    vi.mocked(global.fetch).mockClear();
+    vi.mocked(sleep).mockClear();
+    const notImplemented = createMockResponse({ status: 501, statusText: 'Not Implemented' });
+    vi.mocked(global.fetch).mockResolvedValue(notImplemented);
+
+    const finalResponse = await fetchWithRetries(
+      'https://example.com',
+      { retryOnStatusCodes: [500] },
+      1000,
+      2,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(finalResponse).toBe(notImplemented);
+  });
+
+  it('should not retry response statuses without explicit caller opt-in', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { method: 'POST', body: '{}' },
+      1000,
+      2,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toBe(transientResponse);
+  });
+
+  it('should not retry caller-specified statuses with one-shot request bodies', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+    const body = new ReadableStream();
+
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { method: 'PUT', body, retryOnStatusCodes: [503] },
+      1000,
+      2,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toBe(transientResponse);
+  });
+
+  it('should honor rate-limit headers before transient status retry policy', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({
+        'Retry-After': '2',
+        'X-RateLimit-Remaining': '0',
+      }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledWith(2000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should honor Retry-After on a retryable 503 without other rate-limit headers', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'Retry-After': '2' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledWith(2000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should bound Retry-After on retryable transient responses', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'Retry-After': '9999999999' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    try {
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
+
+      expect(sleep).toHaveBeenCalledOnce();
+      // The cap must not subtract jitter from the server's requested delay.
+      expect(sleep).toHaveBeenCalledWith(60_000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should use normal backoff for malformed Retry-After values', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'Retry-After': 'garbage' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
+
+      expect(sleep).toHaveBeenCalledOnce();
+      expect(sleep).toHaveBeenCalledWith(5000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should cap retry delays and reject invalid backoff values safely', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      vi.mocked(getEnvInt).mockReturnValueOnce(Number.MAX_SAFE_INTEGER);
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(transientResponse)
+        .mockResolvedValueOnce(successResponse);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
+      expect(sleep).toHaveBeenLastCalledWith(60_000);
+
+      vi.mocked(sleep).mockClear();
+      randomSpy.mockReturnValue(0.5);
+      vi.mocked(getEnvInt).mockReturnValueOnce(Number.MAX_SAFE_INTEGER);
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(transientResponse)
+        .mockResolvedValueOnce(successResponse);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
+      expect(sleep).toHaveBeenLastCalledWith(59_500);
+
+      randomSpy.mockReturnValue(0);
+
+      vi.mocked(sleep).mockClear();
+      vi.mocked(getEnvInt).mockReturnValueOnce(Number.POSITIVE_INFINITY);
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(transientResponse)
+        .mockResolvedValueOnce(successResponse);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
+      expect(sleep).toHaveBeenLastCalledWith(5000);
+
+      vi.mocked(sleep).mockClear();
+      vi.mocked(getEnvInt).mockReturnValueOnce(-1);
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(transientResponse)
+        .mockResolvedValueOnce(successResponse);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
+      expect(sleep).toHaveBeenLastCalledWith(5000);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should stop transient retries when aborted during backoff', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+    const abortController = new AbortController();
+    vi.mocked(sleepWithAbort).mockImplementationOnce(async (_ms, signal) => {
+      abortController.abort();
+      throw signal.reason;
+    });
+
+    await expect(
+      fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503], signal: abortController.signal },
+        1000,
+        2,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleepWithAbort).toHaveBeenCalledTimes(1);
+  });
+
+  it('should stop rate-limit retries when aborted during Retry-After', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: new Headers({ 'Retry-After': '1' }),
+    });
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitedResponse);
+    const abortController = new AbortController();
+    vi.mocked(sleepWithAbort).mockImplementationOnce(async (_ms, signal) => {
+      abortController.abort();
+      throw signal.reason;
+    });
+
+    await expect(
+      fetchWithRetries('https://example.com', { signal: abortController.signal }, 1000, 2),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleepWithAbort).toHaveBeenCalledTimes(1);
   });
 
   it('should handle rate limits with proper backoff', async () => {
