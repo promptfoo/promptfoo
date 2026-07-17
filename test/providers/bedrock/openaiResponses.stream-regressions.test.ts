@@ -18,6 +18,42 @@ function createProcessor(processCalls = vi.fn()) {
 }
 
 describe('Responses stream regressions', () => {
+  it('cancels an aborted Responses stream that stalls after headers', async () => {
+    const abortController = new AbortController();
+    let cancelled = false;
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const pending = readResponsesStream(
+      new Response(stream),
+      'test',
+      { debug: vi.fn() },
+      abortController.signal,
+    );
+
+    abortController.abort();
+    const settled = await Promise.race([
+      pending.then(
+        () => 'resolved',
+        () => 'rejected',
+      ),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 100)),
+    ]);
+    if (settled === 'pending') {
+      streamController?.close();
+      await pending.catch(() => undefined);
+    }
+
+    expect(settled).toBe('rejected');
+    expect(cancelled).toBe(true);
+  });
+
   it('cancels an aborted Responses stream delivered in single-byte chunks', async () => {
     const abortController = new AbortController();
     const prefix = new TextEncoder().encode('data: {"type":"ignored","payload":"');

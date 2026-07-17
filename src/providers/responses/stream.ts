@@ -1038,10 +1038,36 @@ export async function readResponsesStream(
     }
   };
 
+  const readChunk = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    if (!signal) {
+      return reader.read();
+    }
+
+    let abortListener: (() => void) | undefined;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<never>((_resolve, reject) => {
+          abortListener = () => {
+            reject(new DOMException(`${providerName} streaming response aborted`, 'AbortError'));
+          };
+          signal.addEventListener('abort', abortListener, { once: true });
+          if (signal.aborted) {
+            abortListener();
+          }
+        }),
+      ]);
+    } finally {
+      if (abortListener) {
+        signal.removeEventListener('abort', abortListener);
+      }
+    }
+  };
+
   try {
     while (true) {
       throwIfAborted();
-      const { done, value } = await reader.read();
+      const { done, value } = await readChunk();
       if (done) {
         break;
       }
