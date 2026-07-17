@@ -397,6 +397,11 @@ export class GoogleLiveProvider implements ApiProvider {
         : configuredResponseModalities;
       const effectiveResponseModalities =
         usesRealtimeTextInput && !responseModalities?.length ? ['AUDIO'] : responseModalities;
+      if (requestedText && !effectiveResponseModalities?.includes('TEXT')) {
+        logger.warn(
+          `[Google Live] ${this.modelName} does not support TEXT response modality; requesting AUDIO with output transcription instead. Audio output is billed at audio rates.`,
+        );
+      }
       const isTextExpected = effectiveResponseModalities?.includes('TEXT') ?? false;
       const isAudioExpected = effectiveResponseModalities?.includes('AUDIO') ?? false;
 
@@ -438,15 +443,25 @@ export class GoogleLiveProvider implements ApiProvider {
       );
       const framePacingAllowanceMs = Math.max(videoFrameCount - 1, 0) * 1_000;
 
-      // Preserve the response timeout after all rate-limited video frames have been sent.
-      const timeout = setTimeout(
-        () => {
-          logger.error('WebSocket connection timed out after 30 seconds');
+      // Idle guard rather than a hard deadline: it re-arms on every server message, so a
+      // long generation that keeps streaming output is never cut off mid-response, while a
+      // stream that stalls — before or after partial output — still errors out. The frame
+      // pacing allowance keeps the guard alive while outbound video frames are rate-limited.
+      const effectiveTimeoutMs = (config.timeoutMs || 30000) + framePacingAllowanceMs;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const armIdleTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          logger.error(
+            `WebSocket connection timed out after ${effectiveTimeoutMs}ms of inactivity`,
+          );
           ws.close();
-          safeResolve({ error: 'WebSocket request timed out' });
-        },
-        (config.timeoutMs || 30000) + framePacingAllowanceMs,
-      );
+          safeResolve({
+            error: `WebSocket request timed out after ${effectiveTimeoutMs}ms of inactivity`,
+          });
+        }, effectiveTimeoutMs);
+      };
+      armIdleTimeout();
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
@@ -809,6 +824,7 @@ export class GoogleLiveProvider implements ApiProvider {
         if (isResolved) {
           return;
         }
+        armIdleTimeout();
         // Handle different data types from WebSocket
         logger.debug('WebSocket message received');
         let responseData: string;

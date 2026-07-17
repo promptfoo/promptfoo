@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { storeBlob } from '../../../src/blobs';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
@@ -15,12 +15,23 @@ describe('GoogleInteractionsProvider', () => {
   const mockFetchWithTimeout = vi.mocked(fetchWithTimeout);
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetchWithTimeout.mockReset();
+    // resetAllMocks (not clearAllMocks) so per-test persistent setters like
+    // mockFetchWithCache.mockResolvedValue cannot leak across randomized test order.
+    vi.resetAllMocks();
+    // Keep endpoint resolution hermetic: developers with gcloud configured often have
+    // these set, which would silently redirect the Vertex endpoint assertions.
+    vi.stubEnv('VERTEX_REGION', '');
+    vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
+    vi.stubEnv('VERTEX_API_HOST', '');
+    vi.stubEnv('GOOGLE_API_HOST', '');
     mockStoreBlob.mockResolvedValue({
       ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
       deduplicated: false,
     } as any);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('routes Omni Flash through the Interactions API and prices video output tokens', async () => {
@@ -1018,5 +1029,99 @@ describe('GoogleInteractionsProvider', () => {
       'json',
       true,
     );
+  });
+
+  it('returns a timeout error when polling exceeds the configured deadline', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { id: 'interaction-slow', status: 'in_progress' },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 0 },
+    });
+
+    await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
+      error: 'Gemini interaction timed out after 0ms (status: in_progress)',
+    });
+  });
+
+  it('surfaces a terminal non-completed interaction status', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { id: 'interaction-dead', status: 'failed' },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
+      error: 'Gemini interaction did not complete (status: failed)',
+    });
+  });
+
+  it('surfaces gateway errors without a Google-shaped error body', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { message: 'Service Unavailable' },
+      cached: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
+      error: 'Gemini Interactions API error: HTTP 503 Service Unavailable',
+    });
+  });
+
+  it('surfaces polling gateway errors without a Google-shaped error body', async () => {
+    mockFetchWithCache
+      .mockResolvedValueOnce({
+        data: { id: 'interaction-pending', status: 'in_progress' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any)
+      .mockResolvedValueOnce({
+        data: {},
+        cached: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+      } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 1_000 },
+    });
+
+    await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
+      error: 'Gemini Interactions API polling error: HTTP 502 Bad Gateway',
+    });
+  });
+
+  it('keeps the raw URI without downloading when the video origin is untrusted', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [
+              { type: 'video', mime_type: 'video/mp4', uri: 'https://evil.example/video.mp4' },
+            ],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toContain('https://evil.example/video.mp4');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 });

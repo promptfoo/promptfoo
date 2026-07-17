@@ -1,6 +1,7 @@
 import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
@@ -416,8 +417,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
     let data: InteractionResponse;
     let cached: boolean;
+    let httpStatus: number;
+    let httpStatusText: string;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({
+        data,
+        cached,
+        status: httpStatus,
+        statusText: httpStatusText,
+      } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
@@ -428,13 +436,20 @@ export class GoogleInteractionsProvider implements ApiProvider {
         'json',
         // Interactions API credentials must not be persisted, even as a stable cache fingerprint.
         true,
-      )) as { data: InteractionResponse; cached: boolean });
+      )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
     } catch (err) {
       return { error: `Gemini Interactions API error: ${String(err)}` };
     }
 
     if (data.error?.message) {
       return { error: `Gemini Interactions API error: ${data.error.message}` };
+    }
+    if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
+      // Gateways and proxies can fail without a Google-shaped `error.message` body.
+      return {
+        error: `Gemini Interactions API error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
+        raw: data,
+      };
     }
 
     const pollTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
@@ -452,19 +467,30 @@ export class GoogleInteractionsProvider implements ApiProvider {
         await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
       }
       try {
-        ({ data } = (await fetchWithCache(
+        ({
+          data,
+          status: httpStatus,
+          statusText: httpStatusText,
+        } = (await fetchWithCache(
           `${endpoint}/${encodeURIComponent(data.id)}`,
           { method: 'GET', headers } as RequestInit,
           Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
           'json',
           true,
-        )) as { data: InteractionResponse; cached: boolean });
+        )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
       } catch (err) {
         return { error: `Gemini Interactions API polling error: ${String(err)}` };
       }
       pollCount++;
       if (data.error?.message) {
         return { error: `Gemini Interactions API error: ${data.error.message}`, raw: data };
+      }
+      if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
+        return {
+          error:
+            `Gemini Interactions API polling error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
+          raw: data,
+        };
       }
     }
     if (data.status && data.status !== 'completed') {
@@ -563,9 +589,19 @@ export class GoogleInteractionsProvider implements ApiProvider {
             );
           }
           if (!response.ok) {
-            return { error: `Failed to download Gemini interaction video: ${response.statusText}` };
+            return {
+              error:
+                `Failed to download Gemini interaction video: HTTP ${response.status} ${response.statusText}`.trim(),
+            };
           }
           videoBuffer = Buffer.from(await response.arrayBuffer());
+        } else {
+          // Not on the download allowlist — keep the raw URI in the output, but say why
+          // the video was not fetched instead of silently returning a link we never followed.
+          logger.warn(
+            '[Google Interactions] Skipping video download from untrusted origin; returning the raw URI',
+            { origin: downloadUrl.origin, protocol: downloadUrl.protocol },
+          );
         }
       } catch (err) {
         return { error: `Failed to download Gemini interaction video: ${String(err)}` };
@@ -592,15 +628,26 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const audioInputTokens =
       getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
       getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
+    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
+    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
     const imageInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['image', 'document']) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['image', 'document']);
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, [
+        'image',
+        'document',
+        'video',
+      ]) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, [
+        'image',
+        'document',
+        'video',
+      ]);
     const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
       'audio',
     ]);
     const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
       'image',
       'document',
+      'video',
     ]);
     const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
       'audio',

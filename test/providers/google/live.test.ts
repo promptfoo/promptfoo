@@ -1741,7 +1741,35 @@ describe('GoogleLiveProvider', () => {
     });
 
     const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ error: 'WebSocket request timed out' });
+    expect(response).toEqual({ error: 'WebSocket request timed out after 100ms of inactivity' });
+  });
+
+  it('keeps a continuously streaming response alive past the idle-timeout window', async () => {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 120,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      // Stream for ~300ms total (longer than timeoutMs) with every gap below the
+      // 120ms idle window — the idle guard must re-arm instead of hard-killing.
+      for (let i = 1; i <= 4; i++) {
+        setTimeout(() => simulateTextMessage(mockWs, `chunk${i} `), 60 * i);
+      }
+      setTimeout(() => simulateCompletionMessage(mockWs), 300);
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'chunk1 chunk2 chunk3 chunk4 ' });
   });
 
   it('should keep the Live request timeout active after a partial text response', async () => {
@@ -1762,7 +1790,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     await expect(provider.callApi('test prompt')).resolves.toEqual({
-      error: 'WebSocket request timed out',
+      error: 'WebSocket request timed out after 30ms of inactivity',
     });
   });
 
@@ -1788,7 +1816,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     await expect(provider.callApi('test prompt')).resolves.toEqual({
-      error: 'WebSocket request timed out',
+      error: 'WebSocket request timed out after 30ms of inactivity',
     });
   });
 
