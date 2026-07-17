@@ -270,7 +270,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     ) as GoogleProviderConfig;
-    if (config.vertexai && config.previousInteractionId) {
+    const passthroughPreviousInteractionId =
+      config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
+    if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {
       return {
         error:
           'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
