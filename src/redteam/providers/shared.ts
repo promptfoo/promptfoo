@@ -176,17 +176,25 @@ class RedteamProviderManager {
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   }): Promise<ApiProvider> {
+    // 1) Explicit provider argument. Strategy-scoped providers such as Meta's
+    // task provider must not be replaced by the global redteam provider cache.
+    if (provider) {
+      const loaded = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
+      return this.wrapProvider(loaded);
+    }
+
+    // 2) Cached redteam provider
     if (this.provider && this.jsonOnlyProvider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
       return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
     }
 
-    // Check if we have an explicit provider argument or redteam.provider configured
-    const hasExplicitProvider = provider || cliState.config?.redteam?.provider;
+    // Check if we have a redteam.provider configured
+    const configuredProvider = cliState.config?.redteam?.provider;
 
-    // If no explicit redteam provider, try defaultTest config chain as fallback
+    // 3) If no configured redteam provider, try defaultTest config chain as fallback
     // This ensures users who configure defaultTest.options.provider get consistent behavior
-    if (!hasExplicitProvider) {
+    if (!configuredProvider) {
       const defaultTestProvider =
         (typeof cliState.config?.defaultTest === 'object' &&
           (cliState.config?.defaultTest as any)?.provider) ||
@@ -221,11 +229,18 @@ class RedteamProviderManager {
     }
 
     logger.debug('[RedteamProviderManager] Loading redteam provider', {
-      providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
+      providedConfig:
+        typeof configuredProvider === 'string'
+          ? configuredProvider
+          : (configuredProvider?.id ?? 'none'),
       jsonOnly,
       preferSmallModel,
     });
-    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
+    const redteamProvider = await loadRedteamProvider({
+      provider: configuredProvider,
+      jsonOnly,
+      preferSmallModel,
+    });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return this.wrapProvider(redteamProvider);
   }

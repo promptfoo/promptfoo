@@ -308,6 +308,22 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(2, ['test-provider']);
     });
 
+    it('prefers an explicit provider over cached providers', async () => {
+      const cachedProvider = createMockProvider({ id: 'cached-provider' });
+      const explicitProvider = createMockProvider({ id: 'explicit-provider' });
+      mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
+
+      await redteamProviderManager.setProvider('cached-provider');
+
+      const result = await redteamProviderManager.getProvider({
+        provider: explicitProvider,
+        jsonOnly: true,
+      });
+
+      expect(result).toBe(explicitProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
+    });
+
     describe('getGradingProvider', () => {
       it('returns cached grading provider set via setGradingProvider', async () => {
         redteamProviderManager.clearProvider();
