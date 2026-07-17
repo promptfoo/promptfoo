@@ -45,9 +45,9 @@ describe('createMoonshotProvider routing', () => {
   });
 
   it('falls back to the default model for a bare prefix', () => {
-    expect(asChat(createMoonshotProvider('moonshot:')).modelName).toBe('kimi-k2.6');
-    expect(asChat(createMoonshotProvider('moonshot:chat')).modelName).toBe('kimi-k2.6');
-    expect(asChat(createMoonshotProvider('moonshot:chat:')).modelName).toBe('kimi-k2.6');
+    expect(asChat(createMoonshotProvider('moonshot:')).modelName).toBe('kimi-k3');
+    expect(asChat(createMoonshotProvider('moonshot:chat')).modelName).toBe('kimi-k3');
+    expect(asChat(createMoonshotProvider('moonshot:chat:')).modelName).toBe('kimi-k3');
   });
 });
 
@@ -166,10 +166,13 @@ describe('MoonshotProvider sampling-param handling', () => {
     );
     const { body } = await provider.getOpenAiBody('Hello');
     expect(body.temperature).toBe(1);
-    expect(body.max_tokens).toBe(2048);
+    // max_tokens is a deprecated alias upstream; the provider maps it onto the
+    // canonical max_completion_tokens field.
+    expect(body.max_completion_tokens).toBe(2048);
+    expect(body.max_tokens).toBeUndefined();
   });
 
-  it('maps max_completion_tokens to Moonshot max_tokens for Kimi (not the injected 1024 default)', async () => {
+  it('forwards max_completion_tokens for Kimi (not the injected 1024 max_tokens default)', async () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:kimi-k2.6', {
         config: { max_completion_tokens: 4096 },
@@ -177,9 +180,9 @@ describe('MoonshotProvider sampling-param handling', () => {
     );
     const { body } = await provider.getOpenAiBody('Hello');
     // The base drops max_completion_tokens for non-reasoning models and injects
-    // max_tokens: 1024; map the caller's value onto Moonshot's max_tokens field.
-    expect(body.max_tokens).toBe(4096);
-    expect(body.max_completion_tokens).toBeUndefined();
+    // max_tokens: 1024; re-attach the caller's value on the canonical field.
+    expect(body.max_completion_tokens).toBe(4096);
+    expect(body.max_tokens).toBeUndefined();
   });
 
   it('does not leak OPENAI_* sampling env defaults into Kimi requests', async () => {
@@ -197,6 +200,77 @@ describe('MoonshotProvider sampling-param handling', () => {
     } finally {
       restore();
     }
+  });
+
+  it('omits promptfoo default sampling/token params for kimi-k3 as well', async () => {
+    const provider = asChat(createMoonshotProvider('moonshot:kimi-k3'));
+    const { body } = await provider.getOpenAiBody('Hello');
+    expect(body.temperature).toBeUndefined();
+    expect(body.max_tokens).toBeUndefined();
+    expect(body.top_p).toBeUndefined();
+  });
+
+  it('forwards an explicit reasoning_effort for kimi-k3 models', async () => {
+    const provider = asChat(
+      createMoonshotProvider('moonshot:kimi-k3', {
+        config: { reasoning_effort: 'max' as any },
+      }),
+    );
+    const { body } = await provider.getOpenAiBody('Hello');
+    // The OpenAI base only sends reasoning_effort for its own reasoning models,
+    // so the Moonshot provider re-attaches it for kimi-k3 requests.
+    expect(body.reasoning_effort).toBe('max');
+  });
+
+  it('does not inject reasoning_effort when unset', async () => {
+    const provider = asChat(createMoonshotProvider('moonshot:kimi-k3'));
+    const { body } = await provider.getOpenAiBody('Hello');
+    expect(body.reasoning_effort).toBeUndefined();
+  });
+
+  it('renders vars in reasoning_effort before forwarding', async () => {
+    const provider = asChat(
+      createMoonshotProvider('moonshot:kimi-k3', {
+        config: { reasoning_effort: '{{ effort }}' as any },
+      }),
+    );
+    const { body } = await (provider.getOpenAiBody as any)('Hello', {
+      prompt: { raw: 'Hello', label: 'test' },
+      vars: { effort: 'max' },
+    });
+    expect(body.reasoning_effort).toBe('max');
+  });
+
+  it('prefers a prompt-level max_tokens over a provider-level max_completion_tokens', async () => {
+    const provider = asChat(
+      createMoonshotProvider('moonshot:kimi-k3', {
+        config: { max_completion_tokens: 4096 },
+      }),
+    );
+    const { body } = await (provider.getOpenAiBody as any)('Hello', {
+      prompt: { raw: 'Hello', label: 'test', config: { max_tokens: 1000 } },
+      vars: {},
+    });
+    expect(body.max_completion_tokens).toBe(1000);
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it('fails fast when reasoning_effort is configured on a non-K3 model', async () => {
+    const k2 = asChat(
+      createMoonshotProvider('moonshot:kimi-k2.6', {
+        config: { reasoning_effort: 'max' as any },
+      }),
+    );
+    await expect(k2.getOpenAiBody('Hello')).rejects.toThrow(
+      /kimi-k2\.6 does not support reasoning_effort/,
+    );
+
+    const v1 = asChat(
+      createMoonshotProvider('moonshot:moonshot-v1-8k', {
+        config: { reasoning_effort: 'max' as any },
+      }),
+    );
+    await expect(v1.getOpenAiBody('Hello')).rejects.toThrow(/does not support reasoning_effort/);
   });
 
   it('keeps promptfoo deterministic defaults for moonshot-v1 generation models', async () => {
@@ -272,6 +346,51 @@ describe('MoonshotProvider callApi cost', () => {
     const result = await provider.callApi('Say hi');
     expect(result.cost).toBe(
       calculateMoonshotCost({ inputCost: 0.000002, outputCost: 0.000004 }, 10, 5, 4),
+    );
+  });
+
+  it('reads cached tokens from the documented top-level usage.cached_tokens field', async () => {
+    const moonshotShapedResponse = {
+      data: {
+        choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+        usage: {
+          total_tokens: 15,
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          cached_tokens: 4,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(moonshotShapedResponse as any);
+    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
+      config: {
+        apiKey: 'k',
+        inputCost: 0.000002,
+        cacheReadCost: 0.0000002,
+        outputCost: 0.000004,
+      },
+    });
+    const result = await provider.callApi('Say hi');
+    // 6 uncached + 4 cached input tokens, 5 output tokens.
+    expect(result.cost).toBeCloseTo(6 * 0.000002 + 4 * 0.0000002 + 5 * 0.000004, 12);
+    // The cache hit must also land in token usage stats, not just cost.
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(4);
+  });
+
+  it('honours prompt-level cost overrides', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
+    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
+      config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
+    });
+    const result = await provider.callApi('Say hi', {
+      prompt: { raw: 'Say hi', label: 'test', config: { inputCost: 0.00002 } },
+      vars: {},
+    });
+    expect(result.cost).toBe(
+      calculateMoonshotCost({ inputCost: 0.00002, outputCost: 0.000004 }, 10, 5, 4),
     );
   });
 
