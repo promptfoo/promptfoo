@@ -58,10 +58,10 @@ The `anthropic` provider supports the following models via the messages API:
 | `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
 | `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
 | `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
-| `anthropic:messages:claude-opus-4-7` (`claude-opus-4-7-20260416`)          | Claude 4.7 Opus        |
+| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
 | `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
-| `anthropic:messages:claude-opus-4-6` (`claude-opus-4-6-20260205`)          | Claude 4.6 Opus        |
+| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
 | `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus        |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Claude 4 Opus          |

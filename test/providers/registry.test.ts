@@ -498,13 +498,7 @@ describe('Provider Registry', () => {
       expect(shorthandProvider).toBeDefined();
       expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
-      for (const model of [
-        'claude-fable-5',
-        'claude-mythos-5',
-        'claude-sonnet-5',
-        'claude-opus-4-6-20260205',
-        'claude-opus-4-7-20260416',
-      ]) {
+      for (const model of ['claude-fable-5', 'claude-mythos-5', 'claude-sonnet-5']) {
         const shorthandModelProvider = await factory!.create(
           `anthropic:${model}`,
           anthropicOptions,

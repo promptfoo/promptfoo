@@ -124,9 +124,12 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
-    it('should calculate default cost for the pinned Claude Opus 4.7 snapshot', () => {
+    it('should return undefined for a dated Claude Opus 4.7 snapshot (Anthropic publishes none)', () => {
+      // The Models API 404s on dated 4.6+/4.7 snapshots like `claude-opus-4-7-20260416`
+      // (verified live 2026-07-17). If Anthropic starts publishing dated snapshots again,
+      // verify against the API before registering them in ANTHROPIC_MODELS.
       const cost = calculateAnthropicCost('claude-opus-4-7-20260416', {}, 100, 200);
-      expect(cost).toBe(0.0055);
+      expect(cost).toBeUndefined();
     });
 
     it('should apply cache pricing for Claude Opus 4.7 with cache tokens', () => {
@@ -151,9 +154,11 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
-    it('should calculate default cost for the pinned Claude Opus 4.6 snapshot', () => {
+    it('should return undefined for a dated Claude Opus 4.6 snapshot (Anthropic publishes none)', () => {
+      // `claude-opus-4-6-20260205` is Azure AI Foundry's deployment name for Opus 4.6,
+      // not a first-party Anthropic model ID — the Models API 404s on it.
       const cost = calculateAnthropicCost('claude-opus-4-6-20260205', {}, 100, 200);
-      expect(cost).toBe(0.0055);
+      expect(cost).toBeUndefined();
     });
 
     it('should calculate default cost for Claude Opus 4.6 latest model', () => {
