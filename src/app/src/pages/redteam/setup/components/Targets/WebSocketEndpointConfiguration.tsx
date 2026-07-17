@@ -65,12 +65,22 @@ const WebSocketEndpointConfiguration = ({
   updateWebSocketTarget,
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^wss?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : '');
+  const [urlInput, setUrlInput] = useState(() => targetUrl);
+  const isUrlInputFocused = useRef(false);
   const formattedProtocols = formatProtocols(selectedTarget.config.protocols);
   const [protocolsInput, setProtocolsInput] = useState(() => formattedProtocols);
   const isProtocolsInputFocused = useRef(false);
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
   );
+  useEffect(() => {
+    if (!isUrlInputFocused.current) {
+      setUrlInput(targetUrl);
+    }
+  }, [targetUrl]);
   useEffect(() => {
     if (!isProtocolsInputFocused.current) {
       setProtocolsInput(formattedProtocols);
@@ -84,8 +94,18 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="websocket-url">WebSocket URL</Label>
           <Input
             id="websocket-url"
-            value={selectedTarget.config.url}
-            onChange={(e) => updateWebSocketTarget('url', e.target.value)}
+            value={urlInput}
+            onChange={(e) => {
+              setUrlInput(e.target.value);
+              updateWebSocketTarget('url', e.target.value);
+            }}
+            onFocus={() => {
+              isUrlInputFocused.current = true;
+            }}
+            onBlur={() => {
+              isUrlInputFocused.current = false;
+              setUrlInput(targetUrl);
+            }}
             className={cn(urlError && 'border-destructive')}
           />
           {urlError && <HelperText error>{urlError}</HelperText>}
@@ -95,7 +115,7 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="message-template">Message Template</Label>
           <Textarea
             id="message-template"
-            value={selectedTarget.config.messageTemplate}
+            value={selectedTarget.config.messageTemplate ?? ''}
             onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
             rows={3}
           />
@@ -213,7 +233,7 @@ const WebSocketEndpointConfiguration = ({
             <Label htmlFor="response-transform">Response Transform</Label>
             <Input
               id="response-transform"
-              value={selectedTarget.config.transformResponse}
+              value={selectedTarget.config.transformResponse ?? ''}
               onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
             />
           </div>

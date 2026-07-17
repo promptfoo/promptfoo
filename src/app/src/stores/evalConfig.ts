@@ -109,12 +109,12 @@ const looksLikeCredential = (name: string): boolean => {
   );
 };
 
-const looksLikeCredentialHeader = (headerName: string): boolean => {
+export const looksLikeCredentialHeader = (headerName: string): boolean => {
   const normalized = normalizeCredentialName(headerName);
   return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
 };
 
-const looksLikeRequestCredentialParameter = (name: string): boolean =>
+export const looksLikeRequestCredentialParameter = (name: string): boolean =>
   BARE_CREDENTIAL_PARAMETER_NAMES.has(normalizeCredentialName(name)) || looksLikeCredential(name);
 
 const URL_USERINFO = /^((?:webhook:)?[a-z][a-z0-9+.-]*:\/\/)([^/?#@\r\n]+)@/i;
@@ -297,7 +297,7 @@ const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
     : scrubbed;
 };
 
-const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
+export const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
   !isTemplatedCredentialReference(value) &&
   (looksLikeSecret(value.trim()) || scrubProviderUrl(value, templatePaths) !== value);
 
@@ -659,7 +659,7 @@ const omitReferencedProviderEnv = (
   );
 };
 
-const omitProviderCredentials = (
+export const omitProviderCredentials = (
   value: unknown,
   parentKey?: string,
   templatePaths?: Set<string>,

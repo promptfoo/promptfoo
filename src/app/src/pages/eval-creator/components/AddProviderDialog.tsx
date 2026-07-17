@@ -2,7 +2,7 @@
 import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -38,6 +38,18 @@ export default function AddProviderDialog({
     initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
+  const [shouldValidate, setShouldValidate] = useState(false);
+  const validateRef = useRef<(() => boolean) | null>(null);
+
+  const handleValidationRequest = useCallback(
+    (validator: () => boolean) => {
+      validateRef.current = validator;
+      if (shouldValidate) {
+        validator();
+      }
+    },
+    [shouldValidate],
+  );
 
   useEffect(() => {
     if (open) {
@@ -53,6 +65,7 @@ export default function AddProviderDialog({
         setStep('select');
       }
       setError(null);
+      setShouldValidate(false);
     }
   }, [open, initialProvider]);
 
@@ -60,6 +73,9 @@ export default function AddProviderDialog({
     // Only move to configure step if user has made an explicit selection
     // (not when ProviderTypeSelector auto-sets a default or we're using placeholder)
     if (newProvider.id && newProvider.id !== '' && newProvider.id !== '__selecting__') {
+      validateRef.current = null;
+      setError(null);
+      setShouldValidate(false);
       setProvider(newProvider);
       setProviderType(type);
       setStep('configure');
@@ -67,7 +83,8 @@ export default function AddProviderDialog({
   };
 
   const handleSave = () => {
-    if (provider) {
+    setShouldValidate(true);
+    if (provider && (validateRef.current?.() ?? false)) {
       // Auto-generate label from ID if not provided
       const providerToSave = provider.label
         ? provider
@@ -143,7 +160,8 @@ export default function AddProviderDialog({
                   provider={provider as RedteamProviderOptions}
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
-                  validateAll={false}
+                  validateAll={shouldValidate}
+                  onValidationRequest={handleValidationRequest}
                   providerType={providerType}
                   mode="eval"
                 />
@@ -218,6 +236,9 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
   }
   if (id.startsWith('perplexity:')) {
     return 'perplexity';
+  }
+  if (id === 'openinterpreter' || id.startsWith('openinterpreter:')) {
+    return 'openinterpreter';
   }
   if (id === 'http') {
     return 'http';

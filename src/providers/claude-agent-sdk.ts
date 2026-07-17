@@ -1266,6 +1266,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           {
             prompt,
             cacheKeyQueryOptions,
+            askUserQuestion: config.ask_user_question,
           },
         );
 

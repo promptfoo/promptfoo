@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
 
@@ -72,6 +73,7 @@ describe('RedTeamSetupPage', () => {
     // Reset the real Zustand store to initial state
     act(() => {
       useRedTeamConfig.setState(initialRedTeamState);
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     });
 
     // Provide default mock implementations for hooks
@@ -90,6 +92,7 @@ describe('RedTeamSetupPage', () => {
   afterEach(() => {
     act(() => {
       useRedTeamConfig.setState(initialRedTeamState);
+      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
     });
   });
 
@@ -128,6 +131,29 @@ describe('RedTeamSetupPage', () => {
       await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
 
       expect(screen.getByRole('heading', { name: 'Save Configuration' })).toBeInTheDocument();
+    });
+
+    it('disables Save while a target configuration has an invalid JSON edit', async () => {
+      const user = userEvent.setup();
+      act(() => {
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigError('Invalid JSON configuration');
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+      await user.type(screen.getByLabelText('Configuration Name'), 'Unsafe target config');
+
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Export YAML' })).toBeDisabled();
+      expect(mockedCallApi).not.toHaveBeenCalledWith('/configs', expect.anything());
     });
   });
 
@@ -190,6 +216,99 @@ describe('RedTeamSetupPage', () => {
   });
 
   describe('YAML file import', () => {
+    it('normalizes an object target with an omitted config while importing YAML', async () => {
+      const user = userEvent.setup();
+      const showToast = vi.fn();
+      mockedUseToast.mockReturnValue({ showToast });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          'description: Valid shorthand target\ntargets:\n  - id: openai:gpt-5\n    label: customer-service-agent\nredteam:\n  plugins: [default]\n',
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() => {
+        expect(useRedTeamConfig.getState().config.target).toEqual({
+          id: 'openai:gpt-5',
+          label: 'customer-service-agent',
+          config: {},
+        });
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      });
+      expect(showToast).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    it('keeps a YAML timestamp target config blocked after import', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          'description: Invalid timestamp target\ntargets:\n  - id: openinterpreter\n    label: Coding target\n    config: 2024-01-01\nredteam:\n  plugins: [default]\n',
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() =>
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+          'Configuration must be a JSON object',
+        ),
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        '"2024-01-01T00:00:00.000Z"',
+      );
+    });
+
+    it.each([
+      ['array', '[]', '[]'],
+      ['null', 'null', 'null'],
+      ['scalar', 'invalid-config', '"invalid-config"'],
+      ['timestamp', '2024-01-01', '"2024-01-01T00:00:00.000Z"'],
+    ])('keeps a YAML %s target config blocked with a stateful strategy', async (_case, yamlConfig, expectedDraft) => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          `description: Invalid stateful target\ntargets:\n  - id: openinterpreter\n    label: Coding target\n    config: ${yamlConfig}\nredteam:\n  plugins: [default]\n  strategies:\n    - id: jailbreak\n      config:\n        stateful: true\n`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() =>
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+          'Configuration must be a JSON object',
+        ),
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(expectedDraft);
+    });
+
     it('should preserve redteam.provider when loading a YAML config', async () => {
       const user = userEvent.setup();
       mockedUseToast.mockReturnValue({ showToast: vi.fn() });

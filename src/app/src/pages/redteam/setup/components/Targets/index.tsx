@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
@@ -18,11 +19,25 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
+const getStructuredTarget = (target: ProviderOptions): ProviderOptions => {
+  const config = target.config as unknown;
+  if (typeof config !== 'object' || config === null) {
+    return { ...target, config: {} };
+  }
+  const prototype = Object.getPrototypeOf(config);
+  return prototype === Object.prototype || prototype === null ? target : { ...target, config: {} };
+};
+
 export default function Targets({ onNext, onBack }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
+  const structuredTarget = useMemo(() => getStructuredTarget(selectedTarget), [selectedTarget]);
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
+  const targetError =
+    targetConfigError ??
+    (structuredTarget === selectedTarget ? null : 'Configuration must be a JSON object');
 
   const [providerError, setProviderError] = useState<string | null>(null);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
@@ -74,7 +89,7 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
 
   const isProviderValid = () => {
     // Check for explicit errors
-    if (providerError) {
+    if (providerError || targetError) {
       return false;
     }
 
@@ -82,16 +97,16 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
     if (selectedTarget.id === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
       const hasConfig =
-        selectedTarget.config.request === undefined
-          ? !!selectedTarget.config.url && selectedTarget.config.url.trim() !== ''
-          : selectedTarget.config.request?.trim() !== '';
+        structuredTarget.config.request === undefined
+          ? !!structuredTarget.config.url && structuredTarget.config.url.trim() !== ''
+          : structuredTarget.config.request?.trim() !== '';
 
       // For HTTP providers, require both tests to be completed
       return hasConfig && isTargetTested && isSessionTested;
     }
 
     if (selectedTarget.id === 'websocket') {
-      return !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+      return !!structuredTarget.config.url && structuredTarget.config.url.trim() !== '';
     }
 
     // For other provider types, rely on providerError
@@ -102,15 +117,18 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
     if (providerError) {
       return providerError;
     }
+    if (targetError) {
+      return targetError;
+    }
 
     // Additional validation messages for HTTP and WebSocket providers
     if (selectedTarget.id === 'http') {
-      if (selectedTarget.config.request === undefined) {
-        if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
+      if (structuredTarget.config.request === undefined) {
+        if (!structuredTarget.config.url || !structuredTarget.config.url.trim()) {
           return 'Valid URL is required';
         }
       } else {
-        if (!selectedTarget.config.request?.trim()) {
+        if (!structuredTarget.config.request?.trim()) {
           return 'HTTP request content is required';
         }
       }
@@ -126,7 +144,7 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
     }
 
     if (selectedTarget.id === 'websocket') {
-      if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
+      if (!structuredTarget.config.url || !structuredTarget.config.url.trim()) {
         return 'Valid WebSocket URL is required';
       }
     }
@@ -169,7 +187,7 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
         </div>
 
         <ProviderEditor
-          provider={selectedTarget}
+          provider={structuredTarget}
           setProvider={handleProviderChange}
           extensions={config.extensions}
           onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}

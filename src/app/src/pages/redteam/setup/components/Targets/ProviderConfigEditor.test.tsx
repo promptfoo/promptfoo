@@ -3,6 +3,8 @@ import React from 'react';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
@@ -18,7 +20,46 @@ vi.mock('./WebSocketEndpointConfiguration', () => ({
   default: () => <div data-testid="ws-config" />,
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
-  default: () => <div data-testid="custom-config" />,
+  default: ({
+    selectedTarget,
+    updateCustomTarget,
+    onConfigErrorChange,
+    rawConfigJson,
+    setRawConfigJson,
+    bodyError,
+  }: {
+    selectedTarget?: { id: string; label?: string; config: Record<string, unknown> };
+    updateCustomTarget?: (field: string, value: unknown) => void;
+    onConfigErrorChange?: (error: string | null, expectedTarget?: unknown) => void;
+    rawConfigJson?: string;
+    setRawConfigJson?: (value: string) => void;
+    bodyError?: React.ReactNode;
+  }) => (
+    <div data-testid="custom-config">
+      <pre data-testid="custom-raw-config">{rawConfigJson}</pre>
+      <div data-testid="custom-body-error">{bodyError}</div>
+      <button
+        data-testid="invalidate-custom-config"
+        onClick={() => {
+          setRawConfigJson?.('{"sandbox_mode":"read-only",}');
+          onConfigErrorChange?.('Invalid JSON configuration');
+        }}
+      >
+        Invalidate custom config
+      </button>
+      <button
+        data-testid="correct-custom-config"
+        onClick={() => {
+          const config = { sandbox_mode: 'read-only' };
+          setRawConfigJson?.(JSON.stringify(config));
+          updateCustomTarget?.('config', config);
+          onConfigErrorChange?.(null, { ...selectedTarget, config });
+        }}
+      >
+        Correct custom config
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./A2AEndpointConfiguration', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
@@ -75,6 +116,7 @@ vi.mock('./CommonConfigurationOptions', () => ({
 describe('ProviderConfigEditor', () => {
   beforeEach(() => {
     mockA2AConfigState.advancedConfigError = null;
+    useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
   describe('validate method', () => {
@@ -611,6 +653,10 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', validGoProvider);
+    });
+
     const { rerender } = renderWithProviders(
       <ProviderConfigEditor
         provider={validGoProvider}
@@ -654,6 +700,10 @@ describe('ProviderConfigEditor', () => {
       config: {},
     };
 
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', initialProvider);
+    });
+
     const TestComponent = () => {
       const [providerType, setProviderType] = React.useState('custom');
 
@@ -687,6 +737,46 @@ describe('ProviderConfigEditor', () => {
     });
   });
 
+  it('should reset stale HTTP JSON when switching to Open Interpreter', async () => {
+    const TestComponent = () => {
+      const [providerType, setProviderType] = React.useState('http');
+      const [provider, setProvider] = React.useState<ProviderOptions>({
+        id: 'http',
+        config: { url: 'https://api.example.com', body: '{{prompt}}' },
+      });
+
+      return (
+        <>
+          <ProviderConfigEditor
+            provider={provider}
+            setProvider={setProvider}
+            providerType={providerType}
+          />
+          <button
+            data-testid="switch-openinterpreter"
+            onClick={() => {
+              setProvider({ id: 'openinterpreter', config: {} });
+              setProviderType('openinterpreter');
+            }}
+          >
+            Switch Open Interpreter
+          </button>
+        </>
+      );
+    };
+
+    renderWithProviders(<TestComponent />);
+
+    act(() => {
+      screen.getByTestId('switch-openinterpreter').click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-raw-config')).toHaveTextContent('{}');
+    });
+    expect(screen.getByTestId('custom-raw-config')).not.toHaveTextContent('api.example.com');
+  });
+
   it('should update validation rules and rendered component when switching from agent framework to non-agent provider type', async () => {
     const mockSetProvider = vi.fn();
     const mockSetError = vi.fn();
@@ -698,6 +788,10 @@ describe('ProviderConfigEditor', () => {
       id: 'file://path/to/agent.py',
       config: {},
     };
+
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', initialProvider);
+    });
 
     const TestComponent = () => {
       const [providerType, setProviderType] = React.useState('langchain');
@@ -742,6 +836,10 @@ describe('ProviderConfigEditor', () => {
         },
       },
     };
+
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', updatedProvider);
+    });
 
     renderWithProviders(
       <ProviderConfigEditor
@@ -808,6 +906,404 @@ describe('ProviderConfigEditor', () => {
 
     expect(screen.getByTestId('fm-config')).toBeInTheDocument();
     expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
+  });
+
+  it('should render the raw provider editor for Open Interpreter targets', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: {} }}
+        setProvider={vi.fn()}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(screen.getByTestId('custom-config')).toBeInTheDocument();
+  });
+
+  it('should reject an empty Open Interpreter target ID', () => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: '', config: {} }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        validateAll={true}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(setError).toHaveBeenCalledWith('Provider ID is required');
+    expect(onValidate).toHaveBeenCalledWith(false);
+  });
+
+  it('should reject an invalid Open Interpreter target ID', () => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:chat:gpt-4o', config: {} }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        validateAll={true}
+        providerType="openinterpreter"
+      />,
+    );
+
+    expect(setError).toHaveBeenCalledWith(
+      'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
+    );
+    expect(onValidate).toHaveBeenCalledWith(false);
+  });
+
+  it('should reject malformed Open Interpreter configuration when validation is requested', () => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+    let validateFn: (() => boolean) | null = null;
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        onValidationRequest={(validator) => {
+          validateFn = validator;
+        }}
+        providerType="openinterpreter"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(validateFn!()).toBe(false);
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(screen.getByTestId('custom-body-error')).toHaveTextContent('Invalid JSON configuration');
+    expect(onValidate).toHaveBeenLastCalledWith(false);
+  });
+
+  it('propagates malformed Open Interpreter configuration to the redteam store immediately', () => {
+    const setError = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+  });
+
+  it('keeps malformed Open Interpreter configuration blocked when browser storage is full', () => {
+    const previousStorage = useRedTeamConfig.persist.getOptions().storage;
+    const setError = vi.fn();
+    const setProvider = vi.fn();
+    const setItem = vi.fn(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    useRedTeamConfig.persist.setOptions({
+      storage: {
+        getItem: () => null,
+        removeItem: () => {},
+        setItem,
+      },
+    });
+
+    try {
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+          setProvider={setProvider}
+          setError={setError}
+          providerType="openinterpreter"
+        />,
+      );
+
+      expect(() => {
+        act(() => {
+          screen.getByTestId('invalidate-custom-config').click();
+        });
+      }).not.toThrow();
+
+      expect(setProvider).not.toHaveBeenCalled();
+      expect(setItem).not.toHaveBeenCalled();
+      expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Invalid JSON configuration',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        '{"sandbox_mode":"read-only",}',
+      );
+    } finally {
+      useRedTeamConfig.persist.setOptions({ storage: previousStorage });
+    }
+  });
+
+  it('keeps a corrected Open Interpreter edit blocked when its persisted target is overwritten before the clear', () => {
+    const staleTarget = {
+      id: 'openinterpreter',
+      label: 'Coding target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: staleTarget,
+    });
+    const setError = vi.fn();
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={staleTarget}
+        setProvider={(provider) => useRedTeamConfig.getState().updateConfig('target', provider)}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    let raced = false;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      const result = originalSetItem.call(this, key, value);
+      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
+        raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    });
+    try {
+      act(() => {
+        screen.getByTestId('correct-custom-config').click();
+      });
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(raced).toBe(true);
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only"}',
+    );
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(screen.getByTestId('custom-body-error')).toHaveTextContent('Invalid JSON configuration');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^invalid-json:[a-z0-9-]+$/,
+    );
+  });
+
+  it('keeps a provider-type replacement blocked when its persisted target is overwritten before the clear', () => {
+    const staleTarget = {
+      id: 'openinterpreter',
+      label: 'Coding target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    const correctedTarget = { id: 'openai:gpt-4o', label: 'Foundation target', config: {} };
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: staleTarget,
+    });
+    const setError = vi.fn();
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={staleTarget}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    let raced = false;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      const result = originalSetItem.call(this, key, value);
+      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
+        raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    });
+    try {
+      act(() => {
+        useRedTeamConfig.getState().updateConfig('target', correctedTarget);
+      });
+      rerender(
+        <ProviderConfigEditor
+          provider={correctedTarget}
+          setProvider={vi.fn()}
+          setError={setError}
+          providerType="openai"
+        />,
+      );
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(raced).toBe(true);
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^invalid-json:[a-z0-9-]+$/,
+    );
+  });
+
+  it('does not rewrite the persisted red-team configuration on malformed edits', () => {
+    const previousStorage = useRedTeamConfig.persist.getOptions().storage;
+    const setItem = vi.fn();
+    useRedTeamConfig.persist.setOptions({
+      storage: { getItem: () => null, removeItem: () => {}, setItem },
+    });
+
+    try {
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+          setProvider={vi.fn()}
+          setError={vi.fn()}
+          providerType="openinterpreter"
+        />,
+      );
+
+      act(() => {
+        for (let edit = 0; edit < 100; edit += 1) {
+          screen.getByTestId('invalidate-custom-config').click();
+        }
+      });
+
+      expect(setItem).not.toHaveBeenCalled();
+    } finally {
+      useRedTeamConfig.persist.setOptions({ storage: previousStorage });
+    }
+  });
+
+  it('does not persist malformed custom configuration from the eval creator', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        providerType="openinterpreter"
+        mode="eval"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+  });
+
+  it('clears propagated custom configuration errors when the provider type changes', () => {
+    const setError = vi.fn();
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openinterpreter"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+      'Invalid JSON configuration',
+    );
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+      '{"sandbox_mode":"read-only",}',
+    );
+
+    act(() => {
+      useRedTeamConfig.getState().updateConfig('target', { id: 'openai:gpt-4o', config: {} });
+    });
+
+    rerender(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:gpt-4o', config: {} }}
+        setProvider={vi.fn()}
+        setError={setError}
+        providerType="openai"
+      />,
+    );
+
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+  });
+
+  it.each([
+    ['python', 'file://provider.py'],
+    ['sagemaker', 'sagemaker:my-endpoint'],
+  ])('should reject malformed %s configuration when validation is requested', (providerType, id) => {
+    const setError = vi.fn();
+    const onValidate = vi.fn();
+    let validateFn: (() => boolean) | null = null;
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id, config: { timeout: 30000 } }}
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidate={onValidate}
+        onValidationRequest={(validator) => {
+          validateFn = validator;
+        }}
+        providerType={providerType}
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('invalidate-custom-config').click();
+    });
+
+    expect(validateFn!()).toBe(false);
+    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(onValidate).toHaveBeenLastCalledWith(false);
   });
 
   it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {

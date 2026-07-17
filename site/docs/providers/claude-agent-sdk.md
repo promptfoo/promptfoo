@@ -769,6 +769,7 @@ sandbox:
   enabled: true
   network:
     allowedDomains: ['api.example.com']
+    tlsTerminate: {}
   credentials:
     envVars:
       - name: EXAMPLE_API_KEY
