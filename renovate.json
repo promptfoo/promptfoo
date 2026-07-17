@@ -8,6 +8,7 @@
   "constraints": {
     "npm": ">= 11"
   },
+  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
