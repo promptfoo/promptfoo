@@ -796,6 +796,21 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('rejects unsupported Vertex Omni follow-ups supplied through passthrough', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        passthrough: { previous_interaction_id: 'interaction-0' },
+      },
+    });
+
+    const result = await provider.callApi('Make it brighter');
+
+    expect(result.error).toContain('does not support previousInteractionId');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported Omni tools before making a request', async () => {
     const unsupportedToolConfigs = [
       { tools: [{ googleSearch: {} }] },
