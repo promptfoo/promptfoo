@@ -21,6 +21,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureImageProvider } from './azure/image';
 import { AzureModerationProvider } from './azure/moderation';
+import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { BrowserProvider } from './browser';
@@ -81,7 +82,7 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
-import { assertOpenAiApiModel } from './openai/util';
+import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -388,11 +389,22 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'realtime') {
+        requirePathSegment('realtime', 'a deployment name', 'deployment');
+        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
+          throw new Error(
+            deploymentName === 'gpt-realtime-whisper'
+              ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'
+              : `azure:realtime:${deploymentName} is translation-only and requires a separate Realtime translation-session endpoint not yet supported by promptfoo.`,
+          );
+        }
+        return new AzureRealtimeProvider(deploymentName, providerOptions);
+      }
       if (modelType === 'video') {
         return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
       }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:realtime:<deployment name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },

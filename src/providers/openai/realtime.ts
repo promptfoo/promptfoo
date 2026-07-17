@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sanitizeUrlForLogging } from '../../util/sanitizer';
-import { OpenAiGenericProvider } from '.';
+import { hasHeaderOverride, OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
@@ -145,6 +145,8 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   maxToolIterations?: number; // Max tool→follow-up rounds in a single turn (default 8)
   apiVersion?: string; // Optional API version
   maintainContext?: boolean;
+  /** Internal Azure delegate marker: API-key connections must not also send bearer auth. */
+  azureApiKeyAuth?: boolean;
 }
 
 interface WebSocketMessage {
@@ -368,10 +370,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (candidate.type === 'input_image' && typeof candidate.image_url === 'string') {
+    const imageUrl =
+      typeof candidate.image_url === 'string'
+        ? candidate.image_url
+        : (candidate.image_url as { url?: unknown } | undefined)?.url;
+    if (
+      (candidate.type === 'input_image' || candidate.type === 'image_url') &&
+      typeof imageUrl === 'string'
+    ) {
       return {
         type: 'input_image',
-        image_url: candidate.image_url,
+        image_url: imageUrl,
       };
     }
 
@@ -665,6 +674,37 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return appendOpenAiApiPath(wsBase, 'realtime', `model=${encodeURIComponent(modelName)}`);
   }
 
+  private shouldOmitBearerAuth(wsUrl: string): boolean {
+    if (!hasHeaderOverride(this.config.headers, 'api-key')) {
+      return false;
+    }
+    return (
+      this.config.azureApiKeyAuth === true ||
+      new URL(wsUrl).hostname.toLowerCase().endsWith('.openai.azure.com')
+    );
+  }
+
+  // Build the WebSocket handshake headers. When bearer auth is suppressed (Azure
+  // api-key auth), also drop any Authorization header a user supplied via
+  // config.headers so it can't re-introduce bearer credentials alongside api-key.
+  private buildRealtimeWsHeaders(wsUrl: string): Record<string, string> {
+    const omitBearer = this.shouldOmitBearerAuth(wsUrl);
+    const requestHeaders = { ...this.getOpenAiRequestHeaders() };
+    if (omitBearer) {
+      for (const key of Object.keys(requestHeaders)) {
+        if (key.toLowerCase() === 'authorization') {
+          delete requestHeaders[key];
+        }
+      }
+    }
+    return {
+      ...(omitBearer ? {} : { Authorization: `Bearer ${this.getApiKey()}` }),
+      'User-Agent': 'promptfoo Realtime API Client',
+      Origin: this.getWebSocketOrigin(),
+      ...requestHeaders,
+    };
+  }
+
   // Build WebSocket URL for client-secret based socket initialization
   private getClientSecretSocketUrl(clientSecret: string): string {
     const wsBase = this.getWebSocketBase();
@@ -748,6 +788,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let responseError = '';
       let responseDone = false;
       let usage = null;
+      const usageEvents: any[] = [];
 
       // Audio content accumulators
       const audioContent: Buffer[] = [];
@@ -984,7 +1025,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             case 'response.done':
               responseDone = true;
-              usage = message.response.usage;
+              usage = message.response?.usage ?? message.usage;
+              if (usage) {
+                usageEvents.push(usage);
+              }
 
               // If there are pending function calls, process them
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
@@ -1120,6 +1164,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   responseId,
                   messageId,
                   usage,
+                  usageEvents,
                   // Include audio data in metadata if available
                   ...(hasAudioContent && {
                     audio: {
@@ -1227,7 +1272,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         ? (context.test.metadata as Record<string, any>)?.conversationId
         : undefined;
 
-    if (!conversationId) {
+    if (
+      conversationId === '' ||
+      (typeof conversationId !== 'string' && typeof conversationId !== 'number')
+    ) {
       this.config.maintainContext = false;
     }
 
@@ -1320,21 +1368,62 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         );
       }
 
-      const cost = calculateOpenAIUsageCost(
-        this.modelName,
-        this.config,
-        result.metadata?.usage ?? {
-          prompt_tokens: result.tokenUsage?.prompt,
-          completion_tokens: result.tokenUsage?.completion,
-          total_tokens: result.tokenUsage?.total,
-        },
-        {
+      const usageEvents: any[] = Array.isArray(result.metadata?.usageEvents)
+        ? result.metadata.usageEvents
+        : [];
+      const tokenUsage =
+        usageEvents.length > 0
+          ? {
+              ...result.tokenUsage,
+              total: usageEvents.reduce(
+                (total, usage) =>
+                  total +
+                  (usage?.total_tokens ??
+                    (usage?.input_tokens ?? usage?.prompt_tokens ?? 0) +
+                      (usage?.output_tokens ?? usage?.completion_tokens ?? 0)),
+                0,
+              ),
+              prompt: usageEvents.reduce(
+                (total, usage) => total + (usage?.input_tokens ?? usage?.prompt_tokens ?? 0),
+                0,
+              ),
+              completion: usageEvents.reduce(
+                (total, usage) => total + (usage?.output_tokens ?? usage?.completion_tokens ?? 0),
+                0,
+              ),
+              cached: usageEvents.reduce(
+                (total, usage) =>
+                  total +
+                  (usage?.input_tokens_details?.cached_tokens ??
+                    usage?.input_token_details?.cached_tokens ??
+                    usage?.prompt_tokens_details?.cached_tokens ??
+                    0),
+                0,
+              ),
+              numRequests: usageEvents.length,
+            }
+          : result.tokenUsage;
+      const billingUsages: any[] =
+        usageEvents.length > 0
+          ? usageEvents
+          : [
+              result.metadata?.usage ?? {
+                prompt_tokens: tokenUsage?.prompt,
+                completion_tokens: tokenUsage?.completion,
+                total_tokens: tokenUsage?.total,
+              },
+            ];
+      const cost = billingUsages.reduce<number | undefined>((total, usage) => {
+        const usageCost = calculateOpenAIUsageCost(this.modelName, this.config, usage, {
           cachedResponse: result.cached,
-        },
-      );
+        });
+        return typeof total === 'number' && typeof usageCost === 'number'
+          ? total + usageCost
+          : undefined;
+      }, 0);
       return {
         output: finalOutput,
-        tokenUsage: result.tokenUsage,
+        tokenUsage,
         cached: result.cached,
         cost,
         metadata,
@@ -1393,12 +1482,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // Add WebSocket options with required headers
       const wsOptions = {
-        headers: {
-          Authorization: `Bearer ${this.getApiKey()}`,
-          'User-Agent': 'promptfoo Realtime API Client',
-          Origin: this.getWebSocketOrigin(),
-          ...this.getOpenAiRequestHeaders(),
-        },
+        headers: this.buildRealtimeWsHeaders(wsUrl),
         handshakeTimeout: 10000,
         perMessageDeflate: false,
       };
@@ -1423,6 +1507,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let responseError = '';
       let responseDone = false;
       let usage = null;
+      const usageEvents: any[] = [];
 
       // Audio content accumulators
       const audioContent: Buffer[] = [];
@@ -1657,7 +1742,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             case 'response.done':
               responseDone = true;
-              usage = message.response.usage;
+              usage = message.response?.usage ?? message.usage;
+              if (usage) {
+                usageEvents.push(usage);
+              }
 
               // If there are pending function calls, process them
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
@@ -1793,6 +1881,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   responseId,
                   messageId,
                   usage,
+                  usageEvents,
                   // Include audio data in metadata if available
                   ...(hasAudioContent && {
                     audio: {
@@ -1987,12 +2076,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     logger.debug(`Opening persistent WebSocket: ${sanitizeUrlForLogging(wsUrl)}`);
 
     const wsOptions = {
-      headers: {
-        Authorization: `Bearer ${this.getApiKey()}`,
-        'User-Agent': 'promptfoo Realtime API Client',
-        Origin: this.getWebSocketOrigin(),
-        ...this.getOpenAiRequestHeaders(),
-      },
+      headers: this.buildRealtimeWsHeaders(wsUrl),
       handshakeTimeout: 10000,
       perMessageDeflate: false,
     };
@@ -2133,6 +2217,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       input_tokens?: number;
       output_tokens?: number;
     } | null = null;
+    const usageEvents: any[] = [];
 
     // Track message IDs and function call state
     let _messageId = '';
@@ -2214,6 +2299,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           responseId: _responseId,
           messageId: _messageId,
           usage: _usage,
+          usageEvents,
           ...(hadAudio && {
             audio: {
               data: finalAudioData,
@@ -2354,6 +2440,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             responseDone = true;
             if (message.response?.usage || message.usage) {
               _usage = message.response?.usage ?? message.usage;
+              usageEvents.push(_usage);
             }
 
             if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
