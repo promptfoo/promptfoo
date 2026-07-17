@@ -352,29 +352,28 @@ export function calculateGoogleCost(
     (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
       ?.service_tier ??
     (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
-    (config as ProviderConfig & { service_tier?: unknown }).service_tier;
-  const serviceTierMultiplier =
-    serviceTier === 'priority'
-      ? (modelCost.priorityMultiplier ?? 1)
-      : serviceTier === 'flex'
-        ? (modelCost.flexMultiplier ?? 1)
-        : 1;
-  const serviceTierAudioInputCost =
-    serviceTier === 'priority' &&
-    config.audioInputCost === undefined &&
-    config.audioCost === undefined &&
-    config.inputCost === undefined &&
-    config.cost === undefined &&
-    modelCost.priorityAudioInput !== undefined
-      ? modelCost.priorityAudioInput / serviceTierMultiplier
-      : serviceTier === 'flex' &&
-          config.audioInputCost === undefined &&
-          config.audioCost === undefined &&
-          config.inputCost === undefined &&
-          config.cost === undefined &&
-          modelCost.flexAudioInput !== undefined
-        ? modelCost.flexAudioInput / serviceTierMultiplier
-        : audioInputCost;
+    config.service_tier;
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+  // A modality/base cost override on the request takes precedence over the
+  // catalog's tier-specific audio rate.
+  const hasAudioInputOverride =
+    config.audioInputCost !== undefined ||
+    config.audioCost !== undefined ||
+    config.inputCost !== undefined ||
+    config.cost !== undefined;
+  let serviceTierAudioInputCost = audioInputCost;
+  if (!hasAudioInputOverride) {
+    if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
+      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
+    } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
+      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
+    }
+  }
 
   return (
     ((textInputTokens - cachedTextTokens) * inputCost +

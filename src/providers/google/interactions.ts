@@ -41,6 +41,19 @@ type InteractionResponse = {
   };
 };
 
+function normalizeAudioMimeType(format?: string): string {
+  if (format?.startsWith('audio/')) {
+    return format;
+  }
+  if (format === 'mp3') {
+    return 'audio/mpeg';
+  }
+  if (format === 'pcm16') {
+    return 'audio/pcm';
+  }
+  return `audio/${format || 'mpeg'}`;
+}
+
 function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
   try {
     const parsedPrompt = JSON.parse(prompt) as unknown;
@@ -99,14 +112,7 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             const inputAudio = (part as { input_audio?: { data?: string; format?: string } })
               .input_audio;
             if (inputAudio?.data) {
-              const format = inputAudio.format?.toLowerCase();
-              const mimeType = format?.startsWith('audio/')
-                ? format
-                : format === 'mp3'
-                  ? 'audio/mpeg'
-                  : format === 'pcm16'
-                    ? 'audio/pcm'
-                    : `audio/${format || 'mpeg'}`;
+              const mimeType = normalizeAudioMimeType(inputAudio.format?.toLowerCase());
               return { type: 'audio', mime_type: mimeType, data: inputAudio.data };
             }
           }

@@ -89,19 +89,14 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
 
     const promptHost = promptConfig?.apiHost?.replace(/\/+$/, '');
     const configuredHost = effectiveConfig.apiHost?.replace(/\/+$/, '');
+    const ensureHttpScheme = (host?: string): string | undefined =>
+      host ? (/^https?:\/\//i.test(host) ? host : `https://${host}`) : undefined;
     const baseUrl =
       promptConfig?.apiBaseUrl?.replace(/\/+$/, '') ??
-      (promptHost
-        ? /^https?:\/\//i.test(promptHost)
-          ? promptHost
-          : `https://${promptHost}`
-        : undefined) ??
+      ensureHttpScheme(promptHost) ??
       effectiveConfig.apiBaseUrl?.replace(/\/+$/, '') ??
-      (configuredHost
-        ? /^https?:\/\//i.test(configuredHost)
-          ? configuredHost
-          : `https://${configuredHost}`
-        : this.getApiBaseUrl());
+      ensureHttpScheme(configuredHost) ??
+      this.getApiBaseUrl();
     if (!baseUrl) {
       throwConfigurationError('Azure API host or base URL must be set for realtime deployments.');
     }
