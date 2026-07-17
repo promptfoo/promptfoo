@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -88,6 +89,49 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+    });
+
+    it('should record GPT-5.6 cache writes in the chat span', async () => {
+      const spanAttributes: Record<string, unknown> = {};
+      const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+          callback({
+            setAttribute: (key: string, value: unknown) => {
+              spanAttributes[key] = value;
+            },
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          }),
+      } as any);
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: {
+            total_tokens: 10,
+            prompt_tokens: 5,
+            completion_tokens: 5,
+            prompt_tokens_details: { cached_tokens: 2, cache_write_tokens: 3 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-5.6');
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage?.completionDetails).toMatchObject({
+          cacheReadInputTokens: 2,
+          cacheCreationInputTokens: 3,
+        });
+        expect(spanAttributes['gen_ai.usage.cache_read_input_tokens']).toBe(2);
+        expect(spanAttributes['gen_ai.usage.cache_creation_input_tokens']).toBe(3);
+      } finally {
+        getTracerSpy.mockRestore();
+      }
     });
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {
@@ -2057,9 +2101,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body: gpt56Body } = await new OpenAiChatCompletionProvider('gpt-5.6', {
+        config: { prompt_cache_options: { mode: 'explicit', ttl: '30m' } },
+      }).getOpenAiBody('Test prompt');
 
       expect(body.prompt_cache_key).toBe('shared-prefix');
       expect(body.prompt_cache_retention).toBe('in_memory');
+      expect(gpt56Body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '30m' });
     });
 
     it('should not share config between provider instances', () => {
@@ -2121,6 +2169,22 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.reasoning_effort).toBeUndefined();
+    });
+
+    it.each([
+      'gpt-5.6',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+    ])('should forward max reasoning_effort for %s', async (model) => {
+      const provider = new OpenAiChatCompletionProvider(model, {
+        config: { reasoning_effort: 'max' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning_effort).toBe('max');
+      expect(body.temperature).toBeUndefined();
     });
 
     it('should handle o4-mini with reasoning_effort and service_tier', async () => {

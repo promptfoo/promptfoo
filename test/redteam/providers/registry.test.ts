@@ -54,6 +54,7 @@ describe('redteamProviderFactories', () => {
     { path: 'promptfoo:redteam:custom:my-strategy', expectedId: 'promptfoo:redteam:custom' },
     { path: 'promptfoo:redteam:goat', expectedId: 'promptfoo:redteam:goat' },
     { path: 'promptfoo:redteam:hydra', expectedId: 'promptfoo:redteam:hydra' },
+    { path: 'promptfoo:redteam:goblin', expectedId: 'promptfoo:redteam:goblin' },
     {
       path: 'promptfoo:redteam:indirect-web-pwn',
       expectedId: 'promptfoo:redteam:indirect-web-pwn',

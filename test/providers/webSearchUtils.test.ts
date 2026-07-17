@@ -447,6 +447,7 @@ describe('webSearchUtils', () => {
     it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
         id: () => 'xai:responses:grok-4.3',
+        config: { tools: [{ type: 'web_search' }] },
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -456,7 +457,7 @@ describe('webSearchUtils', () => {
         .mockRejectedValueOnce(new Error('Vertex failed'))
         .mockResolvedValueOnce(mockProvider as ApiProvider);
 
-      await loadWebSearchProvider(true);
+      const result = await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
         'xai:responses:grok-4.3',
@@ -468,6 +469,7 @@ describe('webSearchUtils', () => {
           }),
         }),
       );
+      expect(result).toBe(mockProvider);
     });
 
     it('should use default value (false) for preferAnthropic parameter', async () => {

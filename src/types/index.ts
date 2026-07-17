@@ -851,6 +851,8 @@ export type ScoringFunction = (
       total: number;
       prompt: number;
       completion: number;
+      cached?: number;
+      numRequests?: number;
     };
   },
 ) => Promise<GradingResult> | GradingResult;
