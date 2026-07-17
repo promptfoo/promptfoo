@@ -424,12 +424,22 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return 'openai';
   }
 
+  /**
+   * Resolve the credential used for one request. Most OpenAI-compatible providers have a static
+   * API key, but subclasses may need an asynchronous request-scoped credential (for example, a
+   * short-lived cloud-provider bearer token).
+   */
+  protected async getApiKeyForRequest(): Promise<string | undefined> {
+    return this.getApiKey();
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.requiresApiKey() && !this.getApiKey()) {
+    const apiKey = await this.getApiKeyForRequest();
+    if (this.requiresApiKey() && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
@@ -460,7 +470,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(context, resolved),
+      () => this.callApiInternal(context, resolved, apiKey),
       extractProviderResponseAttributes,
     );
   }
@@ -471,6 +481,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
     // is already baked into `prepared.body`, so it is not needed here.
     prepared: { body: any; config: any },
+    apiKey: string | undefined,
   ): Promise<ProviderResponse> {
     const { body, config } = prepared;
 
@@ -547,7 +558,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...this.getOpenAiRequestHeaders(config.headers),
         },
         body: JSON.stringify(body),

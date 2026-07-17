@@ -14,7 +14,7 @@ interface FoundationModelConfigurationProps {
   providerType: string;
 }
 
-type BedrockApiMode = 'invoke' | 'converse';
+type BedrockApiMode = 'invoke' | 'converse' | 'responses';
 
 interface MCPServerConfig {
   name: string;
@@ -24,12 +24,19 @@ interface MCPServerConfig {
   url?: string;
 }
 
-const getBedrockApiModeFromId = (id?: string): BedrockApiMode =>
-  id?.startsWith('bedrock:converse:') ? 'converse' : 'invoke';
+const getBedrockApiModeFromId = (id?: string): BedrockApiMode => {
+  if (id?.startsWith('bedrock:responses:')) {
+    return 'responses';
+  }
+  return id?.startsWith('bedrock:converse:') ? 'converse' : 'invoke';
+};
 
 const getBedrockModelFromId = (id?: string): string => {
   if (!id) {
     return '';
+  }
+  if (id.startsWith('bedrock:responses:')) {
+    return id.slice('bedrock:responses:'.length);
   }
   if (id.startsWith('bedrock:converse:')) {
     return id.slice('bedrock:converse:'.length);
@@ -40,8 +47,12 @@ const getBedrockModelFromId = (id?: string): string => {
   return id;
 };
 
-const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string =>
-  apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
+const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string => {
+  if (apiMode === 'responses') {
+    return `bedrock:responses:${modelId}`;
+  }
+  return apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
+};
 
 const isServerConfigured = (server: MCPServerConfig): boolean =>
   Boolean(server.command || server.path || server.url);
@@ -226,6 +237,8 @@ const FoundationModelConfiguration = ({
   };
 
   const providerInfo = getProviderInfo(providerType);
+  const apiKeyEnvVar =
+    isBedrock && bedrockApiMode === 'responses' ? 'AWS_BEARER_TOKEN_BEDROCK' : providerInfo.envVar;
 
   return (
     <div className="mt-4">
@@ -246,10 +259,12 @@ const FoundationModelConfiguration = ({
               >
                 <option value="invoke">InvokeModel</option>
                 <option value="converse">Converse</option>
+                <option value="responses">Responses API</option>
               </select>
               <p className="text-sm text-muted-foreground">
-                Use Converse for Bedrock-native tool calling and MCP servers. InvokeModel keeps the
-                legacy direct model API.
+                Use Responses for OpenAI-compatible mantle models such as
+                <code> openai.gpt-oss-120b</code>. Converse supports Bedrock-native tool calling and
+                MCP servers. InvokeModel keeps the legacy direct model API.
               </p>
             </div>
           )}
@@ -387,7 +402,11 @@ const FoundationModelConfiguration = ({
         {isBedrock && (
           <SetupSection
             title="Bedrock Settings"
-            description="AWS region and credential profile (required for non-default-region deployments)"
+            description={
+              bedrockApiMode === 'responses'
+                ? 'AWS region and Bedrock API key settings for the mantle Responses endpoint'
+                : 'AWS region and credential profile (required for non-default-region deployments)'
+            }
             isExpanded={isBedrockSettingsOpen}
             onExpandedChange={setIsBedrockSettingsOpen}
             className="mt-4"
@@ -402,40 +421,53 @@ const FoundationModelConfiguration = ({
                   placeholder="us-east-1"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Defaults to <code>us-east-1</code> if unset. Set this when using inference
-                  profiles or models pinned to a specific region.
+                  {bedrockApiMode === 'responses' ? (
+                    <>
+                      Defaults to <code>us-east-2</code> for OpenAI frontier models and{' '}
+                      <code>us-east-1</code> for other mantle Responses models.
+                    </>
+                  ) : (
+                    <>
+                      Defaults to <code>us-east-1</code> if unset. Set this when using inference
+                      profiles or models pinned to a specific region.
+                    </>
+                  )}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bedrock-profile">AWS Profile</Label>
-                <Input
-                  id="bedrock-profile"
-                  value={selectedTarget.config?.profile ?? ''}
-                  onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
-                  placeholder="default"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
-                  default credential chain when unset.
-                </p>
-              </div>
+              {bedrockApiMode !== 'responses' && (
+                <div className="space-y-2">
+                  <Label htmlFor="bedrock-profile">AWS Profile</Label>
+                  <Input
+                    id="bedrock-profile"
+                    value={selectedTarget.config?.profile ?? ''}
+                    onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
+                    placeholder="default"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
+                    default credential chain when unset.
+                  </p>
+                </div>
+              )}
 
-              <div className="space-y-2">
-                <Label htmlFor="bedrock-inference-model-type">Inference Model Type</Label>
-                <Input
-                  id="bedrock-inference-model-type"
-                  value={selectedTarget.config?.inferenceModelType ?? ''}
-                  onChange={(e) =>
-                    updateCustomTarget('inferenceModelType', e.target.value || undefined)
-                  }
-                  placeholder="claude, nova, llama, mistral, ..."
-                />
-                <p className="text-sm text-muted-foreground">
-                  Required when the model ID is an Application Inference Profile ARN. Otherwise
-                  inferred from the model ID.
-                </p>
-              </div>
+              {bedrockApiMode !== 'responses' && (
+                <div className="space-y-2">
+                  <Label htmlFor="bedrock-inference-model-type">Inference Model Type</Label>
+                  <Input
+                    id="bedrock-inference-model-type"
+                    value={selectedTarget.config?.inferenceModelType ?? ''}
+                    onChange={(e) =>
+                      updateCustomTarget('inferenceModelType', e.target.value || undefined)
+                    }
+                    placeholder="claude, nova, llama, mistral, ..."
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Required when the model ID is an Application Inference Profile ARN. Otherwise
+                    inferred from the model ID.
+                  </p>
+                </div>
+              )}
             </div>
           </SetupSection>
         )}
@@ -465,14 +497,23 @@ const FoundationModelConfiguration = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="max-tokens">Max Tokens</Label>
+              <Label htmlFor="max-tokens">
+                {bedrockApiMode === 'responses' ? 'Max Output Tokens' : 'Max Tokens'}
+              </Label>
               <Input
                 id="max-tokens"
                 type="number"
                 min={1}
-                value={selectedTarget.config?.max_tokens ?? ''}
+                value={
+                  bedrockApiMode === 'responses'
+                    ? (selectedTarget.config?.max_output_tokens ?? '')
+                    : (selectedTarget.config?.max_tokens ?? '')
+                }
                 onChange={(e) =>
-                  updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
+                  updateCustomTarget(
+                    bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens',
+                    parseInt(e.target.value) || undefined,
+                  )
                 }
               />
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
@@ -505,7 +546,7 @@ const FoundationModelConfiguration = ({
                 onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
               />
               <p className="text-sm text-muted-foreground">
-                Optional - defaults to {providerInfo.envVar} environment variable
+                Optional - defaults to {apiKeyEnvVar} environment variable
               </p>
             </div>
 
@@ -516,7 +557,11 @@ const FoundationModelConfiguration = ({
                 type="url"
                 value={selectedTarget.config?.apiBaseUrl ?? ''}
                 onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
-                placeholder="https://api.openai.com/v1"
+                placeholder={
+                  bedrockApiMode === 'responses'
+                    ? 'https://bedrock-mantle.us-east-1.api.aws/v1'
+                    : 'https://api.openai.com/v1'
+                }
               />
               <p className="text-sm text-muted-foreground">
                 For proxies, local models (Ollama, LMStudio), or custom API endpoints

@@ -152,7 +152,7 @@ describe('aws bedrock provider factory routing', () => {
   it('supports the explicit messages form for Bedrock Fable', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:messages:anthropic.claude-fable-5',
-      { config: { apiKey: 'bedrock-key' } },
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
       ctx,
     );
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
@@ -211,11 +211,11 @@ describe('aws bedrock provider factory routing', () => {
     ).rejects.toThrow(/not supported by the Anthropic Messages provider/);
   });
 
-  it('throws a helpful error for frontier ids without a Bedrock API key', async () => {
+  it('allows frontier ids to use the AWS credential chain without a Bedrock API key', async () => {
     restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     await expect(
       bedrockFactory.create('bedrock:openai.gpt-5.5', { config: { region: 'us-east-2' } }, ctx),
-    ).rejects.toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+    ).resolves.toBeInstanceOf(OpenAiResponsesProvider);
   });
 
   it('routes the converse: form of a frontier id to the Responses provider on the mantle endpoint', async () => {

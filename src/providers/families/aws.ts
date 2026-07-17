@@ -60,6 +60,25 @@ export const awsProviderFactories: ProviderFactory[] = [
         );
       }
 
+      // Explicit OpenAI-compatible Responses API route for Bedrock mantle models. Keep this
+      // separate from the legacy bare bedrock:<id> route so existing InvokeModel ids such as
+      // bedrock:openai.gpt-oss-120b-1:0 retain their current behavior, while the mantle id
+      // bedrock:responses:openai.gpt-oss-120b targets /v1/responses.
+      if (modelType === 'responses') {
+        if (!modelName) {
+          throw new Error(
+            'Amazon Bedrock Responses providers require a model id. Use ' +
+              'bedrock:responses:<model-id>, for example ' +
+              'bedrock:responses:openai.gpt-oss-120b.',
+          );
+        }
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
+
       // Bare and explicit Converse/InvokeModel aliases for OpenAI frontier models (gpt-5.x)
       // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
       // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those

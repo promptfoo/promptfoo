@@ -93,6 +93,45 @@ describe('ConfigureEnvButton', () => {
     expect(azureApiKeyInput).toHaveValue(initialEnv.AZURE_API_KEY);
   });
 
+  it('should save the Amazon Bedrock API key', async () => {
+    render(<ConfigureEnvButton />);
+
+    await openProviderSettingsDialog();
+    await userEvent.click(screen.getByRole('button', { name: /Amazon Bedrock/i }));
+
+    const bedrockApiKeyInput = screen.getByLabelText(/Bedrock API key/i);
+    await userEvent.type(bedrockApiKeyInput, 'bedrock-key');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(useStore.getState().config.env?.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-key');
+  });
+
+  it('should save standard AWS credentials for generated Bedrock tokens', async () => {
+    render(<ConfigureEnvButton />);
+
+    await openProviderSettingsDialog();
+    await userEvent.click(screen.getByRole('button', { name: /Amazon Bedrock/i }));
+
+    await userEvent.type(screen.getByLabelText(/AWS access key ID/i), 'access-key');
+    await userEvent.type(screen.getByLabelText(/AWS secret access key/i), 'secret-key');
+    await userEvent.type(screen.getByLabelText(/AWS session token/i), 'session-token');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(useStore.getState().config.env).toEqual(
+      expect.objectContaining({
+        AWS_ACCESS_KEY_ID: 'access-key',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+        AWS_SESSION_TOKEN: 'session-token',
+      }),
+    );
+  });
+
   it('should refresh environment fields from the latest config when reopened', async () => {
     render(<ConfigureEnvButton />);
 
