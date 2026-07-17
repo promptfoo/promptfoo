@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
@@ -1335,6 +1336,25 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal test prompt',
     );
     expect(result.rubric).toContain('Current timestamp:');
+  });
+
+  it('does not re-log remote grading reasons', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'SECRET_REMOTE_GRADING_REASON',
+    });
+
+    await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+
+    const logs = JSON.stringify(debugSpy.mock.calls);
+    expect(logs).toContain('[Redteam] Grading completed');
+    expect(logs).toContain('"pass":true');
+    expect(logs).toContain('"score":1');
+    expect(logs).toContain('"hasReason":true');
+    expect(logs).not.toContain('SECRET_REMOTE_GRADING_REASON');
+    debugSpy.mockRestore();
   });
 
   it('should pass only image output context to multimodal graders', async () => {

@@ -22,6 +22,7 @@ import {
   withCacheNamespace,
 } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -448,6 +449,42 @@ describe('fetchWithCache', () => {
         cached: true,
       });
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
+    });
+
+    it('keeps silent responses cacheable without logging URL or response content', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      const secretUrl =
+        'https://basic-user:basic-password@example.com/task?Api_Key=URL_ENCODED%2DSECRET&authz=Bearer%20QUERY_SECRET';
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, {
+          result: { pass: true, score: 1, reason: 'SECRET_CACHE_REASON' },
+        }),
+      );
+      const options = {
+        headers: { 'X-Promptfoo-Silent': 'TRUE' },
+        method: 'POST',
+        body: '{"prompt":"SECRET_CACHE_PROMPT"}',
+      };
+
+      const first = await fetchWithCache(secretUrl, options, 1000);
+      const second = await fetchWithCache(secretUrl, options, 1000);
+
+      expect(first.cached).toBe(false);
+      expect(second.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      const logs = JSON.stringify(debugSpy.mock.calls);
+      expect(logs).toContain('[Cache] Storing response');
+      expect(logs).toContain('[Cache] Returning cached response');
+      for (const secret of [
+        'basic-user',
+        'basic-password',
+        'URL_ENCODED%2DSECRET',
+        'QUERY_SECRET',
+        'SECRET_CACHE_REASON',
+        'SECRET_CACHE_PROMPT',
+      ]) {
+        expect(logs).not.toContain(secret);
+      }
     });
 
     it('should return cached false to all concurrent callers on a cache miss', async () => {
