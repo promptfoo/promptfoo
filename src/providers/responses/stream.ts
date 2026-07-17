@@ -541,6 +541,7 @@ export async function readResponsesStream(
   providerName: string,
   logger: ResponsesStreamLogger,
   signal?: AbortSignal,
+  onResponse?: (response: any) => void,
 ): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
@@ -812,6 +813,7 @@ export async function readResponsesStream(
     if (event.response && typeof event.response === 'object') {
       latestResponse = boundedResponse(event.response);
       latestResponseEventType = event.type;
+      onResponse?.(latestResponse);
     } else if (Array.isArray(event.output)) {
       latestResponse = boundedResponse(event);
       latestResponseEventType = event.type;
