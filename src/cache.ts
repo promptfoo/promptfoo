@@ -564,6 +564,44 @@ function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: R
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
+// Disk-backed claim files never expire on their own, so sweep those older than the cache TTL
+// (the same horizon on which the response they guard expires). Throttled so high-volume claim
+// traffic does not turn each claim into an O(directory) scan.
+const CLAIM_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+let lastClaimSweepMs = 0;
+
+/**
+ * Remove claim files older than the cache TTL. A claim only needs to outlive the cached response
+ * it guards; once that response has expired (same TTL), the claim can no longer prevent a
+ * double-bill, so pruning it bounds the claims directory without affecting billing correctness.
+ */
+function pruneExpiredClaims(claimsPath: string, now: number): void {
+  if (now - lastClaimSweepMs < CLAIM_SWEEP_INTERVAL_MS) {
+    return;
+  }
+  lastClaimSweepMs = now;
+  const maxAgeMs = getCacheTtlMs();
+  if (maxAgeMs <= 0) {
+    return;
+  }
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(claimsPath);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const claimFile = path.join(claimsPath, entry);
+    try {
+      if (now - fs.statSync(claimFile).mtimeMs > maxAgeMs) {
+        fs.rmSync(claimFile, { force: true });
+      }
+    } catch {
+      // Claim vanished or is unreadable; nothing to prune.
+    }
+  }
+}
+
 /**
  * Atomically claim a cache-scoped one-time action. Disk-backed claims use an exclusive file so
  * separate eval processes cannot both attribute the same background response's usage.
@@ -580,6 +618,7 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
     const claimsPath = path.join(cachePath, 'claims');
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
+      pruneExpiredClaims(claimsPath, Date.now());
       const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
       fs.closeSync(handle);
     } catch (error) {
@@ -942,6 +981,7 @@ export async function clearCache() {
   namespacedCacheInstances.clear();
   const result = await getCacheInstance().clear();
   claimedCacheKeys.clear();
+  lastClaimSweepMs = 0;
   if (cacheType === 'disk') {
     const cachePath =
       getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
