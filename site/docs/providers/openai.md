@@ -1854,7 +1854,9 @@ providers:
 
 Speech input is limited to 4,096 characters. `instructions` is supported by GPT-4o mini TTS,
 not `tts-1` or `tts-1-hd`. Custom voices can be provided as `voice: { id: voice_123 }` and support
-the current `language` and `format` fields:
+the current `language` and `format` fields. `format` is an alias for `response_format`: the speech
+API ignores a top-level `format` field, so promptfoo sends the value as `response_format`. If both
+are set, the explicit `response_format` takes precedence.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1862,7 +1864,7 @@ providers:
     config:
       voice: { id: voice_123 }
       language: fr
-      format: wav
+      format: wav # sent to the API as response_format: wav
 ```
 
 The legacy models are billed at $15 and $30 per million characters, respectively. GPT-4o mini TTS

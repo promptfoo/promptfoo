@@ -238,13 +238,62 @@ describe('OpenAiTtsProvider', () => {
 
     const result = await provider.callApi('Bienvenue');
 
-    expect(JSON.parse(mockedFetch.mock.calls[0][1]?.body as string)).toEqual({
+    const body = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string);
+    expect(body).toEqual({
       model: 'gpt-4o-mini-tts',
       input: 'Bienvenue',
       voice: { id: 'voice_123' },
       language: 'fr',
-      format: 'wav',
+      response_format: 'wav',
     });
+    expect(body).not.toHaveProperty('format');
+    expect(result.audio?.format).toBe('wav');
+  });
+
+  it('maps the format alias onto response_format so requested pcm is really pcm', async () => {
+    mockedFetch.mockResolvedValue(audioResponse(new Uint8Array([1, 0, 2, 0])));
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', format: 'pcm' },
+    });
+
+    const result = await provider.callApi('Raw PCM through the format alias');
+
+    const body = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string);
+    expect(body.response_format).toBe('pcm');
+    expect(body).not.toHaveProperty('format');
+    expect(result.audio?.format).toBe('wav');
+    expect(
+      Buffer.from(result.audio?.data ?? '', 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('RIFF');
+  });
+
+  it('prefers an explicit response_format over the format alias', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', format: 'mp3', response_format: 'flac' },
+    });
+
+    const result = await provider.callApi('Prefer the explicit response_format');
+
+    const body = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string);
+    expect(body.response_format).toBe('flac');
+    expect(body).not.toHaveProperty('format');
+    expect(result.audio?.format).toBe('flac');
+  });
+
+  it('still forwards a raw passthrough format field verbatim for gateways', async () => {
+    mockedFetch.mockResolvedValue(audioResponse());
+    const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+      config: { apiKey: 'test-key', passthrough: { format: 'wav' } } as any,
+    });
+
+    const result = await provider.callApi('Gateway format passthrough');
+
+    const body = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string);
+    expect(body.format).toBe('wav');
+    expect(body).not.toHaveProperty('response_format');
     expect(result.audio?.format).toBe('wav');
   });
 
@@ -445,15 +494,23 @@ describe('OpenAiTtsProvider', () => {
   it('does not coalesce independently cancellable speech requests', async () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
-    mockedFetch.mockImplementation(async (_url, options) => {
-      return await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => resolve(audioResponse()), 20);
-        options?.signal?.addEventListener('abort', () => {
-          clearTimeout(timeout);
-          reject(new DOMException('The operation was aborted.', 'AbortError'));
-        });
-      });
+    const inFlight = new Map<AbortSignal | undefined, (response: Response) => void>();
+    let notifyBothDispatched: (() => void) | undefined;
+    const bothDispatched = new Promise<void>((resolve) => {
+      notifyBothDispatched = resolve;
     });
+    mockedFetch.mockImplementation(
+      (_url, options) =>
+        new Promise<Response>((resolve, reject) => {
+          options?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          );
+          inFlight.set(options?.signal ?? undefined, resolve);
+          if (inFlight.size === 2) {
+            notifyBothDispatched?.();
+          }
+        }),
+    );
     const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
     const first = new AbortController();
     const second = new AbortController();
@@ -462,7 +519,9 @@ describe('OpenAiTtsProvider', () => {
       provider.callApi('same input', undefined, { abortSignal: first.signal }),
       provider.callApi('same input', undefined, { abortSignal: second.signal }),
     ]);
-    setTimeout(() => first.abort(), 5);
+    await bothDispatched;
+    first.abort();
+    inFlight.get(second.signal)?.(audioResponse());
     const results = await resultsPromise;
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
@@ -705,6 +764,34 @@ describe('OpenAiTtsProvider', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
+  it('caches speech from an unauthenticated custom gateway', async () => {
+    const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockResolvedValue(audioResponse());
+
+    try {
+      const provider = new OpenAiTtsProvider('tts-1', {
+        config: { apiBaseUrl: 'https://gateway.example/v1', apiKeyRequired: false },
+      });
+
+      const first = await provider.callApi('same input');
+      const second = await provider.callApi('same input');
+
+      expect(first.cached).toBe(false);
+      expect(second).toMatchObject({ cached: true, cost: 0, audio: first.audio });
+      expect(cache.set).toHaveBeenCalledOnce();
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('does not share query-authenticated custom speech endpoints without a tenant discriminator', async () => {
     const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: '' });
     const values = new Map<string, string>();
@@ -714,9 +801,10 @@ describe('OpenAiTtsProvider', () => {
     };
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
+    const requestedPaths: string[] = [];
     mockedFetch.mockImplementation(async (url) => {
       const parsedUrl = new URL(String(url));
-      expect(parsedUrl.pathname).toBe('/v1/audio/speech');
+      requestedPaths.push(parsedUrl.pathname);
       const token = parsedUrl.searchParams.get('api_key');
       return audioResponse(new TextEncoder().encode(`audio-for-${token}`));
     });
@@ -744,6 +832,7 @@ describe('OpenAiTtsProvider', () => {
       expect(first.cached).toBe(false);
       expect(second.cached).toBe(false);
       expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(requestedPaths).toEqual(['/v1/audio/speech', '/v1/audio/speech']);
       expect(cache.set).not.toHaveBeenCalled();
     } finally {
       restoreEnv();

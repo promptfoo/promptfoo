@@ -100,11 +100,11 @@ function getValidationError(
   if (characterCount > MAX_INPUT_CHARACTERS) {
     return `Speech input exceeds ${MAX_INPUT_CHARACTERS} characters.`;
   }
-  if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
-    return `Invalid response_format: ${config.response_format}.`;
-  }
   if (config.format && !VALID_RESPONSE_FORMATS.has(config.format)) {
     return `Invalid format: ${config.format}.`;
+  }
+  if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
+    return `Invalid response_format: ${config.response_format}.`;
   }
   if (
     config.speed !== undefined &&
@@ -237,14 +237,16 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    // The speech API silently ignores a top-level `format` field, so treat the
+    // `format` config option as an alias for `response_format`.
+    const responseFormat = config.response_format || config.format;
     const body = {
       model: config.model || this.modelName,
       input: prompt,
       voice: config.voice || 'alloy',
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.language ? { language: config.language } : {}),
-      ...(config.format ? { format: config.format } : {}),
-      ...(config.response_format ? { response_format: config.response_format } : {}),
+      ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(config.speed === undefined ? {} : { speed: config.speed }),
       ...(config.passthrough || {}),
     };
@@ -353,7 +355,9 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         }
 
         const audioBytes = Buffer.from(await response.arrayBuffer());
-        const audioFormat = body.format || body.response_format || 'mp3';
+        // A raw `format` field can only arrive through passthrough (for gateways).
+        const { format: passthroughFormat } = body as typeof body & { format?: string };
+        const audioFormat = body.response_format || passthroughFormat || 'mp3';
         const isPcm = audioFormat === 'pcm';
         const audio = (isPcm ? convertPcm16ToWav(audioBytes) : audioBytes).toString('base64');
         const isHd = model === 'tts-1-hd' || model === 'tts-1-hd-1106';
