@@ -335,7 +335,7 @@ describe('AzureChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.cost).toBeCloseTo((800 * 2.5 + 200 * 40 + 400 * 10 + 100 * 80) / 1e6, 12);
+      expect(result.cost).toBeCloseTo((800 * 2.5 + 200 * 32 + 400 * 10 + 100 * 64) / 1e6, 12);
     });
 
     it('reports API prompt-cache usage for a fresh chat response', async () => {
