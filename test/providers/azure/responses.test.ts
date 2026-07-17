@@ -51,6 +51,7 @@ describe('AzureResponsesProvider', () => {
       mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
     }
     delete (AzureResponsesProvider.prototype as any).authHeaders;
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
@@ -99,18 +100,6 @@ describe('AzureResponsesProvider', () => {
     it('should not identify custom deployment as reasoning model without config override', () => {
       const provider = new AzureResponsesProvider('my-custom-deployment');
       expect(provider.isReasoningModel()).toBe(false);
-    });
-  });
-
-  describe('supportsTemperature', () => {
-    it('should support temperature for non-reasoning models', () => {
-      const provider = new AzureResponsesProvider('gpt-4.1');
-      expect(provider.supportsTemperature()).toBe(true);
-    });
-
-    it('should not support temperature for reasoning models', () => {
-      const provider = new AzureResponsesProvider('o1-preview');
-      expect(provider.supportsTemperature()).toBe(false);
     });
   });
 
@@ -333,6 +322,204 @@ describe('AzureResponsesProvider', () => {
       expect('max_output_tokens' in body).toBe(true);
     });
 
+    it('should include reasoning summary config for Azure Responses reasoning models', async () => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          reasoning: {
+            summary: 'auto',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it.each([
+      null,
+      'malformed',
+      [],
+    ])('should reject non-object reasoning config: %j', async (reasoning) => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: { reasoning: reasoning as any },
+      });
+
+      await expect(provider.getAzureResponsesBody('Hello world')).rejects.toThrow(
+        'Azure Responses reasoning config must be an object',
+      );
+    });
+
+    it('should omit top_p when reasoning config promotes a custom Responses deployment', async () => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          top_p: 0.9,
+          reasoning: {
+            summary: 'auto',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.top_p).toBeUndefined();
+      expect('top_p' in body).toBe(false);
+    });
+
+    it('should preserve sampling parameters when reasoning effort is none', async () => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          reasoning: { effort: 'none' },
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+    });
+
+    it('should preserve sampling when passthrough sets the final reasoning effort to none', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.1', {
+        config: {
+          temperature: 0.7,
+          top_p: 0.9,
+          passthrough: {
+            reasoning: { effort: 'none' },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+    });
+
+    it.each([
+      'gpt-5.1',
+      'gpt-5.2',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+      'gpt-5.4-nano',
+    ])('should preserve sampling for %s when its default reasoning effort is none', async (deploymentName) => {
+      const provider = new AzureResponsesProvider(deploymentName, {
+        config: {
+          omitDefaults: true,
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+    });
+
+    it('should omit sampling for models whose default reasoning effort is active', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.5', {
+        config: {
+          omitDefaults: true,
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBeUndefined();
+      expect(body.top_p).toBeUndefined();
+    });
+
+    it('should merge reasoning_effort with reasoning summary config', async () => {
+      const provider = new AzureResponsesProvider('o4-mini', {
+        config: {
+          reasoning_effort: 'high',
+          reasoning: {
+            summary: 'detailed',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'high',
+        summary: 'detailed',
+      });
+    });
+
+    it('should let reasoning.effort override reasoning_effort', async () => {
+      const provider = new AzureResponsesProvider('o4-mini', {
+        config: {
+          reasoning_effort: 'high',
+          reasoning: {
+            effort: 'low',
+            summary: 'concise',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'low',
+        summary: 'concise',
+      });
+    });
+
+    it('should preserve passthrough reasoning as the legacy reasoning_effort override', async () => {
+      const provider = new AzureResponsesProvider('o4-mini', {
+        config: {
+          reasoning_effort: 'high',
+          temperature: 0.7,
+          top_p: 0.9,
+          passthrough: {
+            reasoning: {
+              summary: 'auto',
+            },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        summary: 'auto',
+      });
+      expect(body.temperature).toBeUndefined();
+      expect(body.top_p).toBeUndefined();
+    });
+
+    it('should let first-class reasoning override matching passthrough fields', async () => {
+      const provider = new AzureResponsesProvider('o4-mini', {
+        config: {
+          reasoning: {
+            effort: 'low',
+          },
+          passthrough: {
+            reasoning: {
+              effort: 'high',
+              summary: 'auto',
+            },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'low',
+        summary: 'auto',
+      });
+    });
+
     it('should include verbosity for reasoning models when configured', async () => {
       const provider = new AzureResponsesProvider('gpt-5', {
         config: { verbosity: 'high' },
@@ -548,6 +735,44 @@ describe('AzureResponsesProvider', () => {
         'json',
         undefined,
       );
+    });
+
+    it('should surface reasoning summary items in provider output', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'reasoning',
+              summary: [{ type: 'summary_text', text: 'Check the constraints first.' }],
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Final answer' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 8,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          reasoning: {
+            summary: 'auto',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.output).toBe('Reasoning: Check the constraints first.\nFinal answer');
+      expect(result.error).toBeUndefined();
     });
 
     it('should handle API errors', async () => {

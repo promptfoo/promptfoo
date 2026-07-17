@@ -2,7 +2,7 @@ import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai
 
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback } from '../openai/types';
+import type { AssistantFunctionCallback, GPT5Reasoning, Reasoning } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -114,6 +114,13 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
    * Only values explicitly set via config or environment variables will be sent.
    */
   omitDefaults?: boolean;
+}
+
+/**
+ * Options supported only by the Azure Responses API surface.
+ */
+export interface AzureResponsesOptions extends AzureChatResponsesOptions {
+  reasoning?: Reasoning | GPT5Reasoning;
 }
 
 export interface AzureModelCost {
