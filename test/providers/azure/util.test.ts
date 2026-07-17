@@ -243,9 +243,9 @@ describe('calculateAzureCost', () => {
       audioOutput: 20,
     },
     { id: 'gpt-audio', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
-    { id: 'gpt-audio-2025-08-28', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-audio-2025-08-28', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-audio-1.5', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
-    { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 40, audioOutput: 80 },
+    { id: 'gpt-audio-1.5-2026-02-23', input: 2.5, output: 10, audioInput: 32, audioOutput: 64 },
     { id: 'gpt-audio-mini', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
     { id: 'gpt-audio-mini-2025-10-06', input: 0.6, output: 2.4, audioInput: 10, audioOutput: 20 },
     { id: 'gpt-4o-realtime-preview', input: 5, output: 20, audioInput: 40, audioOutput: 80 },
@@ -295,10 +295,10 @@ describe('calculateAzureCost', () => {
     { id: 'gpt-4o-mini-audio-preview', input: 0.15, output: 0.6, audioInput: 10, audioOutput: 20 },
     {
       id: 'gpt-4o-mini-audio-preview-2024-12-17',
-      input: 2.5,
-      output: 10,
-      audioInput: 40,
-      audioOutput: 80,
+      input: 0.15,
+      output: 0.6,
+      audioInput: 10,
+      audioOutput: 20,
     },
   ])('uses the correct audio-token rates for $id', ({
     id,
@@ -316,7 +316,7 @@ describe('calculateAzureCost', () => {
   it('clamps invalid cached and audio token counts to the reported totals', () => {
     expect(
       calculateAzureCost('gpt-audio-1.5-2026-02-23', {}, 1_000, 500, -10, 2_000, 1_000),
-    ).toBeCloseTo((1_000 * 40 + 500 * 80) / 1e6, 12);
+    ).toBeCloseTo((1_000 * 32 + 500 * 64) / 1e6, 12);
   });
 
   it('uses the discounted cached-text rate for the dated gpt-realtime-mini snapshot', () => {
@@ -326,9 +326,9 @@ describe('calculateAzureCost', () => {
     );
   });
 
-  it('does not apply the dated cached-text discount to the undated gpt-realtime-mini alias', () => {
+  it('applies the published cached-text discount to the undated gpt-realtime-mini alias', () => {
     expect(calculateAzureCost('gpt-realtime-mini', {}, 1_000, 0, 1_000)).toBeCloseTo(
-      1_000 * (0.6 / 1e6),
+      1_000 * (0.06 / 1e6),
       12,
     );
   });
@@ -373,6 +373,9 @@ describe('calculateAzureCost', () => {
         500,
       ),
     ).toBeCloseTo(0.0755, 12);
+    // Top-level `service_tier` is intentionally ignored here: chat/completion never send
+    // it on the wire, and the Responses provider bridges it into `passthrough` at the
+    // call site. Only `passthrough.service_tier` reflects what Azure actually billed.
     expect(
       calculateAzureCost('gpt-5.4', { service_tier: 'priority' } as any, 272_001, 1_000, 1_000),
     ).toBeCloseTo((271_001 * 5 + 1_000 * 0.5 + 1_000 * 22.5) / 1e6, 12);
@@ -429,7 +432,7 @@ describe('calculateAzureCost', () => {
     'gpt-4o-mini-tts-2025-03-20',
   ])('prices %s text input and audio output using the current Azure rates', (id) => {
     expect(calculateAzureCost(id, {}, 1_000, 1_000, 0, 0, 1_000)).toBeCloseTo(
-      (1_000 * 2.5 + 1_000 * 12) / 1e6,
+      (1_000 * 0.6 + 1_000 * 12) / 1e6,
       12,
     );
   });
@@ -477,8 +480,8 @@ describe('calculateAzureCost', () => {
     {
       id: 'gpt-realtime-1.5-2026-02-23',
       input: 4,
-      cachedText: 4,
-      cachedAudio: 4,
+      cachedText: 0.4,
+      cachedAudio: 0.4,
       cachedImage: 0.5,
       output: 16,
       audioOutput: 64,
@@ -793,8 +796,8 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-audio-1.5', 2.5, 10],
     ['gpt-audio-mini', 0.6, 2.4],
     ['gpt-4o-mini-transcribe', 1.25, 5],
-    ['gpt-4o-mini-tts', 2.5, 10],
-    ['gpt-4o-mini-tts-2025-03-20', 2.5, 10],
+    ['gpt-4o-mini-tts', 0.6, 12],
+    ['gpt-4o-mini-tts-2025-03-20', 0.6, 12],
     ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],

@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import { generateIdFromPrompt } from '../../models/prompt';
 import { OpenAiRealtimeProvider } from '../openai/realtime';
 import { providerRegistry } from '../providerRegistry';
@@ -74,7 +75,14 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const effectiveApiKey = promptApiKey ?? this.getApiKey();
 
     if (promptApiKey) {
-      await this.ensureInitialized().catch(() => undefined);
+      // A prompt-level API key can stand in for provider credentials, but keep a trace of
+      // provider-auth failures so a later rejection isn't a dead end for debugging.
+      await this.ensureInitialized().catch((err) => {
+        logger.debug(
+          '[AzureRealtime] Provider auth initialization failed; relying on prompt-level API key',
+          { error: err instanceof Error ? err.message : String(err) },
+        );
+      });
     } else {
       await this.ensureInitialized();
     }

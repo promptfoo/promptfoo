@@ -142,9 +142,9 @@ For the complete list of models with pricing, see the [Azure model catalog](http
 
 Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule) lists `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` model version `2026-07-09` as generally available. Azure documents Global Standard availability worldwide and Data Zone Standard availability in the US and EU; check the [current region matrix](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability) before deploying.
 
-Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so set `isReasoningModel: true`.
+Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so no cost is reported for it. Separately, set `isReasoningModel: true` on an opaque alias to keep GPT-5 reasoning request behavior (this does not affect cost matching).
 
-The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (including mini and 1.5 variants). GPT-5.6 cost estimates honor `passthrough.service_tier: priority`, and audio-capable models report separate text and audio-token costs.
+The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (each family's mini and 1.5 variants included). Cost estimates honor `service_tier: priority` (top-level or via `passthrough`) for models with published priority rates — the GPT-5.4/5.5/5.6 families and dated GPT-5.1/5.2/5.3 chat and codex snapshots — and audio-capable models report separate text and audio-token costs. Cached input tokens are billed at the catalog's discounted cache-read rates across the supported model families.
 
 ### Azure Realtime API
 
@@ -797,26 +797,26 @@ These properties can be set under the provider `config` key:
 
 ### OpenAI Configuration
 
-| Name                  | Description                                                                                                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
-| isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.     |
-| isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                         |
-| max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                         |
-| max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                   |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`.         |
-| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
-| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
-| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
-| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
-| best_of               | Generates multiple outputs and returns the best                                                                                                 |
-| functions             | Array of functions available for the model to call                                                                                              |
-| function_call         | Controls how the model calls functions                                                                                                          |
-| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                       |
-| stop                  | Array of sequences where the model will stop generating                                                                                         |
-| passthrough           | Additional parameters to send with the request                                                                                                  |
+| Name                  | Description                                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                            |
+| isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                          |
+| isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                                                              |
+| max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                                                              |
+| max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                        |
+| reasoning_effort      | Controls reasoning depth: 'minimal', 'low', 'medium', 'high', 'xhigh', or 'max' (model-dependent). Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`. |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                                                        |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                                                       |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                                                                                      |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                                                                  |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                                                     |
+| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`.                                      |
+| best_of               | Generates multiple outputs and returns the best                                                                                                                                      |
+| functions             | Array of functions available for the model to call                                                                                                                                   |
+| function_call         | Controls how the model calls functions                                                                                                                                               |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                                                            |
+| stop                  | Array of sequences where the model will stop generating                                                                                                                              |
+| passthrough           | Additional parameters to send with the request                                                                                                                                       |
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 

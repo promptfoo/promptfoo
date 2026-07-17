@@ -12,9 +12,7 @@ const { mockCallApi, mockCleanup, mockRegister, mockUnregister } = vi.hoisted(()
 }));
 
 vi.mock('../../../src/providers/openai/realtime', () => ({
-  OpenAiRealtimeProvider: vi.fn().mockImplementation(function (_modelName, options) {
-    return { config: options.config, callApi: mockCallApi, cleanup: mockCleanup };
-  }),
+  OpenAiRealtimeProvider: vi.fn(),
 }));
 
 vi.mock('../../../src/providers/providerRegistry', () => ({
@@ -23,7 +21,14 @@ vi.mock('../../../src/providers/providerRegistry', () => ({
 
 describe('AzureRealtimeProvider', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(OpenAiRealtimeProvider).mockImplementation(function (_modelName, options) {
+      return {
+        config: options?.config,
+        callApi: mockCallApi,
+        cleanup: mockCleanup,
+      } as unknown as OpenAiRealtimeProvider;
+    });
     mockCallApi.mockResolvedValue({
       output: 'hello',
       tokenUsage: { prompt: 1_000, completion: 500, total: 1_500 },
@@ -596,5 +601,40 @@ describe('AzureRealtimeProvider', () => {
       apiKey: 'alternate-key',
       headers: { 'api-key': 'alternate-key', 'x-tenant-id': 'tenant-b' },
     });
+  });
+
+  it('reports undefined cost for a deployment missing from the Azure pricing catalog', async () => {
+    const provider = new AzureRealtimeProvider('my-custom-realtime-deployment', {
+      config: {
+        apiHost: 'example.openai.azure.com',
+        apiKey: 'azure-key',
+      },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('throws an actionable configuration error when no Azure endpoint is configured', async () => {
+    const restoreEnv = mockProcessEnv({
+      AZURE_API_HOST: undefined,
+      AZURE_API_BASE_URL: undefined,
+      AZURE_OPENAI_API_HOST: undefined,
+      AZURE_OPENAI_API_BASE_URL: undefined,
+      AZURE_OPENAI_BASE_URL: undefined,
+    });
+    try {
+      const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+        config: { apiKey: 'azure-key' },
+      });
+
+      await expect(provider.callApi('hello')).rejects.toThrow(
+        /Azure API host or base URL must be set/,
+      );
+    } finally {
+      restoreEnv();
+    }
   });
 });

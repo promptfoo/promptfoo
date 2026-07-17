@@ -148,7 +148,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
           usage?.completion_tokens_details?.image_tokens ??
             usage?.output_tokens_details?.image_tokens,
-        ) ?? 0,
+        ),
     });
 
     if (this.assistantConfig.functionToolCallbacks) {

@@ -560,10 +560,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'gpt-4o-mini-audio-preview-2024-12-17',
     cost: {
-      input: 2.5 / 1000000,
-      output: 10 / 1000000,
-      audioInput: 40 / 1000000,
-      audioOutput: 80 / 1000000,
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
     },
   },
   {
@@ -584,8 +584,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 4 / 1000000,
       output: 16 / 1000000,
-      cacheRead: 4 / 1000000,
-      cacheReadAudio: 4 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
@@ -610,8 +610,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 4 / 1000000,
       output: 16 / 1000000,
-      cacheRead: 4 / 1000000,
-      cacheReadAudio: 4 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
       cacheReadImage: 0.5 / 1000000,
       audioInput: 32 / 1000000,
       audioOutput: 64 / 1000000,
@@ -623,7 +623,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 0.6 / 1000000,
       output: 2.4 / 1000000,
-      cacheRead: 0.6 / 1000000,
+      cacheRead: 0.06 / 1000000,
       cacheReadAudio: 0.3 / 1000000,
       cacheReadImage: 0.08 / 1000000,
       audioInput: 10 / 1000000,
@@ -658,8 +658,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 2.5 / 1000000,
       output: 10 / 1000000,
-      audioInput: 40 / 1000000,
-      audioOutput: 80 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
     },
   },
   {
@@ -676,8 +676,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: {
       input: 2.5 / 1000000,
       output: 10 / 1000000,
-      audioInput: 40 / 1000000,
-      audioOutput: 80 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
     },
   },
   {
@@ -728,7 +728,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-03-20'].map((id) => ({
     id,
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000, audioOutput: 12 / 1000000 },
+    cost: { input: 0.6 / 1000000, output: 12 / 1000000, audioOutput: 12 / 1000000 },
   })),
 
   // =============================================================================

@@ -192,6 +192,9 @@ export function calculateAzureCost(
     imageCompletionTokens,
     Math.max(completionTokens - audioOutputTokens, 0),
   );
+  // Cost follows what is actually sent on the wire: Azure chat/completion only send
+  // `passthrough.service_tier`, and the Responses provider bridges its top-level
+  // `service_tier` config into `passthrough` before calling this function.
   const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
