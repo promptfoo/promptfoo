@@ -213,7 +213,7 @@ describe('MoonshotProvider sampling-param handling', () => {
   it('forwards an explicit reasoning_effort for kimi-k3 models', async () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:kimi-k3', {
-        config: { reasoning_effort: 'max' as any },
+        config: { reasoning_effort: 'max' },
       }),
     );
     const { body } = await provider.getOpenAiBody('Hello');
@@ -255,10 +255,24 @@ describe('MoonshotProvider sampling-param handling', () => {
     expect(body.max_tokens).toBeUndefined();
   });
 
+  it('prefers a prompt-level max_completion_tokens over a provider-level max_tokens', async () => {
+    const provider = asChat(
+      createMoonshotProvider('moonshot:kimi-k3', {
+        config: { max_tokens: 2048 },
+      }),
+    );
+    const { body } = await (provider.getOpenAiBody as any)('Hello', {
+      prompt: { raw: 'Hello', label: 'test', config: { max_completion_tokens: 900 } },
+      vars: {},
+    });
+    expect(body.max_completion_tokens).toBe(900);
+    expect(body.max_tokens).toBeUndefined();
+  });
+
   it('fails fast when reasoning_effort is configured on a non-K3 model', async () => {
     const k2 = asChat(
       createMoonshotProvider('moonshot:kimi-k2.6', {
-        config: { reasoning_effort: 'max' as any },
+        config: { reasoning_effort: 'max' },
       }),
     );
     await expect(k2.getOpenAiBody('Hello')).rejects.toThrow(
@@ -267,10 +281,21 @@ describe('MoonshotProvider sampling-param handling', () => {
 
     const v1 = asChat(
       createMoonshotProvider('moonshot:moonshot-v1-8k', {
-        config: { reasoning_effort: 'max' as any },
+        config: { reasoning_effort: 'max' },
       }),
     );
     await expect(v1.getOpenAiBody('Hello')).rejects.toThrow(/does not support reasoning_effort/);
+  });
+
+  it('force-sends reasoning_effort on a non-K3 model via passthrough (the documented escape hatch)', async () => {
+    const provider = asChat(
+      createMoonshotProvider('moonshot:kimi-k2.6', {
+        config: { passthrough: { reasoning_effort: 'max' } },
+      }),
+    );
+    const { body } = await provider.getOpenAiBody('Hello');
+    // The fail-fast error message advertises this workaround; keep it working.
+    expect(body.reasoning_effort).toBe('max');
   });
 
   it('keeps promptfoo deterministic defaults for moonshot-v1 generation models', async () => {
@@ -400,6 +425,16 @@ describe('MoonshotProvider callApi cost', () => {
       config: { apiKey: 'k' },
     });
     const result = await provider.callApi('Say hi');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('leaves cost undefined for promptfoo cache hits even when pricing is configured', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({ ...okResponse, cached: true } as any);
+    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
+      config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
+    });
+    const result = await provider.callApi('Say hi');
+    expect(result.cached).toBe(true);
     expect(result.cost).toBeUndefined();
   });
 });
