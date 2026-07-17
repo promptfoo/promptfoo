@@ -106,6 +106,47 @@ describe('OpenAiImageProvider', () => {
       });
     });
 
+    it('should preserve caching for the default OpenAI endpoint with an API key', async () => {
+      // Positive control for the cache-bust escape hatch: an Authorization
+      // header on api.openai.com must NOT disable caching. When caching is
+      // preserved, fetchWithCache receives exactly (url, request, timeout) —
+      // the bust path appends ('json', true).
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(result.error).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(callArgs?.[0]).toContain('api.openai.com');
+      expect(callArgs).toHaveLength(3);
+    });
+
+    it('should preserve caching for an unauthenticated custom gateway', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3', {
+          config: { apiKeyRequired: false, apiBaseUrl: 'https://gateway.example/v1' },
+        });
+
+        const result = await provider.callApi('Generate a cat');
+
+        expect(result.error).toBeUndefined();
+        const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(callArgs?.[0]).toBe('https://gateway.example/v1/images/generations');
+        // No credential was sent, so the custom gateway stays cacheable.
+        expect((callArgs?.[1] as RequestInit | undefined)?.headers).not.toHaveProperty(
+          'Authorization',
+        );
+        expect(callArgs).toHaveLength(3);
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
+    });
+
     it('should include all generated URL images in images array', async () => {
       const provider = new OpenAiImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', n: 2 },

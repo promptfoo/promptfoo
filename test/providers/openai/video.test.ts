@@ -1,4 +1,5 @@
 import fsPromises from 'fs/promises';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -1425,6 +1426,51 @@ describe('OpenAiVideoProvider', () => {
       // Should make API calls (not use cache)
       expect(mockFetchWithProxy).toHaveBeenCalled();
       expect(result.cached).toBe(false);
+    });
+
+    it('should persist the cache mapping for a cacheable default-endpoint video', async () => {
+      // Positive control for all of the "does not persist" tests below: a clean
+      // api.openai.com run with no sensitive headers, prompt, or references MUST
+      // write the cache mapping. A regression that disables persistence
+      // everywhere passes every bypass test but fails here.
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', download_thumbnail: false, download_spritesheet: false },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_cacheable', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_cacheable', status: 'completed', progress: 100 }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('A cat riding a skateboard');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(result.metadata?.cacheKey).toBeTruthy();
+
+      const mappingPath = path.join(
+        '/test/config',
+        'media',
+        'video',
+        '_cache',
+        `${result.metadata?.cacheKey}.json`,
+      );
+      // The persistent cache was consulted on the way in (miss via ENOENT)...
+      expect(fsPromises.readFile).toHaveBeenCalledWith(mappingPath, 'utf8');
+      // ...and the mapping was written on success to the same path.
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(mappingPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+      const [writtenPath, writtenJson, encoding] = vi.mocked(fsPromises.writeFile).mock.calls[0];
+      expect(writtenPath).toBe(mappingPath);
+      expect(encoding).toBe('utf8');
+      expect(JSON.parse(String(writtenJson))).toMatchObject({ videoKey: 'video/abc123.mp4' });
     });
   });
 

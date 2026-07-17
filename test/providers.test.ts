@@ -595,14 +595,25 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
-    ['openai:chat:gpt-5.3-codex-spark', {}],
-    ['openai:responses:gpt-4.1', { passthrough: { model: 'gpt-5.3-codex-spark' } }],
-  ])('should allow a Codex-named model on a custom OpenAI-compatible gateway for %s', async (route, config) => {
-    await expect(
-      loadApiProvider(route, {
-        options: { config: { ...config, apiBaseUrl: 'https://gateway.example/v1' } },
+    ['openai:chat:gpt-5.3-codex-spark', {}, OpenAiChatCompletionProvider, 'gpt-5.3-codex-spark'],
+    [
+      'openai:responses:gpt-4.1',
+      { passthrough: { model: 'gpt-5.3-codex-spark' } },
+      OpenAiResponsesProvider,
+      'gpt-4.1',
+    ],
+  ])('should allow a Codex-named model on a custom OpenAI-compatible gateway for %s', async (route, config, expectedProvider, expectedModel) => {
+    const provider = await loadApiProvider(route, {
+      options: { config: { ...config, apiBaseUrl: 'https://gateway.example/v1' } },
+    });
+
+    expect(expectedProvider).toHaveBeenCalledWith(
+      expectedModel,
+      expect.objectContaining({
+        config: expect.objectContaining({ apiBaseUrl: 'https://gateway.example/v1' }),
       }),
-    ).resolves.toBeDefined();
+    );
+    expect(provider).toBeDefined();
   });
 
   it('should allow the documented gpt-5-codex-mini Responses replacement', async () => {
@@ -613,24 +624,39 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
-    'openai:assistant:gpt-5-codex-mini',
-    'openai:assistant:gpt-5.3-codex-spark',
-    'openai:agents:gpt-5-codex-mini',
-    'openai:agents:gpt-5.3-codex-spark',
-    'openai:chatkit:gpt-5-codex-mini',
-    'openai:chatkit:gpt-5.3-codex-spark',
-  ])('should allow Codex-like names on identifier-based route %s', async (route) => {
-    await expect(loadApiProvider(route)).resolves.toBeDefined();
+    ['openai:assistant:gpt-5-codex-mini', 'openai:gpt-5-codex-mini'],
+    ['openai:assistant:gpt-5.3-codex-spark', 'openai:gpt-5.3-codex-spark'],
+    ['openai:agents:gpt-5-codex-mini', 'openai:agents:gpt-5-codex-mini'],
+    ['openai:agents:gpt-5.3-codex-spark', 'openai:agents:gpt-5.3-codex-spark'],
+    ['openai:chatkit:gpt-5-codex-mini', 'openai:chatkit:gpt-5-codex-mini'],
+    ['openai:chatkit:gpt-5.3-codex-spark', 'openai:chatkit:gpt-5.3-codex-spark'],
+  ])('should allow Codex-like names on identifier-based route %s', async (route, expectedId) => {
+    const provider = await loadApiProvider(route);
+
+    expect(provider.id()).toBe(expectedId);
   });
 
   it.each([
     'gpt-5-search-api',
     'gpt-5-search-api-2025-10-14',
   ])('should auto-route bare Chat Completions search model %s to Chat Completions', async (model) => {
-    const provider = await loadApiProvider(`openai:${model}`);
+    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
+      '../src/providers/openai/chat',
+    );
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
 
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
-    expect(provider).toBeDefined();
+    expect(chatModelNames).toContain(model);
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+    try {
+      const provider = await loadApiProvider(`openai:${model}`);
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+    }
   });
 
   it.each([
@@ -639,15 +665,33 @@ describe('loadApiProvider', () => {
     'gpt-3.5-turbo-instruct',
     'gpt-3.5-turbo-instruct-0914',
   ])('should auto-route bare legacy Completions model %s to Completions', async (model) => {
-    const originalModelNames = (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES;
-    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = [model];
+    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
+      '../src/providers/openai/chat',
+    );
+    const actualCompletionProvider = await vi.importActual<
+      typeof import('../src/providers/openai/completion')
+    >('../src/providers/openai/completion');
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalCompletionModelNames = (OpenAiCompletionProvider as any)
+      .OPENAI_COMPLETION_MODEL_NAMES;
+    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+    const completionModelNames =
+      actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
+
+    expect(chatModelNames).not.toContain(model);
+    expect(completionModelNames).toContain(model);
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
     try {
       const provider = await loadApiProvider(`openai:${model}`);
 
       expect(OpenAiCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
       expect(provider).toBeDefined();
     } finally {
-      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = originalModelNames;
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
+        originalCompletionModelNames;
     }
   });
 
@@ -660,8 +704,30 @@ describe('loadApiProvider', () => {
     'tts-1-hd',
     'tts-1-hd-1106',
   ])('should auto-route bare speech model %s to the speech endpoint', async (model) => {
-    const originalModelNames = (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES;
-    (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = [model];
+    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
+      '../src/providers/openai/chat',
+    );
+    const actualCompletionProvider = await vi.importActual<
+      typeof import('../src/providers/openai/completion')
+    >('../src/providers/openai/completion');
+    const actualTtsProvider = await vi.importActual<typeof import('../src/providers/openai/tts')>(
+      '../src/providers/openai/tts',
+    );
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalCompletionModelNames = (OpenAiCompletionProvider as any)
+      .OPENAI_COMPLETION_MODEL_NAMES;
+    const originalTtsModelNames = (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES;
+    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+    const completionModelNames =
+      actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
+    const ttsModelNames = actualTtsProvider.OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES;
+
+    expect(chatModelNames).not.toContain(model);
+    expect(completionModelNames).not.toContain(model);
+    expect(ttsModelNames).toContain(model);
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
+    (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = ttsModelNames;
     try {
       const provider = await loadApiProvider(`openai:${model}`);
 
@@ -669,7 +735,10 @@ describe('loadApiProvider', () => {
       expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
       expect(provider).toBeDefined();
     } finally {
-      (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = originalModelNames;
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
+        originalCompletionModelNames;
+      (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = originalTtsModelNames;
     }
   });
 
@@ -694,15 +763,50 @@ describe('loadApiProvider', () => {
     'gpt-realtime-2.1',
     'gpt-realtime-2.1-mini',
   ])('should auto-route bare Realtime model %s to Realtime', async (model) => {
-    const originalModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
-    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = [model];
+    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
+      '../src/providers/openai/chat',
+    );
+    const actualCompletionProvider = await vi.importActual<
+      typeof import('../src/providers/openai/completion')
+    >('../src/providers/openai/completion');
+    const actualTtsProvider = await vi.importActual<typeof import('../src/providers/openai/tts')>(
+      '../src/providers/openai/tts',
+    );
+    const actualRealtimeProvider = await vi.importActual<
+      typeof import('../src/providers/openai/realtime')
+    >('../src/providers/openai/realtime');
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalCompletionModelNames = (OpenAiCompletionProvider as any)
+      .OPENAI_COMPLETION_MODEL_NAMES;
+    const originalTtsModelNames = (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES;
+    const originalRealtimeModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
+    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+    const completionModelNames =
+      actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
+    const ttsModelNames = actualTtsProvider.OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES;
+    const realtimeModelNames =
+      actualRealtimeProvider.OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES;
+
+    expect(chatModelNames).not.toContain(model);
+    expect(completionModelNames).not.toContain(model);
+    expect(ttsModelNames).not.toContain(model);
+    expect(realtimeModelNames).toContain(model);
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
+    (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = ttsModelNames;
+    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = realtimeModelNames;
     try {
       const provider = await loadApiProvider(`openai:${model}`);
 
       expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
       expect(provider).toBeDefined();
     } finally {
-      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalModelNames;
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
+        originalCompletionModelNames;
+      (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = originalTtsModelNames;
+      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalRealtimeModelNames;
     }
   });
 

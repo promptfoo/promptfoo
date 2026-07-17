@@ -368,6 +368,63 @@ describe('OpenAI Image Provider Functions', () => {
         true,
       );
     });
+
+    it('should bypass persistent image caching when the request body embeds a credential', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await callOpenAiImageApi(
+        'https://api.openai.com/v1/images/generations',
+        {
+          model: 'gpt-image-1',
+          prompt: 'Render this key: sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        { 'Content-Type': 'application/json' },
+        30000,
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/images/generations',
+        expect.objectContaining({ method: 'POST' }),
+        30000,
+        'json',
+        true,
+      );
+    });
+
+    it.each([
+      [
+        'api.openai.com with an Authorization header',
+        'https://api.openai.com/v1/images/generations',
+        { Authorization: 'Bearer sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      ],
+      ['a credential-free custom gateway', 'https://gateway.example/v1/images/generations', {}],
+    ])('should preserve persistent image caching for %s', async (_label, url, headers) => {
+      // Positive controls for the bypass cases above: a credential header on the
+      // DEFAULT endpoint and a clean custom gateway must both keep caching
+      // enabled. The exact three-argument call pins bust=false — the bust path
+      // appends ('json', true).
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const body = { model: 'gpt-image-1', prompt: 'test' };
+      const fullHeaders = { 'Content-Type': 'application/json', ...headers };
+
+      await callOpenAiImageApi(url, body, fullHeaders, 30000);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        url,
+        { method: 'POST', headers: fullHeaders, body: JSON.stringify(body) },
+        30000,
+      );
+    });
   });
 
   describe('processApiResponse', () => {

@@ -284,6 +284,25 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       expect(result.output).toBe('Research complete');
     });
 
+    it.each([
+      { label: 'without vector_store_ids', tools: [{ type: 'file_search' }] },
+      {
+        label: 'with empty vector_store_ids',
+        tools: [{ type: 'file_search', vector_store_ids: [] }],
+      },
+    ])('should not count file_search $label as a deep research data source', async ({ tools }) => {
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: { apiKey: 'test-key', tools: tools as any },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('requires at least one data source');
+      expect(result.error).toContain('o3-deep-research');
+      expect(result.error).toContain('file_search with vector_store_ids');
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should require MCP tools to have require_approval: never for deep research', async () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {

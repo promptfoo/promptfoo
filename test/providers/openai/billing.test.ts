@@ -116,14 +116,21 @@ describe('OpenAI billing helpers', () => {
     ['ft:davinci-002:company::model', 12, undefined, 12],
     ['ft:gpt-3.5-turbo:company::model', 3, undefined, 6],
     ['ft:gpt-3.5-turbo-0125:company::model', 3, undefined, 6],
+    ['ft:gpt-3.5-turbo-0613:company::model', 3, undefined, 6],
+    ['ft:gpt-3.5-turbo-1106:company::model', 3, undefined, 6],
     ['ft:gpt-4-0613:company::model', 30, undefined, 60],
     ['ft:gpt-4.1:company::model', 3, 0.75, 12],
     ['ft:gpt-4.1-2025-04-14:company::model', 3, 0.75, 12],
+    ['ft:gpt-4.1-mini:company::model', 0.8, 0.2, 3.2],
     ['ft:gpt-4.1-mini-2025-04-14:company::model', 0.8, 0.2, 3.2],
+    ['ft:gpt-4.1-nano:company::model', 0.2, 0.05, 0.8],
     ['ft:gpt-4.1-nano-2025-04-14:company::model', 0.2, 0.05, 0.8],
+    ['ft:gpt-4o:company::model', 3.75, 1.875, 15],
     ['ft:gpt-4o-2024-08-06:company::model', 3.75, 1.875, 15],
     ['ft:gpt-4o-2024-11-20:company::model', 3.75, undefined, 15],
     ['ft:gpt-4o-mini:company::model', 0.3, 0.15, 1.2],
+    ['ft:gpt-4o-mini-2024-07-18:company::model', 0.3, 0.15, 1.2],
+    ['ft:o4-mini:company::model', 4, 1, 16],
     ['ft:o4-mini-2025-04-16:company::model', 4, 1, 16],
   ])('prices fine-tuned model %s using its inference rates', (model, inputRate, cachedRate, outputRate) => {
     const cachedInput = cachedRate === undefined ? 0 : 500;
@@ -146,7 +153,7 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
-  it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex unset', () => {
+  it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex and Priority unset', () => {
     const model = 'ft:gpt-4.1-mini-2025-04-14:company::model';
     const usage = {
       prompt_tokens: 2_000,
@@ -159,6 +166,39 @@ describe('OpenAI billing helpers', () => {
       10,
     );
     expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'flex' })).toBeUndefined();
+    expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier: 'priority' })).toBeUndefined();
+  });
+
+  it('does not price fine-tuned models with unknown base models', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'ft:gpt-99-unknown:company::model',
+        {},
+        {
+          prompt_tokens: 2_000,
+          completion_tokens: 1_000,
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('bills cached fine-tuned input at the full input rate when no cached rate is published', () => {
+    const usage = {
+      prompt_tokens: 2_000,
+      completion_tokens: 1_000,
+      prompt_tokens_details: { cached_tokens: 500 },
+    };
+
+    // ft:gpt-4o-mini publishes a cached-input discount.
+    expect(calculateOpenAIUsageCost('ft:gpt-4o-mini:company::model', {}, usage)).toBeCloseTo(
+      (1_500 * 0.3 + 500 * 0.15 + 1_000 * 1.2) / 1e6,
+      10,
+    );
+    // ft:gpt-4o-2024-11-20 has no cached-input rate; cached tokens fall back to the input rate.
+    expect(calculateOpenAIUsageCost('ft:gpt-4o-2024-11-20:company::model', {}, usage)).toBeCloseTo(
+      (1_500 * 3.75 + 500 * 3.75 + 1_000 * 15) / 1e6,
+      10,
+    );
   });
 
   it.each([

@@ -1638,6 +1638,105 @@ describe('fetchWithCache', () => {
       expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe('fetch:v3:project-a:response-hash');
     });
 
+    it('should isolate different explicit cache keys from each other', async () => {
+      // Positive control for the cacheKey escape hatch: distinct keys must MISS
+      // even when the underlying request is byte-identical. A regression that
+      // ignores the provided key (or disables caching outright) fails here.
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'project b data' }),
+      );
+
+      const first = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      const second = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-b:response-hash',
+      });
+
+      expect(first.cached).toBe(false);
+      expect(second.cached).toBe(false);
+      expect(second.data).toEqual({ data: 'project b data' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+      // Each explicit key still caches positively on repeat.
+      const firstAgain = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      expect(firstAgain.cached).toBe(true);
+      expect(firstAgain.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should scope explicit cache keys to the active cache namespace', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await withCacheNamespace('repeat:1', async () => {
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: 'project-a:response-hash',
+        });
+        expect(result.cached).toBe(false);
+      });
+
+      // The stored key must carry the namespace prefix.
+      expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe(
+        'repeat:1:fetch:v3:project-a:response-hash',
+      );
+
+      // The same explicit key under a different namespace is a MISS...
+      await withCacheNamespace('repeat:2', async () => {
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: 'project-a:response-hash',
+        });
+        expect(result.cached).toBe(false);
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+      // ...while the original namespace still HITs.
+      await withCacheNamespace('repeat:1', async () => {
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: 'project-a:response-hash',
+        });
+        expect(result.cached).toBe(true);
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should refetch on bust without evicting or overwriting an explicit cache entry', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+
+      const first = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      expect(first.cached).toBe(false);
+      expect(vi.mocked(getCache().set)).toHaveBeenCalledTimes(1);
+
+      // bust: true forces a fresh fetch even though the key is cached...
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'fresh data' }),
+      );
+      const busted = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+        bust: true,
+      });
+      expect(busted.cached).toBe(false);
+      expect(busted.data).toEqual({ data: 'fresh data' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+      // ...but bust bypasses the cache entirely (cacheKey resolves to null): it
+      // neither overwrites nor evicts the entry, so a later non-bust call still
+      // HITs the ORIGINAL response, not the busted refetch.
+      expect(vi.mocked(getCache().set)).toHaveBeenCalledTimes(1);
+      const after = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      expect(after.cached).toBe(true);
+      expect(after.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
     it('should use same cache key for repeatIndex 0 and no repeatIndex', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
