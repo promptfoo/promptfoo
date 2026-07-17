@@ -811,6 +811,38 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('rejects Vertex Omni follow-ups supplied through a camelCase passthrough key', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        passthrough: { previousInteractionId: 'interaction-0' },
+      },
+    });
+
+    const result = await provider.callApi('Make it brighter');
+
+    expect(result.error).toContain('does not support previousInteractionId');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('does not reject an AI Studio Omni follow-up supplied through passthrough', async () => {
+    // The follow-up guard is Vertex-only; AI Studio supports conversational editing, so
+    // the request must proceed past the guard (here it reaches the API-key check).
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        passthrough: { previous_interaction_id: 'interaction-0' },
+      },
+      env: { GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined },
+    });
+
+    const result = await provider.callApi('Make it brighter');
+
+    expect(result.error).not.toContain('does not support previousInteractionId');
+    expect(result.error).toContain('requires an API key');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported Omni tools before making a request', async () => {
     const unsupportedToolConfigs = [
       { tools: [{ googleSearch: {} }] },
