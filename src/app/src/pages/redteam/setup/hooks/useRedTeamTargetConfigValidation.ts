@@ -1,3 +1,4 @@
+import { omitProviderCredentials } from '@app/stores/evalConfig';
 import { create } from 'zustand';
 import { targetConfigSha256 } from './targetConfigSha256';
 
@@ -50,34 +51,31 @@ const getPersistedTargetSnapshot = (): {
   }
 };
 
-const redactTargetCredentials = (value: unknown, parentKey?: string): unknown => {
+const canonicalizeCredentialFreeTarget = (value: unknown, parentKey?: string): unknown => {
   if (Array.isArray(value)) {
-    return value.map((item) => redactTargetCredentials(item, parentKey));
+    return value.map((item) => canonicalizeCredentialFreeTarget(item, parentKey));
   }
   if (!isPlainObject(value)) {
     return value;
   }
-
-  const redactAllValues = parentKey?.toLowerCase().endsWith('headers') ?? false;
+  const normalizedParent = parentKey?.toLowerCase().replace(/[-_]/g, '');
+  const redactAllValues =
+    normalizedParent !== undefined &&
+    ['auth', 'headers', 'signatureauth', 'tls', 'clienv', 'env'].includes(normalizedParent);
   return Object.fromEntries(
     Object.entries(value)
       .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(([key, child]) => {
-        const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
-        const isCredential =
-          redactAllValues ||
-          /^(?:apikey|authorization|bearer|cookie|credential(?:s)?|password|secret|token|accesstoken|refreshtoken|clientsecret)$/.test(
-            normalizedKey,
-          ) ||
-          (parentKey === 'auth' &&
-            !['type', 'granttype', 'placement', 'keyname'].includes(normalizedKey));
-        return [key, isCredential ? '[REDACTED]' : redactTargetCredentials(child, key)];
-      }),
+      .map(([key, child]) => [
+        key,
+        redactAllValues ? '[REDACTED]' : canonicalizeCredentialFreeTarget(child, key),
+      ]),
   );
 };
 
 const getClearMessage = (serialized: string, token = 'none'): string => {
-  const credentialFreeTarget = JSON.stringify(redactTargetCredentials(JSON.parse(serialized)));
+  const credentialFreeTarget = JSON.stringify(
+    canonicalizeCredentialFreeTarget(omitProviderCredentials(JSON.parse(serialized))),
+  );
   return `clear:${token}:${credentialFreeTarget.length.toString(36)}:${targetConfigSha256(credentialFreeTarget)}`;
 };
 

@@ -659,7 +659,7 @@ const omitReferencedProviderEnv = (
   );
 };
 
-const omitProviderCredentials = (
+export const omitProviderCredentials = (
   value: unknown,
   parentKey?: string,
   templatePaths?: Set<string>,

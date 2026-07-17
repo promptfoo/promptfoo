@@ -867,9 +867,39 @@ describe('useRedTeamConfig', () => {
       { steps: [{ action: 'click', args: { selector: 'button:nth-match(div, 0)' } }] },
     ],
     [
+      'browser click with missing Playwright nth-match index',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:nth-match(div)' } }] },
+    ],
+    [
+      'browser click with string Playwright nth-match index',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:nth-match(div, "1")' } }] },
+    ],
+    [
       'browser click with empty Playwright layout selector',
       'browser',
       { steps: [{ action: 'click', args: { selector: 'button:right-of()' } }] },
+    ],
+    [
+      'browser click with malformed nested Playwright layout selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:right-of(div:)' } }] },
+    ],
+    [
+      'browser click with Playwright layout distance but no selector',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:right-of(10)' } }] },
+    ],
+    [
+      'browser click with invalid Playwright regex syntax',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:text-matches("[", "i")' } }] },
+    ],
+    [
+      'browser click with invalid Playwright regex flags',
+      'browser',
+      { steps: [{ action: 'click', args: { selector: 'button:text-matches("x", "z")' } }] },
     ],
     [
       'browser click with malformed CSS after a Playwright pseudo-selector',
@@ -1287,7 +1317,11 @@ describe('useRedTeamConfig', () => {
           { action: 'click', args: { selector: 'button:text-matches("^Submit$", "i")' } },
           { action: 'click', args: { selector: 'button:visible' } },
           { action: 'click', args: { selector: 'button:nth-match(div, 1)' } },
+          { action: 'click', args: { selector: 'button:nth-match(div, span, 1)' } },
+          { action: 'click', args: { selector: 'button:nth-match(div, 1.5)' } },
           { action: 'click', args: { selector: 'button:right-of(div)' } },
+          { action: 'click', args: { selector: 'button:right-of(div, 10)' } },
+          { action: 'click', args: { selector: 'button:right-of(div:has-text("Submit"))' } },
           { action: 'click', args: { selector: 'css:light=button' } },
           { action: 'click', args: { selector: 'role=button[name="Submit"]' } },
           { action: 'click', args: { selector: 'css=[data-label="a >> b"]' } },
@@ -3912,12 +3946,16 @@ describe('useRedTeamConfig', () => {
       persistedConfig.state.config.target.config = {
         sandbox_mode: sandboxMode,
         apiKey: credential,
+        request: `POST /chat HTTP/1.1\nHost: example.test\nAuthorization: Bearer ${credential}\n\n{{prompt}}`,
         headers: {
           Authorization: `Bearer ${credential}`,
           'X-Custom-Secret': credential,
           Cookie: `session=${credential}`,
         },
         auth: { type: 'basic', username: credential, password: credential },
+        signatureAuth: { privateKey: credential, password: credential },
+        tls: { passphrase: credential, privateKey: credential },
+        cli_env: { OPENAI_API_KEY: credential, SERVICE_PASSWORD: credential },
       };
       originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
       useRedTeamTargetConfigValidation

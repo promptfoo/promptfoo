@@ -491,26 +491,9 @@ const isValidA2AConfig = (config: Record<string, unknown>): boolean => {
 };
 
 const playwrightSelectorExtension =
-  /:(?:text-matches|text-is|has-text|nth-match|right-of|left-of|above|below|near|visible|text)(?=\(|\b)/;
-const playwrightQuotedString = `(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')`;
-const invalidPlaywrightTextSelector = new RegExp(
-  `:(?:has-text|text|text-is)\\(\\s*(?!${playwrightQuotedString}\\s*\\))`,
-);
-const invalidPlaywrightRegexSelector = new RegExp(
-  `:text-matches\\(\\s*(?!${playwrightQuotedString}(?:\\s*,\\s*${playwrightQuotedString})?\\s*\\))`,
-);
-
-const isValidPlaywrightSelectorExtension = (selector: string): boolean =>
-  !/:(?:text-matches|text-is|has-text|nth-match|right-of|left-of|above|below|near|text)(?![\w-]|\()/.test(
-    selector,
-  ) &&
-  !/:(?:has-text|text|text-is|text-matches|visible|nth-match|right-of|left-of|above|below|near)\(\s*\)/.test(
-    selector,
-  ) &&
-  !invalidPlaywrightTextSelector.test(selector) &&
-  !invalidPlaywrightRegexSelector.test(selector) &&
-  !/:visible\s*\(/.test(selector) &&
-  !/:nth-match\([^)]*,\s*(?:0|-\d+)\s*\)/.test(selector);
+  /:(text-matches|text-is|has-text|nth-match|right-of|left-of|above|below|near|visible|text)(?=\(|\b)/;
+const playwrightQuotedString = /^(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')$/s;
+const playwrightNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 
 const maskPlaywrightQuotedStrings = (selector: string): string =>
   selector.replace(
@@ -518,7 +501,109 @@ const maskPlaywrightQuotedStrings = (selector: string): string =>
     (value) => `${value[0]}${' '.repeat(Math.max(0, value.length - 2))}${value[value.length - 1]}`,
   );
 
-const stripPlaywrightSelectorExtensions = (selector: string, maskedSelector: string): string => {
+const splitPlaywrightSelectorArguments = (value: string): string[] | null => {
+  if (!value.trim()) {
+    return [];
+  }
+  const args: string[] = [];
+  const stack: string[] = [];
+  let quote: string | null = null;
+  let escaped = false;
+  let start = 0;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === '[' || character === '(') {
+      stack.push(character);
+      continue;
+    }
+    if ((character === ']' && stack.pop() !== '[') || (character === ')' && stack.pop() !== '(')) {
+      return null;
+    }
+    if (character === ',' && stack.length === 0) {
+      const arg = value.slice(start, index).trim();
+      if (!arg) {
+        return null;
+      }
+      args.push(arg);
+      start = index + 1;
+    }
+  }
+  const last = value.slice(start).trim();
+  return quote || escaped || stack.length || !last ? null : [...args, last];
+};
+
+const unquotePlaywrightString = (value: string): string =>
+  value.slice(1, -1).replace(/\\(.)/gs, '$1');
+
+const getPlaywrightSelectorArgumentEnd = (selector: string, start: number): number | null => {
+  let depth = 1;
+  let end = start;
+  for (; end < selector.length && depth > 0; end++) {
+    if (selector[end] === '(') {
+      depth++;
+    } else if (selector[end] === ')') {
+      depth--;
+    }
+  }
+  return depth === 0 ? end : null;
+};
+
+const isValidPlaywrightSelectorArguments = (
+  name: string,
+  args: string[],
+  isValidNestedSelector: (selector: string) => boolean,
+): boolean => {
+  if (name === 'text' || name === 'text-is' || name === 'has-text') {
+    return args.length === 1 && playwrightQuotedString.test(args[0]);
+  }
+  if (name === 'text-matches') {
+    if (
+      args.length < 1 ||
+      args.length > 2 ||
+      args.some((arg) => !playwrightQuotedString.test(arg))
+    ) {
+      return false;
+    }
+    try {
+      new RegExp(
+        unquotePlaywrightString(args[0]),
+        args[1] ? unquotePlaywrightString(args[1]) : undefined,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const lastArg = args[args.length - 1];
+  const hasNumber = lastArg !== undefined && playwrightNumber.test(lastArg);
+  const selectorArgs = hasNumber ? args.slice(0, -1) : args;
+  return (
+    selectorArgs.length > 0 &&
+    (name !== 'nth-match' || (hasNumber && Number(lastArg) >= 1)) &&
+    selectorArgs.every(isValidNestedSelector)
+  );
+};
+
+const isValidPlaywrightCssSelector = (selector: string): boolean => {
+  const maskedSelector = maskPlaywrightQuotedStrings(selector);
   const extension = new RegExp(playwrightSelectorExtension.source, 'g');
   let nativeSelector = '';
   let cursor = 0;
@@ -527,22 +612,40 @@ const stripPlaywrightSelectorExtensions = (selector: string, maskedSelector: str
   while (match) {
     nativeSelector += selector.slice(cursor, match.index);
     let end = match.index + match[0].length;
-    if (maskedSelector[end] === '(') {
-      let depth = 1;
-      for (end++; end < maskedSelector.length && depth > 0; end++) {
-        if (maskedSelector[end] === '(') {
-          depth++;
-        } else if (maskedSelector[end] === ')') {
-          depth--;
-        }
+    const name = match[1];
+    if (maskedSelector[end] !== '(') {
+      if (name !== 'visible') {
+        return false;
       }
+      cursor = end;
+      extension.lastIndex = end;
+      match = extension.exec(maskedSelector);
+      continue;
+    }
+
+    const argsStart = ++end;
+    const argsEnd = getPlaywrightSelectorArgumentEnd(maskedSelector, argsStart);
+    if (argsEnd === null || name === 'visible') {
+      return false;
+    }
+    end = argsEnd;
+    const args = splitPlaywrightSelectorArguments(selector.slice(argsStart, end - 1));
+    if (!args || !isValidPlaywrightSelectorArguments(name, args, isValidPlaywrightCssSelector)) {
+      return false;
     }
     cursor = end;
     extension.lastIndex = end;
     match = extension.exec(maskedSelector);
   }
 
-  return `${nativeSelector}${selector.slice(cursor)}`.trim() || '*';
+  try {
+    document
+      .createDocumentFragment()
+      .querySelector(`${nativeSelector}${selector.slice(cursor)}`.trim() || '*');
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const isValidBrowserStep = (step: unknown): boolean => {
@@ -675,22 +778,7 @@ const isValidBrowserStep = (step: unknown): boolean => {
         }
       }
       const cssSelector = engineMatch ? engineMatch[2].trim() : segment;
-      const maskedCssSelector = maskPlaywrightQuotedStrings(cssSelector);
-      const hasPlaywrightExtension = playwrightSelectorExtension.test(maskedCssSelector);
-      if (hasPlaywrightExtension) {
-        if (!isValidPlaywrightSelectorExtension(maskedCssSelector)) {
-          return false;
-        }
-      }
-      try {
-        document
-          .createDocumentFragment()
-          .querySelector(
-            hasPlaywrightExtension
-              ? stripPlaywrightSelectorExtensions(cssSelector, maskedCssSelector)
-              : cssSelector,
-          );
-      } catch {
+      if (!isValidPlaywrightCssSelector(cssSelector)) {
         return false;
       }
     }
