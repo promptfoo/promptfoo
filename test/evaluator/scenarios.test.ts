@@ -3,13 +3,80 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
+import { createTestCaseSelection, evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it('filters scenario-generated test cases by flattened index', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation((prompt) => ({ output: prompt })),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{region}} {{role}}')],
+      scenarios: [
+        {
+          config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+          tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { testCaseIndices: [2] });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].vars).toEqual({ region: 'east', role: 'admin' });
+  });
+
+  it.each([0.5, Number.NaN])('rejects non-integer test case index %s', async (index) => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'unexpected' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{value}}')],
+      tests: [{ vars: { value: 'first' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, { testCaseIndices: [index] })).rejects.toThrow(
+      'Invalid test case indices',
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('restores a selected test by identity after external test order changes', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation((prompt) => ({ output: prompt })),
+    };
+    const originalTests = [
+      { vars: { value: 'first' } },
+      { vars: { value: 'second' } },
+      { vars: { value: 'third' } },
+    ];
+    const testCaseSelection = createTestCaseSelection(originalTests, [2, 0]);
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{value}}')],
+      tests: [originalTests[0], originalTests[2], originalTests[1]],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { testCaseSelection });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results.map((result) => result.vars.value)).toEqual(['third', 'first']);
+  });
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

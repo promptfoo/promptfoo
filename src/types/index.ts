@@ -310,9 +310,57 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 };
 
 /** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
+export interface EvalProviderSelectionEntry {
+  /** Index in the resolved provider list. */
+  index: number;
+  /** Effective runtime provider ID. */
+  id: string;
+  /** Effective runtime provider label, when configured. */
+  label?: string;
+  /** Original Promptfoo Cloud provider reference, before runtime resolution. */
+  cloudProviderId?: string;
+  /** Linked Promptfoo target used for permission checks and remote grading. */
+  linkedTargetId?: string;
+  /** Hash of the resolved provider definition used to fail closed on replay drift. */
+  fingerprint: string;
+}
+
+export interface EvalProviderSelection {
+  providers: EvalProviderSelectionEntry[];
+}
+
+export interface EvalPromptSelection {
+  prompts: Array<{ id: string; fingerprint: string }>;
+}
+
+export interface EvalTestCaseSelectionEntry {
+  /** Zero-based position when the selection was created, used for diagnostics only. */
+  index: number;
+  /** Content fingerprint used to restore this logical test exactly. */
+  fingerprint: string;
+}
+
+export interface EvalTestCaseSelection {
+  tests: EvalTestCaseSelectionEntry[];
+}
+
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
+  /** @internal Absolute base directory used to resolve the persisted configuration. */
+  configBasePath?: string;
+  /** @internal Resolved config environment files reloaded for resume and retry. */
+  configEnvPaths?: string | string[];
+  /** @internal Source of the effective environment paths, used to preserve CLI precedence. */
+  configEnvSource?: 'cli' | 'config';
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal Exact resolved-provider selection for reproducible MCP replay. */
+  providerSelection?: EvalProviderSelection;
+  /** @internal Exact logical prompt order for reproducible resume and retry. */
+  promptSelection?: EvalPromptSelection;
+  /** @internal Zero-based logical test indices selected after scenario expansion. */
+  testCaseIndices?: number[];
+  /** @internal Exact logical test selection for reproducible resume and retry. */
+  testCaseSelection?: EvalTestCaseSelection;
 };
 
 const PromptMetricsSchema = z.object({

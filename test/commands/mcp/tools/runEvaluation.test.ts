@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
@@ -29,9 +29,11 @@ vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('../../../../src/node/doEval', () => ({
-  doEval: vi.fn().mockResolvedValue({
+function createMockEvalResult() {
+  return {
     id: 'test-eval-123',
+    shared: false,
+    shareableUrl: undefined,
     toEvaluateSummary: vi.fn().mockResolvedValue({
       version: 3,
       stats: { successes: 1, failures: 0, errors: 0 },
@@ -52,12 +54,806 @@ vi.mock('../../../../src/node/doEval', () => ({
       ],
       prompts: [{ label: 'test-prompt', provider: 'test-provider', metrics: {} }],
     }),
-  }),
+  };
+}
+
+function createMockTestSuite() {
+  return {
+    prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
+    providers: [{ id: 'test-provider' }],
+    tests: [{ vars: { input: 'test' } }],
+  };
+}
+
+async function defaultDoEvalImplementation(
+  _cmdObj: unknown,
+  _defaultConfig: unknown,
+  _defaultConfigPath: unknown,
+  _evaluateOptions: unknown,
+  customization: any,
+) {
+  const testSuite = createMockTestSuite();
+  const config = { providers: testSuite.providers };
+  await customization?.beforeFilterTestSuite?.(testSuite, config, {
+    selectedProviderConfigs: testSuite.providers,
+  });
+  await customization?.afterFilterTestSuite?.(testSuite, config, {});
+  return createMockEvalResult();
+}
+
+vi.mock('../../../../src/node/doEval', () => ({
+  doEval: vi.fn().mockImplementation(defaultDoEvalImplementation),
 }));
 
 describe('runEvaluation tool', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { doEval } = await import('../../../../src/node/doEval');
+    vi.mocked(doEval)
+      .mockReset()
+      .mockImplementation(defaultDoEvalImplementation as any);
+  });
+
+  afterEach(async () => {
+    const { doEval } = await import('../../../../src/node/doEval');
+    vi.mocked(doEval).mockReset();
+  });
+
+  describe('shared execution path', () => {
+    it('should route filtered evals through doEval with the requested runtime options', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: 0,
+        maxConcurrency: 2,
+        timeoutMs: 1234,
+        repeat: 2,
+        delay: 50,
+        cache: false,
+        write: true,
+        share: true,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(doEval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: ['test.yaml'],
+          maxConcurrency: 2,
+          repeat: 2,
+          delay: 50,
+          cache: false,
+          write: true,
+          share: true,
+        }),
+        {},
+        'promptfooconfig.yaml',
+        expect.objectContaining({
+          maxConcurrency: 2,
+          timeoutMs: 1234,
+          eventSource: 'mcp',
+          showProgressBar: false,
+        }),
+        expect.objectContaining({
+          beforeFilterTestSuite: expect.any(Function),
+          afterFilterTestSuite: expect.any(Function),
+          evaluateOptionOverrides: expect.objectContaining({
+            timeoutMs: 1234,
+            testCaseIndices: [0],
+            testCaseSelection: expect.objectContaining({ tests: expect.any(Array) }),
+          }),
+          allowConfigFilterRange: false,
+          allowConfigFilterSample: false,
+          disablePromptSuggestions: true,
+          skipRedteamEmailPreflight: true,
+        }),
+      );
+    });
+
+    it('should pass timeoutMs through the unfiltered doEval path', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        timeoutMs: 4321,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(doEval).toHaveBeenCalledWith(
+        expect.any(Object),
+        {},
+        'promptfooconfig.yaml',
+        expect.objectContaining({
+          timeoutMs: 4321,
+        }),
+        expect.objectContaining({
+          beforeFilterTestSuite: expect.any(Function),
+          afterFilterTestSuite: expect.any(Function),
+          evaluateOptionOverrides: {
+            timeoutMs: 4321,
+          },
+          disablePromptSuggestions: false,
+          skipRedteamEmailPreflight: false,
+        }),
+      );
+    });
+
+    it('should preserve config timeout overrides when the MCP caller omits timeoutMs', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = createMockTestSuite();
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return {
+            ...createMockEvalResult(),
+            runtimeOptions: {
+              timeoutMs: 9999,
+            },
+          } as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(doEval).toHaveBeenCalledWith(
+        expect.any(Object),
+        {},
+        'promptfooconfig.yaml',
+        expect.objectContaining({
+          timeoutMs: 30000,
+        }),
+        expect.objectContaining({
+          evaluateOptionOverrides: {},
+        }),
+      );
+      expect(payload.data.configuration.options.timeoutMs).toBe(9999);
+    });
+
+    it('should report effective delay and concurrency from the completed eval runtime options', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = createMockTestSuite();
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return {
+            ...createMockEvalResult(),
+            runtimeOptions: {
+              delay: 100,
+              maxConcurrency: 1,
+              timeoutMs: 30000,
+            },
+          } as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: 'test-prompt',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(payload.data.configuration.options.delay).toBe(100);
+      expect(payload.data.configuration.options.maxConcurrency).toBe(1);
+    });
+
+    it('should report successful and unsuccessful sharing outcomes without hiding eval results', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      vi.mocked(doEval).mockImplementationOnce(async (...args: any[]) => {
+        const customization = args[4];
+        const testSuite = createMockTestSuite();
+        await customization.beforeFilterTestSuite(
+          testSuite,
+          { providers: [] },
+          {
+            selectedProviderConfigs: testSuite.providers,
+          },
+        );
+        await customization.afterFilterTestSuite(testSuite, { providers: [] }, {});
+        return {
+          ...createMockEvalResult(),
+          shared: true,
+          shareableUrl: 'https://app.promptfoo.dev/eval/shared-123',
+        } as any;
+      });
+
+      const sharedResult = await toolHandler({ configPath: 'test.yaml', share: true });
+      const sharedPayload = JSON.parse(sharedResult.content[0].text);
+      expect(sharedPayload.data.sharing).toEqual({
+        requested: true,
+        status: 'shared',
+        shared: true,
+        shareableUrl: 'https://app.promptfoo.dev/eval/shared-123',
+      });
+
+      vi.mocked(doEval).mockImplementationOnce(defaultDoEvalImplementation as any);
+      const notSharedResult = await toolHandler({ configPath: 'test.yaml', share: true });
+      const notSharedPayload = JSON.parse(notSharedResult.content[0].text);
+      expect(notSharedResult.isError).toBe(false);
+      expect(notSharedPayload.data.results.totalEvals).toBe(1);
+      expect(notSharedPayload.data.sharing).toEqual({
+        requested: true,
+        status: 'not_shared',
+        shared: false,
+        warning: 'The evaluation completed, but a shareable URL was not created.',
+      });
+    });
+
+    it('should keep source config providers unchanged while filtering executable providers', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      let observedConfigProviders: unknown;
+      let observedExecutableProviders: unknown;
+      let observedProviderSelection: unknown;
+
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+          };
+          const config = {
+            providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
+          observedConfigProviders = config.providers;
+          observedExecutableProviders = testSuite.providers;
+          observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        providerFilter: 'allowed-provider',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(observedConfigProviders).toEqual([
+        { id: 'allowed-provider' },
+        { id: 'blocked-provider' },
+      ]);
+      expect(observedExecutableProviders).toEqual([{ id: 'allowed-provider' }]);
+      expect(observedProviderSelection).toEqual({
+        providers: [
+          expect.objectContaining({
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+            id: 'allowed-provider',
+            index: 0,
+          }),
+        ],
+      });
+    });
+
+    it('should not persist expanded file provider contents after filtering a resolved provider', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      let observedConfigProviders: unknown;
+      let observedExecutableProviders: unknown;
+      let observedProviderSelection: unknown;
+
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const selectedProvider = {
+            id: () => 'cloud:resolved-provider',
+            label: 'resolved-target',
+          };
+          const testSuite = {
+            ...createMockTestSuite(),
+            providers: [selectedProvider, { id: () => 'blocked-provider' }],
+          };
+          const config = {
+            providers: ['file://providers-with-secrets.yaml'],
+          };
+          const selectedProviderConfigs = [
+            {
+              id: 'cloud:resolved-provider',
+              label: 'resolved-target',
+              config: { apiKey: 'sentinel-secret' },
+            },
+            { id: 'blocked-provider' },
+          ];
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs,
+          });
+          observedConfigProviders = config.providers;
+          observedExecutableProviders = testSuite.providers;
+          observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        providerFilter: 'resolved-target',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(observedConfigProviders).toEqual(['file://providers-with-secrets.yaml']);
+      expect(observedExecutableProviders).toEqual([
+        expect.objectContaining({ label: 'resolved-target' }),
+      ]);
+      expect(observedProviderSelection).toEqual({
+        providers: [
+          expect.objectContaining({
+            id: 'cloud:resolved-provider',
+            index: 0,
+            label: 'resolved-target',
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }),
+        ],
+      });
+      expect(JSON.stringify(observedProviderSelection)).not.toContain('sentinel-secret');
+    });
+
+    it('should return the same suite metadata shape for unfiltered evals', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 1,
+        filtered: 1,
+        filters: {},
+      });
+      expect(payload.data.configuration.prompts).toEqual({
+        total: 1,
+        filtered: 1,
+        labels: ['test-prompt'],
+      });
+      expect(payload.data.configuration.providers).toEqual({
+        total: 1,
+        filtered: 1,
+        ids: ['test-provider'],
+      });
+    });
+
+    it('should summarize the final filtered test surface after doEval applies later filtering', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: [
+              { vars: { input: 'first' } },
+              { vars: { input: 'second' } },
+              { vars: { input: 'third' } },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          testSuite.tests = testSuite.tests.slice(1, 2);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 3,
+        filtered: 1,
+        filters: {},
+      });
+    });
+
+    it('should count scenario-generated test cases in the suite summary', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+              },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 4,
+        filters: {},
+      });
+    });
+
+    it('should select scenario-generated test cases by their flattened indices', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+              },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: [1, 3],
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 2,
+        filters: { testCaseIndices: [1, 3] },
+      });
+      expect(doEval).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Object),
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          evaluateOptionOverrides: expect.objectContaining({
+            testCaseIndices: [1, 3],
+            testCaseSelection: expect.objectContaining({ tests: expect.any(Array) }),
+          }),
+        }),
+      );
+    });
+
+    it('should expand a valid test case range after validating the resolved suite', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      let selectedTestCaseIndices: number[] | undefined;
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: [
+              { vars: { input: 'first' } },
+              { vars: { input: 'second' } },
+              { vars: { input: 'third' } },
+              { vars: { input: 'fourth' } },
+            ],
+          };
+          const config = { providers: testSuite.providers };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          selectedTestCaseIndices = customization?.evaluateOptionOverrides?.testCaseIndices;
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: { start: 1, end: 3 },
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(selectedTestCaseIndices).toEqual([1, 2]);
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 2,
+        filters: { testCaseIndices: { start: 1, end: 3 } },
+      });
+    });
+
+    it('should reject an enormous out-of-bounds range before expanding it', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: { start: 0, end: 2 ** 32 },
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(true);
+      expect(payload.error).toBe('Invalid range: start=0, end=4294967296. Available indices: 0-0');
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('should apply deferred scenario filter ranges to the final suite summary', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+              },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {
+            deferredFilterRange: '1:2',
+          });
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 1,
+        filters: {},
+      });
+    });
+
+    it('should count scenarios with explicit empty test arrays as zero generated test cases', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [],
+              },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 0,
+        filtered: 0,
+        filters: {},
+      });
+    });
+
+    it('should count the implicit default test in the suite summary', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 1,
+        filtered: 1,
+        filters: {},
+      });
+    });
   });
 
   describe('result formatting', () => {
@@ -257,17 +1053,6 @@ describe('runEvaluation tool', () => {
     });
 
     it('should return error when all prompts are filtered out', async () => {
-      const { resolveConfigs } = await import('../../../../src/util/config/load');
-
-      vi.mocked(resolveConfigs).mockResolvedValueOnce({
-        config: {},
-        testSuite: {
-          prompts: [{ label: 'test-prompt', raw: 'test' }],
-          providers: [{ id: 'test-provider' }],
-          tests: [{ vars: { input: 'test' } }],
-        },
-      } as any);
-
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -288,20 +1073,58 @@ describe('runEvaluation tool', () => {
       expect(result.content[0].text).toContain('No prompts found after applying filter');
     });
 
-    it('should return error when all providers are filtered out', async () => {
-      const { resolveConfigs } = await import('../../../../src/util/config/load');
+    it('should treat an empty promptFilter array as no filter', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
 
-      vi.mocked(resolveConfigs).mockResolvedValueOnce({
-        config: {},
-        testSuite: {
-          prompts: [{ label: 'test-prompt', raw: 'test' }],
-          providers: [
-            { id: () => 'openai:gpt-4', callApi: async () => ({ output: 'test' }) },
-          ] as any,
-          tests: [{ vars: { input: 'test' } }],
-        },
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
       } as any);
 
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: [],
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(payload.data.configuration.prompts).toEqual({
+        total: 1,
+        filtered: 1,
+        labels: ['test-prompt'],
+      });
+    });
+
+    it('should return a filter error when promptFilter is an invalid regex', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: '[invalid',
+      });
+
+      expect(result.isError).toBe(true);
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.error).toContain('Invalid regex pattern for --filter-prompts: "[invalid"');
+
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('should return error when all providers are filtered out', async () => {
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -322,13 +1145,43 @@ describe('runEvaluation tool', () => {
       expect(result.content[0].text).toContain('No providers matched filter');
     });
 
-    it('should return an error when config resolution fails instead of terminating the host', async () => {
-      const { ConfigResolutionError, resolveConfigs } = await import(
-        '../../../../src/util/config/load'
+    it('should redact unexpected default-config load errors', async () => {
+      const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+      vi.mocked(loadDefaultConfig).mockRejectedValueOnce(
+        new Error('Invalid YAML near apiKey: SENTINEL_DEFAULT_SECRET_9208'),
+      );
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
       );
 
-      vi.mocked(resolveConfigs).mockRejectedValueOnce(
-        new ConfigResolutionError('You must provide at least 1 prompt'),
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({ configPath: 'test.yaml' });
+
+      expect(result.isError).toBe(true);
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.error).toBe('Evaluation failed. Check the Promptfoo server logs for details.');
+      expect(result.content[0].text).not.toContain('SENTINEL_DEFAULT_SECRET_9208');
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to load default config for MCP evaluation',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
+    it('should redact unexpected config resolution errors instead of terminating the host', async () => {
+      const { ConfigResolutionError } = await import('../../../../src/util/config/load');
+      const { doEval } = await import('../../../../src/node/doEval');
+
+      vi.mocked(doEval).mockRejectedValueOnce(
+        new ConfigResolutionError(
+          'Invalid YAML near apiKey: SENTINEL_SECRET_9208. You must provide at least 1 prompt',
+        ),
       );
 
       const { registerRunEvaluationTool } = await import(
@@ -348,9 +1201,13 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBe(true);
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.error).toBe('Evaluation failed. Check the Promptfoo server logs for details.');
+      expect(result.content[0].text).not.toContain('SENTINEL_SECRET_9208');
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
-        'Evaluation execution failed: You must provide at least 1 prompt',
+        'Evaluation execution failed',
+        expect.objectContaining({ error: expect.any(ConfigResolutionError) }),
       );
     });
   });
