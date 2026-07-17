@@ -906,6 +906,20 @@ tests:
 - **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
 - **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
 
+When using the Anthropic disk response cache across runs, assign each provider a distinct, non-secret `label`. Promptfoo uses that stable label to isolate cached responses without persisting API-key or OAuth-token fingerprints. Unlabeled providers receive an ephemeral per-instance namespace, which safely preserves repeated calls within a run without reusing responses across tenants or processes. Requests with custom headers bypass the disk response cache because those headers may contain tenant credentials.
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    label: tenant-a
+    config:
+      apiKey: '{{env.ANTHROPIC_API_KEY_A}}'
+  - id: anthropic:messages:claude-sonnet-4-6
+    label: tenant-b
+    config:
+      apiKey: '{{env.ANTHROPIC_API_KEY_B}}'
+```
+
 ## See Also
 
 ### Examples

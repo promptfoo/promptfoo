@@ -1,12 +1,15 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
-import logger from '../../../src/logger';
 import {
-  getAnthropicAuthCacheNamespace,
-  hashAnthropicCacheValue,
-} from '../../../src/providers/anthropic/generic';
+  clearCache,
+  disableCache,
+  enableCache,
+  getCache,
+  withCacheNamespace,
+} from '../../../src/cache';
+import logger from '../../../src/logger';
+import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
@@ -92,6 +95,7 @@ const createProvider = (
   ...args: ConstructorParameters<typeof AnthropicMessagesProvider>
 ): AnthropicMessagesProvider => {
   const created = new AnthropicMessagesProvider(...args);
+  created.label ||= `test:${args[0]}`;
   const lastInstance = mcpMocks.instances[mcpMocks.instances.length - 1] as
     | Mocked<MCPClient>
     | undefined;
@@ -107,7 +111,7 @@ const anthropicCacheIdentityHash = () =>
   });
 
 const anthropicMessagesCacheKey = (modelName: string, params: unknown) =>
-  `anthropic:messages:${modelName}:${anthropicCacheIdentityHash()}:${getAnthropicAuthCacheNamespace(TEST_API_KEY)}:${hashAnthropicCacheValue(params)}`;
+  `anthropic:messages:${modelName}:${anthropicCacheIdentityHash()}:${hashAnthropicCacheValue({ providerId: `anthropic:${modelName}`, providerLabel: `test:${modelName}` })}:${hashAnthropicCacheValue(params)}`;
 
 describe('AnthropicMessagesProvider', () => {
   let provider: AnthropicMessagesProvider;
@@ -508,11 +512,13 @@ describe('AnthropicMessagesProvider', () => {
       expect(setSpy).toHaveBeenCalledWith(cacheKey, expect.any(String));
     });
 
-    it('should isolate hashed cache keys by resolved API key', async () => {
+    it('should isolate hashed cache keys by non-secret provider label', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        label: 'tenant-a',
         config: { apiKey: 'sk-ant-tenant-a' },
       });
       const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        label: 'tenant-b',
         config: { apiKey: 'sk-ant-tenant-b' },
       });
       const cache = await getCache();
@@ -540,6 +546,176 @@ describe('AnthropicMessagesProvider', () => {
         expect(cacheKey).not.toContain('Shared sensitive prompt');
         expect(cacheKey).not.toContain('sk-ant-tenant-a');
         expect(cacheKey).not.toContain('sk-ant-tenant-b');
+      }
+    });
+
+    it('should isolate hashed cache keys when provider labels are assigned by the loader', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-b' },
+      });
+      providerA.label = 'tenant-a';
+      providerB.label = 'tenant-b';
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
+      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('Shared sensitive prompt');
+        expect(cacheKey).not.toContain('sk-ant-tenant-a');
+        expect(cacheKey).not.toContain('sk-ant-tenant-b');
+      }
+    });
+
+    it('keeps unlabeled credentials isolated without persisting unreachable cache entries', async () => {
+      const providerA = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const providerB = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-b' },
+      });
+      const persistentCache = await getCache();
+      const getSpy = vi.spyOn(persistentCache, 'get');
+      const setSpy = vi.spyOn(persistentCache, 'set');
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      const resultA = await providerA.callApi('Shared sensitive prompt');
+      const resultB = await providerB.callApi('Shared sensitive prompt');
+      const cachedResultA = await providerA.callApi('Shared sensitive prompt');
+      const cachedResultB = await providerB.callApi('Shared sensitive prompt');
+
+      expect(resultA.output).toBe('Tenant A response');
+      expect(resultB.output).toBe('Tenant B response');
+      expect(cachedResultA).toMatchObject({ output: 'Tenant A response', cached: true });
+      expect(cachedResultB).toMatchObject({ output: 'Tenant B response', cached: true });
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('isolates unlabeled message cache entries by repeat namespace and honors clearCache', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-3' }] } as any);
+
+      const repeat0 = await withCacheNamespace('repeat:0', () => provider.callApi('Same prompt'));
+      const repeat1 = await withCacheNamespace('repeat:1', () => provider.callApi('Same prompt'));
+      await clearCache();
+      const afterClear = await withCacheNamespace('repeat:0', () =>
+        provider.callApi('Same prompt'),
+      );
+
+      expect(repeat0).toMatchObject({ output: 'fresh-1' });
+      expect(repeat1).toMatchObject({ output: 'fresh-2' });
+      expect(afterClear).toMatchObject({ output: 'fresh-3' });
+      expect(create).toHaveBeenCalledTimes(3);
+    });
+
+    it('expires unlabeled message cache entries using PROMPTFOO_CACHE_TTL', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '1' });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any);
+
+      try {
+        const first = await provider.callApi('Same prompt');
+        now.mockReturnValue(2_001);
+        const second = await provider.callApi('Same prompt');
+
+        expect(first).toMatchObject({ output: 'fresh-1' });
+        expect(second).toMatchObject({ output: 'fresh-2' });
+        expect(create).toHaveBeenCalledTimes(2);
+      } finally {
+        restoreEnv();
+        now.mockRestore();
+      }
+    });
+
+    it('invalidates unlabeled message cache entries when the cache is cleared directly', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any);
+
+      await provider.callApi('Same prompt');
+      await getCache().clear();
+      const afterClear = await provider.callApi('Same prompt');
+
+      expect(afterClear).toMatchObject({ output: 'fresh-2' });
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates unlabeled message cache entries when a namespaced cache is cleared', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-1' }] } as any)
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh-2' }] } as any);
+
+      await withCacheNamespace('repeat:0', () => provider.callApi('Same prompt'));
+      await withCacheNamespace('repeat:0', async () => getCache().clear());
+      const afterClear = await withCacheNamespace('repeat:0', () =>
+        provider.callApi('Same prompt'),
+      );
+
+      expect(afterClear).toMatchObject({ output: 'fresh-2' });
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps unlabeled message cache entries when PROMPTFOO_CACHE_TTL is zero', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '0' });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ content: [{ type: 'text', text: 'fresh-1' }] } as any);
+
+      try {
+        await provider.callApi('Same prompt');
+        now.mockReturnValue(10_000_000);
+        const cached = await provider.callApi('Same prompt');
+
+        expect(cached).toMatchObject({ output: 'fresh-1', cached: true });
+        expect(create).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreEnv();
+        now.mockRestore();
       }
     });
 
@@ -583,7 +759,7 @@ describe('AnthropicMessagesProvider', () => {
       }
     });
 
-    it('should hash custom request header values into cache keys without leaking them', async () => {
+    it('should bypass the response cache for custom request auth headers', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
         config: {
           headers: {
@@ -599,8 +775,8 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
       const cache = await getCache();
-      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
-      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
       vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Tenant A response' }],
       } as Anthropic.Messages.Message);
@@ -611,16 +787,62 @@ describe('AnthropicMessagesProvider', () => {
       await providerA.callApi('Shared sensitive prompt');
       await providerB.callApi('Shared sensitive prompt');
 
-      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
-      expect(cacheKeyA).not.toBe(cacheKeyB);
-      expect(cacheKeyA).not.toContain('Shared sensitive prompt');
-      expect(cacheKeyA).not.toContain('sk-ant-header-a');
-      expect(cacheKeyA).not.toContain('sk-ant-header-b');
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
       expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
 
-    it('should preserve duplicate-case request headers in cache keys', async () => {
+    it('should bypass the response cache for scoped Anthropic custom headers', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'shared-api-key', apiBaseUrl: 'https://gateway.example' },
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: tenant-a-secret' },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'shared-api-key', apiBaseUrl: 'https://gateway.example' },
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: tenant-b-secret' },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared prompt');
+      await providerB.callApi('Shared prompt');
+
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should keep bypassing the response cache after captured ambient custom headers are cleared', async () => {
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: captured-secret' });
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'shared-api-key', apiBaseUrl: 'https://gateway.example' },
+      });
+      mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: undefined });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Shared prompt');
+      await provider.callApi('Shared prompt');
+
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should bypass the response cache for duplicate-case custom auth headers', async () => {
       const providerA = createProvider('claude-3-5-sonnet-20241022', {
         config: {
           headers: {
@@ -638,8 +860,8 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
       const cache = await getCache();
-      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
-      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
       vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Tenant A response' }],
       } as Anthropic.Messages.Message);
@@ -650,14 +872,8 @@ describe('AnthropicMessagesProvider', () => {
       await providerA.callApi('Shared sensitive prompt');
       await providerB.callApi('Shared sensitive prompt');
 
-      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
-      expect(cacheKeyA).not.toBe(cacheKeyB);
-      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
-        expect(cacheKey).not.toContain('Shared sensitive prompt');
-        expect(cacheKey).not.toContain('sk-ant-header-a');
-        expect(cacheKey).not.toContain('sk-ant-header-b');
-        expect(cacheKey).not.toContain('sk-ant-header-c');
-      }
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
       expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
@@ -3391,6 +3607,40 @@ describe('AnthropicMessagesProvider', () => {
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
       expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
+    });
+
+    it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential
+        .mockReturnValueOnce({ accessToken: 'sk-ant-oat-tenant-a', expiresAt: Date.now() + 60_000 })
+        .mockReturnValueOnce({
+          accessToken: 'sk-ant-oat-tenant-b',
+          expiresAt: Date.now() + 60_000,
+        });
+      const providerA = createProvider('claude-sonnet-4-6', {
+        label: 'tenant-a',
+        config: { apiKeyRequired: false },
+      });
+      const providerB = createProvider('claude-sonnet-4-6', {
+        label: 'tenant-b',
+        config: { apiKeyRequired: false },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
+      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue(mockMessageResponse());
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue(mockMessageResponse());
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('sk-ant-oat-tenant-a');
+        expect(cacheKey).not.toContain('sk-ant-oat-tenant-b');
+        expect(cacheKey).not.toContain('Shared sensitive prompt');
+      }
     });
 
     it('adds the Claude Code identity block even when no user system prompt is provided', async () => {

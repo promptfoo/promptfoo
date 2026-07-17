@@ -1,7 +1,8 @@
-import { createHash, createHmac } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
+import { getEnvOverrides } from '../../envOverrides';
 import logger from '../../logger';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
@@ -11,6 +12,7 @@ import {
   loadClaudeCodeCredential,
 } from './claudeCodeAuth';
 import type { ClientOptions } from '@anthropic-ai/sdk';
+import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -23,22 +25,57 @@ import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
  * third-party endpoints use this to keep Anthropic-scoped headers (often
  * gateway/proxy secrets) off foreign hosts.
  */
-export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
-  const suppressed: Record<string, null> = {};
-  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
-  if (!customHeadersEnv) {
-    return suppressed;
-  }
-  for (const line of customHeadersEnv.split('\n')) {
+export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
+  const scopedHeaders =
+    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  return Object.fromEntries(
+    Object.keys({
+      ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
+      ...parseAnthropicCustomHeaders(scopedHeaders),
+    }).map((name) => [name, null]),
+  );
+}
+
+function parseAnthropicCustomHeaders(value: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of value?.split('\n') ?? []) {
     const colon = line.indexOf(':');
     if (colon >= 0) {
       const name = line.substring(0, colon).trim();
       if (name) {
-        suppressed[name] = null;
+        headers[name] = line.substring(colon + 1).trim();
       }
     }
   }
-  return suppressed;
+  return headers;
+}
+
+function setCaseInsensitiveHeaderValue(
+  headers: Record<string, string | null>,
+  headerName: string,
+  value: string,
+): void {
+  headers[headerName] = value;
+  for (const name of Object.keys(headers)) {
+    if (name.toLowerCase() === headerName.toLowerCase()) {
+      headers[name] = value;
+    }
+  }
+}
+
+function getAnthropicCustomHeaderOverrides(
+  env: EnvOverrides | undefined,
+): Record<string, string | null> {
+  const customHeaders =
+    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  if (customHeaders === undefined) {
+    return {};
+  }
+
+  return {
+    ...getAnthropicEnvHeaderSuppressions(env),
+    ...parseAnthropicCustomHeaders(customHeaders),
+  };
 }
 
 /**
@@ -65,6 +102,7 @@ interface AnthropicBaseOptions {
 }
 
 const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
+const MAX_EPHEMERAL_RESPONSE_CACHE_ENTRIES = 512;
 
 // Canonicalize before hashing so semantically identical plain objects with
 // different property insertion orders produce the same cache key. See
@@ -102,10 +140,6 @@ export function hashAnthropicCacheValue(value: unknown): string {
     .update('\0')
     .update(serialized)
     .digest('hex');
-}
-
-export function getAnthropicAuthCacheNamespace(apiKey: string): string {
-  return createHmac('sha256', apiKey).update(`${ANTHROPIC_CACHE_HASH_CONTEXT}:auth`).digest('hex');
 }
 
 /**
@@ -152,19 +186,36 @@ export class AnthropicGenericProvider implements ApiProvider {
    */
   claudeCodeCredential?: ClaudeCodeOAuthCredential;
   anthropic: Anthropic;
+  label?: string;
+  private readonly clientHasCustomHeaders: boolean;
+  private readonly ephemeralCacheNamespace = randomUUID();
+  private readonly ephemeralResponseCache = new Map<
+    string,
+    { response: string; expiresAt: number }
+  >();
+  private ephemeralCacheClearGeneration = 0;
 
   constructor(
     modelName: string,
     options: {
       config?: AnthropicBaseOptions;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     } = {},
   ) {
-    const { config, id, env } = options;
+    const { config, id, label, env } = options;
     this.env = env;
     this.modelName = modelName;
     this.config = config || {};
+    this.label = label;
+    const customHeaders =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
+      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+      process.env.ANTHROPIC_CUSTOM_HEADERS;
+    this.clientHasCustomHeaders =
+      Object.keys(this.config.headers ?? {}).length > 0 ||
+      Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
     this.apiKey = this.getApiKey();
     this.usingClaudeCodeOAuth = false;
 
@@ -208,12 +259,39 @@ export class AnthropicGenericProvider implements ApiProvider {
       }
     }
 
+    const clientDefaultHeaders = {
+      ...getAnthropicCustomHeaderOverrides(this.env),
+      ...defaultHeaders,
+    };
+    const scopedCustomHeaderValue =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+    const scopedCustomHeaders = parseAnthropicCustomHeaders(scopedCustomHeaderValue);
+    const scopedAuthHeaders = new Set(
+      Object.keys(scopedCustomHeaders).map((name) => name.toLowerCase()),
+    );
+    if (
+      scopedCustomHeaderValue !== undefined &&
+      this.apiKey &&
+      !scopedAuthHeaders.has('x-api-key')
+    ) {
+      setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'x-api-key', this.apiKey);
+    }
+    if (
+      scopedCustomHeaderValue !== undefined &&
+      authToken &&
+      !scopedAuthHeaders.has('authorization')
+    ) {
+      setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
+    }
+
     this.anthropic = new Anthropic(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
-        ...(Object.keys(defaultHeaders).length > 0 ? { defaultHeaders } : {}),
+        ...(Object.keys(clientDefaultHeaders).length > 0
+          ? { defaultHeaders: clientDefaultHeaders }
+          : {}),
       }),
     );
     this.id = id ? () => id : this.id;
@@ -270,9 +348,84 @@ export class AnthropicGenericProvider implements ApiProvider {
     });
   }
 
-  protected getCacheAuthNamespace(): string {
-    const apiKey = this.apiKey ?? this.getApiKey();
-    return apiKey ? getAnthropicAuthCacheNamespace(apiKey) : 'no-api-key';
+  protected hasCustomHeaders(): boolean {
+    const customHeaders =
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
+      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+      process.env.ANTHROPIC_CUSTOM_HEADERS;
+    return (
+      this.clientHasCustomHeaders ||
+      Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0
+    );
+  }
+
+  protected getCacheNamespace(): string {
+    // Provider aliases are stable, non-secret tenant namespaces. Credentials
+    // must never contribute a persistent cache fingerprint. An unlabeled
+    // provider can safely reuse responses only within its own process lifetime.
+    return hashAnthropicCacheValue({
+      providerId: this.id(),
+      providerLabel: this.label || this.ephemeralCacheNamespace,
+    });
+  }
+
+  protected async getCachedResponse(
+    cache: Cache,
+    cacheKey: string,
+    ephemeralCacheKey: string,
+    clearGeneration: number,
+  ): Promise<string | undefined> {
+    if (this.label) {
+      return cache.get<string | undefined>(cacheKey);
+    }
+
+    this.syncEphemeralCache(clearGeneration);
+    const entry = this.ephemeralResponseCache.get(ephemeralCacheKey);
+    if (!entry) {
+      return undefined;
+    }
+    if (entry.expiresAt <= Date.now()) {
+      this.ephemeralResponseCache.delete(ephemeralCacheKey);
+      return undefined;
+    }
+    return entry.response;
+  }
+
+  protected async setCachedResponse(
+    cache: Cache,
+    cacheKey: string,
+    ephemeralCacheKey: string,
+    clearGeneration: number,
+    ttlMs: number,
+    response: string,
+  ): Promise<void> {
+    if (this.label) {
+      await cache.set(cacheKey, response);
+      return;
+    }
+
+    this.syncEphemeralCache(clearGeneration);
+
+    if (
+      !this.ephemeralResponseCache.has(ephemeralCacheKey) &&
+      this.ephemeralResponseCache.size >= MAX_EPHEMERAL_RESPONSE_CACHE_ENTRIES
+    ) {
+      const oldestKey = this.ephemeralResponseCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.ephemeralResponseCache.delete(oldestKey);
+      }
+    }
+    this.ephemeralResponseCache.set(ephemeralCacheKey, {
+      response,
+      expiresAt: ttlMs <= 0 ? Number.POSITIVE_INFINITY : Date.now() + ttlMs,
+    });
+  }
+
+  private syncEphemeralCache(clearGeneration: number): void {
+    if (this.ephemeralCacheClearGeneration !== clearGeneration) {
+      this.ephemeralResponseCache.clear();
+      this.ephemeralCacheClearGeneration = clearGeneration;
+    }
   }
 
   /**

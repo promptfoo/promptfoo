@@ -384,6 +384,62 @@ describe('CloudflareGateway Provider', () => {
         expect.any(Object),
       );
     });
+
+    it('does not forward scoped Anthropic gateway credentials to Cloudflare', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS:
+          'Authorization: Bearer ambient-secret\nX-Proxy-Secret: ambient-proxy-secret',
+      });
+      try {
+        const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+          config: minimumConfig,
+          env: {
+            ANTHROPIC_CUSTOM_HEADERS:
+              'authorization: Bearer scoped-secret\nx-proxy-secret: scoped-proxy-secret',
+          },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-sonnet-4-20250514', max_tokens: 1, messages: [] },
+        });
+
+        expect(req.headers.get('authorization')).toBeNull();
+        expect(req.headers.get('x-proxy-secret')).toBeNull();
+        expect(req.headers.get('x-api-key')).toBe('testApiKey');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('keeps response caching enabled when suppressed Anthropic headers are present', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS: 'Authorization: Bearer ambient-secret',
+      });
+      try {
+        const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+          config: minimumConfig,
+          env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: scoped-secret' },
+        });
+        const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Test' }],
+          model: 'claude-sonnet-4-20250514',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 5 },
+        } as any);
+
+        await provider.callApi('Same prompt');
+        const cached = await provider.callApi('Same prompt');
+
+        expect(cached).toMatchObject({ output: 'Test', cached: true });
+        expect(create).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('Error Handling', () => {

@@ -16,8 +16,10 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
+import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -418,6 +420,36 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
       hasApiKey: !!providerOptions.config?.apiKey,
       hasCfAigToken: !!cfAigToken,
     });
+  }
+
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
+    const apiKeyHeaders = Object.fromEntries(
+      Object.keys(suppressedEnvHeaders)
+        .filter((name) => name.toLowerCase() === 'x-api-key')
+        .map((name) => [name, this.apiKey]),
+    );
+
+    return {
+      ...options,
+      defaultHeaders: {
+        ...safeDefaultHeaders,
+        ...suppressedEnvHeaders,
+        ...(this.apiKey ? { 'x-api-key': this.apiKey, ...apiKeyHeaders } : {}),
+      },
+    };
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
   }
 
   id(): string {
