@@ -375,7 +375,7 @@ describe('Provider Registry', () => {
       );
 
       expect(chatProvider.id()).toBe('moonshot:kimi-k2.6');
-      expect(defaultProvider.id()).toBe('moonshot:kimi-k2.6');
+      expect(defaultProvider.id()).toBe('moonshot:kimi-k3');
       const { body } = await (chatProvider as any).getOpenAiBody('Hello');
       expect(body.temperature).toBeUndefined();
       expect(body.max_tokens).toBeUndefined();
