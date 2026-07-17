@@ -769,12 +769,13 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
 // Transcription models for /v1/audio/transcriptions endpoint
 export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
-  cost: { perMinute: number; input?: number; output?: number };
+  cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
   {
     id: 'gpt-4o-transcribe',
     cost: {
-      input: 2.5 / 1e6,
+      input: 2.5 / 1e6, // text tokens
+      audioInput: 6 / 1e6, // audio tokens (~1000 audio tokens/min * $6/M = $0.006/min)
       output: 10 / 1e6,
       perMinute: 0.006, // $0.006 per minute
     },
@@ -782,7 +783,8 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   {
     id: 'gpt-4o-mini-transcribe',
     cost: {
-      input: 1.25 / 1e6,
+      input: 1.25 / 1e6, // text tokens
+      audioInput: 3 / 1e6, // audio tokens (~1000 audio tokens/min * $3/M = $0.003/min)
       output: 5 / 1e6,
       perMinute: 0.003, // $0.003 per minute
     },
@@ -791,6 +793,7 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
     id: 'gpt-4o-mini-transcribe-2025-12-15',
     cost: {
       input: 1.25 / 1e6,
+      audioInput: 3 / 1e6,
       output: 5 / 1e6,
       perMinute: 0.003,
     },
@@ -799,6 +802,7 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
     id: 'gpt-4o-mini-transcribe-2025-03-20',
     cost: {
       input: 1.25 / 1e6,
+      audioInput: 3 / 1e6,
       output: 5 / 1e6,
       perMinute: 0.003,
     },
@@ -807,6 +811,7 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
     id: 'gpt-4o-transcribe-diarize',
     cost: {
       input: 2.5 / 1e6,
+      audioInput: 6 / 1e6,
       output: 10 / 1e6,
       perMinute: 0.006, // $0.006 per minute (same as base gpt-4o-transcribe)
     },
@@ -815,6 +820,7 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
     id: 'gpt-4o-transcribe-diarize-2025-10-15',
     cost: {
       input: 2.5 / 1e6,
+      audioInput: 6 / 1e6,
       output: 10 / 1e6,
       perMinute: 0.006,
     },

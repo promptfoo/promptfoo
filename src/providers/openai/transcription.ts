@@ -3,6 +3,7 @@ import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { isAbortError } from '../../util/fetch/errors';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { appendOpenAiApiPath, getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
@@ -14,6 +15,16 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
+
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
 
 export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;
@@ -58,23 +69,41 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
 
   private calculateTranscriptionCost(
     durationSeconds: number | undefined,
-    usage: { type?: string; input_tokens?: number; output_tokens?: number } | undefined,
+    usage:
+      | {
+          type?: string;
+          input_tokens?: number;
+          input_token_details?: { text_tokens?: number; audio_tokens?: number };
+          output_tokens?: number;
+        }
+      | undefined,
   ): number | undefined {
     const model = OPENAI_TRANSCRIPTION_MODELS.find((m) => m.id === this.modelName);
     if (!model?.cost) {
       return undefined;
     }
 
+    // Transcription input is mostly audio tokens, billed at a higher rate than text
+    // tokens, so token-based billing requires the text/audio split from the API.
+    const inputTokenDetails = usage?.input_token_details;
     if (
       usage?.type === 'tokens' &&
-      typeof usage.input_tokens === 'number' &&
+      typeof inputTokenDetails?.text_tokens === 'number' &&
+      typeof inputTokenDetails?.audio_tokens === 'number' &&
       typeof usage.output_tokens === 'number' &&
       model.cost.input !== undefined &&
+      model.cost.audioInput !== undefined &&
       model.cost.output !== undefined
     ) {
-      return usage.input_tokens * model.cost.input + usage.output_tokens * model.cost.output;
+      return (
+        inputTokenDetails.text_tokens * model.cost.input +
+        inputTokenDetails.audio_tokens * model.cost.audioInput +
+        usage.output_tokens * model.cost.output
+      );
     }
 
+    // Without the audio/text split, duration-based billing is more accurate than
+    // pricing all input tokens at the text rate.
     if (durationSeconds === undefined) {
       return undefined;
     }
@@ -85,8 +114,12 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const abortSignal = callApiOptions?.abortSignal;
+    if (abortSignal?.aborted) {
+      throw getAbortError(abortSignal);
+    }
     const apiKey = this.getApiKey();
     if (!apiKey && this.requiresApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -188,6 +221,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             method: 'POST',
             headers,
             body: formData,
+            ...(abortSignal ? { signal: abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
@@ -201,6 +235,12 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           };
         }
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
+        if (isAbortError(err)) {
+          throw err;
+        }
         logger.error('API call error', { error: err });
         return {
           error: `API call error: ${String(err)}`,
@@ -316,6 +356,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       logger.error('Transcription error', { error: err });
       return {
         error: `Transcription error: ${String(err)}`,

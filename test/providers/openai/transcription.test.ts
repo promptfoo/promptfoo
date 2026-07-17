@@ -330,7 +330,66 @@ describe('OpenAiTranscriptionProvider', () => {
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
-      expect(result.cost).toBeCloseTo((1_000 * 1.25 + 100 * 5) / 1e6, 10);
+      // Audio tokens bill at the $3/M audio rate, not the $1.25/M text rate.
+      expect(result.cost).toBeCloseTo((1_000 * 3 + 100 * 5) / 1e6, 10);
+      expect(result.tokenUsage).toEqual({
+        total: 1_100,
+        prompt: 1_000,
+        completion: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should bill mixed text and audio input tokens at their separate rates', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          text: 'This is a test transcription.',
+          usage: {
+            type: 'tokens',
+            input_tokens: 1_000,
+            input_token_details: { text_tokens: 200, audio_tokens: 800 },
+            output_tokens: 100,
+            total_tokens: 1_100,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      // $2.50/M text input + $6/M audio input + $10/M output
+      expect(result.cost).toBeCloseTo((200 * 2.5 + 800 * 6 + 100 * 10) / 1e6, 10);
+    });
+
+    it('should fall back to duration billing when token usage lacks the audio/text split', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          text: 'This is a test transcription.',
+          duration: 120,
+          usage: {
+            type: 'tokens',
+            input_tokens: 1_000,
+            output_tokens: 100,
+            total_tokens: 1_100,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      // 2 minutes * $0.006/min, not input tokens priced at the text rate
+      expect(result.cost).toBeCloseTo(0.012, 10);
       expect(result.tokenUsage).toEqual({
         total: 1_100,
         prompt: 1_000,
@@ -487,6 +546,54 @@ describe('OpenAiTranscriptionProvider', () => {
       } finally {
         restoreEnv();
       }
+    });
+  });
+
+  describe('Abort handling', () => {
+    it('forwards the eval abort signal to transcription requests', async () => {
+      const controller = new AbortController();
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await provider.callApi('/path/to/audio.mp3', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/audio/transcriptions'),
+        expect.objectContaining({ signal: controller.signal }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('does not transcribe for an already-aborted eval', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await expect(
+        provider.callApi('/path/to/audio.mp3', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('normalizes a pre-aborted custom reason to AbortError', async () => {
+      const controller = new AbortController();
+      controller.abort(new Error('caller cancelled before dispatch'));
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await expect(
+        provider.callApi('/path/to/audio.mp3', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled before dispatch' });
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
 
