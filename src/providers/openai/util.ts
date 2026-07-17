@@ -13,6 +13,17 @@ const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
 
+function hasInlineSecret(value: string): boolean {
+  return (
+    looksLikeSecret(value) ||
+    /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
+    /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(value) ||
+    /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
+      value,
+    )
+  );
+}
+
 export function hasSensitiveOpenAiCacheString(value: string): boolean {
   const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
   return (
@@ -25,26 +36,12 @@ export function hasSensitiveOpenAiCacheString(value: string): boolean {
       } catch {
         return true;
       }
-    }) ||
-    looksLikeSecret(value) ||
-    /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
-    /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(value) ||
-    /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
-      value,
-    )
+    }) || hasInlineSecret(value)
   );
 }
 
 export function hasSensitiveOpenAiCachePath(value: string): boolean {
-  return (
-    looksLikeSecret(value) ||
-    /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
-    /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(value) ||
-    /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
-      value,
-    ) ||
-    OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value)
-  );
+  return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
 }
 
 export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {

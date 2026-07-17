@@ -322,7 +322,8 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ),
     )}`;
 
-    if (cacheEnabled && !this.shouldBustCache(context)) {
+    const useCache = cacheEnabled && !this.shouldBustCache(context);
+    if (useCache) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);
       if (cachedResponse) {
         return cachedResponse;
@@ -371,7 +372,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
           latencyMs: Date.now() - startedAt,
         };
 
-        if (cacheEnabled && !this.shouldBustCache(context)) {
+        if (useCache) {
           await cacheResponse(cacheKey, result);
         }
 
@@ -400,7 +401,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       }
     };
 
-    return cacheEnabled && !this.shouldBustCache(context)
+    return useCache
       ? coalesceRequest(
           getInFlightCacheKey(getScopedCacheKey(cacheKey), callApiOptions?.abortSignal),
           requestSpeech,

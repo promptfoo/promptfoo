@@ -759,13 +759,14 @@ export async function callOpenAiImageApi(
   const hasSensitiveHeaderValue = Object.entries(headers).some(
     ([key, value]) => !isSensitiveHeader(key) && hasSensitiveOpenAiCacheString(value),
   );
-  const hasSensitiveBody = hasSensitiveOpenAiCacheString(JSON.stringify(body));
+  const serializedBody = JSON.stringify(body);
+  const hasSensitiveBody = hasSensitiveOpenAiCacheString(serializedBody);
   const bustCache =
     hasSensitiveUrl ||
     hasSensitiveHeaderValue ||
     hasSensitiveBody ||
     (!sendsToOpenAiApi && hasSensitiveHeader);
-  const request = { method: 'POST', headers, body: JSON.stringify(body) };
+  const request = { method: 'POST', headers, body: serializedBody };
 
   return bustCache
     ? await fetchWithCache(url, request, timeout, 'json', true)

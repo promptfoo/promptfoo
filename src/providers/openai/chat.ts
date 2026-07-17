@@ -80,6 +80,16 @@ function getChatSearchCitations(
   });
 }
 
+function getChatSearchSurcharge(modelName: string): number {
+  if (/(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)) {
+    return 0.01;
+  }
+  if (/(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)) {
+    return 0.025;
+  }
+  return 0;
+}
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
@@ -248,24 +258,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       this.isGPT5Model() ||
       capabilityModelName.startsWith('gpt-5') ||
       capabilityModelName.includes('/gpt-5');
-    const isPassthroughReasoningModel =
-      typeof config.passthrough?.model === 'string' &&
-      (isGPT5Model ||
-        capabilityModelName.startsWith('o1') ||
-        capabilityModelName.startsWith('o3') ||
-        capabilityModelName.startsWith('o4') ||
-        capabilityModelName.includes('/o1') ||
-        capabilityModelName.includes('/o3') ||
-        capabilityModelName.includes('/o4'));
-    const isReasoningModel =
-      this.isReasoningModel() ||
-      isGPT5Model ||
+    const isOSeriesModel =
       capabilityModelName.startsWith('o1') ||
       capabilityModelName.startsWith('o3') ||
       capabilityModelName.startsWith('o4') ||
       capabilityModelName.includes('/o1') ||
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
+    const isPassthroughReasoningModel =
+      typeof config.passthrough?.model === 'string' && (isGPT5Model || isOSeriesModel);
+    const isReasoningModel = this.isReasoningModel() || isGPT5Model || isOSeriesModel;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -369,15 +371,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
-    if (
-      config.reasoning &&
-      (capabilityModelName.startsWith('o1') ||
-        capabilityModelName.startsWith('o3') ||
-        capabilityModelName.startsWith('o4') ||
-        capabilityModelName.includes('/o1') ||
-        capabilityModelName.includes('/o3') ||
-        capabilityModelName.includes('/o4'))
-    ) {
+    if (config.reasoning && isOSeriesModel) {
       body.reasoning = config.reasoning;
     }
 
@@ -425,13 +419,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       cachedResponse: cached,
       serviceTier: data.service_tier ?? config.service_tier,
     });
-    const searchCost = cached
-      ? 0
-      : /(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)
-        ? 0.01
-        : /(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)
-          ? 0.025
-          : 0;
+    const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);
 
     return tokenCost === undefined ? searchCost || undefined : tokenCost + searchCost;
   }

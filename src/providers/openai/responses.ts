@@ -186,17 +186,18 @@ function getBackgroundCacheIdentity(
   request: BackgroundRequest,
   responseId?: string,
 ): { key: string; cacheable: boolean; coalescable: boolean } {
-  const cacheHeaders = Object.entries(request.headers)
+  const headerEntries = Object.entries(request.headers);
+  const cacheHeaders = headerEntries
     .filter(
       ([key, value]) =>
         !isSensitiveBackgroundCacheHeader(key) && !hasSensitiveBackgroundCacheValue(value),
     )
     .map(([key, value]) => [key.toLowerCase(), value])
     .sort(([left], [right]) => left.localeCompare(right));
-  const hasSensitiveHeader = Object.entries(request.headers).some(
+  const hasSensitiveHeader = headerEntries.some(
     ([key, value]) => isSensitiveBackgroundCacheHeader(key) && value.trim().length > 0,
   );
-  const hasSensitiveHeaderValue = Object.entries(request.headers).some(
+  const hasSensitiveHeaderValue = headerEntries.some(
     ([key, value]) =>
       !isSensitiveBackgroundCacheHeader(key) && hasSensitiveBackgroundCacheValue(value),
   );
@@ -209,8 +210,9 @@ function getBackgroundCacheIdentity(
   let sendsToOpenAiApi = false;
   let hasSensitiveUrlPath = false;
   try {
-    hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(new URL(url).pathname));
-    sendsToOpenAiApi = new URL(url).hostname.toLowerCase() === 'api.openai.com';
+    const parsedUrl = new URL(url);
+    hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname));
+    sendsToOpenAiApi = parsedUrl.hostname.toLowerCase() === 'api.openai.com';
   } catch {
     hasSensitiveUrlPath = true;
   }
