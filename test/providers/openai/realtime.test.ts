@@ -3044,6 +3044,25 @@ describe('OpenAI Realtime Provider', () => {
       expect(wsOptions.headers).not.toHaveProperty('Authorization');
     });
 
+    it('strips a user-supplied Authorization header when omitting bearer auth for Azure api-key', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
+          apiKey: 'azure-key',
+          headers: { 'api-key': 'azure-key', Authorization: 'Bearer stale-openai-token' },
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers['api-key']).toBe('azure-key');
+      expect(wsOptions.headers).not.toHaveProperty('Authorization');
+    });
+
     it('keeps the OpenAI bearer header when a gateway API-key header is configured', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { apiKey: 'openai-key', headers: { 'api-key': 'gateway-key' } },

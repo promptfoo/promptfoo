@@ -679,6 +679,27 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     );
   }
 
+  // Build the WebSocket handshake headers. When bearer auth is suppressed (Azure
+  // api-key auth), also drop any Authorization header a user supplied via
+  // config.headers so it can't re-introduce bearer credentials alongside api-key.
+  private buildRealtimeWsHeaders(wsUrl: string): Record<string, string> {
+    const omitBearer = this.shouldOmitBearerAuth(wsUrl);
+    const requestHeaders = { ...this.getOpenAiRequestHeaders() };
+    if (omitBearer) {
+      for (const key of Object.keys(requestHeaders)) {
+        if (key.toLowerCase() === 'authorization') {
+          delete requestHeaders[key];
+        }
+      }
+    }
+    return {
+      ...(omitBearer ? {} : { Authorization: `Bearer ${this.getApiKey()}` }),
+      'User-Agent': 'promptfoo Realtime API Client',
+      Origin: this.getWebSocketOrigin(),
+      ...requestHeaders,
+    };
+  }
+
   // Build WebSocket URL for client-secret based socket initialization
   private getClientSecretSocketUrl(clientSecret: string): string {
     const wsBase = this.getWebSocketBase();
@@ -1452,14 +1473,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // Add WebSocket options with required headers
       const wsOptions = {
-        headers: {
-          ...(this.shouldOmitBearerAuth(wsUrl)
-            ? {}
-            : { Authorization: `Bearer ${this.getApiKey()}` }),
-          'User-Agent': 'promptfoo Realtime API Client',
-          Origin: this.getWebSocketOrigin(),
-          ...this.getOpenAiRequestHeaders(),
-        },
+        headers: this.buildRealtimeWsHeaders(wsUrl),
         handshakeTimeout: 10000,
         perMessageDeflate: false,
       };
@@ -2053,14 +2067,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     logger.debug(`Opening persistent WebSocket: ${wsUrl}`);
 
     const wsOptions = {
-      headers: {
-        ...(this.shouldOmitBearerAuth(wsUrl)
-          ? {}
-          : { Authorization: `Bearer ${this.getApiKey()}` }),
-        'User-Agent': 'promptfoo Realtime API Client',
-        Origin: this.getWebSocketOrigin(),
-        ...this.getOpenAiRequestHeaders(),
-      },
+      headers: this.buildRealtimeWsHeaders(wsUrl),
       handshakeTimeout: 10000,
       perMessageDeflate: false,
     };
