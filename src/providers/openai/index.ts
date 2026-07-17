@@ -94,13 +94,17 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
+    if (this.config.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+    if (envApiHost) {
+      return `https://${envApiHost}/v1`;
     }
     return (
-      this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
       getEnvString('OPENAI_API_BASE_URL') ||
