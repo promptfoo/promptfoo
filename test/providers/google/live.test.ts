@@ -591,6 +591,40 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('does not attach an empty WAV when only a transcription arrives without audio bytes', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          outputAudioTranscription: {},
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            outputTranscription: { text: 'Silent transcript.' },
+            generationComplete: true,
+            turnComplete: true,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.output).toMatchObject({ text: 'Silent transcript.' });
+    // No PCM bytes were received, so there must be no bare 44-byte WAV artifact.
+    expect(response.audio).toBeUndefined();
+  });
+
   it('should preserve padded Gemini Live audio chunks when assembling the WAV response', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {

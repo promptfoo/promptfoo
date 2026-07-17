@@ -712,7 +712,11 @@ export class GoogleLiveProvider implements ApiProvider {
                 (billVideoPerSecond ? billableVideoFrameCount * videoInputPerSecond : 0);
         }
 
-        if (hasAudioContent) {
+        // `hasAudioContent` is also set when only a transcription arrives on an
+        // audio-expected stream, so gate the WAV on actual PCM bytes — otherwise
+        // convertPcmToWav emits a bare 44-byte header with no samples. The
+        // transcript is still preserved as the response output text above.
+        if (hasAudioContent && responseAudioChunks.length > 0) {
           result.audio = {
             data: this.convertPcmToWav(Buffer.concat(responseAudioChunks)),
             format: 'wav',
