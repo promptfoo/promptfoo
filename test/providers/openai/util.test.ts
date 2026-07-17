@@ -144,6 +144,43 @@ describe('getTokenUsage', () => {
     });
   });
 
+  it('should read cached tokens from top-level usage.cached_tokens (e.g. Moonshot)', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        cached_tokens: 32,
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+      completionDetails: {
+        cacheReadInputTokens: 32,
+      },
+    });
+  });
+
+  it('should prefer prompt_tokens_details.cached_tokens over the top-level field', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        cached_tokens: 7,
+        prompt_tokens_details: { cached_tokens: 32 },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result.completionDetails).toEqual({ cacheReadInputTokens: 32 });
+  });
+
   it.each([
     ['top-level positive', { cache_write_input_tokens: 4 }, 4],
     ['nested explicit zero', { prompt_tokens_details: { cache_write_tokens: 0 } }, 0],
