@@ -58,7 +58,8 @@ const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 const MAX_STREAM_SERIALIZED_OUTPUT_CHARS = MAX_STREAM_OUTPUT_CHARS + 64 * 1024;
-const MAX_STREAM_EXCESS_INPUT_BYTES = 2 * MAX_STREAM_OUTPUT_CHARS;
+const MAX_STREAM_EXCESS_INPUT_BYTES = MAX_STREAM_OUTPUT_CHARS;
+const MAX_STREAM_TOTAL_INPUT_BYTES = 6 * MAX_STREAM_OUTPUT_CHARS;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
 const MAX_STREAM_FRAGMENT_BATCH = 1024;
@@ -213,7 +214,10 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
   return undefined;
 }
 
-function getRetainedStreamPayloadBytes(event: ResponsesStreamEvent): number {
+function getRetainedStreamPayloadBytes(
+  event: ResponsesStreamEvent,
+  addedFunctionItems: Map<string, Record<string, string | undefined>>,
+): number {
   const encoder = new TextEncoder();
   let bytes = 0;
   const addText = (value: unknown): void => {
@@ -223,7 +227,13 @@ function getRetainedStreamPayloadBytes(event: ResponsesStreamEvent): number {
   };
   const addOutputItem = (item: any): void => {
     if (item?.type === 'function_call') {
-      addText(item.arguments);
+      if (
+        typeof item.name === 'string' &&
+        item.name.length > 0 &&
+        item.name.length <= MAX_STREAM_FUNCTION_METADATA_CHARS
+      ) {
+        addText(item.arguments);
+      }
       return;
     }
     if (item?.type === 'refusal') {
@@ -275,7 +285,15 @@ function getRetainedStreamPayloadBytes(event: ResponsesStreamEvent): number {
       addOutputItem(event.item);
       break;
     case 'response.function_call_arguments.done':
-      addText(event.arguments);
+      if (
+        (typeof event.name === 'string' &&
+          event.name.length > 0 &&
+          event.name.length <= MAX_STREAM_FUNCTION_METADATA_CHARS) ||
+        typeof addedFunctionItems.get(getFunctionCallOutputKey(event.output_index, event.item_id))
+          ?.name === 'string'
+      ) {
+        addText(event.arguments);
+      }
       break;
     case 'response.refusal.delta':
       addText(event.delta);
@@ -294,7 +312,11 @@ function getRetainedStreamPayloadBytes(event: ResponsesStreamEvent): number {
         name: event.item.name,
       };
       const serialized = JSON.stringify(metadata);
-      if (serialized.length <= MAX_STREAM_FUNCTION_METADATA_CHARS) {
+      if (
+        typeof metadata.name === 'string' &&
+        metadata.name.length > 0 &&
+        serialized.length <= MAX_STREAM_FUNCTION_METADATA_CHARS
+      ) {
         bytes += encoder.encode(serialized).byteLength;
       }
       break;
@@ -981,6 +1003,8 @@ export async function readResponsesStream(
   let finalizedOutputChars = 0;
   let streamEventCount = 0;
   let streamExcessInputBytes = 0;
+  let streamTotalInputBytes = 0;
+  const creditedStreamPayloadBytesByKind = new Map<string, number>();
   let streamedAnnotationCount = 0;
   let streamedAnnotationChars = 0;
 
@@ -1233,7 +1257,32 @@ export async function readResponsesStream(
 
     const event = parseSseEvent(chunk, providerName, logger);
     const bytes = new TextEncoder().encode(chunk).byteLength;
-    const retainedBytes = event ? getRetainedStreamPayloadBytes(event) : 0;
+    if (bytes > MAX_STREAM_TOTAL_INPUT_BYTES - streamTotalInputBytes) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_TOTAL_INPUT_BYTES} bytes of total stream input`,
+      );
+    }
+    streamTotalInputBytes += bytes;
+
+    const terminalResponse = isTerminalStreamResponse(
+      latestResponseEventType,
+      latestResponse?.status,
+    );
+    const retainedPayloadBytes =
+      event && !terminalResponse ? getRetainedStreamPayloadBytes(event, addedFunctionItems) : 0;
+    const creditKind = event
+      ? `${Array.isArray(event.response?.output) || Array.isArray(event.output) ? 'snapshot' : 'event'}:${event.type ?? 'unknown'}`
+      : undefined;
+    const previousCredit = creditKind ? (creditedStreamPayloadBytesByKind.get(creditKind) ?? 0) : 0;
+    const retainedBytes =
+      creditKind &&
+      (creditedStreamPayloadBytesByKind.has(creditKind) ||
+        creditedStreamPayloadBytesByKind.size < MAX_STREAM_OUTPUT_KEYS)
+        ? Math.min(retainedPayloadBytes, MAX_STREAM_OUTPUT_CHARS - previousCredit)
+        : 0;
+    if (creditKind && retainedBytes > 0) {
+      creditedStreamPayloadBytesByKind.set(creditKind, previousCredit + retainedBytes);
+    }
     const excessBytes = Math.max(0, bytes - retainedBytes);
     if (excessBytes > MAX_STREAM_EXCESS_INPUT_BYTES - streamExcessInputBytes) {
       throw new Error(
@@ -1242,10 +1291,6 @@ export async function readResponsesStream(
     }
     streamExcessInputBytes += excessBytes;
 
-    const terminalResponse = isTerminalStreamResponse(
-      latestResponseEventType,
-      latestResponse?.status,
-    );
     if (!event || terminalResponse) {
       return;
     }

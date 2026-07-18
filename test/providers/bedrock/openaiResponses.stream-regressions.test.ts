@@ -4203,6 +4203,198 @@ describe('Responses stream regressions', () => {
       expect(cancelled).toBe(true);
     });
 
+    it.each([
+      {
+        name: 'late output-text-done event',
+        late: true,
+        event: (text: string) => ({
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm',
+          text,
+        }),
+      },
+      {
+        name: 'late function-argument-done event',
+        late: true,
+        event: (text: string) => ({
+          type: 'response.function_call_arguments.done',
+          output_index: 0,
+          item_id: 'fc',
+          arguments: text,
+        }),
+      },
+      {
+        name: 'late output-item-done event',
+        late: true,
+        event: (text: string) => ({
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            id: 'm',
+            role: 'assistant',
+            content: [{ type: 'output_text', text }],
+          },
+        }),
+      },
+      {
+        name: 'late response snapshot',
+        late: true,
+        event: (text: string) => ({
+          type: 'response.in_progress',
+          response: {
+            status: 'in_progress',
+            output: [
+              {
+                type: 'message',
+                id: 'm',
+                role: 'assistant',
+                content: [{ type: 'output_text', text }],
+              },
+            ],
+          },
+        }),
+      },
+      {
+        name: 'repeated nonterminal response snapshot',
+        late: false,
+        event: (text: string) => ({
+          type: 'response.in_progress',
+          response: {
+            status: 'in_progress',
+            output: [
+              {
+                type: 'message',
+                id: 'm',
+                role: 'assistant',
+                content: [{ type: 'output_text', text }],
+              },
+            ],
+          },
+        }),
+      },
+      {
+        name: 'repeated output-text-done event',
+        late: false,
+        event: (text: string) => ({
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm',
+          text,
+        }),
+      },
+      {
+        name: 'invalid function-argument identity',
+        late: false,
+        event: (text: string) => ({
+          type: 'response.function_call_arguments.done',
+          output_index: '0:function_call:a',
+          item_id: 'b',
+          arguments: text,
+        }),
+      },
+      {
+        name: 'invalid function-call item arguments',
+        late: false,
+        event: (text: string) => ({
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: { type: 'function_call', id: 'bad', arguments: text },
+        }),
+      },
+    ])('cancels a Responses stream when $name replays ignored retained payloads', async ({
+      event,
+      late,
+    }) => {
+      const encoder = new TextEncoder();
+      const text = 'X'.repeat(7 * 1024 * 1024);
+      const completed =
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","id":"safe","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n';
+      let sent = 0;
+      let terminalSent = false;
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (late && !terminalSent) {
+            terminalSent = true;
+            controller.enqueue(encoder.encode(completed));
+            return;
+          }
+          if (sent >= 12) {
+            controller.enqueue(encoder.encode(completed));
+            controller.close();
+            return;
+          }
+          sent++;
+          const payloadEvent = event(text);
+          controller.enqueue(
+            encoder.encode(
+              `event: ${payloadEvent.type}\ndata: ${JSON.stringify(payloadEvent)}\n\n`,
+            ),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*(?:unretained|total).*stream input/i);
+      expect(sent).toBeLessThan(12);
+      expect(cancelled).toBe(true);
+    });
+
+    it('cancels a Responses stream at the hard input ceiling when snapshot kinds evade retained repetition tracking', async () => {
+      const encoder = new TextEncoder();
+      const text = 'X'.repeat(7 * 1024 * 1024);
+      let sent = 0;
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent >= 16) {
+            controller.enqueue(
+              encoder.encode(
+                'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n',
+              ),
+            );
+            controller.close();
+            return;
+          }
+          sent++;
+          const event = {
+            type: `response.snapshot_${sent}`,
+            response: {
+              status: 'in_progress',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text }],
+                },
+              ],
+            },
+          };
+          controller.enqueue(
+            encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*total stream input/i);
+      expect(sent).toBeLessThan(16);
+      expect(cancelled).toBe(true);
+    });
+
     it('executes a completed function call with empty string arguments', async () => {
       const processCalls = vi.fn().mockResolvedValue('SAFE TOOL RESULT');
       const parsed = await readResponsesStream(
