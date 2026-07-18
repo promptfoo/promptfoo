@@ -3711,6 +3711,123 @@ describe('Responses stream regressions', () => {
 
     it.each([
       {
+        name: 'the same item ID at different finalized indices',
+        mode: 'index',
+      },
+      {
+        name: 'different item IDs at the same finalized index',
+        mode: 'item-id',
+      },
+    ])('rejects a conflicting citation from text.done-only output at EOF with $name', async ({
+      mode,
+    }) => {
+      const firstId = 'm_first';
+      const secondId = mode === 'index' ? firstId : 'm_second';
+      const secondIndex = mode === 'index' ? 1 : 0;
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: firstId,
+            text: 'FIRST FINAL',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: secondIndex,
+            content_index: 0,
+            item_id: secondId,
+            text: 'SECOND FINAL',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: secondIndex,
+            content_index: 0,
+            item_id: secondId,
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toHaveLength(1);
+      expect(processed.output).toBe('FIRST FINAL');
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('SECOND FINAL');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECOND FINAL');
+    });
+
+    it('preserves a matching text.done-only citation at EOF', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/text-done',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SAFE FINAL',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation,
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([
+        {
+          type: 'message',
+          id: 'm_safe',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'SAFE FINAL', annotations: [annotation] }],
+        },
+      ]);
+      expect(processed.output).toBe('SAFE FINAL');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
         name: 'statusless incomplete after output_text.done',
         eventType: 'response.incomplete',
         finalizer: 'text',

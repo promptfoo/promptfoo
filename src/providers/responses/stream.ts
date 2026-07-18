@@ -1523,22 +1523,37 @@ export async function readResponsesStream(
   const finalizedMessageIndexById = new Map<string, number>();
   const finalizedMessageIdByIndex = new Map<number, string>();
   const terminalMessageByIndex = new Map<number, any>();
+  const hasFinalizedMessageIdentityConflict = (itemId: string, outputIndex: number): boolean => {
+    const finalizedIndex = finalizedMessageIndexById.get(itemId);
+    const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
+    return (
+      (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
+      (finalizedId !== undefined && finalizedId !== itemId)
+    );
+  };
   for (const [key, { item, outputIndex, serializedLength }] of finalizedNonMessageItems) {
     if (item?.type !== 'message' || typeof item.id !== 'string' || outputIndex === undefined) {
       continue;
     }
-    const finalizedIndex = finalizedMessageIndexById.get(item.id);
-    const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
-    if (
-      (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
-      (finalizedId !== undefined && finalizedId !== item.id)
-    ) {
+    if (hasFinalizedMessageIdentityConflict(item.id, outputIndex)) {
       finalizedOutputChars -= serializedLength;
       finalizedNonMessageItems.delete(key);
       continue;
     }
     finalizedMessageIndexById.set(item.id, outputIndex);
     finalizedMessageIdByIndex.set(outputIndex, item.id);
+  }
+  for (const key of finalizedOutputTextKeys) {
+    const itemId = outputTextItemIds.get(key);
+    if (!itemId) {
+      continue;
+    }
+    const outputIndex = Number(key.slice(0, key.indexOf(':')));
+    if (hasFinalizedMessageIdentityConflict(itemId, outputIndex)) {
+      continue;
+    }
+    finalizedMessageIndexById.set(itemId, outputIndex);
+    finalizedMessageIdByIndex.set(outputIndex, itemId);
   }
   if (Array.isArray(latestResponse?.output)) {
     for (const [outputIndex, item] of latestResponse.output.entries()) {
@@ -1552,12 +1567,7 @@ export async function readResponsesStream(
         continue;
       }
       terminalMessageByIndex.set(outputIndex, item);
-      const finalizedIndex = finalizedMessageIndexById.get(item.id);
-      const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
-      if (
-        (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
-        (finalizedId !== undefined && finalizedId !== item.id)
-      ) {
+      if (hasFinalizedMessageIdentityConflict(item.id, outputIndex)) {
         continue;
       }
       finalizedMessageIndexById.set(item.id, outputIndex);
@@ -1566,15 +1576,12 @@ export async function readResponsesStream(
   }
 
   for (const [key, streamedItem] of streamedAnnotations) {
-    if (streamedItem.itemId && streamedItem.outputIndex !== undefined) {
-      const finalizedIndex = finalizedMessageIndexById.get(streamedItem.itemId);
-      const finalizedId = finalizedMessageIdByIndex.get(streamedItem.outputIndex);
-      if (
-        (finalizedIndex !== undefined && finalizedIndex !== streamedItem.outputIndex) ||
-        (finalizedId !== undefined && finalizedId !== streamedItem.itemId)
-      ) {
-        continue;
-      }
+    if (
+      streamedItem.itemId &&
+      streamedItem.outputIndex !== undefined &&
+      hasFinalizedMessageIdentityConflict(streamedItem.itemId, streamedItem.outputIndex)
+    ) {
+      continue;
     }
     const existingItem =
       finalizedNonMessageItems.get(key)?.item ??
@@ -1765,12 +1772,7 @@ export async function readResponsesStream(
       const itemId = outputTextItemIds.get(key);
       const contentIndex = key.slice(key.indexOf(':') + 1);
       const outputIndex = Number(key.slice(0, key.indexOf(':')));
-      const finalizedIndex = itemId ? finalizedMessageIndexById.get(itemId) : undefined;
-      const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
-      if (
-        (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
-        (itemId && finalizedId !== undefined && finalizedId !== itemId)
-      ) {
+      if (itemId && hasFinalizedMessageIdentityConflict(itemId, outputIndex)) {
         continue;
       }
       const terminalIndex = itemId
@@ -1884,9 +1886,16 @@ export async function readResponsesStream(
 
   if (outputText) {
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
+    const recoverableOutputTextByContent = new Map(
+      Array.from(outputTextByContent).filter(([key]) => {
+        const itemId = outputTextItemIds.get(key);
+        const outputIndex = Number(key.slice(0, key.indexOf(':')));
+        return !itemId || !hasFinalizedMessageIdentityConflict(itemId, outputIndex);
+      }),
+    );
     const recoveredOutput = recoverIncompleteOutput(
       finalizedStreamOutput,
-      outputTextByContent,
+      recoverableOutputTextByContent,
       [
         ...completedUnindexedOutputTexts,
         ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
