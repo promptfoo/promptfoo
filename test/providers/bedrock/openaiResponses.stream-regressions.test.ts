@@ -2095,6 +2095,111 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
     });
 
+    it('never borrows added function-call metadata across colliding colon identities', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.added',
+            output_index: '0:function_call:a',
+            item: {
+              type: 'function_call',
+              id: 'b',
+              call_id: 'safe_call',
+              name: 'dangerous_action',
+            },
+          },
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: '0',
+            item_id: 'a:function_call:b',
+            arguments: '{"path":"/tmp/secret"}',
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
+    it('never reconciles a call-id-only output item across colliding colon identities', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: '0:function_call:a',
+            item_id: 'b',
+            name: 'dangerous_action',
+            arguments: '{"path":"/tmp/secret"}',
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: '0',
+            item: {
+              type: 'function_call',
+              call_id: 'safe_call',
+              name: 'dangerous_action',
+              arguments: '',
+            },
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
+    it('executes a legitimately matched function call with colon-delimited identities', async () => {
+      const processCalls = vi.fn().mockResolvedValue('SAFE TOOL RESULT');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.added',
+            output_index: '0:function_call:a',
+            item: { type: 'function_call', id: 'b', call_id: 'safe_call', name: 'lookup' },
+          },
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: '0:function_call:a',
+            item_id: 'b',
+            arguments: '{"q":"safe"}',
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'function_call',
+          id: 'b',
+          call_id: 'safe_call',
+          name: 'lookup',
+          arguments: '{"q":"safe"}',
+        }),
+        undefined,
+      );
+      expect(processed.output).toBe('SAFE TOOL RESULT');
+    });
+
     it.each([
       { name: 'completed content-part snapshot', status: 'completed', snapshot: 'part' },
       { name: 'incomplete content-part snapshot', status: 'incomplete', snapshot: 'part' },

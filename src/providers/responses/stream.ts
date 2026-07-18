@@ -127,6 +127,14 @@ function getMessageOutputKey(outputIndex: unknown, itemId?: string): string {
   return JSON.stringify([compactStreamIndex(outputIndex, 'missing'), 'message', itemId ?? '']);
 }
 
+function getFunctionCallOutputKey(outputIndex: unknown, itemId?: string): string {
+  return JSON.stringify([
+    compactStreamIndex(outputIndex, 'missing'),
+    'function_call',
+    itemId ?? '',
+  ]);
+}
+
 function getValidOutputIndex(event: ResponsesStreamEvent): number | undefined {
   return typeof event.output_index === 'number' &&
     Number.isInteger(event.output_index) &&
@@ -349,20 +357,24 @@ function hasRefusalOutput(output: any[] | undefined): boolean {
   );
 }
 
+function isExecutableFunctionCall(item: any): boolean {
+  return (
+    item?.type === 'function_call' &&
+    typeof item.name === 'string' &&
+    item.name.length > 0 &&
+    typeof item.arguments === 'string' &&
+    item.arguments.length > 0 &&
+    typeof item.call_id === 'string' &&
+    item.call_id.length > 0 &&
+    (item.status === undefined || item.status === 'completed')
+  );
+}
+
 function filterUnfinalizedTerminalToolCalls(
   output: any[],
   finalizedItems: FinalizedStreamOutputItem[],
 ): any[] {
-  const finalizedToolCalls = finalizedItems.filter(
-    ({ item }) =>
-      item?.type === 'function_call' &&
-      typeof item.name === 'string' &&
-      item.name.length > 0 &&
-      typeof item.arguments === 'string' &&
-      typeof item.call_id === 'string' &&
-      item.call_id.length > 0 &&
-      (item.status === undefined || item.status === 'completed'),
-  );
+  const finalizedToolCalls = finalizedItems.filter(({ item }) => isExecutableFunctionCall(item));
   return output
     .filter((item, outputIndex) => {
       if (item?.type !== 'function_call') {
@@ -393,10 +405,7 @@ function filterUnfinalizedTerminalToolCalls(
 }
 
 function filterIncompleteFunctionCalls(output: any[]): any[] {
-  return output.filter(
-    (item) =>
-      item?.type !== 'function_call' || item.status === undefined || item.status === 'completed',
-  );
+  return output.filter((item) => item?.type !== 'function_call' || isExecutableFunctionCall(item));
 }
 
 function dedupeAnnotations(annotations: any[]): any[] {
@@ -1173,13 +1182,12 @@ export async function readResponsesStream(
       const outputIndex = getValidOutputIndex(event);
       let item = event.item as any;
       if (item.type === 'function_call' && typeof item.call_id === 'string' && !item.id) {
-        const indexPrefix = `${compactStreamIndex(event.output_index, 'missing')}:function_call:`;
         for (const [previousKey, previousItem] of finalizedNonMessageItems) {
           if (
-            !previousKey.startsWith(indexPrefix) ||
             previousItem.outputIndex !== outputIndex ||
             previousItem.item?.type !== 'function_call' ||
             typeof previousItem.item.id !== 'string' ||
+            previousKey !== getFunctionCallOutputKey(event.output_index, previousItem.item.id) ||
             previousItem.item.call_id ||
             (previousItem.item.name && item.name && previousItem.item.name !== item.name)
           ) {
@@ -1202,7 +1210,9 @@ export async function readResponsesStream(
       const key =
         item.type === 'message'
           ? getMessageOutputKey(event.output_index, String(item.id ?? ''))
-          : `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
+          : item.type === 'function_call'
+            ? getFunctionCallOutputKey(event.output_index, String(item.id ?? item.call_id ?? ''))
+            : `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
     if (
@@ -1313,7 +1323,7 @@ export async function readResponsesStream(
         call_id: event.item.call_id,
         name: event.item.name,
       };
-      const key = `${compactStreamIndex(event.output_index, 'missing')}:function_call:${event.item.id ?? event.item.call_id ?? ''}`;
+      const key = getFunctionCallOutputKey(event.output_index, event.item.id ?? event.item.call_id);
       if (
         JSON.stringify(metadata).length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
         (addedFunctionItems.has(key) || addedFunctionItems.size < MAX_STREAM_OUTPUT_KEYS)
@@ -1326,7 +1336,7 @@ export async function readResponsesStream(
       typeof event.arguments === 'string'
     ) {
       const outputIndex = getValidOutputIndex(event);
-      const key = `${compactStreamIndex(event.output_index, 'missing')}:function_call:${event.item_id ?? ''}`;
+      const key = getFunctionCallOutputKey(event.output_index, event.item_id);
       const item = {
         ...addedFunctionItems.get(key),
         type: 'function_call',
