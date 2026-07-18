@@ -1753,14 +1753,11 @@ describe('bedrock openaiResponses helper', () => {
         expect.objectContaining({
           type: 'message',
           content: [
-            expect.objectContaining({
-              type: 'output_text',
-              text: 'SECRET OR UNSAFE TERMINAL DRAFT',
-            }),
             expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
           ],
         }),
       ]);
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE TERMINAL DRAFT');
       expect(processed.isRefusal).toBe(true);
     });
 

@@ -650,4 +650,355 @@ describe('Responses stream regressions', () => {
       }),
     );
   });
+
+  describe('native stream safety regressions', () => {
+    it.each([
+      { eventType: 'response.failed', response: { status: 'failed', error: null } },
+      {
+        eventType: 'response.incomplete',
+        response: { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
+      },
+    ])('never executes a tool call supplied only by a $eventType terminal snapshot', async ({
+      eventType,
+      response,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: eventType,
+            response: {
+              ...response,
+              output: [
+                {
+                  type: 'function_call',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                  call_id: 'call_terminal',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
+      );
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        name: 'indexed delta',
+        event: {
+          type: 'response.output_text.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'LATE UNSAFE',
+        },
+      },
+      {
+        name: 'unindexed delta',
+        event: { type: 'response.output_text.delta', delta: 'LATE UNSAFE' },
+      },
+      {
+        name: 'indexed done',
+        event: {
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          text: 'LATE UNSAFE',
+        },
+      },
+    ])('ignores a late $name after authoritative empty completion', async ({ event }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.completed', response: { status: 'completed', output: [] } },
+          event,
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('LATE UNSAFE');
+    });
+
+    it('removes blocked audio and transcripts from content-filtered raw output', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.failed',
+            response: {
+              status: 'failed',
+              error: { code: 'content_filter', message: 'blocked by safety system' },
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'output_audio',
+                      audio: 'SECRET_AUDIO_BASE64',
+                      transcript: 'SECRET TRANSCRIPT',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(processed.isRefusal).toBe(true);
+    });
+
+    it.each([
+      {
+        name: 'done/incomplete',
+        terminalType: 'response.incomplete',
+        status: 'incomplete',
+        event: {
+          type: 'response.refusal.done',
+          output_index: 0,
+          content_index: 0,
+          refusal: 'I cannot help with that.',
+        },
+      },
+      {
+        name: 'delta/incomplete',
+        terminalType: 'response.incomplete',
+        status: 'incomplete',
+        event: {
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'I cannot help with that.',
+        },
+      },
+      {
+        name: 'done/in-progress',
+        terminalType: 'response.in_progress',
+        status: 'in_progress',
+        event: {
+          type: 'response.refusal.done',
+          output_index: 0,
+          content_index: 0,
+          refusal: 'I cannot help with that.',
+        },
+      },
+      {
+        name: 'delta/in-progress',
+        terminalType: 'response.in_progress',
+        status: 'in_progress',
+        event: {
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'I cannot help with that.',
+        },
+      },
+    ])('keeps a finalized refusal $name authoritative over a draft', async ({
+      event,
+      terminalType,
+      status,
+    }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: terminalType,
+            response: {
+              status,
+              ...(status === 'incomplete'
+                ? { incomplete_details: { reason: 'max_output_tokens' } }
+                : {}),
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(processed.isRefusal).toBe(true);
+    });
+
+    it('keeps distinct malformed output/content index pairs separate', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: '0:0',
+            content_index: '1',
+            text: 'FIRST',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: '0',
+            content_index: '0:1',
+            text: 'SECOND',
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({ content: [expect.objectContaining({ text: 'FIRST' })] }),
+        expect.objectContaining({ content: [expect.objectContaining({ text: 'SECOND' })] }),
+      ]);
+    });
+
+    it('keeps distinct object-valued malformed indices separate', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: { item: 'first' },
+            content_index: 0,
+            text: 'FIRST',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: { item: 'second' },
+            content_index: 0,
+            text: 'SECOND',
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({ content: [expect.objectContaining({ text: 'FIRST' })] }),
+        expect.objectContaining({ content: [expect.objectContaining({ text: 'SECOND' })] }),
+      ]);
+    });
+
+    it('preserves an annotation-only citation when reconstructing incomplete output text', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/native-citation',
+        title: 'Native citation',
+        start_index: 0,
+        end_index: 5,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.created',
+            response: { id: 'resp_anno', status: 'in_progress', output: [] },
+          },
+          {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: {
+              id: 'msg_1',
+              type: 'message',
+              role: 'assistant',
+              status: 'in_progress',
+              content: [],
+            },
+          },
+          {
+            type: 'response.content_part.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_1',
+            part: { type: 'output_text', text: '', annotations: [] },
+          },
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_1',
+            delta: 'Hello',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_1',
+            annotation_index: 0,
+            annotation,
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [
+            expect.objectContaining({
+              type: 'output_text',
+              text: 'Hello',
+              annotations: [annotation],
+            }),
+          ],
+        }),
+      ]);
+      expect(processed.raw?.annotations).toEqual([annotation]);
+    });
+
+    it('does not duplicate a compacted completed message with the same item/content identity', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'msg_1',
+            text: 'Hello',
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  id: 'msg_1',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'Hello' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toHaveLength(1);
+      expect(parsed.output[0]).toEqual(
+        expect.objectContaining({
+          id: 'msg_1',
+          content: [expect.objectContaining({ type: 'output_text', text: 'Hello' })],
+        }),
+      );
+    });
+  });
 });
