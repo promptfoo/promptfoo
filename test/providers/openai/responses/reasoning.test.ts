@@ -45,6 +45,17 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect('max_output_tokens' in body).toBe(false);
   });
 
+  it('should treat fine-tuned o-series models as reasoning models', async () => {
+    const provider = new OpenAiResponsesProvider('ft:o4-mini-2025-04-16:company::model', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body).not.toHaveProperty('max_output_tokens');
+    expect(body).not.toHaveProperty('temperature');
+  });
+
   it('should handle reasoning models correctly', async () => {
     // Mock API response for o1-pro model
     const mockApiResponse = {
@@ -190,16 +201,16 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   describe('deep research model validation', () => {
-    it('should require web_search_preview tool for deep research models', async () => {
+    it('should require a data-source tool for deep research models', async () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
-          tools: [{ type: 'code_interpreter' } as any], // Missing web_search_preview
+          tools: [{ type: 'code_interpreter' } as any],
         },
       });
 
       const result = await provider.callApi('Test prompt');
-      expect(result.error).toContain('requires the web_search_preview tool');
+      expect(result.error).toContain('requires at least one data source');
       expect(result.error).toContain('o3-deep-research');
       expect(cache.fetchWithCache).not.toHaveBeenCalled();
     });
@@ -235,12 +246,68 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       expect(result.output).toBe('Research complete');
     });
 
+    it.each([
+      { tools: [{ type: 'web_search' }] },
+      { tools: [{ type: 'file_search', vector_store_ids: ['vs_123'] }] },
+      {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'test_server',
+            server_url: 'https://example.com/mcp',
+            require_approval: 'never',
+          },
+        ],
+      },
+    ])('should accept a supported deep research data source %#', async ({ tools }) => {
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Research complete' }],
+            },
+          ],
+          usage: { input_tokens: 100, output_tokens: 200 },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const result = await new OpenAiResponsesProvider('o3-deep-research', {
+        config: { apiKey: 'test-key', tools: tools as any },
+      }).callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Research complete');
+    });
+
+    it.each([
+      { label: 'without vector_store_ids', tools: [{ type: 'file_search' }] },
+      {
+        label: 'with empty vector_store_ids',
+        tools: [{ type: 'file_search', vector_store_ids: [] }],
+      },
+    ])('should not count file_search $label as a deep research data source', async ({ tools }) => {
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: { apiKey: 'test-key', tools: tools as any },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('requires at least one data source');
+      expect(result.error).toContain('o3-deep-research');
+      expect(result.error).toContain('file_search with vector_store_ids');
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should require MCP tools to have require_approval: never for deep research', async () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
           tools: [
-            { type: 'web_search_preview' } as any,
             {
               type: 'mcp',
               server_label: 'test_server',

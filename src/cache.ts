@@ -19,7 +19,7 @@ import {
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
-import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
+import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -280,6 +280,12 @@ export type FetchWithCacheResult<T> = {
   headers?: Record<string, string>;
   latencyMs?: number;
   deleteFromCache?: () => Promise<void>;
+  updateCache?: (
+    data: unknown,
+    status: number,
+    statusText: string,
+    headers?: Record<string, string>,
+  ) => Promise<void>;
 };
 
 type SerializedFetchResponse = string;
@@ -290,6 +296,7 @@ type PreparedFetchResponse = {
 };
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
@@ -557,6 +564,40 @@ function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: R
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
+/**
+ * Atomically claim a cache-scoped one-time action. Disk-backed claims use an exclusive file so
+ * separate eval processes cannot both attribute the same background response's usage.
+ */
+export function claimCacheKeyOnce(cacheKey: string): boolean {
+  const scopedCacheKey = getScopedCacheKey(cacheKey);
+  if (claimedCacheKeys.has(scopedCacheKey)) {
+    return false;
+  }
+
+  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const claimsPath = path.join(cachePath, 'claims');
+    try {
+      fs.mkdirSync(claimsPath, { recursive: true });
+      const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
+      fs.closeSync(handle);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        claimedCacheKeys.add(scopedCacheKey);
+        return false;
+      }
+      logger.warn(
+        `[Cache] Failed to persist a one-time cache claim: ${(error as Error).message}. ` +
+          'Using a process-local claim instead.',
+      );
+    }
+  }
+
+  claimedCacheKeys.add(scopedCacheKey);
+  return true;
+}
+
 function serializeFetchResponse(
   data: unknown,
   status: number,
@@ -590,6 +631,18 @@ function deserializeFetchResponse<T>(
     deleteFromCache: async () => {
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
+    },
+    updateCache: async (
+      data: unknown,
+      status: number,
+      statusText: string,
+      headers?: Record<string, string>,
+    ) => {
+      await cache.set(
+        cacheKey,
+        serializeFetchResponse(data, status, statusText, headers ?? {}, parsedResponse.latencyMs),
+      );
+      logger.debug(`Updated cached response: ${cacheKey}`);
     },
   };
 }
@@ -635,7 +688,7 @@ async function fetchAndReadBody(
       // actionable diagnostics instead of a bare platform error. Sanitize the URL so
       // credential-bearing userinfo / query params are not leaked into logs.
       const wrappedError = new Error(
-        `Error reading response body from ${sanitizeUrl(getRequestUrlString(url))}: ${
+        `Error reading response body from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}`,
       ) as Error & { cause?: unknown };
@@ -688,7 +741,9 @@ async function prepareFetchResponse(
     }
 
     if (format === 'json' && parsedData?.error) {
-      logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+      logger.debug(
+        `Not caching ${sanitizeUrlForLogging(getRequestUrlString(url))} because it contains an 'error' key: ${parsedData.error}`,
+      );
       return {
         response: serializedResponse,
         cacheable: false,
@@ -696,7 +751,7 @@ async function prepareFetchResponse(
     }
 
     logger.debug(
-      `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
+      `Storing ${sanitizeUrlForLogging(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
     );
     return {
       response: serializedResponse,
@@ -704,7 +759,7 @@ async function prepareFetchResponse(
     };
   } catch (err) {
     throw new Error(
-      `Error parsing response from ${url}: ${
+      `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
         (err as Error).message
       }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
@@ -756,7 +811,7 @@ export async function fetchWithCache<T = unknown>(
 ): Promise<FetchWithCacheResult<T>> {
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, repeatIndex } = cacheOptions;
+  const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
@@ -765,8 +820,13 @@ export async function fetchWithCache<T = unknown>(
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
+  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   const cacheKey =
-    cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format, repeatIndex) : null;
+    cacheEnabled && !bust
+      ? providedCacheKey
+        ? getScopedCacheKey(`fetch:v3:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, options, method, format, repeatIndex)
+      : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
@@ -790,7 +850,7 @@ export async function fetchWithCache<T = unknown>(
       };
     } catch (err) {
       throw new Error(
-        `Error parsing response from ${url}: ${
+        `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
       );
@@ -801,7 +861,9 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
+    logger.debug(
+      `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
+    );
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
@@ -878,7 +940,14 @@ export function disableCache() {
 export async function clearCache() {
   inflightFetchResponses.clear();
   namespacedCacheInstances.clear();
-  return getCacheInstance().clear();
+  const result = await getCacheInstance().clear();
+  claimedCacheKeys.clear();
+  if (cacheType === 'disk') {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    fs.rmSync(path.join(cachePath, 'claims'), { force: true, recursive: true });
+  }
+  return result;
 }
 
 /**
