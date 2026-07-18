@@ -920,7 +920,7 @@ describe('bedrock openaiResponses helper', () => {
       const result = await provider.callApi('hello');
 
       expect(result.error).toBeUndefined();
-      expect(result.output).toContain('content_filter');
+      expect(result.output).toBe('I cannot help with that request. Response blocked.');
       expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
       expect(result.isRefusal).toBe(true);
     });
@@ -947,7 +947,7 @@ describe('bedrock openaiResponses helper', () => {
       const result = await provider.callApi('hello');
 
       expect(result.error).toBeUndefined();
-      expect(result.output).toContain('content_filter');
+      expect(result.output).toBe('I cannot help with that request. Response blocked.');
       expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
       expect(result.isRefusal).toBe(true);
       expect(result.tokenUsage).toEqual({
@@ -2543,7 +2543,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('Hi');
     });
 
-    it('keeps sparse but bounded streamed indices out of the returned output array', async () => {
+    it('keeps an empty completed terminal authoritative over sparse streamed indices', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
           'event: response.output_text.delta',
@@ -2564,10 +2564,9 @@ describe('bedrock openaiResponses helper', () => {
 
       const result = await provider.callApi('hello');
 
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('hello');
-      expect((result.raw as any).output).toHaveLength(1);
-      expect((result.raw as any).output[0]?.type).toBe('message');
+      expect(result.error).toContain('Invalid response format: Missing output array');
+      expect(result.output).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('hello');
     });
 
     it('restores out-of-order indexed outputs in output-index order', async () => {
@@ -2626,7 +2625,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('FIRST\nSECOND');
     });
 
-    it('preserves every completed output-text item when the terminal output is empty', async () => {
+    it('keeps an empty completed terminal output authoritative over streamed text', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
           'event: response.output_text.done',
@@ -2650,8 +2649,10 @@ describe('bedrock openaiResponses helper', () => {
 
       const result = await provider.callApi('hello');
 
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('FIRST\nSECOND');
+      expect(result.error).toContain('Invalid response format: Missing output array');
+      expect(result.output).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('FIRST');
+      expect(JSON.stringify(result)).not.toContain('SECOND');
     });
 
     it('preserves leading unindexed delta order when an incomplete response has no terminal output', async () => {

@@ -195,15 +195,18 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 
 function hasTerminalSafetyDecision(response: any): boolean {
   const errorCode = response?.error?.code;
+  const safetyReason =
+    /^(?:content[_-]?filter|content[_-]?policy|safety|guardrail)(?:[_-](?:violation|blocked))?$/i;
+  if (
+    typeof response?.incomplete_details?.reason === 'string' &&
+    safetyReason.test(response.incomplete_details.reason)
+  ) {
+    return true;
+  }
   if (
     errorCode !== 'content_filter_error' &&
-    [response?.incomplete_details?.reason, errorCode].some(
-      (reason) =>
-        typeof reason === 'string' &&
-        /^(?:content[_-]?filter|content[_-]?policy|safety|guardrail)(?:[_-](?:violation|blocked))?$/i.test(
-          reason,
-        ),
-    )
+    typeof errorCode === 'string' &&
+    safetyReason.test(errorCode)
   ) {
     return true;
   }
@@ -319,7 +322,10 @@ function filterUnfinalizedTerminalToolCalls(
 ): any[] {
   const finalizedToolCalls = finalizedItems.filter(
     ({ item }) =>
-      item?.type === 'function_call' && typeof item.name === 'string' && item.name.length > 0,
+      item?.type === 'function_call' &&
+      typeof item.name === 'string' &&
+      item.name.length > 0 &&
+      (typeof item.id === 'string' || typeof item.call_id === 'string'),
   );
   return output
     .filter((item, outputIndex) => {
@@ -1337,6 +1343,11 @@ export async function readResponsesStream(
     latestResponse?.status === 'failed' ||
     latestResponse?.status === 'incomplete' ||
     latestResponse?.status === 'cancelled';
+  const isFailedOrCancelledResponse =
+    latestResponseEventType === 'response.failed' ||
+    latestResponseEventType === 'response.cancelled' ||
+    latestResponse?.status === 'failed' ||
+    latestResponse?.status === 'cancelled';
   const useFinalizedItems = !isCompletedResponse || sawFinalizedRefusal;
   const finalizedOutputTextByContent = new Map(
     Array.from(outputTextByContent).filter(([key]) => finalizedOutputTextKeys.has(key)),
@@ -1373,18 +1384,13 @@ export async function readResponsesStream(
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
     if (!hasRefusalOutput(safeOutput)) {
-      const reason = [
-        latestResponse.incomplete_details?.reason,
-        latestResponse.error?.code,
-        latestResponse.error?.message,
-      ].find((value) => typeof value === 'string' && value.length > 0);
       safeOutput.push({
         type: 'message',
         role: 'assistant',
         content: [
           {
             type: 'refusal',
-            refusal: `I cannot help with that request. Response blocked${reason ? `: ${reason}` : '.'}`,
+            refusal: 'I cannot help with that request. Response blocked.',
           },
         ],
       });
@@ -1415,6 +1421,14 @@ export async function readResponsesStream(
 
   if (
     latestResponse &&
+    isCompletedResponse &&
+    (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0)
+  ) {
+    return boundedResponse(latestResponse);
+  }
+
+  if (
+    latestResponse &&
     (outputText ||
       finalizedOutputTextKeys.size > 0 ||
       completedUnindexedOutputTexts.length > 0 ||
@@ -1423,6 +1437,7 @@ export async function readResponsesStream(
   ) {
     if (
       unassignedUnindexedOutputText &&
+      !isFailedOrCancelledResponse &&
       (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0) &&
       invalidlyIndexedOutputTextByContent.size === 0 &&
       finalizedOutputTextKeys.size === 0 &&
@@ -1460,15 +1475,26 @@ export async function readResponsesStream(
         alignedFinalizedOutputTextKeys.add(alignedKey);
       }
     }
+    const recoverableOutputTextByContent = isFailedOrCancelledResponse
+      ? new Map(
+          Array.from(alignedOutputTextByContent).filter(([key]) =>
+            alignedFinalizedOutputTextKeys.has(key),
+          ),
+        )
+      : alignedOutputTextByContent;
     const recoveredOutput = recoverIncompleteOutput(
       finalizedStreamOutput,
-      alignedOutputTextByContent,
+      recoverableOutputTextByContent,
       [
         ...completedUnindexedOutputTexts,
         ...finalizedInvalidOutputTexts,
-        ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
+        ...(remainingUnindexedOutputText && !isFailedOrCancelledResponse
+          ? [remainingUnindexedOutputText]
+          : []),
       ],
-      latestResponse.status === 'incomplete' || latestResponse.status === 'in_progress',
+      latestResponse.status === 'incomplete' ||
+        latestResponse.status === 'in_progress' ||
+        isFailedOrCancelledResponse,
       alignedFinalizedOutputTextKeys,
       completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
     );
@@ -1479,7 +1505,11 @@ export async function readResponsesStream(
       terminalTextCounts.set(text, (terminalTextCounts.get(text) ?? 0) + 1);
     }
     for (const [key, text] of invalidlyIndexedOutputTextByContent) {
-      if (finalizedInvalidOutputTextKeys.has(key) || isCompletedResponse) {
+      if (
+        finalizedInvalidOutputTextKeys.has(key) ||
+        isCompletedResponse ||
+        isFailedOrCancelledResponse
+      ) {
         continue;
       }
       const remainingMatches = terminalTextCounts.get(text) ?? 0;

@@ -842,6 +842,265 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).not.toContain('LATE UNSAFE');
     });
 
+    it.each([
+      {
+        name: 'indexed delta with empty output',
+        event: {
+          type: 'response.output_text.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'SECRET OR UNSAFE DRAFT',
+        },
+        response: { status: 'completed', output: [] },
+      },
+      {
+        name: 'indexed done with empty output',
+        event: {
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          text: 'SECRET OR UNSAFE DRAFT',
+        },
+        response: { status: 'completed', output: [] },
+      },
+      {
+        name: 'unindexed delta with omitted output',
+        event: { type: 'response.output_text.delta', delta: 'SECRET OR UNSAFE DRAFT' },
+        response: { status: 'completed' },
+      },
+    ])('keeps a completed terminal authoritative after a $name', async ({ event, response }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([event, { type: 'response.completed', response }]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
+    it('treats a safety reason as authoritative even with an operational content-filter error', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              incomplete_details: { reason: 'content_filter' },
+              error: {
+                code: 'content_filter_error',
+                message: 'content-filter service returned an operational error',
+              },
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
+    it('does not echo upstream safety error text into a synthesized refusal', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.failed',
+            response: {
+              status: 'failed',
+              error: {
+                message: 'blocked by content filter: SECRET OR UNSAFE DRAFT',
+              },
+              output: [],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
+    it('does not borrow a terminal call identity when finalized arguments omit item_id', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: 0,
+            name: 'lookup',
+            arguments: '{"q":"final"}',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'terminal_item',
+                  call_id: 'terminal_call',
+                  name: 'lookup',
+                  arguments: '{"q":"draft"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(parsed.output).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
+      );
+    });
+
+    it('executes one independently finalized tool when argument item_id is missing', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: 0,
+            name: 'lookup',
+            arguments: '{"q":"final"}',
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'finalized_item',
+              call_id: 'finalized_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'finalized_item',
+                  call_id: 'finalized_call',
+                  name: 'lookup',
+                  arguments: '{"q":"draft"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          type: 'function_call',
+          id: 'finalized_item',
+          call_id: 'finalized_call',
+          name: 'lookup',
+          arguments: '{"q":"final"}',
+        }),
+      ]);
+      expect(processCalls).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      'failed',
+      'cancelled',
+    ])('preserves independently finalized text over a truncated %s terminal snapshot', async (status) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            text: 'SAFE FINALIZED TEXT',
+          },
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINALIZED TEXT' })],
+        }),
+      ]);
+    });
+
+    it.each([
+      'failed',
+      'cancelled',
+    ])('never recovers an unfinalized text delta over a %s terminal snapshot', async (status) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            delta: 'SECRET OR UNSAFE DRAFT',
+          },
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE TERMINAL TEXT' })],
+        }),
+      ]);
+    });
+
     it('removes blocked audio and transcripts from content-filtered raw output', async () => {
       const parsed = await readResponsesStream(
         createSseResponse([
