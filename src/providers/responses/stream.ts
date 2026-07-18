@@ -57,7 +57,8 @@ const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
-const MAX_STREAM_INPUT_BYTES = 2 * MAX_STREAM_OUTPUT_CHARS;
+const MAX_STREAM_SERIALIZED_OUTPUT_CHARS = MAX_STREAM_OUTPUT_CHARS + 64 * 1024;
+const MAX_STREAM_EXCESS_INPUT_BYTES = 2 * MAX_STREAM_OUTPUT_CHARS;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
 const MAX_STREAM_FRAGMENT_BATCH = 1024;
@@ -210,6 +211,97 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       : event.item;
   }
   return undefined;
+}
+
+function getRetainedStreamPayloadBytes(event: ResponsesStreamEvent): number {
+  const encoder = new TextEncoder();
+  let bytes = 0;
+  const addText = (value: unknown): void => {
+    if (typeof value === 'string') {
+      bytes += encoder.encode(value).byteLength;
+    }
+  };
+  const addOutputItem = (item: any): void => {
+    if (item?.type === 'function_call') {
+      addText(item.arguments);
+      return;
+    }
+    if (item?.type === 'refusal') {
+      addText(item.refusal);
+      return;
+    }
+    if (item?.type !== 'message') {
+      return;
+    }
+
+    addText(item.refusal);
+    if (!Array.isArray(item.content)) {
+      return;
+    }
+    for (const part of item.content) {
+      if (part?.type === 'output_text') {
+        addText(part.text);
+      } else if (part?.type === 'refusal') {
+        addText(part.refusal);
+      }
+    }
+  };
+
+  if (Array.isArray(event.response?.output)) {
+    for (const item of event.response.output) {
+      addOutputItem(item);
+    }
+  } else if (Array.isArray(event.output)) {
+    for (const item of event.output) {
+      addOutputItem(item);
+    }
+  }
+
+  switch (event.type) {
+    case 'response.output_text.delta':
+      addText(getOutputTextDelta(event));
+      break;
+    case 'response.output_text.done':
+      addText(event.text);
+      break;
+    case 'response.content_part.done':
+      if (event.part?.type === 'output_text') {
+        addText(event.part.text);
+      } else if (event.part?.type === 'refusal') {
+        addText(event.part.refusal);
+      }
+      break;
+    case 'response.output_item.done':
+      addOutputItem(event.item);
+      break;
+    case 'response.function_call_arguments.done':
+      addText(event.arguments);
+      break;
+    case 'response.refusal.delta':
+      addText(event.delta);
+      break;
+    case 'response.refusal.done':
+      addText(event.refusal);
+      break;
+    case 'response.output_item.added': {
+      if (event.item?.type !== 'function_call') {
+        break;
+      }
+      const metadata = {
+        type: 'function_call',
+        id: event.item.id,
+        call_id: event.item.call_id,
+        name: event.item.name,
+      };
+      const serialized = JSON.stringify(metadata);
+      if (serialized.length <= MAX_STREAM_FUNCTION_METADATA_CHARS) {
+        bytes += encoder.encode(serialized).byteLength;
+      }
+      break;
+    }
+  }
+
+  return Math.min(bytes, MAX_STREAM_OUTPUT_CHARS);
 }
 
 function getTerminalOutputTexts(output: any[] | undefined): string[] {
@@ -888,7 +980,7 @@ export async function readResponsesStream(
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
   let streamEventCount = 0;
-  let streamInputBytes = 0;
+  let streamExcessInputBytes = 0;
   let streamedAnnotationCount = 0;
   let streamedAnnotationChars = 0;
 
@@ -904,7 +996,7 @@ export async function readResponsesStream(
   const boundedResponse = (value: any): any => {
     if (
       Array.isArray(value?.output) &&
-      JSON.stringify(value.output).length > MAX_STREAM_OUTPUT_CHARS
+      JSON.stringify(value.output).length > MAX_STREAM_SERIALIZED_OUTPUT_CHARS
     ) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
@@ -927,7 +1019,7 @@ export async function readResponsesStream(
     const serializedLength = knownSerializedLength ?? JSON.stringify(item).length;
     const previousLength = target.get(key)?.serializedLength ?? 0;
     const growth = serializedLength - previousLength;
-    if (growth > MAX_STREAM_OUTPUT_CHARS - finalizedOutputChars) {
+    if (growth > MAX_STREAM_SERIALIZED_OUTPUT_CHARS - finalizedOutputChars) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
       );
@@ -1139,15 +1231,17 @@ export async function readResponsesStream(
       );
     }
 
+    const event = parseSseEvent(chunk, providerName, logger);
     const bytes = new TextEncoder().encode(chunk).byteLength;
-    if (bytes > MAX_STREAM_INPUT_BYTES - streamInputBytes) {
+    const retainedBytes = event ? getRetainedStreamPayloadBytes(event) : 0;
+    const excessBytes = Math.max(0, bytes - retainedBytes);
+    if (excessBytes > MAX_STREAM_EXCESS_INPUT_BYTES - streamExcessInputBytes) {
       throw new Error(
-        `${providerName} streaming response exceeded ${MAX_STREAM_INPUT_BYTES} bytes of stream input`,
+        `${providerName} streaming response exceeded ${MAX_STREAM_EXCESS_INPUT_BYTES} bytes of unretained stream input`,
       );
     }
-    streamInputBytes += bytes;
+    streamExcessInputBytes += excessBytes;
 
-    const event = parseSseEvent(chunk, providerName, logger);
     const terminalResponse = isTerminalStreamResponse(
       latestResponseEventType,
       latestResponse?.status,
@@ -1419,7 +1513,7 @@ export async function readResponsesStream(
       return;
     }
     bufferedEventLength += fragment.length;
-    if (bufferedEventLength > MAX_STREAM_OUTPUT_CHARS + (complete ? 4 : 0)) {
+    if (bufferedEventLength > MAX_STREAM_SERIALIZED_OUTPUT_CHARS + (complete ? 4 : 0)) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (${complete ? 'event data' : 'buffered event data'})`,
       );
@@ -1461,7 +1555,7 @@ export async function readResponsesStream(
 
       appendEventFragment(decoded.slice(segmentStart, index + 1), true);
       const chunk = takeBufferedEvent().replace(/\r?\n\r?\n$/, '');
-      if (chunk.length > MAX_STREAM_OUTPUT_CHARS) {
+      if (chunk.length > MAX_STREAM_SERIALIZED_OUTPUT_CHARS) {
         throw new Error(
           `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (event data)`,
         );

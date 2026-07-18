@@ -4868,6 +4868,49 @@ describe('Responses stream regressions', () => {
       expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(9 * 1024 * 1024);
     });
 
+    it.each([
+      7, 8, 16,
+    ])('accepts a valid %i-mebibyte output text repeated across final stream snapshots', async (mebibytes) => {
+      const text = 'A'.repeat(mebibytes * 1024 * 1024);
+      const item = {
+        type: 'message',
+        id: 'm_1',
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            delta: text,
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            text,
+          },
+          {
+            type: 'response.content_part.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            part: { type: 'output_text', text },
+          },
+          { type: 'response.output_item.done', output_index: 0, item },
+          { type: 'response.completed', response: { status: 'completed', output: [item] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(mebibytes * 1024 * 1024);
+    });
+
     it('does not let an empty refusal delta replace a completed answer', async () => {
       const parsed = await readResponsesStream(
         createSseResponse([
