@@ -57,6 +57,7 @@ const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
+const MAX_STREAM_INPUT_BYTES = 2 * MAX_STREAM_OUTPUT_CHARS;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
 const MAX_STREAM_FRAGMENT_BATCH = 1024;
@@ -209,56 +210,6 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       : event.item;
   }
   return undefined;
-}
-
-function hasEffectiveStreamEvent(event: ResponsesStreamEvent): boolean {
-  if (
-    event.type === 'error' ||
-    (event.response && typeof event.response === 'object') ||
-    Array.isArray(event.output)
-  ) {
-    return true;
-  }
-
-  switch (event.type) {
-    case 'response.output_item.added':
-      return event.item?.type === 'function_call';
-    case 'response.content_part.added':
-      return event.part?.type === 'output_text';
-    case 'response.refusal.delta':
-      return typeof event.delta === 'string' && event.delta.length > 0;
-    case 'response.refusal.done':
-      return typeof event.refusal === 'string' && event.refusal.length > 0;
-    case 'response.output_text.annotation.added':
-      return Boolean(event.annotation && typeof event.annotation === 'object');
-    case 'response.content_part.done':
-      return (
-        event.part?.type === 'refusal' ||
-        (event.part?.type === 'output_text' &&
-          (typeof event.part.text === 'string' ||
-            Object.keys(event.part).some((key) => key !== 'type' && key !== 'text')))
-      );
-    case 'response.output_item.done':
-      return Boolean(
-        getOutputRefusalItem(event) ||
-          (event.item && event.item.type !== 'message') ||
-          (Array.isArray(event.item?.content) &&
-            event.item.content.some(
-              (part) =>
-                part?.type === 'output_text' &&
-                (typeof part.text === 'string' ||
-                  Object.keys(part).some((key) => key !== 'type' && key !== 'text')),
-            )),
-      );
-    case 'response.function_call_arguments.done':
-      return typeof event.arguments === 'string';
-    case 'response.output_text.delta':
-      return Boolean(getOutputTextDelta(event));
-    case 'response.output_text.done':
-      return typeof event.text === 'string';
-    default:
-      return false;
-  }
 }
 
 function getTerminalOutputTexts(output: any[] | undefined): string[] {
@@ -937,7 +888,7 @@ export async function readResponsesStream(
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
   let streamEventCount = 0;
-  let ignoredStreamBytes = 0;
+  let streamInputBytes = 0;
   let streamedAnnotationCount = 0;
   let streamedAnnotationChars = 0;
 
@@ -1187,24 +1138,20 @@ export async function readResponsesStream(
         `${providerName} streaming response exceeded ${MAX_STREAM_EVENT_COUNT} events`,
       );
     }
+
+    const bytes = new TextEncoder().encode(chunk).byteLength;
+    if (bytes > MAX_STREAM_INPUT_BYTES - streamInputBytes) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_INPUT_BYTES} bytes of stream input`,
+      );
+    }
+    streamInputBytes += bytes;
+
     const event = parseSseEvent(chunk, providerName, logger);
     const terminalResponse = isTerminalStreamResponse(
       latestResponseEventType,
       latestResponse?.status,
     );
-    const responseSnapshot = Boolean(
-      event &&
-        ((event.response && typeof event.response === 'object') || Array.isArray(event.output)),
-    );
-    if (!event || terminalResponse || responseSnapshot || !hasEffectiveStreamEvent(event)) {
-      const bytes = new TextEncoder().encode(chunk).byteLength;
-      if (bytes > MAX_STREAM_OUTPUT_CHARS - ignoredStreamBytes) {
-        throw new Error(
-          `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} bytes of ignored event data`,
-        );
-      }
-      ignoredStreamBytes += bytes;
-    }
     if (!event || terminalResponse) {
       return;
     }

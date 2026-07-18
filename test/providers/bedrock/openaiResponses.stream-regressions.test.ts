@@ -143,7 +143,7 @@ describe('Responses stream regressions', () => {
 
     await expect(
       readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-    ).rejects.toThrow(/exceeded.*(?:event|delta)/i);
+    ).rejects.toThrow(/exceeded.*(?:event|delta|stream input)/i);
   });
 
   it.each([
@@ -4079,6 +4079,88 @@ describe('Responses stream regressions', () => {
                 content: [{ type: 'output_text', text: 'x' }],
               },
             ],
+            junk: payload,
+          },
+        }),
+      },
+      {
+        name: 'output-text delta with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.output_text.delta',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          delta: 'x',
+          junk: payload,
+        }),
+      },
+      {
+        name: 'output-text-done event with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          text: 'x',
+          junk: payload,
+        }),
+      },
+      {
+        name: 'content-part-added event with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.content_part.added',
+          output_index: 0,
+          content_index: 0,
+          part: { type: 'output_text', text: 'x', junk: payload },
+        }),
+      },
+      {
+        name: 'content-part-done event with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.content_part.done',
+          output_index: 0,
+          content_index: 0,
+          part: { type: 'output_text', text: 'x', junk: payload },
+        }),
+      },
+      {
+        name: 'function-argument-done event with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.function_call_arguments.done',
+          output_index: 0,
+          item_id: 'fc_1',
+          arguments: '{}',
+          junk: payload,
+        }),
+      },
+      {
+        name: 'refusal delta with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'x',
+          junk: payload,
+        }),
+      },
+      {
+        name: 'function-call-added event with oversized ignored metadata',
+        event: (payload: string) => ({
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: payload },
+        }),
+      },
+      {
+        name: 'output-item-done event with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            id: 'm_1',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'x' }],
             junk: payload,
           },
         }),
