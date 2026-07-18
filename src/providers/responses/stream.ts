@@ -63,6 +63,19 @@ const MAX_STREAM_FRAGMENT_BATCH = 1024;
 const MAX_STREAM_EVENT_COUNT = 1024 * 1024;
 const MAX_STREAM_ANNOTATION_COUNT = 8192;
 const STREAM_READ_YIELD_INTERVAL = 1024;
+const HANDLED_STREAM_EVENT_TYPES = new Set([
+  'error',
+  'response.output_item.added',
+  'response.content_part.added',
+  'response.refusal.delta',
+  'response.refusal.done',
+  'response.output_item.done',
+  'response.output_text.annotation.added',
+  'response.content_part.done',
+  'response.function_call_arguments.done',
+  'response.output_text.delta',
+  'response.output_text.done',
+]);
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -177,7 +190,11 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       content: [{ type: 'refusal', refusal: event.delta }],
     };
   }
-  if (event.type === 'response.refusal.done' && typeof event.refusal === 'string') {
+  if (
+    event.type === 'response.refusal.done' &&
+    typeof event.refusal === 'string' &&
+    event.refusal.length > 0
+  ) {
     return {
       type: 'message',
       role: 'assistant',
@@ -365,7 +382,7 @@ function isExecutableFunctionCall(item: any): boolean {
     typeof item.name === 'string' &&
     item.name.length > 0 &&
     typeof item.arguments === 'string' &&
-    item.arguments.length > 0 &&
+    (item.arguments.length > 0 || item.status === 'completed') &&
     typeof item.call_id === 'string' &&
     item.call_id.length > 0 &&
     (item.status === undefined || item.status === 'completed')
@@ -883,6 +900,7 @@ export async function readResponsesStream(
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
   let streamEventCount = 0;
+  let ignoredStreamBytes = 0;
   let streamedAnnotationCount = 0;
   let streamedAnnotationChars = 0;
 
@@ -955,6 +973,14 @@ export async function readResponsesStream(
       (key && finalizedOutputTextKeys.has(key)) ||
       (invalidKey && finalizedInvalidOutputTextKeys.has(invalidKey)) ||
       (!key && !invalidKey && finalizedUnindexedOutputText)
+    ) {
+      return;
+    }
+    if (
+      key &&
+      typeof event.item_id === 'string' &&
+      outputTextItemIds.has(key) &&
+      outputTextItemIds.get(key) !== event.item_id
     ) {
       return;
     }
@@ -1125,11 +1151,26 @@ export async function readResponsesStream(
       );
     }
     const event = parseSseEvent(chunk, providerName, logger);
-    if (!event) {
-      return;
+    const terminalResponse = isTerminalStreamResponse(
+      latestResponseEventType,
+      latestResponse?.status,
+    );
+    if (
+      !event ||
+      terminalResponse ||
+      (!HANDLED_STREAM_EVENT_TYPES.has(event.type ?? '') &&
+        !event.response &&
+        !Array.isArray(event.output))
+    ) {
+      const bytes = new TextEncoder().encode(chunk).byteLength;
+      if (bytes > MAX_STREAM_OUTPUT_CHARS - ignoredStreamBytes) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} bytes of ignored event data`,
+        );
+      }
+      ignoredStreamBytes += bytes;
     }
-
-    if (isTerminalStreamResponse(latestResponseEventType, latestResponse?.status)) {
+    if (!event || terminalResponse) {
       return;
     }
 
@@ -1591,7 +1632,7 @@ export async function readResponsesStream(
     const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
     for (const [contentIndex, annotations] of streamedItem.content) {
       while (content.length <= contentIndex) {
-        content.push({ type: 'output_text' });
+        content.push({ type: 'output_text', text: '' });
       }
       const existingContent = content[contentIndex];
       if (existingContent?.type !== 'output_text') {

@@ -3826,6 +3826,213 @@ describe('Responses stream regressions', () => {
       expect(processCalls).not.toHaveBeenCalled();
     });
 
+    it('never mixes unfinalized output-text deltas from conflicting item identities', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_safe',
+            delta: 'SAFE ',
+          },
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_secret',
+            delta: 'SECRET_DRAFT ',
+          },
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_safe',
+            delta: 'FINAL',
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processed.output).toBe('SAFE FINAL');
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('SECRET_DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET_DRAFT');
+    });
+
+    it('does not let an empty refusal.done replace a completed answer', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.refusal.done',
+            output_index: 0,
+            content_index: 0,
+            refusal: '',
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL ANSWER' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).not.toBe(true);
+      expect(processed.output).toBe('SAFE FINAL ANSWER');
+      expect(JSON.stringify(parsed)).not.toContain('refusal');
+    });
+
+    it.each([
+      { name: 'annotation-only', includeText: false, expected: '' },
+      { name: 'annotation and text.done', includeText: true, expected: 'ANSWER' },
+    ])('never exposes undefined for a sparse $name output-text slot', async ({
+      includeText,
+      expected,
+    }) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/sparse-slot',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 1,
+            item_id: 'm_sparse',
+            annotation_index: 0,
+            annotation,
+          },
+          ...(includeText
+            ? [
+                {
+                  type: 'response.output_text.done',
+                  output_index: 0,
+                  content_index: 1,
+                  item_id: 'm_sparse',
+                  text: 'ANSWER',
+                },
+              ]
+            : []),
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.error).toBeUndefined();
+      expect(processed.output).toBe(expected);
+      expect(String(processed.output)).not.toContain('undefined');
+      expect(JSON.stringify(parsed)).not.toContain('"text":null');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+    });
+
+    it.each([
+      { name: 'ignored SSE event', type: 'response.unknown' },
+      { name: 'function-argument delta', type: 'response.function_call_arguments.delta' },
+    ])('cancels a Responses stream when cumulative $name bytes exceed the bound', async ({
+      type,
+    }) => {
+      const encoder = new TextEncoder();
+      const payload = 'x'.repeat(1024 * 1024);
+      let sent = 0;
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent >= 48) {
+            controller.enqueue(
+              encoder.encode(
+                'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n',
+              ),
+            );
+            controller.close();
+            return;
+          }
+          sent++;
+          controller.enqueue(
+            encoder.encode(
+              `event: ${type}\ndata: ${JSON.stringify({ type, output_index: 0, item_id: 'fc_1', delta: payload })}\n\n`,
+            ),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*(input|ignored|output)/i);
+      expect(sent).toBeLessThan(48);
+      expect(cancelled).toBe(true);
+    });
+
+    it('executes a completed function call with empty string arguments', async () => {
+      const processCalls = vi.fn().mockResolvedValue('SAFE TOOL RESULT');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'function_call',
+                  status: 'completed',
+                  name: 'lookup',
+                  arguments: '',
+                  call_id: 'call_empty',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          type: 'function_call',
+          status: 'completed',
+          name: 'lookup',
+          arguments: '',
+          call_id: 'call_empty',
+        }),
+      ]);
+      expect(processCalls).toHaveBeenCalledOnce();
+      expect(processed.output).toBe('SAFE TOOL RESULT');
+      expect(processed.error).toBeUndefined();
+    });
+
     it.each([
       {
         name: 'statusless incomplete after output_text.done',
