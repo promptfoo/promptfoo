@@ -63,19 +63,6 @@ const MAX_STREAM_FRAGMENT_BATCH = 1024;
 const MAX_STREAM_EVENT_COUNT = 1024 * 1024;
 const MAX_STREAM_ANNOTATION_COUNT = 8192;
 const STREAM_READ_YIELD_INTERVAL = 1024;
-const HANDLED_STREAM_EVENT_TYPES = new Set([
-  'error',
-  'response.output_item.added',
-  'response.content_part.added',
-  'response.refusal.delta',
-  'response.refusal.done',
-  'response.output_item.done',
-  'response.output_text.annotation.added',
-  'response.content_part.done',
-  'response.function_call_arguments.done',
-  'response.output_text.delta',
-  'response.output_text.done',
-]);
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -222,6 +209,56 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       : event.item;
   }
   return undefined;
+}
+
+function hasEffectiveStreamEvent(event: ResponsesStreamEvent): boolean {
+  if (
+    event.type === 'error' ||
+    (event.response && typeof event.response === 'object') ||
+    Array.isArray(event.output)
+  ) {
+    return true;
+  }
+
+  switch (event.type) {
+    case 'response.output_item.added':
+      return event.item?.type === 'function_call';
+    case 'response.content_part.added':
+      return event.part?.type === 'output_text';
+    case 'response.refusal.delta':
+      return typeof event.delta === 'string' && event.delta.length > 0;
+    case 'response.refusal.done':
+      return typeof event.refusal === 'string' && event.refusal.length > 0;
+    case 'response.output_text.annotation.added':
+      return Boolean(event.annotation && typeof event.annotation === 'object');
+    case 'response.content_part.done':
+      return (
+        event.part?.type === 'refusal' ||
+        (event.part?.type === 'output_text' &&
+          (typeof event.part.text === 'string' ||
+            Object.keys(event.part).some((key) => key !== 'type' && key !== 'text')))
+      );
+    case 'response.output_item.done':
+      return Boolean(
+        getOutputRefusalItem(event) ||
+          (event.item && event.item.type !== 'message') ||
+          (Array.isArray(event.item?.content) &&
+            event.item.content.some(
+              (part) =>
+                part?.type === 'output_text' &&
+                (typeof part.text === 'string' ||
+                  Object.keys(part).some((key) => key !== 'type' && key !== 'text')),
+            )),
+      );
+    case 'response.function_call_arguments.done':
+      return typeof event.arguments === 'string';
+    case 'response.output_text.delta':
+      return Boolean(getOutputTextDelta(event));
+    case 'response.output_text.done':
+      return typeof event.text === 'string';
+    default:
+      return false;
+  }
 }
 
 function getTerminalOutputTexts(output: any[] | undefined): string[] {
@@ -1155,13 +1192,11 @@ export async function readResponsesStream(
       latestResponseEventType,
       latestResponse?.status,
     );
-    if (
-      !event ||
-      terminalResponse ||
-      (!HANDLED_STREAM_EVENT_TYPES.has(event.type ?? '') &&
-        !event.response &&
-        !Array.isArray(event.output))
-    ) {
+    const responseSnapshot = Boolean(
+      event &&
+        ((event.response && typeof event.response === 'object') || Array.isArray(event.output)),
+    );
+    if (!event || terminalResponse || responseSnapshot || !hasEffectiveStreamEvent(event)) {
       const bytes = new TextEncoder().encode(chunk).byteLength;
       if (bytes > MAX_STREAM_OUTPUT_CHARS - ignoredStreamBytes) {
         throw new Error(

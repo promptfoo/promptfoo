@@ -3951,10 +3951,140 @@ describe('Responses stream regressions', () => {
     });
 
     it.each([
-      { name: 'ignored SSE event', type: 'response.unknown' },
-      { name: 'function-argument delta', type: 'response.function_call_arguments.delta' },
+      {
+        name: 'ignored SSE event',
+        event: (payload: string) => ({
+          type: 'response.unknown',
+          output_index: 0,
+          item_id: 'fc_1',
+          delta: payload,
+        }),
+      },
+      {
+        name: 'function-argument delta',
+        event: (payload: string) => ({
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          item_id: 'fc_1',
+          delta: payload,
+        }),
+      },
+      {
+        name: 'audio-only content-part-added event',
+        event: (payload: string) => ({
+          type: 'response.content_part.added',
+          output_index: 0,
+          content_index: 0,
+          part: { type: 'output_audio', audio: payload },
+        }),
+      },
+      {
+        name: 'audio-only output-item-added event',
+        event: (payload: string) => ({
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_audio', audio: payload }],
+          },
+        }),
+      },
+      {
+        name: 'malformed annotation event',
+        event: (payload: string) => ({
+          type: 'response.output_text.annotation.added',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          annotation_index: 0,
+          annotation: payload,
+        }),
+      },
+      {
+        name: 'malformed refusal delta',
+        event: (payload: string) => ({
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: { raw: payload },
+        }),
+      },
+      {
+        name: 'malformed output-text-done event',
+        event: (payload: string) => ({
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          text: { raw: payload },
+        }),
+      },
+      {
+        name: 'nonterminal response snapshot with ignored payload',
+        event: (payload: string) => ({
+          type: 'response.in_progress',
+          response: { status: 'in_progress', junk: payload },
+        }),
+      },
+      {
+        name: 'empty output snapshot with ignored payload',
+        event: (payload: string) => ({
+          type: 'response.unknown',
+          output: [],
+          junk: payload,
+        }),
+      },
+      {
+        name: 'invalid-item response snapshot with ignored payload',
+        event: (payload: string) => ({
+          type: 'response.in_progress',
+          response: { status: 'in_progress', output: [{}], junk: payload },
+        }),
+      },
+      {
+        name: 'invalid-item output snapshot with ignored payload',
+        event: (payload: string) => ({
+          type: 'response.unknown',
+          output: [{}],
+          junk: payload,
+        }),
+      },
+      {
+        name: 'audio-only response snapshot',
+        event: (payload: string) => ({
+          type: 'response.in_progress',
+          response: {
+            status: 'in_progress',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_audio', audio: payload }],
+              },
+            ],
+          },
+        }),
+      },
+      {
+        name: 'valid-text response snapshot with ignored sibling payload',
+        event: (payload: string) => ({
+          type: 'response.in_progress',
+          response: {
+            status: 'in_progress',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'x' }],
+              },
+            ],
+            junk: payload,
+          },
+        }),
+      },
     ])('cancels a Responses stream when cumulative $name bytes exceed the bound', async ({
-      type,
+      event,
     }) => {
       const encoder = new TextEncoder();
       const payload = 'x'.repeat(1024 * 1024);
@@ -3972,9 +4102,10 @@ describe('Responses stream regressions', () => {
             return;
           }
           sent++;
+          const payloadEvent = event(payload);
           controller.enqueue(
             encoder.encode(
-              `event: ${type}\ndata: ${JSON.stringify({ type, output_index: 0, item_id: 'fc_1', delta: payload })}\n\n`,
+              `event: ${payloadEvent.type}\ndata: ${JSON.stringify(payloadEvent)}\n\n`,
             ),
           );
         },
