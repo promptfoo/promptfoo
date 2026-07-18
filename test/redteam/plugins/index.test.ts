@@ -10,6 +10,7 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
+  STRATEGY_COLLECTION_MAPPINGS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants';
 import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
@@ -675,6 +676,12 @@ describe('Plugins', () => {
         ]);
       },
     );
+
+    it('excludes every other-encodings strategy from coding-agent canary checks', () => {
+      for (const strategy of STRATEGY_COLLECTION_MAPPINGS['other-encodings']) {
+        expect(CANARY_BREAKING_STRATEGY_IDS).toContain(strategy);
+      }
+    });
 
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
