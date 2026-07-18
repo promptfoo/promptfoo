@@ -250,20 +250,20 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
         : item?.type === 'message' && typeof item.refusal === 'string' && item.refusal.length > 0
           ? {
               type: 'message',
-              role: item.role ?? 'assistant',
-              ...(item.id ? { id: item.id } : {}),
-              ...(item.status ? { status: item.status } : {}),
-              ...(item.phase ? { phase: item.phase } : {}),
+              role: typeof item.role === 'string' ? item.role : 'assistant',
+              ...(typeof item.id === 'string' ? { id: item.id } : {}),
+              ...(typeof item.status === 'string' ? { status: item.status } : {}),
+              ...(typeof item.phase === 'string' ? { phase: item.phase } : {}),
               refusal: item.refusal,
               content: [{ type: 'refusal', refusal: item.refusal }],
             }
           : item?.type === 'message' && Array.isArray(item.content)
             ? {
                 type: 'message',
-                role: item.role ?? 'assistant',
-                ...(item.id ? { id: item.id } : {}),
-                ...(item.status ? { status: item.status } : {}),
-                ...(item.phase ? { phase: item.phase } : {}),
+                role: typeof item.role === 'string' ? item.role : 'assistant',
+                ...(typeof item.id === 'string' ? { id: item.id } : {}),
+                ...(typeof item.status === 'string' ? { status: item.status } : {}),
+                ...(typeof item.phase === 'string' ? { phase: item.phase } : {}),
                 content: item.content.filter(
                   (content: any) =>
                     content?.type !== 'tool_use' &&
@@ -341,17 +341,81 @@ function filterUnfinalizedTerminalToolCalls(
     );
 }
 
+function getSafeUsage(usage: any): Record<string, any> | undefined {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+    return undefined;
+  }
+
+  const numericFields = [
+    'input_tokens',
+    'output_tokens',
+    'total_tokens',
+    'prompt_tokens',
+    'completion_tokens',
+    'cached_tokens',
+  ];
+  const detailFields = [
+    'input_tokens_details',
+    'output_tokens_details',
+    'prompt_tokens_details',
+    'completion_tokens_details',
+  ];
+  const detailNumericFields = [
+    'cached_tokens',
+    'cache_write_tokens',
+    'reasoning_tokens',
+    'accepted_prediction_tokens',
+    'rejected_prediction_tokens',
+    'audio_tokens',
+    'text_tokens',
+  ];
+  const safeUsage: Record<string, any> = {};
+  for (const field of numericFields) {
+    if (typeof usage[field] === 'number' && Number.isFinite(usage[field])) {
+      safeUsage[field] = usage[field];
+    }
+  }
+  for (const field of detailFields) {
+    const details = usage[field];
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+      continue;
+    }
+    const safeDetails: Record<string, number> = {};
+    for (const detailField of detailNumericFields) {
+      if (typeof details[detailField] === 'number' && Number.isFinite(details[detailField])) {
+        safeDetails[detailField] = details[detailField];
+      }
+    }
+    safeUsage[field] = safeDetails;
+  }
+  return safeUsage;
+}
+
 function getSafeRefusalResponse(response: any, output: any[], stripError = false): any {
+  const usage = getSafeUsage(response?.usage);
+  const error = response?.error;
+  const safeError =
+    !stripError && error && typeof error === 'object' && !Array.isArray(error)
+      ? {
+          ...(typeof error.code === 'string' ? { code: error.code } : {}),
+          ...(typeof error.message === 'string' ? { message: error.message } : {}),
+          ...(typeof error.type === 'string' ? { type: error.type } : {}),
+          ...(typeof error.param === 'string' ? { param: error.param } : {}),
+        }
+      : undefined;
+  const incompleteReason = response?.incomplete_details?.reason;
   return {
-    ...(response?.id ? { id: response.id } : {}),
-    ...(response?.object ? { object: response.object } : {}),
-    ...(response?.created_at === undefined ? {} : { created_at: response.created_at }),
-    ...(response?.status ? { status: response.status } : {}),
-    ...(response?.model ? { model: response.model } : {}),
-    ...(response?.usage ? { usage: response.usage } : {}),
-    ...(response?.service_tier ? { service_tier: response.service_tier } : {}),
-    ...(response?.incomplete_details ? { incomplete_details: response.incomplete_details } : {}),
-    ...(!stripError && response?.error ? { error: response.error } : {}),
+    ...(typeof response?.id === 'string' ? { id: response.id } : {}),
+    ...(typeof response?.object === 'string' ? { object: response.object } : {}),
+    ...(typeof response?.created_at === 'number' ? { created_at: response.created_at } : {}),
+    ...(typeof response?.status === 'string' ? { status: response.status } : {}),
+    ...(typeof response?.model === 'string' ? { model: response.model } : {}),
+    ...(usage ? { usage } : {}),
+    ...(typeof response?.service_tier === 'string' ? { service_tier: response.service_tier } : {}),
+    ...(typeof incompleteReason === 'string'
+      ? { incomplete_details: { reason: incompleteReason } }
+      : {}),
+    ...(safeError ? { error: safeError } : {}),
     output,
   };
 }
@@ -1264,7 +1328,7 @@ export async function readResponsesStream(
     latestResponse?.status === 'failed' ||
     latestResponse?.status === 'incomplete' ||
     latestResponse?.status === 'cancelled';
-  const useFinalizedItems = !isCompletedResponse;
+  const useFinalizedItems = !isCompletedResponse || sawFinalizedRefusal;
   const finalizedOutputTextByContent = new Map(
     Array.from(outputTextByContent).filter(([key]) => finalizedOutputTextKeys.has(key)),
   );

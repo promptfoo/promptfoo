@@ -1761,7 +1761,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(processed.isRefusal).toBe(true);
     });
 
-    it('keeps a completed terminal answer authoritative over an earlier finalized refusal', async () => {
+    it('keeps an earlier finalized refusal authoritative over a completed terminal answer', async () => {
       const body = [
         'event: response.refusal.done',
         'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"draft refusal"}',
@@ -1775,7 +1775,7 @@ describe('bedrock openaiResponses helper', () => {
 
       expect(result.output).toEqual([
         expect.objectContaining({
-          content: [expect.objectContaining({ type: 'output_text', text: 'safe final answer' })],
+          content: [expect.objectContaining({ type: 'refusal', refusal: 'draft refusal' })],
         }),
       ]);
     });
@@ -2124,7 +2124,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(processCalls).not.toHaveBeenCalled();
     });
 
-    it('preserves finalized refusal evidence when a completed response has safe text and a tool call', async () => {
+    it('keeps finalized refusal evidence authoritative when a completed response has text and a tool call', async () => {
       const body = [
         'event: response.refusal.done',
         'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that"}',
@@ -2145,9 +2145,6 @@ describe('bedrock openaiResponses helper', () => {
       const processed = await processor.processResponseOutput(result, {}, false);
 
       expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [expect.objectContaining({ type: 'output_text', text: 'Some context.' })],
-        }),
         expect.objectContaining({
           content: [
             expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),

@@ -812,6 +812,11 @@ describe('Responses stream regressions', () => {
             response: {
               status: 'failed',
               error: { code: 'content_filter', message: 'blocked by safety system' },
+              incomplete_details: {
+                reason: 'content_filter',
+                raw_output: 'SECRET_DETAILS',
+              },
+              usage: { input_tokens: 1, raw_output: 'SECRET_USAGE' },
               output_text: 'SECRET_RESPONSE_TEXT',
               raw_output: 'SECRET_RESPONSE_RAW',
               audio: 'SECRET_RESPONSE_AUDIO',
@@ -820,6 +825,7 @@ describe('Responses stream regressions', () => {
                 {
                   type: 'message',
                   role: 'assistant',
+                  status: { raw_output: 'SECRET_STATUS' },
                   audio: 'SECRET_MESSAGE_AUDIO',
                   transcript: 'SECRET MESSAGE TRANSCRIPT',
                   content: [
@@ -889,6 +895,28 @@ describe('Responses stream regressions', () => {
           delta: 'I cannot help with that.',
         },
       },
+      {
+        name: 'done/completed',
+        terminalType: 'response.completed',
+        status: 'completed',
+        event: {
+          type: 'response.refusal.done',
+          output_index: 0,
+          content_index: 0,
+          refusal: 'I cannot help with that.',
+        },
+      },
+      {
+        name: 'delta/completed',
+        terminalType: 'response.completed',
+        status: 'completed',
+        event: {
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'I cannot help with that.',
+        },
+      },
     ])('keeps a finalized refusal $name authoritative over a draft', async ({
       event,
       terminalType,
@@ -905,14 +933,24 @@ describe('Responses stream regressions', () => {
               raw_output: 'SECRET_RESPONSE_RAW',
               audio: 'SECRET_RESPONSE_AUDIO',
               transcript: 'SECRET RESPONSE TRANSCRIPT',
-              ...(status === 'incomplete'
-                ? { incomplete_details: { reason: 'max_output_tokens' } }
-                : {}),
+              incomplete_details: {
+                reason: 'max_output_tokens',
+                raw_output: 'SECRET_DETAILS',
+              },
+              usage: { input_tokens: 1, raw_output: 'SECRET_USAGE' },
               output: [
                 {
                   type: 'message',
                   role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' }],
+                  status: { raw_output: 'SECRET_STATUS' },
+                  content: [
+                    { type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' },
+                    {
+                      type: 'output_audio',
+                      audio: 'SECRET_AUDIO',
+                      transcript: 'SECRET_TRANSCRIPT',
+                    },
+                  ],
                 },
               ],
             },
