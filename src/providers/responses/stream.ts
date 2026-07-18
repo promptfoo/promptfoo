@@ -1683,9 +1683,9 @@ export async function readResponsesStream(
           ? [remainingUnindexedOutputText]
           : []),
       ],
-      latestResponse.status === 'incomplete' ||
-        latestResponse.status === 'in_progress' ||
-        isFailedOrCancelledResponse,
+      isPartialTerminalResponse ||
+        latestResponseEventType === 'response.in_progress' ||
+        latestResponse.status === 'in_progress',
       alignedFinalizedOutputTextKeys,
       completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
     );

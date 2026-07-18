@@ -2068,6 +2068,160 @@ describe('Responses stream regressions', () => {
   });
 
   describe('native stream fidelity and bound regressions', () => {
+    it.each([
+      {
+        name: 'statusless incomplete after output_text.done',
+        eventType: 'response.incomplete',
+        finalizer: 'text',
+        includeStatus: false,
+      },
+      {
+        name: 'statusless incomplete after output_item.done',
+        eventType: 'response.incomplete',
+        finalizer: 'item',
+        includeStatus: false,
+      },
+      {
+        name: 'statusless in-progress at EOF after output_text.done',
+        eventType: 'response.in_progress',
+        finalizer: 'text',
+        includeStatus: false,
+      },
+      {
+        name: 'statusless in-progress at EOF after output_item.done',
+        eventType: 'response.in_progress',
+        finalizer: 'item',
+        includeStatus: false,
+      },
+      {
+        name: 'status-present incomplete after output_text.done',
+        eventType: 'response.incomplete',
+        finalizer: 'text',
+        includeStatus: true,
+      },
+      {
+        name: 'status-present incomplete after output_item.done',
+        eventType: 'response.incomplete',
+        finalizer: 'item',
+        includeStatus: true,
+      },
+    ])('keeps finalized text authoritative for $name', async ({
+      eventType,
+      finalizer,
+      includeStatus,
+    }) => {
+      const finalized =
+        finalizer === 'text'
+          ? {
+              type: 'response.output_text.done',
+              output_index: 0,
+              content_index: 0,
+              item_id: 'm_1',
+              text: 'SAFE FINAL TEXT',
+            }
+          : {
+              type: 'response.output_item.done',
+              output_index: 0,
+              item: {
+                type: 'message',
+                id: 'm_1',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'SAFE FINAL TEXT' }],
+              },
+            };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          finalized,
+          {
+            type: eventType,
+            response: {
+              ...(includeStatus
+                ? { status: eventType === 'response.incomplete' ? 'incomplete' : 'in_progress' }
+                : {}),
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET TERMINAL DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET TERMINAL DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET TERMINAL DRAFT');
+    });
+
+    it('keeps citations and finalized text while stripping a statusless in-progress tool draft', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SAFE FINAL TEXT',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: 'response.in_progress',
+            response: {
+              output: [
+                {
+                  type: 'function_call',
+                  call_id: 'call_dangerous',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET TERMINAL DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET TERMINAL DRAFT');
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
     it('never executes a finalized function call explicitly marked incomplete', async () => {
       const processCalls = vi.fn().mockResolvedValue('executed');
       const parsed = await readResponsesStream(
