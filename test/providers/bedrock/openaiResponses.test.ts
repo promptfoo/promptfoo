@@ -2246,7 +2246,7 @@ describe('bedrock openaiResponses helper', () => {
         'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\\"path\\":\\"final\\"}"}',
         '',
         'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[]}}',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\\"path\\":","status":"in_progress"}]}}',
         '',
       ].join('\n');
 

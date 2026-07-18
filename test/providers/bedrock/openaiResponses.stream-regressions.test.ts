@@ -471,7 +471,21 @@ describe('Responses stream regressions', () => {
           arguments: '{"path":"/tmp/secret"}',
         },
       },
-      { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+      {
+        type: 'response.incomplete',
+        response: {
+          status: 'incomplete',
+          output: [
+            {
+              type: 'function_call',
+              call_id: 'call_1',
+              name: 'delete_file',
+              arguments: '{"path":',
+              status: 'in_progress',
+            },
+          ],
+        },
+      },
     ]);
     const processCalls = vi.fn().mockResolvedValue('executed');
 
@@ -1694,7 +1708,7 @@ describe('Responses stream regressions', () => {
       );
       await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-      expect(processCalls).toHaveBeenCalledTimes(2);
+      expect(processCalls).toHaveBeenCalledTimes(1);
       expect(processCalls).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
@@ -1704,18 +1718,10 @@ describe('Responses stream regressions', () => {
         }),
         undefined,
       );
-      expect(processCalls).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          call_id: 'call_b',
-          name: 'lookup_b',
-          arguments: '{"q":"final-b"}',
-        }),
-        undefined,
-      );
       expect(JSON.stringify(parsed)).not.toContain('delete_file');
       expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
       expect(JSON.stringify(parsed)).not.toContain('draft-a');
+      expect(JSON.stringify(parsed)).not.toContain('lookup_b');
     });
 
     it.each([
@@ -2371,6 +2377,186 @@ describe('Responses stream regressions', () => {
   });
 
   describe('native stream fidelity and bound regressions', () => {
+    it.each([
+      {
+        name: 'replacement message',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Action was not approved.' }],
+          },
+        ],
+      },
+      { name: 'replacement reasoning item', output: [{ type: 'reasoning', summary: [] }] },
+      {
+        name: 'different in-progress tool',
+        output: [
+          {
+            type: 'function_call',
+            id: 'other_item',
+            call_id: 'other_call',
+            name: 'lookup',
+            arguments: '{"q":',
+            status: 'in_progress',
+          },
+        ],
+      },
+      { name: 'discarded output', output: [] },
+    ])('never resurrects a finalized tool after an incomplete terminal $name', async ({
+      output,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
+            },
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(processed)).not.toContain('CALLED');
+    });
+
+    it('executes a finalized tool explicitly retained by an incomplete terminal identity', async () => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'lookup_item',
+              call_id: 'lookup_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+              status: 'completed',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'lookup_item',
+                  call_id: 'lookup_call',
+                  name: 'lookup',
+                  arguments: '{"q":',
+                  status: 'in_progress',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ call_id: 'lookup_call', arguments: '{"q":"final"}' }),
+        undefined,
+      );
+      expect(processed.output).toBe('CALLED');
+    });
+
+    it('stays abort-responsive while processing a single legal SSE body chunk', async () => {
+      const event =
+        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"x"}\n\n';
+      const body = new TextEncoder().encode(event.repeat(300_000));
+      const abortController = new AbortController();
+      let cancelled = false;
+      let sent = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (!sent) {
+            sent = true;
+            controller.enqueue(body);
+          }
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const started = performance.now();
+      let abortDelay = Number.POSITIVE_INFINITY;
+      const timer = setTimeout(() => {
+        abortDelay = performance.now() - started;
+        abortController.abort();
+      }, 10);
+
+      try {
+        await expect(
+          readResponsesStream(
+            new Response(stream),
+            'test',
+            { debug: vi.fn() },
+            abortController.signal,
+          ),
+        ).rejects.toThrow(/abort/i);
+      } finally {
+        clearTimeout(timer);
+      }
+
+      expect(cancelled).toBe(true);
+      expect(abortDelay).toBeLessThan(250);
+    });
+
+    it.each([
+      {
+        name: 'finalized output item',
+        event: (content: unknown[]) => ({
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: { type: 'message', id: 'm_parts', role: 'assistant', content },
+        }),
+      },
+      {
+        name: 'completed terminal snapshot',
+        event: (content: unknown[]) => ({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output: [{ type: 'message', id: 'm_parts', role: 'assistant', content }],
+          },
+        }),
+      },
+    ])('bounds an oversized $name content-part array before fan-out', async ({ event }) => {
+      const content = Array.from({ length: 650_000 }, () => ({ type: 'output_text' }));
+
+      await expect(
+        readResponsesStream(createSseResponse([event(content)]), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*content parts/i);
+    });
+
     it('preserves a finalized audio-only message when a stream ends at EOF', async () => {
       const item = {
         type: 'message',
@@ -5152,7 +5338,22 @@ describe('Responses stream regressions', () => {
             item_id: 'b',
             arguments: '{"q":"safe"}',
           },
-          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'b',
+                  call_id: 'safe_call',
+                  name: 'lookup',
+                  arguments: '{"q":',
+                  status: 'in_progress',
+                },
+              ],
+            },
+          },
         ]),
         'test',
         { debug: vi.fn() },

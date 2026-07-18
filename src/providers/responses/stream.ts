@@ -59,6 +59,7 @@ type StreamedAnnotationItem = {
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
+const MAX_STREAM_CONTENT_PARTS = MAX_STREAM_OUTPUT_KEYS;
 const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 const MAX_STREAM_SERIALIZED_OUTPUT_CHARS = MAX_STREAM_OUTPUT_CHARS + 64 * 1024;
 const MAX_STREAM_EXCESS_INPUT_BYTES = MAX_STREAM_OUTPUT_CHARS;
@@ -514,8 +515,40 @@ function isExecutableFunctionCall(item: any, allowEmptyArguments = false): boole
 function filterUnfinalizedTerminalToolCalls(
   output: any[],
   finalizedItems: FinalizedStreamOutputItem[],
+  terminalOutput: any[] | undefined,
+  requireTerminalIdentity: boolean,
 ): any[] {
-  const finalizedToolCalls = finalizedItems.filter(({ item }) => isExecutableFunctionCall(item));
+  const finalizedToolCalls = finalizedItems.filter(
+    ({ item }) =>
+      isExecutableFunctionCall(item) &&
+      (!requireTerminalIdentity ||
+        terminalOutput?.some((terminalItem) => {
+          if (terminalItem?.type !== 'function_call') {
+            return false;
+          }
+          const sameId =
+            typeof terminalItem.id === 'string' &&
+            typeof item.id === 'string' &&
+            terminalItem.id === item.id;
+          const sameCallId =
+            typeof terminalItem.call_id === 'string' &&
+            typeof item.call_id === 'string' &&
+            terminalItem.call_id === item.call_id;
+          const conflictingId =
+            typeof terminalItem.id === 'string' &&
+            typeof item.id === 'string' &&
+            terminalItem.id !== item.id;
+          const conflictingCallId =
+            typeof terminalItem.call_id === 'string' &&
+            typeof item.call_id === 'string' &&
+            terminalItem.call_id !== item.call_id;
+          const conflictingName =
+            typeof terminalItem.name === 'string' &&
+            typeof item.name === 'string' &&
+            terminalItem.name !== item.name;
+          return (sameId || sameCallId) && !conflictingId && !conflictingCallId && !conflictingName;
+        })),
+  );
   const matchedToolCalls = new Set<FinalizedStreamOutputItem>();
   const finalizedToolCallByItem = new Map<any, any>();
   return output
@@ -1003,6 +1036,7 @@ export async function readResponsesStream(
   let bufferedEventBatches: string[] = [];
   let separatorState = 0;
   let readsSinceYield = 0;
+  let eventsSinceYield = 0;
   let latestResponse: any;
   let latestResponseEventType: string | undefined;
   let outputText = '';
@@ -1285,6 +1319,28 @@ export async function readResponsesStream(
     }
 
     const event = parseSseEvent(chunk, providerName, logger);
+    const snapshotOutput = Array.isArray(event?.response?.output)
+      ? event.response.output
+      : Array.isArray(event?.output)
+        ? event.output
+        : undefined;
+    if (snapshotOutput && snapshotOutput.length > MAX_STREAM_OUTPUT_KEYS) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_KEYS} items of output`,
+      );
+    }
+    const hasOversizedMessageContent = (item: any): boolean =>
+      item?.type === 'message' &&
+      Array.isArray(item.content) &&
+      item.content.length > MAX_STREAM_CONTENT_PARTS;
+    if (
+      hasOversizedMessageContent(event?.item) ||
+      snapshotOutput?.some(hasOversizedMessageContent)
+    ) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_CONTENT_PARTS} content parts`,
+      );
+    }
     const bytes = new TextEncoder().encode(chunk).byteLength;
     if (bytes > MAX_STREAM_TOTAL_INPUT_BYTES - streamTotalInputBytes) {
       throw new Error(
@@ -1650,7 +1706,7 @@ export async function readResponsesStream(
     return event;
   };
 
-  const processDecodedText = (decoded: string): void => {
+  const processDecodedText = async (decoded: string): Promise<void> => {
     let segmentStart = 0;
     for (let index = 0; index < decoded.length; index++) {
       const char = decoded[index];
@@ -1676,6 +1732,11 @@ export async function readResponsesStream(
       }
       processChunk(chunk);
       segmentStart = index + 1;
+      if (signal && ++eventsSinceYield >= STREAM_READ_YIELD_INTERVAL) {
+        eventsSinceYield = 0;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        throwIfAborted();
+      }
     }
     appendEventFragment(decoded.slice(segmentStart), false);
   };
@@ -1720,7 +1781,7 @@ export async function readResponsesStream(
         break;
       }
 
-      processDecodedText(decoder.decode(value, { stream: true }));
+      await processDecodedText(decoder.decode(value, { stream: true }));
       if (++readsSinceYield >= STREAM_READ_YIELD_INTERVAL) {
         readsSinceYield = 0;
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1728,7 +1789,7 @@ export async function readResponsesStream(
       }
     }
 
-    processDecodedText(decoder.decode());
+    await processDecodedText(decoder.decode());
     if (bufferedEventLength > 0) {
       const chunk = takeBufferedEvent();
       if (chunk.trim()) {
@@ -1912,6 +1973,8 @@ export async function readResponsesStream(
       ? filterUnfinalizedTerminalToolCalls(
           outputWithCompletedAnnotations,
           Array.from(finalizedNonMessageItems.values()),
+          latestResponse?.output,
+          isPartialTerminalResponse,
         )
       : outputWithCompletedAnnotations,
     isCompletedResponse,
