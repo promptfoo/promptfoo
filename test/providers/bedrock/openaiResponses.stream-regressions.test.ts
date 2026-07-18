@@ -1497,6 +1497,229 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).not.toContain('draft');
     });
 
+    it('never finalizes a second terminal tool that duplicates a finalized call identity', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'safe_item',
+              call_id: 'safe_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'safe_item',
+                  call_id: 'safe_call',
+                  name: 'lookup',
+                  arguments: '{"q":"draft"}',
+                },
+                {
+                  type: 'function_call',
+                  id: 'safe_item',
+                  call_id: 'safe_call',
+                  name: 'delete_file',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({
+          call_id: 'safe_call',
+          name: 'lookup',
+          arguments: '{"q":"final"}',
+        }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
+    it.each([
+      { name: 'compacted', firstIndex: 2, secondIndex: 3 },
+      { name: 'sparse', firstIndex: 100, secondIndex: 101 },
+    ])('never executes a displaced duplicate tool from $name finalized indices', async ({
+      firstIndex,
+      secondIndex,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: firstIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_a',
+              call_id: 'call_a',
+              name: 'lookup_a',
+              arguments: '{"q":"final-a"}',
+            },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: secondIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_b',
+              call_id: 'call_b',
+              name: 'lookup_b',
+              arguments: '{"q":"final-b"}',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'safe_a',
+                  call_id: 'call_a',
+                  name: 'lookup_a',
+                  arguments: '{"q":"draft-a"}',
+                },
+                {
+                  type: 'function_call',
+                  id: 'safe_a',
+                  call_id: 'call_a',
+                  name: 'delete_file',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).toHaveBeenCalledTimes(2);
+      expect(processCalls).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          call_id: 'call_a',
+          name: 'lookup_a',
+          arguments: '{"q":"final-a"}',
+        }),
+        undefined,
+      );
+      expect(processCalls).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          call_id: 'call_b',
+          name: 'lookup_b',
+          arguments: '{"q":"final-b"}',
+        }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(parsed)).not.toContain('draft-a');
+    });
+
+    it.each([
+      { name: 'compacted', firstIndex: 2, secondIndex: 3 },
+      { name: 'sparse', firstIndex: 100, secondIndex: 101 },
+    ])('executes two independently finalized tools from $name indices', async ({
+      firstIndex,
+      secondIndex,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: firstIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_a',
+              call_id: 'call_a',
+              name: 'lookup_a',
+              arguments: '{"q":"final-a"}',
+            },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: secondIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_b',
+              call_id: 'call_b',
+              name: 'lookup_b',
+              arguments: '{"q":"final-b"}',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'safe_a',
+                  call_id: 'call_a',
+                  name: 'lookup_a',
+                  arguments: '{"q":"draft-a"}',
+                },
+                {
+                  type: 'function_call',
+                  id: 'safe_b',
+                  call_id: 'call_b',
+                  name: 'lookup_b',
+                  arguments: '{"q":"draft-b"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).toHaveBeenCalledTimes(2);
+      expect(processCalls).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          call_id: 'call_a',
+          name: 'lookup_a',
+          arguments: '{"q":"final-a"}',
+        }),
+        undefined,
+      );
+      expect(processCalls).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          call_id: 'call_b',
+          name: 'lookup_b',
+          arguments: '{"q":"final-b"}',
+        }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('draft-a');
+      expect(JSON.stringify(parsed)).not.toContain('draft-b');
+    });
+
     it('executes one independently finalized tool when argument item_id is missing', async () => {
       const processCalls = vi.fn().mockResolvedValue('executed');
       const parsed = await readResponsesStream(
@@ -2231,6 +2454,120 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).not.toContain('wrong.example');
       expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
       expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
+
+    it('does not attach a citation finalized with empty text to different completed text', async () => {
+      const stale = {
+        type: 'url_citation',
+        url: 'https://wrong.example/SECRET',
+        title: 'SECRET SOURCE',
+        start_index: 0,
+        end_index: 0,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: '',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation: stale,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'DIFFERENT FINAL TEXT', annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('DIFFERENT FINAL TEXT');
+      expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
+
+    it('does not let an ignored late delta change a finalized citation identity', async () => {
+      const stale = {
+        type: 'url_citation',
+        url: 'https://wrong.example/SECRET',
+        title: 'SECRET SOURCE',
+        start_index: 0,
+        end_index: 6,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SECRET STREAM TEXT',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation: stale,
+          },
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_other',
+            delta: 'IGNORED LATE DELTA',
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'DIFFERENT FINAL TEXT', annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('DIFFERENT FINAL TEXT');
+      expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('IGNORED LATE DELTA');
     });
 
     it.each([

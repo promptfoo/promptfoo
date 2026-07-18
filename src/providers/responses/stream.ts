@@ -375,32 +375,44 @@ function filterUnfinalizedTerminalToolCalls(
   finalizedItems: FinalizedStreamOutputItem[],
 ): any[] {
   const finalizedToolCalls = finalizedItems.filter(({ item }) => isExecutableFunctionCall(item));
+  const matchedToolCalls = new Set<FinalizedStreamOutputItem>();
+  const finalizedToolCallByItem = new Map<any, any>();
   return output
     .filter((item, outputIndex) => {
       if (item?.type !== 'function_call') {
         return true;
       }
-      return finalizedToolCalls.some(({ item: finalizedItem, outputIndex: finalizedIndex }) => {
+      return finalizedToolCalls.some((finalizedToolCall) => {
+        if (matchedToolCalls.has(finalizedToolCall)) {
+          return false;
+        }
+        const { item: finalizedItem, outputIndex: finalizedIndex } = finalizedToolCall;
         const identities = [item.id, item.call_id].filter(
           (identity): identity is string => typeof identity === 'string',
         );
-        return (
+        const matches =
           (finalizedIndex !== undefined && finalizedIndex === outputIndex) ||
           identities.some(
             (identity) => finalizedItem.id === identity || finalizedItem.call_id === identity,
-          )
-        );
+          );
+        if (matches) {
+          matchedToolCalls.add(finalizedToolCall);
+          finalizedToolCallByItem.set(item, finalizedItem);
+        }
+        return matches;
       });
     })
     .map((item) =>
-      item?.type === 'message' && Array.isArray(item.content)
-        ? {
-            ...item,
-            content: item.content.filter(
-              (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
-            ),
-          }
-        : item,
+      item?.type === 'function_call'
+        ? finalizedToolCallByItem.get(item)
+        : item?.type === 'message' && Array.isArray(item.content)
+          ? {
+              ...item,
+              content: item.content.filter(
+                (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
+              ),
+            }
+          : item,
     );
 }
 
@@ -648,11 +660,7 @@ function mergeCompletedOutputAnnotations(
         ) {
           return content;
         }
-        if (
-          typeof finalizedContent.text === 'string' &&
-          finalizedContent.text.length > 0 &&
-          finalizedContent.text !== content.text
-        ) {
+        if (typeof finalizedContent.text === 'string' && finalizedContent.text !== content.text) {
           return content;
         }
         const existingAnnotations = Array.isArray(content.annotations) ? content.annotations : [];
@@ -936,14 +944,6 @@ export async function readResponsesStream(
     }
 
     const key = getOutputTextKey(event);
-    if (
-      key &&
-      typeof event.item_id === 'string' &&
-      event.item_id.length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
-      (outputTextItemIds.has(key) || outputTextItemIds.size < MAX_STREAM_OUTPUT_KEYS)
-    ) {
-      outputTextItemIds.set(key, event.item_id);
-    }
     const invalidKey =
       !key && (event.output_index !== undefined || event.content_index !== undefined)
         ? getInvalidOutputTextKey(event)
@@ -954,6 +954,14 @@ export async function readResponsesStream(
       (!key && !invalidKey && finalizedUnindexedOutputText)
     ) {
       return;
+    }
+    if (
+      key &&
+      typeof event.item_id === 'string' &&
+      event.item_id.length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
+      (outputTextItemIds.has(key) || outputTextItemIds.size < MAX_STREAM_OUTPUT_KEYS)
+    ) {
+      outputTextItemIds.set(key, event.item_id);
     }
 
     appendOutputText(delta);
@@ -1011,14 +1019,6 @@ export async function readResponsesStream(
 
     const key = getOutputTextKey(event);
     const itemId = event.item_id ?? event.item?.id;
-    if (
-      key &&
-      typeof itemId === 'string' &&
-      itemId.length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
-      (outputTextItemIds.has(key) || outputTextItemIds.size < MAX_STREAM_OUTPUT_KEYS)
-    ) {
-      outputTextItemIds.set(key, itemId);
-    }
     const invalidKey =
       !key && (event.output_index !== undefined || event.content_index !== undefined)
         ? getInvalidOutputTextKey(event)
@@ -1029,6 +1029,14 @@ export async function readResponsesStream(
       (!key && !invalidKey && finalizedUnindexedOutputText)
     ) {
       return;
+    }
+    if (
+      key &&
+      typeof itemId === 'string' &&
+      itemId.length <= MAX_STREAM_FUNCTION_METADATA_CHARS &&
+      (outputTextItemIds.has(key) || outputTextItemIds.size < MAX_STREAM_OUTPUT_KEYS)
+    ) {
+      outputTextItemIds.set(key, itemId);
     }
     if (key) {
       if (!hasStreamOutputCapacity(outputTextByContent.has(key))) {
@@ -1514,7 +1522,7 @@ export async function readResponsesStream(
     const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
     for (const [contentIndex, annotations] of streamedItem.content) {
       while (content.length <= contentIndex) {
-        content.push({ type: 'output_text', text: '' });
+        content.push({ type: 'output_text' });
       }
       const existingContent = content[contentIndex];
       const existingAnnotations = Array.isArray(existingContent?.annotations)
