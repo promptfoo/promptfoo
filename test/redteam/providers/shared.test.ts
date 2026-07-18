@@ -19,6 +19,7 @@ import {
   setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
+import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
@@ -121,6 +122,9 @@ describe('shared redteam provider utilities', () => {
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
+    // clearProvider() intentionally keeps the rate limit registry, so reset it
+    // here to keep provider-wrapping state from leaking across shuffled tests.
+    redteamProviderManager.setRateLimitRegistry(undefined);
     resetRedteamProviderLoader();
 
     // Reset cliState to default
@@ -445,6 +449,33 @@ describe('shared redteam provider utilities', () => {
         const got = await redteamProviderManager.getProvider({});
         expect(got.id()).toContain('openai:');
         expect(mockOpenAiInstances.length).toBe(1);
+      });
+
+      it('wraps the defaultTest fallback provider with the configured rate limit registry', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider = createMockProvider({ id: 'defaultTest-wrapped-provider' });
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+        redteamProviderManager.setRateLimitRegistry(registry);
+
+        setCliStateConfig({
+          redteam: {
+            provider: undefined,
+          },
+          defaultTest: {
+            options: {
+              provider: 'defaultTest-provider',
+            },
+          },
+        });
+
+        const got = await redteamProviderManager.getProvider({});
+
+        // The defaultTest fallback path must apply rate limiting like every other return path.
+        expect(isRateLimitWrapped(got)).toBe(true);
+        expect(got.id()).toBe('defaultTest-wrapped-provider');
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['defaultTest-provider']);
       });
     });
 

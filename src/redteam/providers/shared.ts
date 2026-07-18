@@ -224,10 +224,12 @@ class RedteamProviderManager {
         logger.debug(
           `[RedteamProviderManager] Using redteam provider from defaultTest: ${redteamProvider.id()}`,
         );
-        return redteamProvider;
+        // Wrap for rate limiting to match every other return path in this method.
+        return this.wrapProvider(redteamProvider);
       }
     }
 
+    // 4) Configured redteam provider (cliState.config.redteam.provider) or the default attacker model.
     logger.debug('[RedteamProviderManager] Loading redteam provider', {
       providedConfig:
         typeof configuredProvider === 'string'
