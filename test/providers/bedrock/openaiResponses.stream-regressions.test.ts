@@ -2371,6 +2371,145 @@ describe('Responses stream regressions', () => {
   });
 
   describe('native stream fidelity and bound regressions', () => {
+    it('accepts 128,000 tiny output-text deltas without charging bounded SSE envelope overhead', async () => {
+      const encoder = new TextEncoder();
+      const delta =
+        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"content_index":0,"item_id":"m_1","delta":"x"}\n\n';
+      const batch = encoder.encode(delta.repeat(1024));
+      let batches = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (batches++ < 125) {
+            controller.enqueue(batch);
+            return;
+          }
+          const text = 'x'.repeat(128_000);
+          controller.enqueue(
+            encoder.encode(
+              `event: response.output_text.done\ndata: ${JSON.stringify({ type: 'response.output_text.done', output_index: 0, content_index: 0, item_id: 'm_1', text })}\n\n` +
+                `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [{ type: 'message', id: 'm_1', role: 'assistant', content: [{ type: 'output_text', text }] }] } })}\n\n`,
+            ),
+          );
+          controller.close();
+        },
+      });
+
+      const parsed = await readResponsesStream(new Response(stream), 'test', { debug: vi.fn() });
+
+      expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(128_000);
+    });
+
+    it('executes a terminal-completed function call with empty arguments and omitted item status', async () => {
+      const processCalls = vi.fn().mockResolvedValue('NOARG TOOL RESULT');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'function_call',
+                  name: 'noarg_tool',
+                  arguments: '',
+                  call_id: 'call_1',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          type: 'function_call',
+          name: 'noarg_tool',
+          arguments: '',
+          call_id: 'call_1',
+        }),
+      );
+      expect(processed.output).toBe('NOARG TOOL RESULT');
+    });
+
+    it('does not concatenate refusal deltas from different message identities at EOF', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.refusal.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_discarded',
+            delta: 'SECRET DRAFT ',
+          },
+          {
+            type: 'response.refusal.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'msg_final',
+            delta: 'I cannot comply.',
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('I cannot comply.');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET DRAFT');
+    });
+
+    it('accepts three permitted six-mebibyte partial-image stream events', async () => {
+      const partialImage = 'A'.repeat(6 * 1024 * 1024);
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.image_generation_call.partial_image',
+            output_index: 0,
+            item_id: 'img_1',
+            partial_image_b64: partialImage,
+          },
+          {
+            type: 'response.image_generation_call.partial_image',
+            output_index: 0,
+            item_id: 'img_1',
+            partial_image_b64: partialImage,
+          },
+          {
+            type: 'response.image_generation_call.partial_image',
+            output_index: 0,
+            item_id: 'img_1',
+            partial_image_b64: partialImage,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'IMAGE READY' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output?.[0]?.content?.[0]?.text).toBe('IMAGE READY');
+    });
+
     it.each([
       { name: 'truncated function_call', nestedType: 'function_call', terminalType: undefined },
       { name: 'truncated tool_use', nestedType: 'tool_use', terminalType: undefined },

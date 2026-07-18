@@ -7,6 +7,7 @@ type ResponsesStreamEvent = {
   annotation_index?: number;
   annotation?: any;
   arguments?: string;
+  partial_image_b64?: string;
   item_id?: string;
   name?: string;
   output_text?: { delta?: string };
@@ -60,6 +61,7 @@ const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 const MAX_STREAM_SERIALIZED_OUTPUT_CHARS = MAX_STREAM_OUTPUT_CHARS + 64 * 1024;
 const MAX_STREAM_EXCESS_INPUT_BYTES = MAX_STREAM_OUTPUT_CHARS;
 const MAX_STREAM_TOTAL_INPUT_BYTES = 6 * MAX_STREAM_OUTPUT_CHARS;
+const MAX_STREAM_EVENT_ENVELOPE_BYTES = 256;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
 const MAX_STREAM_FRAGMENT_BATCH = 1024;
@@ -301,6 +303,9 @@ function getRetainedStreamPayloadBytes(
     case 'response.refusal.done':
       addText(event.refusal);
       break;
+    case 'response.image_generation_call.partial_image':
+      addText(event.partial_image_b64);
+      break;
     case 'response.output_item.added': {
       if (event.item?.type !== 'function_call') {
         break;
@@ -478,13 +483,13 @@ function hasRefusalOutput(output: any[] | undefined): boolean {
   );
 }
 
-function isExecutableFunctionCall(item: any): boolean {
+function isExecutableFunctionCall(item: any, allowEmptyArguments = false): boolean {
   return (
     item?.type === 'function_call' &&
     typeof item.name === 'string' &&
     item.name.length > 0 &&
     typeof item.arguments === 'string' &&
-    (item.arguments.length > 0 || item.status === 'completed') &&
+    (item.arguments.length > 0 || item.status === 'completed' || allowEmptyArguments) &&
     typeof item.call_id === 'string' &&
     item.call_id.length > 0 &&
     (item.status === undefined || item.status === 'completed')
@@ -537,9 +542,12 @@ function filterUnfinalizedTerminalToolCalls(
     );
 }
 
-function filterIncompleteFunctionCalls(output: any[]): any[] {
+function filterIncompleteFunctionCalls(output: any[], allowEmptyArguments = false): any[] {
   return output
-    .filter((item) => item?.type !== 'function_call' || isExecutableFunctionCall(item))
+    .filter(
+      (item) =>
+        item?.type !== 'function_call' || isExecutableFunctionCall(item, allowEmptyArguments),
+    )
     .map((item) =>
       item?.type === 'message' && Array.isArray(item.content)
         ? {
@@ -997,6 +1005,7 @@ export async function readResponsesStream(
   const finalizedNonMessageItems = new Map<string, RetainedStreamOutputItem>();
   const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
   const refusalDeltaChunks = new Map<string, string[]>();
+  const refusalItemIds = new Map<string, string>();
   const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
   const streamedAnnotations = new Map<string, StreamedAnnotationItem>();
   let sawFinalizedRefusal = false;
@@ -1283,7 +1292,11 @@ export async function readResponsesStream(
     if (creditKind && retainedBytes > 0) {
       creditedStreamPayloadBytesByKind.set(creditKind, previousCredit + retainedBytes);
     }
-    const excessBytes = Math.max(0, bytes - retainedBytes);
+    const envelopeBytes =
+      event && !terminalResponse
+        ? Math.min(Math.max(0, bytes - retainedBytes), MAX_STREAM_EVENT_ENVELOPE_BYTES)
+        : 0;
+    const excessBytes = Math.max(0, bytes - retainedBytes - envelopeBytes);
     if (excessBytes > MAX_STREAM_EXCESS_INPUT_BYTES - streamExcessInputBytes) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_EXCESS_INPUT_BYTES} bytes of unretained stream input`,
@@ -1329,12 +1342,31 @@ export async function readResponsesStream(
             finalizedOutputChars -= previousItem.serializedLength;
             finalizedRefusalItems.delete(previousKey);
             refusalDeltaChunks.delete(previousKey);
+            refusalItemIds.delete(previousKey);
           }
         }
       }
       const key = getOutputTextKey(event) ?? getInvalidOutputTextKey(event);
       let knownSerializedLength: number | undefined;
       if (event.type === 'response.refusal.delta') {
+        const itemId =
+          typeof event.item_id === 'string' &&
+          event.item_id.length > 0 &&
+          event.item_id.length <= MAX_STREAM_FUNCTION_METADATA_CHARS
+            ? event.item_id
+            : undefined;
+        const previousItemId = refusalItemIds.get(key);
+        if (itemId && previousItemId && previousItemId !== itemId) {
+          const discardedItem = finalizedRefusalItems.get(key);
+          if (discardedItem) {
+            finalizedOutputChars -= discardedItem.serializedLength;
+            finalizedRefusalItems.delete(key);
+          }
+          refusalDeltaChunks.delete(key);
+        }
+        if (itemId) {
+          refusalItemIds.set(key, itemId);
+        }
         const previousItem = finalizedRefusalItems.get(key);
         const delta = event.delta ?? '';
         if (delta.length > 0) {
@@ -1351,6 +1383,7 @@ export async function readResponsesStream(
         }
       } else {
         refusalDeltaChunks.delete(key);
+        refusalItemIds.delete(key);
       }
       setFinalizedOutputItem(
         finalizedRefusalItems,
@@ -1361,6 +1394,7 @@ export async function readResponsesStream(
       );
       if (!finalizedRefusalItems.has(key)) {
         refusalDeltaChunks.delete(key);
+        refusalItemIds.delete(key);
       }
     }
     if (
@@ -1845,6 +1879,7 @@ export async function readResponsesStream(
           Array.from(finalizedNonMessageItems.values()),
         )
       : outputWithCompletedAnnotations,
+    isCompletedResponse,
   );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
