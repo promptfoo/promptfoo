@@ -21,6 +21,8 @@ type ResponsesStreamEvent = {
     name?: string;
     arguments?: string;
     refusal?: string;
+    result?: string;
+    code?: string;
     content?: Array<{ type?: string; text?: string; refusal?: string }>;
   };
   output?: any[];
@@ -193,17 +195,27 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       content: [{ type: 'refusal', refusal: event.refusal }],
     };
   }
-  if (event.type === 'response.content_part.done' && event.part?.type === 'refusal') {
+  if (
+    event.type === 'response.content_part.done' &&
+    event.part?.type === 'refusal' &&
+    typeof event.part.refusal === 'string' &&
+    event.part.refusal.length > 0
+  ) {
     return { type: 'message', role: 'assistant', content: [event.part] };
   }
   if (
     event.type === 'response.output_item.done' &&
-    (event.item?.type === 'refusal' ||
+    ((event.item?.type === 'refusal' &&
+      typeof event.item.refusal === 'string' &&
+      event.item.refusal.length > 0) ||
       (event.item?.type === 'message' &&
         typeof event.item.refusal === 'string' &&
         event.item.refusal.length > 0) ||
       (Array.isArray(event.item?.content) &&
-        event.item.content.some((part) => part?.type === 'refusal')))
+        event.item.content.some(
+          (part) =>
+            part?.type === 'refusal' && typeof part.refusal === 'string' && part.refusal.length > 0,
+        )))
   ) {
     return event.item?.type === 'refusal'
       ? {
@@ -285,6 +297,11 @@ function getRetainedStreamPayloadBytes(
       break;
     case 'response.output_item.done':
       addOutputItem(event.item);
+      if (event.item?.type === 'image_generation_call') {
+        addText(event.item.result);
+      } else if (event.item?.type === 'code_interpreter_call') {
+        addText(event.item.code);
+      }
       break;
     case 'response.function_call_arguments.done':
       if (

@@ -2511,6 +2511,100 @@ describe('Responses stream regressions', () => {
     });
 
     it.each([
+      {
+        name: 'image-generation result',
+        item: (payload: string) => ({
+          type: 'image_generation_call',
+          id: 'img_1',
+          status: 'completed',
+          result: payload,
+        }),
+        field: 'result',
+      },
+      {
+        name: 'code-interpreter code',
+        item: (payload: string) => ({
+          type: 'code_interpreter_call',
+          id: 'ci_1',
+          status: 'completed',
+          code: payload,
+          outputs: [],
+        }),
+        field: 'code',
+      },
+    ])('accepts a finalized nine-mebibyte $name duplicated by the terminal snapshot', async ({
+      item,
+      field,
+    }) => {
+      const payload = 'x'.repeat(9 * 1024 * 1024);
+      const finalized = item(payload);
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item: finalized },
+          {
+            type: 'response.completed',
+            response: { status: 'completed', output: [finalized] },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output?.[0]?.[field]).toHaveLength(9 * 1024 * 1024);
+    });
+
+    it.each([
+      {
+        name: 'content-part refusal finalizer',
+        event: {
+          type: 'response.content_part.done',
+          output_index: 0,
+          content_index: 0,
+          part: { type: 'refusal', refusal: '' },
+        },
+      },
+      {
+        name: 'output-item refusal finalizer',
+        event: {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            id: 'm_1',
+            role: 'assistant',
+            content: [{ type: 'refusal', refusal: '' }],
+          },
+        },
+      },
+    ])('does not let an empty $name replace a completed answer', async ({ event }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('SAFE FINAL');
+      expect(processed.isRefusal).not.toBe(true);
+    });
+
+    it.each([
       { name: 'truncated function_call', nestedType: 'function_call', terminalType: undefined },
       { name: 'truncated tool_use', nestedType: 'tool_use', terminalType: undefined },
       {
