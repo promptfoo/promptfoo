@@ -700,7 +700,7 @@ describe('Responses stream regressions', () => {
     );
   });
 
-  it('merges a streamed citation into completed terminal text without restoring a draft', async () => {
+  it('drops a streamed citation when completed terminal text replaces its draft', async () => {
     const annotations = [
       {
         type: 'url_citation',
@@ -750,12 +750,11 @@ describe('Responses stream regressions', () => {
     expect(parsed.output).toEqual([
       expect.objectContaining({
         id: 'm_1',
-        content: [
-          expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT', annotations }),
-        ],
+        content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
       }),
     ]);
-    expect(processed.metadata?.annotations).toEqual(annotations);
+    expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+    expect(processed.metadata?.annotations ?? []).toEqual([]);
     expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
   });
 
@@ -791,7 +790,7 @@ describe('Responses stream regressions', () => {
           output_index: 0,
           content_index: 0,
           item_id: 'm_1',
-          text: 'SECRET OR UNSAFE DRAFT',
+          text: 'SAFE FINAL TEXT',
         },
         ...streamed.map((citationIndex, annotationIndex) => ({
           type: 'response.output_text.annotation.added',
@@ -2068,6 +2067,215 @@ describe('Responses stream regressions', () => {
   });
 
   describe('native stream fidelity and bound regressions', () => {
+    it.each([
+      { name: 'truncated function_call', nestedType: 'function_call', terminalType: undefined },
+      { name: 'truncated tool_use', nestedType: 'tool_use', terminalType: undefined },
+      {
+        name: 'incomplete function_call',
+        nestedType: 'function_call',
+        terminalType: 'response.incomplete',
+      },
+      { name: 'incomplete tool_use', nestedType: 'tool_use', terminalType: 'response.incomplete' },
+      {
+        name: 'in-progress function_call',
+        nestedType: 'function_call',
+        terminalType: 'response.in_progress',
+      },
+      {
+        name: 'in-progress tool_use',
+        nestedType: 'tool_use',
+        terminalType: 'response.in_progress',
+      },
+      {
+        name: 'completed function_call',
+        nestedType: 'function_call',
+        terminalType: 'response.completed',
+      },
+      { name: 'completed tool_use', nestedType: 'tool_use', terminalType: 'response.completed' },
+    ])('never executes nested content from a $name finalized message', async ({
+      nestedType,
+      terminalType,
+    }) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_safe',
+        role: 'assistant',
+        content: [
+          { type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [annotation] },
+          {
+            type: nestedType,
+            call_id: 'call_1',
+            name: 'delete_file',
+            arguments: '{"path":"/tmp/secret"}',
+          },
+        ],
+      };
+      const terminal = terminalType
+        ? {
+            type: terminalType,
+            response: {
+              ...(terminalType === 'response.incomplete'
+                ? { status: 'incomplete' }
+                : terminalType === 'response.in_progress'
+                  ? { status: 'in_progress' }
+                  : { status: 'completed' }),
+              output: [item],
+            },
+          }
+        : undefined;
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item },
+          ...(terminal ? [terminal] : []),
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
+    it.each([
+      { name: 'output_text.done', finalizer: 'text' },
+      { name: 'output_item.done', finalizer: 'item' },
+    ])('does not attach a stale streamed citation from $name to different completed text', async ({
+      finalizer,
+    }) => {
+      const stale = {
+        type: 'url_citation',
+        url: 'https://wrong.example/SECRET',
+        title: 'SECRET SOURCE',
+        start_index: 0,
+        end_index: 6,
+      };
+      const finalized =
+        finalizer === 'text'
+          ? [
+              {
+                type: 'response.output_text.done',
+                output_index: 0,
+                content_index: 0,
+                item_id: 'm_safe',
+                text: 'SECRET STREAM TEXT',
+              },
+              {
+                type: 'response.output_text.annotation.added',
+                output_index: 0,
+                content_index: 0,
+                item_id: 'm_safe',
+                annotation_index: 0,
+                annotation: stale,
+              },
+            ]
+          : [
+              {
+                type: 'response.output_item.done',
+                output_index: 0,
+                item: {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'output_text',
+                      text: 'SECRET STREAM TEXT',
+                      annotations: [stale],
+                    },
+                  ],
+                },
+              },
+            ];
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          ...finalized,
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
+
+    it('preserves a citation-only stream annotation on compatible completed output', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual([annotation]);
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+    });
+
     it.each([
       {
         name: 'statusless incomplete after output_text.done',

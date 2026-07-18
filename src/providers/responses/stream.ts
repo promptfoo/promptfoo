@@ -405,7 +405,18 @@ function filterUnfinalizedTerminalToolCalls(
 }
 
 function filterIncompleteFunctionCalls(output: any[]): any[] {
-  return output.filter((item) => item?.type !== 'function_call' || isExecutableFunctionCall(item));
+  return output
+    .filter((item) => item?.type !== 'function_call' || isExecutableFunctionCall(item))
+    .map((item) =>
+      item?.type === 'message' && Array.isArray(item.content)
+        ? {
+            ...item,
+            content: item.content.filter(
+              (content: any) => content?.type !== 'tool_use' && content?.type !== 'function_call',
+            ),
+          }
+        : item,
+    );
 }
 
 function dedupeAnnotations(annotations: any[]): any[] {
@@ -615,7 +626,7 @@ function mergeCompletedOutputAnnotations(
         if (candidate?.type !== 'message') {
           return false;
         }
-        if (typeof item.id === 'string' && typeof candidate.id === 'string') {
+        if (typeof item.id === 'string' || typeof candidate.id === 'string') {
           return item.id === candidate.id;
         }
         return candidateIndex === outputIndex;
@@ -628,8 +639,17 @@ function mergeCompletedOutputAnnotations(
     return {
       ...item,
       content: item.content.map((content: any, contentIndex: number) => {
-        const annotations = finalizedItem.content[contentIndex]?.annotations;
+        const finalizedContent = finalizedItem.content[contentIndex];
+        const annotations = finalizedContent?.annotations;
         if (content?.type !== 'output_text' || !Array.isArray(annotations)) {
+          return content;
+        }
+        if (
+          typeof finalizedContent.text === 'string' &&
+          finalizedContent.text.length > 0 &&
+          typeof content.text === 'string' &&
+          finalizedContent.text !== content.text
+        ) {
           return content;
         }
         const existingAnnotations = Array.isArray(content.annotations) ? content.annotations : [];
@@ -1500,9 +1520,20 @@ export async function readResponsesStream(
       const indexedAnnotations = Array.from(annotations)
         .sort(([left], [right]) => left - right)
         .map(([, retained]) => retained.annotation);
+      const outputTextKey =
+        streamedItem.outputIndex === undefined
+          ? undefined
+          : `${streamedItem.outputIndex}:${contentIndex}`;
+      const finalizedText =
+        outputTextKey &&
+        finalizedOutputTextKeys.has(outputTextKey) &&
+        (!streamedItem.itemId || outputTextItemIds.get(outputTextKey) === streamedItem.itemId)
+          ? outputTextByContent.get(outputTextKey)
+          : undefined;
       content[contentIndex] = {
         ...existingContent,
         type: 'output_text',
+        ...(typeof finalizedText === 'string' ? { text: finalizedText } : {}),
         annotations: dedupeAnnotations([...existingAnnotations, ...indexedAnnotations]),
       };
     }
