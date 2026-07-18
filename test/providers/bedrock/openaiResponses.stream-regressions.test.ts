@@ -2233,6 +2233,120 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).not.toContain('SECRET');
     });
 
+    it.each([
+      { name: 'omitted', terminalContent: { type: 'output_text', annotations: [] } },
+      { name: 'null', terminalContent: { type: 'output_text', text: null, annotations: [] } },
+      { name: 'number', terminalContent: { type: 'output_text', text: 42, annotations: [] } },
+      {
+        name: 'object',
+        terminalContent: { type: 'output_text', text: { value: 'SAFE' }, annotations: [] },
+      },
+    ])('does not attach a stale streamed citation when completed text is $name', async ({
+      terminalContent,
+    }) => {
+      const stale = {
+        type: 'url_citation',
+        url: 'https://wrong.example/SECRET',
+        title: 'SECRET SOURCE',
+        start_index: 0,
+        end_index: 6,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SECRET STREAM TEXT',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation: stale,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [terminalContent],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
+
+    it.each([
+      { name: 'equal non-empty', text: 'SAFE FINAL TEXT' },
+      { name: 'equal empty', text: '' },
+    ])('preserves a streamed citation when completed text is $name', async ({ text }) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: Math.min(4, text.length),
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text,
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text, annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual([annotation]);
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+    });
+
     it('preserves a citation-only stream annotation on compatible completed output', async () => {
       const annotation = {
         type: 'url_citation',

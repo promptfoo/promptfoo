@@ -641,13 +641,16 @@ function mergeCompletedOutputAnnotations(
       content: item.content.map((content: any, contentIndex: number) => {
         const finalizedContent = finalizedItem.content[contentIndex];
         const annotations = finalizedContent?.annotations;
-        if (content?.type !== 'output_text' || !Array.isArray(annotations)) {
+        if (
+          content?.type !== 'output_text' ||
+          typeof content.text !== 'string' ||
+          !Array.isArray(annotations)
+        ) {
           return content;
         }
         if (
           typeof finalizedContent.text === 'string' &&
           finalizedContent.text.length > 0 &&
-          typeof content.text === 'string' &&
           finalizedContent.text !== content.text
         ) {
           return content;
