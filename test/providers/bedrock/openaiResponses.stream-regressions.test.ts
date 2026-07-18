@@ -658,6 +658,7 @@ describe('Responses stream regressions', () => {
         eventType: 'response.incomplete',
         response: { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
       },
+      { eventType: 'response.cancelled', response: { status: 'cancelled' } },
     ])('never executes a tool call supplied only by a $eventType terminal snapshot', async ({
       eventType,
       response,
@@ -689,6 +690,81 @@ describe('Responses stream regressions', () => {
         expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
       );
       expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { eventType: 'response.failed', status: 'failed' },
+      { eventType: 'response.incomplete', status: 'incomplete' },
+      { eventType: 'response.cancelled', status: 'cancelled' },
+    ])('never borrows executable tool metadata from a $eventType terminal snapshot', async ({
+      eventType,
+      status,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: 0,
+            item_id: 'safe_item',
+            arguments: '{"ok":true}',
+          },
+          {
+            type: eventType,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'evil_item',
+                  call_id: 'evil_call',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
+
+    it.each([
+      { eventType: 'response.failed', status: 'failed' },
+      { eventType: 'response.incomplete', status: 'incomplete' },
+      { eventType: 'response.cancelled', status: 'cancelled' },
+    ])('ignores a late finalized tool call after a $eventType terminal snapshot', async ({
+      eventType,
+      status,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: eventType, response: { status, output: [] } },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'late_item',
+              call_id: 'late_call',
+              name: 'dangerous_action',
+              arguments: '{"path":"/tmp/secret"}',
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
     });
 
     it.each([
@@ -736,10 +812,16 @@ describe('Responses stream regressions', () => {
             response: {
               status: 'failed',
               error: { code: 'content_filter', message: 'blocked by safety system' },
+              output_text: 'SECRET_RESPONSE_TEXT',
+              raw_output: 'SECRET_RESPONSE_RAW',
+              audio: 'SECRET_RESPONSE_AUDIO',
+              transcript: 'SECRET RESPONSE TRANSCRIPT',
               output: [
                 {
                   type: 'message',
                   role: 'assistant',
+                  audio: 'SECRET_MESSAGE_AUDIO',
+                  transcript: 'SECRET MESSAGE TRANSCRIPT',
                   content: [
                     {
                       type: 'output_audio',
@@ -819,6 +901,10 @@ describe('Responses stream regressions', () => {
             type: terminalType,
             response: {
               status,
+              output_text: 'SECRET_RESPONSE_TEXT',
+              raw_output: 'SECRET_RESPONSE_RAW',
+              audio: 'SECRET_RESPONSE_AUDIO',
+              transcript: 'SECRET RESPONSE TRANSCRIPT',
               ...(status === 'incomplete'
                 ? { incomplete_details: { reason: 'max_output_tokens' } }
                 : {}),
@@ -837,8 +923,8 @@ describe('Responses stream regressions', () => {
       );
       const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
-      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
       expect(processed.isRefusal).toBe(true);
     });
 

@@ -249,12 +249,21 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
           }
         : item?.type === 'message' && typeof item.refusal === 'string' && item.refusal.length > 0
           ? {
-              ...item,
+              type: 'message',
+              role: item.role ?? 'assistant',
+              ...(item.id ? { id: item.id } : {}),
+              ...(item.status ? { status: item.status } : {}),
+              ...(item.phase ? { phase: item.phase } : {}),
+              refusal: item.refusal,
               content: [{ type: 'refusal', refusal: item.refusal }],
             }
           : item?.type === 'message' && Array.isArray(item.content)
             ? {
-                ...item,
+                type: 'message',
+                role: item.role ?? 'assistant',
+                ...(item.id ? { id: item.id } : {}),
+                ...(item.status ? { status: item.status } : {}),
+                ...(item.phase ? { phase: item.phase } : {}),
                 content: item.content.filter(
                   (content: any) =>
                     content?.type !== 'tool_use' &&
@@ -299,7 +308,10 @@ function filterUnfinalizedTerminalToolCalls(
   output: any[],
   finalizedItems: FinalizedStreamOutputItem[],
 ): any[] {
-  const finalizedToolCalls = finalizedItems.filter(({ item }) => item?.type === 'function_call');
+  const finalizedToolCalls = finalizedItems.filter(
+    ({ item }) =>
+      item?.type === 'function_call' && typeof item.name === 'string' && item.name.length > 0,
+  );
   return output
     .filter((item, outputIndex) => {
       if (item?.type !== 'function_call') {
@@ -327,6 +339,34 @@ function filterUnfinalizedTerminalToolCalls(
           }
         : item,
     );
+}
+
+function getSafeRefusalResponse(response: any, output: any[], stripError = false): any {
+  return {
+    ...(response?.id ? { id: response.id } : {}),
+    ...(response?.object ? { object: response.object } : {}),
+    ...(response?.created_at === undefined ? {} : { created_at: response.created_at }),
+    ...(response?.status ? { status: response.status } : {}),
+    ...(response?.model ? { model: response.model } : {}),
+    ...(response?.usage ? { usage: response.usage } : {}),
+    ...(response?.service_tier ? { service_tier: response.service_tier } : {}),
+    ...(response?.incomplete_details ? { incomplete_details: response.incomplete_details } : {}),
+    ...(!stripError && response?.error ? { error: response.error } : {}),
+    output,
+  };
+}
+
+function isTerminalStreamResponse(eventType: string | undefined, status: unknown): boolean {
+  return (
+    eventType === 'response.completed' ||
+    eventType === 'response.failed' ||
+    eventType === 'response.incomplete' ||
+    eventType === 'response.cancelled' ||
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'incomplete' ||
+    status === 'cancelled'
+  );
 }
 
 function mergeFinalizedStreamOutput(
@@ -867,10 +907,7 @@ export async function readResponsesStream(
       );
     }
 
-    if (
-      latestResponseEventType === 'response.completed' ||
-      latestResponse?.status === 'completed'
-    ) {
+    if (isTerminalStreamResponse(latestResponseEventType, latestResponse?.status)) {
       return;
     }
 
@@ -1223,8 +1260,10 @@ export async function readResponsesStream(
   const isPartialTerminalResponse =
     latestResponseEventType === 'response.failed' ||
     latestResponseEventType === 'response.incomplete' ||
+    latestResponseEventType === 'response.cancelled' ||
     latestResponse?.status === 'failed' ||
-    latestResponse?.status === 'incomplete';
+    latestResponse?.status === 'incomplete' ||
+    latestResponse?.status === 'cancelled';
   const useFinalizedItems = !isCompletedResponse;
   const finalizedOutputTextByContent = new Map(
     Array.from(outputTextByContent).filter(([key]) => finalizedOutputTextKeys.has(key)),
@@ -1277,11 +1316,7 @@ export async function readResponsesStream(
         ],
       });
     }
-    return boundedResponse({
-      ...latestResponse,
-      error: undefined,
-      output: safeOutput,
-    });
+    return boundedResponse(getSafeRefusalResponse(latestResponse, safeOutput, true));
   }
 
   if (sawFinalizedRefusal) {
@@ -1289,9 +1324,9 @@ export async function readResponsesStream(
     const safeOutput = filterExecutableToolCalls(
       useFinalizedItems ? finalizedStreamOutput : latestResponse?.output,
     );
-    return boundedResponse({
-      ...(latestResponse ?? {}),
-      output:
+    return boundedResponse(
+      getSafeRefusalResponse(
+        latestResponse,
         useFinalizedItems || !terminalHadExecutableCalls
           ? safeOutput
           : [
@@ -1300,7 +1335,8 @@ export async function readResponsesStream(
                 Array.from(finalizedRefusalItems.values(), ({ item }) => item),
               ),
             ],
-    });
+      ),
+    );
   }
 
   if (
