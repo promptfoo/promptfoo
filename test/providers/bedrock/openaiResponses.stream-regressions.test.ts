@@ -97,6 +97,55 @@ describe('Responses stream regressions', () => {
     expect(sent).toBeLessThan(byteLimit);
   });
 
+  it('rejects an aborted Responses stream even when underlying cancellation never settles', async () => {
+    const abortController = new AbortController();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const pending = readResponsesStream(
+      new Response(stream),
+      'test',
+      { debug: vi.fn() },
+      abortController.signal,
+    );
+
+    abortController.abort();
+    const settled = await Promise.race([
+      pending.then(
+        () => 'resolved',
+        () => 'rejected',
+      ),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 100)),
+    ]);
+
+    expect(cancelled).toBe(true);
+    expect(settled).toBe('rejected');
+  });
+
+  it('fails closed on a bounded flood of empty refusal deltas', async () => {
+    const event =
+      'event: response.refusal.delta\ndata: {"type":"response.refusal.delta","output_index":0,"content_index":0,"delta":""}\n\n';
+    const batch = new TextEncoder().encode(event.repeat(1024));
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent++ >= 1025) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(batch);
+      },
+    });
+
+    await expect(
+      readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+    ).rejects.toThrow(/exceeded.*(?:event|delta)/i);
+  });
+
   it.each([
     '\n',
     '\r\n',
@@ -651,7 +700,227 @@ describe('Responses stream regressions', () => {
     );
   });
 
+  it('merges a streamed citation into completed terminal text without restoring a draft', async () => {
+    const annotations = [
+      {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe citation',
+        start_index: 0,
+        end_index: 4,
+      },
+    ];
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          text: 'SECRET OR UNSAFE DRAFT',
+        },
+        {
+          type: 'response.output_text.annotation.added',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          annotation_index: 0,
+          annotation: annotations[0],
+        },
+        {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                id: 'm_1',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'SAFE FINAL TEXT' }],
+              },
+            ],
+          },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        id: 'm_1',
+        content: [
+          expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT', annotations }),
+        ],
+      }),
+    ]);
+    expect(processed.metadata?.annotations).toEqual(annotations);
+    expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+  });
+
   describe('native stream safety regressions', () => {
+    it.each([
+      {
+        name: 'created top-level function call',
+        eventType: 'response.created',
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_dangerous',
+            name: 'dangerous_action',
+            arguments: '{"path":"/tmp/secret"}',
+          },
+        ],
+      },
+      {
+        name: 'in-progress top-level function call',
+        eventType: 'response.in_progress',
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_dangerous',
+            name: 'dangerous_action',
+            arguments: '{"path":"/tmp/secret"}',
+          },
+        ],
+      },
+      {
+        name: 'created nested tool use',
+        eventType: 'response.created',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                call_id: 'call_dangerous',
+                name: 'dangerous_action',
+                arguments: '{"path":"/tmp/secret"}',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'in-progress nested tool use',
+        eventType: 'response.in_progress',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                call_id: 'call_dangerous',
+                name: 'dangerous_action',
+                arguments: '{"path":"/tmp/secret"}',
+              },
+            ],
+          },
+        ],
+      },
+    ])('never executes a $name snapshot tool at EOF', async ({ eventType, output }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([{ type: eventType, response: { status: 'in_progress', output } }]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
+    it('preserves empty finalized-argument semantics without executing a status-only tool', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'lookup' },
+          },
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: 0,
+            item_id: 'fc_1',
+            name: 'lookup',
+            arguments: '{}',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'fc_1',
+                  call_id: 'call_1',
+                  name: 'lookup',
+                  arguments: '{}',
+                  status: 'completed',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          type: 'function_call',
+          call_id: 'call_1',
+          arguments: '{}',
+          status: 'completed',
+        }),
+      ]);
+      expect(processed.output).toContain('no_arguments_provided');
+    });
+
+    it.each([
+      { name: 'code', error: { code: 'guardrail_checks_failed', message: 'BLOCKED DRAFT' } },
+      { name: 'type', error: { type: 'guardrail_checks_failed', message: 'BLOCKED DRAFT' } },
+    ])('scrubs a guardrail_checks_failed $name terminal draft as a refusal', async ({ error }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.failed',
+            response: {
+              status: 'failed',
+              error,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(JSON.stringify(parsed)).not.toContain('BLOCKED DRAFT');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
+    });
+
     it.each([
       { eventType: 'response.failed', response: { status: 'failed', error: null } },
       {

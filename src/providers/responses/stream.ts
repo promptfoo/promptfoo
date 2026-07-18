@@ -48,6 +48,7 @@ const MAX_STREAM_OUTPUT_CHARS = 16 * 1024 * 1024;
 const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
 const MAX_STREAM_FRAGMENT_BATCH = 1024;
+const MAX_STREAM_EVENT_COUNT = 1024 * 1024;
 const STREAM_READ_YIELD_INTERVAL = 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
@@ -194,9 +195,9 @@ function getTerminalOutputTexts(output: any[] | undefined): string[] {
 }
 
 function hasTerminalSafetyDecision(response: any): boolean {
-  const errorCode = response?.error?.code;
+  const errorCodes = [response?.error?.code, response?.error?.type];
   const safetyReason =
-    /^(?:content[_-]?filter|content[_-]?policy|safety|guardrail)(?:[_-](?:violation|blocked))?$/i;
+    /^(?:content[_-]?filter|content[_-]?policy|safety|guardrail)(?:[_-](?:violation|blocked|checks?[_-]?failed))?$/i;
   if (
     typeof response?.incomplete_details?.reason === 'string' &&
     safetyReason.test(response.incomplete_details.reason)
@@ -204,14 +205,17 @@ function hasTerminalSafetyDecision(response: any): boolean {
     return true;
   }
   if (
-    errorCode !== 'content_filter_error' &&
-    typeof errorCode === 'string' &&
-    safetyReason.test(errorCode)
+    errorCodes.some(
+      (errorCode) =>
+        errorCode !== 'content_filter_error' &&
+        typeof errorCode === 'string' &&
+        safetyReason.test(errorCode),
+    )
   ) {
     return true;
   }
   if (
-    errorCode !== 'content_filter_error' &&
+    !errorCodes.includes('content_filter_error') &&
     typeof response?.error?.message === 'string' &&
     /\b(?:blocked|refused|rejected|filtered|disallowed)\b/i.test(response.error.message) &&
     /(?:content[_ -]?(?:filter|policy)|safety|guardrail)/i.test(response.error.message)
@@ -539,6 +543,53 @@ function mergeFinalizedStreamOutput(
   return [...indexedOutput, ...appendedOutput];
 }
 
+function mergeCompletedOutputAnnotations(
+  output: any[],
+  finalizedItems: FinalizedStreamOutputItem[],
+): any[] {
+  return output.map((item, outputIndex) => {
+    if (item?.type !== 'message' || !Array.isArray(item.content)) {
+      return item;
+    }
+
+    const finalizedItem = finalizedItems.find(
+      ({ item: candidate, outputIndex: candidateIndex }) => {
+        if (candidate?.type !== 'message') {
+          return false;
+        }
+        if (typeof item.id === 'string' && typeof candidate.id === 'string') {
+          return item.id === candidate.id;
+        }
+        return candidateIndex === outputIndex;
+      },
+    )?.item;
+    if (!Array.isArray(finalizedItem?.content)) {
+      return item;
+    }
+
+    return {
+      ...item,
+      content: item.content.map((content: any, contentIndex: number) => {
+        const annotations = finalizedItem.content[contentIndex]?.annotations;
+        if (content?.type !== 'output_text' || !Array.isArray(annotations)) {
+          return content;
+        }
+        const existingAnnotations = Array.isArray(content.annotations) ? content.annotations : [];
+        const seen = new Set(
+          existingAnnotations.map((annotation: any) => JSON.stringify(annotation)),
+        );
+        return {
+          ...content,
+          annotations: [
+            ...existingAnnotations,
+            ...annotations.filter((annotation: any) => !seen.has(JSON.stringify(annotation))),
+          ],
+        };
+      }),
+    };
+  });
+}
+
 function recoverIncompleteOutput(
   output: any[] | undefined,
   outputTextByContent: Map<string, string>,
@@ -744,6 +795,7 @@ export async function readResponsesStream(
   const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
+  let streamEventCount = 0;
 
   const appendOutputText = (text: string): void => {
     if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length - finalizedOutputChars) {
@@ -978,6 +1030,11 @@ export async function readResponsesStream(
   };
 
   const processChunk = (chunk: string) => {
+    if (++streamEventCount > MAX_STREAM_EVENT_COUNT) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_EVENT_COUNT} events`,
+      );
+    }
     const event = parseSseEvent(chunk, providerName, logger);
     if (!event) {
       return;
@@ -1029,11 +1086,13 @@ export async function readResponsesStream(
       if (event.type === 'response.refusal.delta') {
         const previousItem = finalizedRefusalItems.get(key);
         const delta = event.delta ?? '';
-        const chunks = refusalDeltaChunks.get(key);
-        if (chunks) {
-          chunks.push(delta);
-        } else {
-          refusalDeltaChunks.set(key, [delta]);
+        if (delta.length > 0) {
+          const chunks = refusalDeltaChunks.get(key);
+          if (chunks) {
+            chunks.push(delta);
+          } else {
+            refusalDeltaChunks.set(key, [delta]);
+          }
         }
         if (previousItem) {
           finalizedRefusalItem = previousItem.item;
@@ -1197,6 +1256,7 @@ export async function readResponsesStream(
         ...(event.item_id ? { id: event.item_id } : {}),
         ...(event.name ? { name: event.name } : {}),
         arguments: event.arguments,
+        status: 'completed',
       };
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
@@ -1324,7 +1384,7 @@ export async function readResponsesStream(
       }
     }
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    void reader.cancel().catch(() => undefined);
     throw error;
   } finally {
     reader.releaseLock();
@@ -1379,12 +1439,19 @@ export async function readResponsesStream(
     useFinalizedItems ? Array.from(finalizedRefusalItems.values()) : [],
     useFinalizedItems,
   );
-  const finalizedStreamOutput = isPartialTerminalResponse
-    ? filterUnfinalizedTerminalToolCalls(
+  const outputWithCompletedAnnotations = isCompletedResponse
+    ? mergeCompletedOutputAnnotations(
         mergedStreamOutput,
         Array.from(finalizedNonMessageItems.values()),
       )
     : mergedStreamOutput;
+  const requiresFinalizedToolCalls = Boolean(latestResponse) && !isCompletedResponse;
+  const finalizedStreamOutput = requiresFinalizedToolCalls
+    ? filterUnfinalizedTerminalToolCalls(
+        outputWithCompletedAnnotations,
+        Array.from(finalizedNonMessageItems.values()),
+      )
+    : outputWithCompletedAnnotations;
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
@@ -1552,7 +1619,7 @@ export async function readResponsesStream(
     return boundedResponse({
       ...latestResponse,
       output: [
-        ...(Array.isArray(latestResponse.output) ? latestResponse.output : []),
+        ...finalizedStreamOutput,
         {
           type: 'message',
           role: 'assistant',
@@ -1564,7 +1631,7 @@ export async function readResponsesStream(
 
   if (latestResponse) {
     return boundedResponse(
-      finalizedNonMessageItems.size > 0 || isPartialTerminalResponse
+      finalizedNonMessageItems.size > 0 || isPartialTerminalResponse || requiresFinalizedToolCalls
         ? {
             ...latestResponse,
             output: finalizedStreamOutput.filter((item) => item !== undefined),
