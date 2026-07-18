@@ -50,6 +50,7 @@ type StreamedAnnotationItem = {
   outputIndex?: number;
   itemId?: string;
   content: Map<number, Map<number, RetainedStreamAnnotation>>;
+  nextAnnotationIndex: Map<number, number>;
 };
 
 const MAX_STREAM_OUTPUT_INDEX = 1024;
@@ -120,6 +121,10 @@ function getInvalidOutputTextKey(event: ResponsesStreamEvent): string {
     compactStreamIndex(event.output_index, 'missing'),
     compactStreamIndex(event.content_index, '0'),
   ]);
+}
+
+function getMessageOutputKey(outputIndex: unknown, itemId?: string): string {
+  return JSON.stringify([compactStreamIndex(outputIndex, 'missing'), 'message', itemId ?? '']);
 }
 
 function getValidOutputIndex(event: ResponsesStreamEvent): number | undefined {
@@ -1194,7 +1199,10 @@ export async function readResponsesStream(
           break;
         }
       }
-      const key = `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
+      const key =
+        item.type === 'message'
+          ? getMessageOutputKey(event.output_index, String(item.id ?? ''))
+          : `${compactStreamIndex(event.output_index, 'missing')}:${String(item.type ?? 'unknown')}:${String(item.id ?? item.call_id ?? '')}`;
       setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, item);
     }
     if (
@@ -1214,7 +1222,7 @@ export async function readResponsesStream(
         event.item_id.length <= MAX_STREAM_FUNCTION_METADATA_CHARS
           ? event.item_id
           : undefined;
-      const key = `${compactStreamIndex(event.output_index, 'missing')}:message:${itemId ?? ''}`;
+      const key = getMessageOutputKey(event.output_index, itemId);
       const contentIndex =
         typeof event.content_index === 'number' &&
         Number.isInteger(event.content_index) &&
@@ -1228,6 +1236,7 @@ export async function readResponsesStream(
           outputIndex,
           ...(itemId ? { itemId } : {}),
           content: new Map(),
+          nextAnnotationIndex: new Map(),
         };
         streamedAnnotations.set(key, streamedItem);
       }
@@ -1236,13 +1245,24 @@ export async function readResponsesStream(
         annotations = new Map();
         streamedItem.content.set(contentIndex, annotations);
       }
-      const annotationIndex =
+      const validAnnotationIndex =
         typeof event.annotation_index === 'number' &&
         Number.isInteger(event.annotation_index) &&
         event.annotation_index >= 0 &&
         event.annotation_index <= MAX_STREAM_ANNOTATION_COUNT
           ? event.annotation_index
-          : annotations.size;
+          : undefined;
+      const nextAnnotationIndex = streamedItem.nextAnnotationIndex.get(contentIndex) ?? 0;
+      const annotationIndex = validAnnotationIndex ?? nextAnnotationIndex;
+      if (annotationIndex > MAX_STREAM_ANNOTATION_COUNT) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_ANNOTATION_COUNT} annotation slots`,
+        );
+      }
+      streamedItem.nextAnnotationIndex.set(
+        contentIndex,
+        Math.max(nextAnnotationIndex, annotationIndex + 1),
+      );
       const serializedLength = JSON.stringify(event.annotation).length;
       const previousLength = annotations.get(annotationIndex)?.serializedLength ?? 0;
       const growth = serializedLength - previousLength;
@@ -1263,7 +1283,7 @@ export async function readResponsesStream(
       Object.keys(event.part).some((key) => key !== 'type' && key !== 'text')
     ) {
       const outputIndex = getValidOutputIndex(event);
-      const key = `${compactStreamIndex(event.output_index, 'missing')}:message:${event.item_id ?? ''}`;
+      const key = getMessageOutputKey(event.output_index, event.item_id);
       const existingItem = finalizedNonMessageItems.get(key)?.item;
       const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
       const contentIndex =

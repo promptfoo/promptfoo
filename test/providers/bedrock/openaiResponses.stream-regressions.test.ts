@@ -2180,6 +2180,165 @@ describe('Responses stream regressions', () => {
       expect(parsed.output?.[0]?.content?.[0]?.text).toBe('SAFE FINAL TEXT');
     });
 
+    it.each([
+      { name: 'normal append', indices: [0, 1, -1], values: [0, 1, 2] },
+      { name: 'sparse append', indices: [0, 2, -1], values: [0, 1, 2] },
+      { name: 'duplicate sparse append', indices: [0, 2, 2, -1], values: [0, 1, 1, 2] },
+    ])('preserves every citation for a $name annotation sequence', async ({ indices, values }) => {
+      const annotations = [
+        {
+          type: 'url_citation',
+          url: 'https://example.test/a',
+          title: 'A',
+          start_index: 0,
+          end_index: 1,
+        },
+        {
+          type: 'url_citation',
+          url: 'https://example.test/b',
+          title: 'B',
+          start_index: 2,
+          end_index: 3,
+        },
+        {
+          type: 'url_citation',
+          url: 'https://example.test/c',
+          title: 'C',
+          start_index: 4,
+          end_index: 5,
+        },
+      ];
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          ...indices.map((annotationIndex, eventIndex) => ({
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            annotation_index: annotationIndex,
+            annotation: annotations[values[eventIndex]],
+          })),
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            text: 'A B C',
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'A B C', annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual(annotations);
+      expect(processed.metadata?.annotations).toEqual(annotations);
+    });
+
+    it('keeps malformed colon-delimited annotation identities distinct', async () => {
+      const first = {
+        type: 'url_citation',
+        url: 'https://example.test/first',
+        title: 'First',
+        start_index: 0,
+        end_index: 1,
+      };
+      const second = {
+        type: 'url_citation',
+        url: 'https://example.test/second',
+        title: 'Second',
+        start_index: 0,
+        end_index: 1,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: '0:message:a',
+            content_index: 0,
+            item_id: 'b',
+            annotation_index: 0,
+            annotation: first,
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: '0',
+            content_index: 0,
+            item_id: 'a:message:b',
+            annotation_index: 0,
+            annotation: second,
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  id: 'b',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'FIRST' }],
+                },
+                {
+                  type: 'message',
+                  id: 'a:message:b',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECOND' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const byId = new Map<string, any>(parsed.output.map((item: any) => [item.id, item]));
+
+      expect(byId.get('b')?.content?.[0]?.annotations).toEqual([first]);
+      expect(byId.get('a:message:b')?.content?.[0]?.annotations).toEqual([second]);
+    });
+
+    it('rejects a malformed append when the bounded annotation suffix is exhausted', async () => {
+      await expect(
+        readResponsesStream(
+          createSseResponse([
+            {
+              type: 'response.output_text.annotation.added',
+              output_index: 0,
+              content_index: 0,
+              item_id: 'm_1',
+              annotation_index: 8192,
+              annotation: { type: 'url_citation', url: 'https://example.test/last' },
+            },
+            {
+              type: 'response.output_text.annotation.added',
+              output_index: 0,
+              content_index: 0,
+              item_id: 'm_1',
+              annotation_index: -1,
+              annotation: { type: 'url_citation', url: 'https://example.test/overflow' },
+            },
+          ]),
+          'test',
+          { debug: vi.fn() },
+        ),
+      ).rejects.toThrow(/exceeded.*annotation slots/i);
+    });
+
     it('fails closed on a bounded annotation-event flood', async () => {
       const events = Array.from({ length: 8193 }, (_unused, annotationIndex) => ({
         type: 'response.output_text.annotation.added',
