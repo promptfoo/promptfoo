@@ -190,16 +190,8 @@ function getSafeOutputRefusalItem(refusals: unknown[], item?: any): any {
 }
 
 function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
-  if (
-    event.type === 'response.refusal.delta' &&
-    typeof event.delta === 'string' &&
-    event.delta.length > 0
-  ) {
-    return {
-      type: 'message',
-      role: 'assistant',
-      content: [{ type: 'refusal', refusal: event.delta }],
-    };
+  if (event.type === 'response.refusal.delta' && event.delta !== '') {
+    return getSafeOutputRefusalItem([event.delta]);
   }
   if (event.type === 'response.refusal.done' && event.refusal !== '') {
     return getSafeOutputRefusalItem([event.refusal]);
@@ -1391,7 +1383,7 @@ export async function readResponsesStream(
           refusalItemIds.set(key, itemId);
         }
         const previousItem = finalizedRefusalItems.get(key);
-        const delta = event.delta ?? '';
+        const delta = typeof event.delta === 'string' ? event.delta : '';
         if (delta.length > 0) {
           const chunks = refusalDeltaChunks.get(key);
           if (chunks) {

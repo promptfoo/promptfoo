@@ -2665,6 +2665,63 @@ describe('Responses stream regressions', () => {
     });
 
     it.each([
+      {
+        name: 'object',
+        event: {
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm',
+          delta: { unsafe: 'SECRET REFUSAL', nested: { credential: 'leaked' } },
+        },
+      },
+      {
+        name: 'null',
+        event: {
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm',
+          delta: null,
+        },
+      },
+      {
+        name: 'missing',
+        event: {
+          type: 'response.refusal.delta',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm',
+        },
+      },
+    ])('fails closed on a malformed $name refusal delta at EOF without leaking draft text', async ({
+      event,
+    }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm',
+            text: 'SECRET DRAFT',
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(processed.output).toBe('');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('leaked');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('leaked');
+    });
+
+    it.each([
       { name: 'truncated function_call', nestedType: 'function_call', terminalType: undefined },
       { name: 'truncated tool_use', nestedType: 'tool_use', terminalType: undefined },
       {
