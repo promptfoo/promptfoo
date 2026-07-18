@@ -3519,6 +3519,198 @@ describe('Responses stream regressions', () => {
 
     it.each([
       {
+        name: 'incomplete with the same item ID at different finalized indices',
+        terminalType: 'response.incomplete',
+        mode: 'index',
+      },
+      {
+        name: 'in-progress with the same item ID at different finalized indices',
+        terminalType: 'response.in_progress',
+        mode: 'index',
+      },
+      {
+        name: 'failed with the same item ID at different finalized indices',
+        terminalType: 'response.failed',
+        mode: 'index',
+      },
+      {
+        name: 'cancelled with the same item ID at different finalized indices',
+        terminalType: 'response.cancelled',
+        mode: 'index',
+      },
+      {
+        name: 'completed with the same item ID at different finalized indices',
+        terminalType: 'response.completed',
+        mode: 'index',
+      },
+      {
+        name: 'incomplete with different item IDs at the same finalized index',
+        terminalType: 'response.incomplete',
+        mode: 'item-id',
+      },
+      {
+        name: 'in-progress with different item IDs at the same finalized index',
+        terminalType: 'response.in_progress',
+        mode: 'item-id',
+      },
+      {
+        name: 'failed with different item IDs at the same finalized index',
+        terminalType: 'response.failed',
+        mode: 'item-id',
+      },
+      {
+        name: 'cancelled with different item IDs at the same finalized index',
+        terminalType: 'response.cancelled',
+        mode: 'item-id',
+      },
+      {
+        name: 'completed with different item IDs at the same finalized index',
+        terminalType: 'response.completed',
+        mode: 'item-id',
+      },
+    ])('rejects a citation when finalized message snapshots contradict after $name', async ({
+      terminalType,
+      mode,
+    }) => {
+      const firstId = mode === 'index' ? 'm_final' : 'm_first';
+      const secondId = mode === 'index' ? 'm_final' : 'm_second';
+      const secondIndex = mode === 'index' ? 1 : 0;
+      const terminalItem = {
+        type: 'message',
+        id: firstId,
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: firstId,
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'FIRST FINAL', annotations: [] }],
+            },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: secondIndex,
+            item: {
+              type: 'message',
+              id: secondId,
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'SECOND FINAL', annotations: [] }],
+            },
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: secondIndex,
+            content_index: 0,
+            item_id: secondId,
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
+            },
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [terminalItem],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(
+        parsed.output?.filter((item: any) => item?.id === firstId).length ?? 0,
+      ).toBeLessThanOrEqual(1);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('SECOND FINAL');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECOND FINAL');
+    });
+
+    it.each([
+      'response.incomplete',
+      'response.in_progress',
+      'response.failed',
+      'response.cancelled',
+      'response.completed',
+    ])('preserves a citation when repeated finalized snapshots agree after %s', async (terminalType) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/repeated',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_consistent',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item },
+          { type: 'response.output_item.done', output_index: 0, item },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_consistent',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [item],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([
+        {
+          ...item,
+          content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [annotation] }],
+        },
+      ]);
+      expect(processed.output).toBe('CONSISTENT SAFE');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
         name: 'statusless incomplete after output_text.done',
         eventType: 'response.incomplete',
         finalizer: 'text',

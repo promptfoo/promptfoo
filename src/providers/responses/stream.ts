@@ -1523,8 +1523,18 @@ export async function readResponsesStream(
   const finalizedMessageIndexById = new Map<string, number>();
   const finalizedMessageIdByIndex = new Map<number, string>();
   const terminalMessageByIndex = new Map<number, any>();
-  for (const { item, outputIndex } of finalizedNonMessageItems.values()) {
+  for (const [key, { item, outputIndex, serializedLength }] of finalizedNonMessageItems) {
     if (item?.type !== 'message' || typeof item.id !== 'string' || outputIndex === undefined) {
+      continue;
+    }
+    const finalizedIndex = finalizedMessageIndexById.get(item.id);
+    const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
+    if (
+      (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
+      (finalizedId !== undefined && finalizedId !== item.id)
+    ) {
+      finalizedOutputChars -= serializedLength;
+      finalizedNonMessageItems.delete(key);
       continue;
     }
     finalizedMessageIndexById.set(item.id, outputIndex);
@@ -1754,10 +1764,18 @@ export async function readResponsesStream(
     for (const [key, text] of outputTextByContent) {
       const itemId = outputTextItemIds.get(key);
       const contentIndex = key.slice(key.indexOf(':') + 1);
+      const outputIndex = Number(key.slice(0, key.indexOf(':')));
+      const finalizedIndex = itemId ? finalizedMessageIndexById.get(itemId) : undefined;
+      const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
+      if (
+        (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
+        (itemId && finalizedId !== undefined && finalizedId !== itemId)
+      ) {
+        continue;
+      }
       const terminalIndex = itemId
         ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
         : -1;
-      const outputIndex = Number(key.slice(0, key.indexOf(':')));
       if (
         itemId &&
         terminalIndex < 0 &&
