@@ -325,7 +325,9 @@ function filterUnfinalizedTerminalToolCalls(
       item?.type === 'function_call' &&
       typeof item.name === 'string' &&
       item.name.length > 0 &&
-      (typeof item.id === 'string' || typeof item.call_id === 'string'),
+      typeof item.arguments === 'string' &&
+      typeof item.call_id === 'string' &&
+      item.call_id.length > 0,
   );
   return output
     .filter((item, outputIndex) => {
@@ -481,7 +483,10 @@ function mergeFinalizedStreamOutput(
       entries[existingIndex] = {
         ...entries[existingIndex],
         outputIndex: finalizedItem.outputIndex ?? entries[existingIndex].outputIndex,
-        item: { ...entries[existingIndex].item, ...finalizedItem.item },
+        item:
+          finalizedItem.item?.type === 'function_call'
+            ? finalizedItem.item
+            : { ...entries[existingIndex].item, ...finalizedItem.item },
       };
     }
   }

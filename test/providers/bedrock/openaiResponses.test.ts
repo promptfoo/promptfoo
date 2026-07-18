@@ -2211,7 +2211,7 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it('executes finalized function-call argument events instead of stale incomplete arguments', async () => {
+    it('does not execute finalized arguments that lack an independently observed call_id', async () => {
       const body = [
         'event: response.function_call_arguments.done',
         'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\\"path\\":\\"final\\"}"}',
@@ -2231,18 +2231,10 @@ describe('bedrock openaiResponses helper', () => {
       });
       await processor.processResponseOutput(result, {}, false);
 
-      expect(result.output[0]).toEqual(
-        expect.objectContaining({
-          type: 'function_call',
-          id: 'fc_1',
-          call_id: 'call_1',
-          arguments: '{"path":"final"}',
-        }),
+      expect(result.output).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
       );
-      expect(processCalls).toHaveBeenCalledWith(
-        expect.objectContaining({ arguments: '{"path":"final"}' }),
-        undefined,
-      );
+      expect(processCalls).not.toHaveBeenCalled();
     });
 
     it('preserves an added function-call call_id when finalized arguments arrive before truncation', async () => {

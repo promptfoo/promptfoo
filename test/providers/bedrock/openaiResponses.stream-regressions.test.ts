@@ -972,6 +972,131 @@ describe('Responses stream regressions', () => {
       );
     });
 
+    it.each([
+      {
+        name: 'arguments from an incomplete terminal snapshot',
+        event: {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'function_call',
+            id: 'safe_item',
+            call_id: 'safe_call',
+            name: 'lookup',
+          },
+        },
+        terminal: {
+          type: 'function_call',
+          id: 'safe_item',
+          call_id: 'safe_call',
+          name: 'lookup',
+          arguments: '{"path":"/tmp/secret"}',
+        },
+      },
+      {
+        name: 'call_id for finalized function-call arguments',
+        event: {
+          type: 'response.function_call_arguments.done',
+          output_index: 0,
+          item_id: 'safe_item',
+          name: 'lookup',
+          arguments: '{"q":"final"}',
+        },
+        terminal: {
+          type: 'function_call',
+          id: 'safe_item',
+          call_id: 'evil_call',
+          name: 'lookup',
+          arguments: '{"q":"draft"}',
+        },
+      },
+      {
+        name: 'call_id for a finalized output item',
+        event: {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'function_call',
+            id: 'safe_item',
+            name: 'lookup',
+            arguments: '{"q":"final"}',
+          },
+        },
+        terminal: {
+          type: 'function_call',
+          id: 'safe_item',
+          call_id: 'evil_call',
+          name: 'lookup',
+          arguments: '{"q":"draft"}',
+        },
+      },
+    ])('never borrows $name to execute a partial tool call', async ({ event, terminal }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: 'response.incomplete',
+            response: { status: 'incomplete', output: [terminal] },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(parsed.output).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
+      );
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(parsed)).not.toContain('evil_call');
+    });
+
+    it('executes a fully finalized tool without borrowing terminal fields', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'safe_item',
+              call_id: 'safe_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'safe_item',
+                  call_id: 'safe_call',
+                  name: 'lookup',
+                  arguments: '{"q":"draft"}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ call_id: 'safe_call', arguments: '{"q":"final"}' }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('draft');
+    });
+
     it('executes one independently finalized tool when argument item_id is missing', async () => {
       const processCalls = vi.fn().mockResolvedValue('executed');
       const parsed = await readResponsesStream(
