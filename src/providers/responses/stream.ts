@@ -281,7 +281,9 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
         ? {
             type: 'message',
             role: 'assistant',
-            content: [{ type: 'refusal', refusal: item.refusal }],
+            content: [
+              { type: 'refusal', refusal: typeof item.refusal === 'string' ? item.refusal : '' },
+            ],
           }
         : item?.type === 'message' && typeof item.refusal === 'string' && item.refusal.length > 0
           ? {

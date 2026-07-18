@@ -369,6 +369,87 @@ describe('Responses stream regressions', () => {
   });
 
   it.each([
+    {
+      name: 'malformed top-level refusal',
+      output: [
+        {
+          type: 'refusal',
+          refusal: {
+            unsafe: 'SECRET OR UNSAFE DRAFT',
+            nested: { credential: 'leaked' },
+          },
+        },
+      ],
+      expected: '',
+    },
+    {
+      name: 'malformed nested refusal',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'refusal',
+              refusal: {
+                unsafe: 'SECRET OR UNSAFE DRAFT',
+                nested: { credential: 'leaked' },
+              },
+            },
+          ],
+        },
+      ],
+      expected: '',
+    },
+    {
+      name: 'safe top-level refusal string',
+      output: [{ type: 'refusal', refusal: 'I cannot help with that.' }],
+      expected: 'I cannot help with that.',
+    },
+  ])('fails closed on a $name while preserving usage', async ({ output, expected }) => {
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.incomplete',
+          response: {
+            status: 'incomplete',
+            incomplete_details: { reason: 'content_filter' },
+            usage: {
+              input_tokens: 3,
+              output_tokens: 2,
+              total_tokens: 5,
+              raw_output: 'SECRET_USAGE',
+            },
+            output,
+          },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        content: [{ type: 'refusal', refusal: expected }],
+      }),
+    ]);
+    expect(parsed.usage).toEqual({ input_tokens: 3, output_tokens: 2, total_tokens: 5 });
+    expect(processed).toEqual(
+      expect.objectContaining({
+        output: expected,
+        isRefusal: true,
+        tokenUsage: { prompt: 3, completion: 2, total: 5, numRequests: 1 },
+      }),
+    );
+    expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    expect(JSON.stringify(parsed)).not.toContain('leaked');
+    expect(JSON.stringify(processed.raw)).not.toContain('leaked');
+  });
+
+  it.each([
     { name: 'missing', index: {} },
     { name: 'invalid', index: { output_index: 1_000_000_000 } },
   ])('reconciles finalized function-call events with a $name output index', async ({ index }) => {
