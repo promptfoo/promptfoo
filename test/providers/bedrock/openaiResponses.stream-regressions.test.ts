@@ -852,6 +852,124 @@ describe('Responses stream regressions', () => {
 
     it.each([
       {
+        name: 'filtered terminal message',
+        events: [
+          {
+            type: 'response.failed',
+            response: {
+              status: 'failed',
+              error: { code: 'content_filter', message: 'blocked by safety system' },
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'refusal',
+                      refusal: 'I cannot help with that.',
+                      raw_output: 'SECRET_REFUSAL_RAW',
+                      audio: 'SECRET_REFUSAL_AUDIO',
+                      transcript: 'SECRET REFUSAL TRANSCRIPT',
+                      output_text: 'SECRET REFUSAL TEXT',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        name: 'finalized content part',
+        events: [
+          {
+            type: 'response.content_part.done',
+            output_index: 0,
+            content_index: 0,
+            part: {
+              type: 'refusal',
+              refusal: 'I cannot help with that.',
+              raw_output: 'SECRET_REFUSAL_RAW',
+              audio: 'SECRET_REFUSAL_AUDIO',
+              transcript: 'SECRET REFUSAL TRANSCRIPT',
+              output_text: 'SECRET REFUSAL TEXT',
+            },
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ],
+      },
+      {
+        name: 'finalized output item',
+        events: [
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'refusal',
+                  refusal: 'I cannot help with that.',
+                  raw_output: 'SECRET_REFUSAL_RAW',
+                  audio: 'SECRET_REFUSAL_AUDIO',
+                  transcript: 'SECRET REFUSAL TRANSCRIPT',
+                  output_text: 'SECRET REFUSAL TEXT',
+                },
+              ],
+            },
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ],
+      },
+    ])('scrubs payload fields from a $name refusal part', async ({ events }) => {
+      const parsed = await readResponsesStream(createSseResponse(events), 'test', {
+        debug: vi.fn(),
+      });
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    });
+
+    it('keeps a finalized refusal authoritative over an incomplete terminal error', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.refusal.done',
+            output_index: 0,
+            content_index: 0,
+            refusal: 'I cannot help with that.',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              error: { code: 'transient', message: 'SECRET_ERROR_MESSAGE' },
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET ERROR DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(processed.output).toBe('I cannot help with that.');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    });
+
+    it.each([
+      {
         name: 'done/incomplete',
         terminalType: 'response.incomplete',
         status: 'incomplete',

@@ -264,12 +264,21 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
                 ...(typeof item.id === 'string' ? { id: item.id } : {}),
                 ...(typeof item.status === 'string' ? { status: item.status } : {}),
                 ...(typeof item.phase === 'string' ? { phase: item.phase } : {}),
-                content: item.content.filter(
-                  (content: any) =>
-                    content?.type !== 'tool_use' &&
-                    content?.type !== 'function_call' &&
-                    (!stripText || content?.type === 'refusal'),
-                ),
+                content: item.content
+                  .filter(
+                    (content: any) =>
+                      content?.type !== 'tool_use' &&
+                      content?.type !== 'function_call' &&
+                      (!stripText || content?.type === 'refusal'),
+                  )
+                  .map((content: any) =>
+                    content?.type === 'refusal'
+                      ? {
+                          type: 'refusal',
+                          refusal: typeof content.refusal === 'string' ? content.refusal : '',
+                        }
+                      : content,
+                  ),
               }
             : item,
     );
@@ -1399,6 +1408,7 @@ export async function readResponsesStream(
                 Array.from(finalizedRefusalItems.values(), ({ item }) => item),
               ),
             ],
+        true,
       ),
     );
   }
