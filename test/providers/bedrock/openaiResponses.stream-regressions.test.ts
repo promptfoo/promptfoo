@@ -2371,6 +2371,109 @@ describe('Responses stream regressions', () => {
   });
 
   describe('native stream fidelity and bound regressions', () => {
+    it('preserves a finalized audio-only message when a stream ends at EOF', async () => {
+      const item = {
+        type: 'message',
+        id: 'm_audio',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_audio', audio: 'QUJD', transcript: 'hello' }],
+      };
+
+      const parsed = await readResponsesStream(
+        createSseResponse([{ type: 'response.output_item.done', output_index: 0, item }]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([item]);
+    });
+
+    it.each([
+      'tool_use',
+      'function_call',
+    ])('preserves finalized audio-only content without reviving a draft or nested %s', async (nestedType) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const audio = { type: 'output_audio', audio: 'QUJD', transcript: 'hello' };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_audio',
+            delta: 'SECRET DRAFT',
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm_audio',
+              role: 'assistant',
+              status: 'completed',
+              content: [
+                audio,
+                { type: nestedType, name: 'dangerous_action', arguments: '{}', call_id: 'c_1' },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({ type: 'message', id: 'm_audio', content: [audio] }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET DRAFT');
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it('compacts malformed terminal slots while preserving indexed non-text output', async () => {
+      const item = {
+        type: 'message',
+        id: 'm_audio',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_audio', audio: 'QUJD', transcript: 'hello' }],
+      };
+
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 1, item },
+          { type: 'response.completed', response: { status: 'completed', output: [null, item] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([item]);
+    });
+
+    it('bounds malformed completed terminal slots before reconciling finalized items', async () => {
+      const finalized = Array.from({ length: 1_023 }, (_, output_index) => ({
+        type: 'response.output_item.done',
+        output_index,
+        item: { type: 'reasoning', id: `reason_${output_index}`, summary: [] },
+      }));
+
+      await expect(
+        readResponsesStream(
+          createSseResponse([
+            ...finalized,
+            {
+              type: 'response.completed',
+              response: { status: 'completed', output: Array(400_000).fill(null) },
+            },
+          ]),
+          'test',
+          { debug: vi.fn() },
+        ),
+      ).rejects.toThrow(/streaming response exceeded.*output/i);
+    });
+
     it('accepts 128,000 tiny output-text deltas without charging bounded SSE envelope overhead', async () => {
       const encoder = new TextEncoder();
       const delta =

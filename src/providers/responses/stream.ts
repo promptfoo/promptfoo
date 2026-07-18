@@ -687,7 +687,7 @@ function mergeFinalizedStreamOutput(
 ): any[] {
   const entries: FinalizedStreamOutputItem[] = (Array.isArray(output) ? output : [])
     .map((item, outputIndex) => ({ item, outputIndex }))
-    .filter(({ item }) => item !== undefined);
+    .filter(({ item }) => item !== undefined && item !== null);
 
   for (const finalizedItem of finalizedNonMessageItems) {
     const identities = [finalizedItem.item?.id, finalizedItem.item?.call_id].filter(
@@ -1042,6 +1042,11 @@ export async function readResponsesStream(
   };
 
   const boundedResponse = (value: any): any => {
+    if (Array.isArray(value?.output) && value.output.length > MAX_STREAM_OUTPUT_KEYS) {
+      throw new Error(
+        `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_KEYS} items of output`,
+      );
+    }
     if (
       Array.isArray(value?.output) &&
       JSON.stringify(value.output).length > MAX_STREAM_SERIALIZED_OUTPUT_CHARS
@@ -1420,12 +1425,27 @@ export async function readResponsesStream(
         (Array.isArray(event.item.content) &&
           event.item.content.some(
             (part) =>
-              part?.type === 'output_text' &&
-              Object.keys(part).some((key) => key !== 'type' && key !== 'text'),
+              part?.type === 'output_audio' ||
+              (part?.type === 'output_text' &&
+                Object.keys(part).some((key) => key !== 'type' && key !== 'text')),
           )))
     ) {
       const outputIndex = getValidOutputIndex(event);
       let item = event.item as any;
+      if (item.type === 'message' && outputIndex !== undefined) {
+        item.content.forEach((part: any, contentIndex: number) => {
+          if (part?.type !== 'output_audio' || contentIndex > MAX_STREAM_CONTENT_INDEX) {
+            return;
+          }
+          const textKey = `${outputIndex}:${contentIndex}`;
+          const textItemId = outputTextItemIds.get(textKey);
+          if (textItemId && typeof item.id === 'string' && textItemId !== item.id) {
+            return;
+          }
+          outputTextByContent.delete(textKey);
+          finalizedOutputTextKeys.add(textKey);
+        });
+      }
       if (item.type === 'function_call' && typeof item.call_id === 'string' && !item.id) {
         for (const [previousKey, previousItem] of finalizedNonMessageItems) {
           if (
@@ -1940,7 +1960,7 @@ export async function readResponsesStream(
   if (latestResponse && isCompletedResponse) {
     return boundedResponse(
       Array.isArray(latestResponse.output)
-        ? { ...latestResponse, output: finalizedStreamOutput }
+        ? { ...latestResponse, output: finalizedStreamOutput.filter((item) => item !== undefined) }
         : latestResponse,
     );
   }
