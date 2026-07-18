@@ -814,7 +814,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.output).toBe('full answer');
     });
 
-    it('recovers a streamed output item omitted from a completed terminal response', async () => {
+    it('keeps a completed terminal authoritative over an omitted streamed output item', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: [
           'event: response.output_text.delta',
@@ -853,7 +853,8 @@ describe('bedrock openaiResponses helper', () => {
       const result = await provider.callApi('hello');
 
       expect(result.error).toBeUndefined();
-      expect(result.output).toBe('FIRST\nSECOND');
+      expect(result.output).toBe('FIRST');
+      expect(JSON.stringify(result)).not.toContain('SECOND');
     });
 
     it('preserves finalized text when a completed response redacts an earlier streamed draft', async () => {

@@ -759,6 +759,138 @@ describe('Responses stream regressions', () => {
     expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
   });
 
+  it.each([
+    { name: 'repeated streamed citations', streamed: [0, 0], terminal: [], expected: [0] },
+    { name: 'distinct streamed citations', streamed: [0, 1], terminal: [], expected: [0, 1] },
+    { name: 'repeated terminal citations', streamed: [0], terminal: [0, 0], expected: [0] },
+  ])('deduplicates $name without dropping distinct citations', async ({
+    streamed,
+    terminal,
+    expected,
+  }) => {
+    const citations = [
+      {
+        type: 'url_citation',
+        url: 'https://example.test/one',
+        title: 'One',
+        start_index: 0,
+        end_index: 3,
+      },
+      {
+        type: 'url_citation',
+        url: 'https://example.test/two',
+        title: 'Two',
+        start_index: 4,
+        end_index: 7,
+      },
+    ];
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          text: 'SECRET OR UNSAFE DRAFT',
+        },
+        ...streamed.map((citationIndex, annotationIndex) => ({
+          type: 'response.output_text.annotation.added',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          annotation_index: annotationIndex,
+          annotation: citations[citationIndex],
+        })),
+        {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                id: 'm_1',
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: 'SAFE FINAL TEXT',
+                    annotations: terminal.map((citationIndex) => citations[citationIndex]),
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+    const expectedAnnotations = expected.map((citationIndex) => citations[citationIndex]);
+
+    expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual(expectedAnnotations);
+    expect(processed.metadata?.annotations).toEqual(expectedAnnotations);
+    expect(processed.raw?.annotations).toEqual(expectedAnnotations);
+    expect(parsed.output?.[0]?.content?.[0]?.text).toBe('SAFE FINAL TEXT');
+    expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+  });
+
+  it('never restores unmatched streamed citation text after a completed terminal snapshot', async () => {
+    const annotation = {
+      type: 'url_citation',
+      url: 'https://example.test/unmatched',
+      title: 'Unmatched',
+      start_index: 0,
+      end_index: 4,
+    };
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.output_text.done',
+          output_index: 3,
+          content_index: 0,
+          item_id: 'm_other',
+          text: 'SECRET OR UNSAFE DRAFT',
+        },
+        {
+          type: 'response.output_text.annotation.added',
+          output_index: 3,
+          content_index: 0,
+          item_id: 'm_other',
+          annotation_index: 0,
+          annotation,
+        },
+        {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                id: 'm_safe',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'SAFE FINAL TEXT' }],
+              },
+            ],
+          },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        id: 'm_safe',
+        content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
+      }),
+    ]);
+    expect(parsed.output?.[0]?.content?.[0]?.annotations).toBeUndefined();
+    expect(processed.metadata?.annotations).toBeUndefined();
+    expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+  });
+
   describe('native stream safety regressions', () => {
     it.each([
       {

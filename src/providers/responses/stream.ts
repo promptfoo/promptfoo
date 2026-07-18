@@ -575,15 +575,17 @@ function mergeCompletedOutputAnnotations(
           return content;
         }
         const existingAnnotations = Array.isArray(content.annotations) ? content.annotations : [];
-        const seen = new Set(
-          existingAnnotations.map((annotation: any) => JSON.stringify(annotation)),
-        );
+        const seen = new Set<string>();
         return {
           ...content,
-          annotations: [
-            ...existingAnnotations,
-            ...annotations.filter((annotation: any) => !seen.has(JSON.stringify(annotation))),
-          ],
+          annotations: [...existingAnnotations, ...annotations].filter((annotation: any) => {
+            const key = JSON.stringify(annotation);
+            if (seen.has(key)) {
+              return false;
+            }
+            seen.add(key);
+            return true;
+          }),
         };
       }),
     };
@@ -1491,12 +1493,12 @@ export async function readResponsesStream(
     );
   }
 
-  if (
-    latestResponse &&
-    isCompletedResponse &&
-    (!Array.isArray(latestResponse.output) || latestResponse.output.length === 0)
-  ) {
-    return boundedResponse(latestResponse);
+  if (latestResponse && isCompletedResponse) {
+    return boundedResponse(
+      Array.isArray(latestResponse.output)
+        ? { ...latestResponse, output: finalizedStreamOutput }
+        : latestResponse,
+    );
   }
 
   if (
