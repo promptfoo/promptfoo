@@ -551,19 +551,20 @@ function mergeFinalizedStreamOutput(
     const identities = [finalizedItem.item?.id, finalizedItem.item?.call_id].filter(
       (identity): identity is string => typeof identity === 'string',
     );
-    const existingIndex = entries.findIndex(({ item, outputIndex }) => {
-      if (
-        finalizedItem.outputIndex !== undefined &&
-        outputIndex === finalizedItem.outputIndex &&
-        item?.type === finalizedItem.item?.type
-      ) {
-        return true;
-      }
-      return (
+    const existingIdentityIndex = entries.findIndex(
+      ({ item }) =>
         item?.type === finalizedItem.item?.type &&
-        identities.some((identity) => item?.id === identity || item?.call_id === identity)
-      );
-    });
+        identities.some((identity) => item?.id === identity || item?.call_id === identity),
+    );
+    const existingIndex =
+      existingIdentityIndex >= 0
+        ? existingIdentityIndex
+        : entries.findIndex(
+            ({ item, outputIndex }) =>
+              finalizedItem.outputIndex !== undefined &&
+              outputIndex === finalizedItem.outputIndex &&
+              item?.type === finalizedItem.item?.type,
+          );
     if (existingIndex < 0 && preferFinalizedNonMessageItems) {
       entries.push(finalizedItem);
     } else if (preferFinalizedNonMessageItems) {
@@ -1541,6 +1542,14 @@ export async function readResponsesStream(
         continue;
       }
       terminalMessageByIndex.set(outputIndex, item);
+      const finalizedIndex = finalizedMessageIndexById.get(item.id);
+      const finalizedId = finalizedMessageIdByIndex.get(outputIndex);
+      if (
+        (finalizedIndex !== undefined && finalizedIndex !== outputIndex) ||
+        (finalizedId !== undefined && finalizedId !== item.id)
+      ) {
+        continue;
+      }
       finalizedMessageIndexById.set(item.id, outputIndex);
       finalizedMessageIdByIndex.set(outputIndex, item.id);
     }
