@@ -2066,4 +2066,521 @@ describe('Responses stream regressions', () => {
       );
     });
   });
+
+  describe('native stream fidelity and bound regressions', () => {
+    it('never executes a finalized function call explicitly marked incomplete', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'fc_incomplete',
+              call_id: 'call_incomplete',
+              name: 'dangerous_action',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'incomplete',
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
+
+    it.each([
+      { name: 'completed content-part snapshot', status: 'completed', snapshot: 'part' },
+      { name: 'incomplete content-part snapshot', status: 'incomplete', snapshot: 'part' },
+      { name: 'completed output-item snapshot', status: 'completed', snapshot: 'item' },
+      { name: 'incomplete output-item snapshot', status: 'incomplete', snapshot: 'item' },
+    ])('preserves indexed citations after a later $name', async ({ status, snapshot }) => {
+      const annotations = [
+        {
+          type: 'url_citation',
+          url: 'https://example.test/one',
+          title: 'One',
+          start_index: 0,
+          end_index: 3,
+        },
+        {
+          type: 'url_citation',
+          url: 'https://example.test/two',
+          title: 'Two',
+          start_index: 4,
+          end_index: 7,
+        },
+      ];
+      const laterSnapshot =
+        snapshot === 'part'
+          ? {
+              type: 'response.content_part.done',
+              output_index: 0,
+              content_index: 0,
+              item_id: 'm_1',
+              part: { type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] },
+            }
+          : {
+              type: 'response.output_item.done',
+              output_index: 0,
+              item: {
+                type: 'message',
+                id: 'm_1',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
+              },
+            };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            annotation_index: 1,
+            annotation: annotations[1],
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            annotation_index: 0,
+            annotation: annotations[0],
+          },
+          laterSnapshot,
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual(annotations);
+      expect(processed.metadata?.annotations).toEqual(annotations);
+      expect(parsed.output?.[0]?.content?.[0]?.text).toBe('SAFE FINAL TEXT');
+    });
+
+    it('fails closed on a bounded annotation-event flood', async () => {
+      const events = Array.from({ length: 8193 }, (_unused, annotationIndex) => ({
+        type: 'response.output_text.annotation.added',
+        output_index: 0,
+        content_index: 0,
+        item_id: 'm_1',
+        annotation_index: annotationIndex,
+        annotation: {
+          type: 'url_citation',
+          url: `https://example.test/${annotationIndex}`,
+          title: `Citation ${annotationIndex}`,
+          start_index: annotationIndex,
+          end_index: annotationIndex + 1,
+        },
+      }));
+
+      await expect(
+        readResponsesStream(createSseResponse(events), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/exceeded.*annotation/i);
+    }, 20_000);
+
+    it('does not retain oversized annotation item identifiers', async () => {
+      const oversizedItemId = 'x'.repeat(4097);
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: oversizedItemId,
+            annotation_index: 0,
+            annotation,
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(JSON.stringify(parsed)).not.toContain(oversizedItemId);
+      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual([annotation]);
+    });
+
+    it('accepts a valid nine-mebibyte output-text snapshot with empty annotations', async () => {
+      const text = 'A'.repeat(9 * 1024 * 1024);
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            text,
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm_1',
+              role: 'assistant',
+              content: [{ type: 'output_text', text, annotations: [] }],
+            },
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text, annotations: [] }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(9 * 1024 * 1024);
+    });
+
+    it('does not let an empty refusal delta replace a completed answer', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.refusal.delta',
+            output_index: 0,
+            content_index: 0,
+            delta: '',
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL ANSWER' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).not.toBe(true);
+      expect(processed.output).toBe('SAFE FINAL ANSWER');
+      expect(JSON.stringify(parsed)).not.toContain('refusal');
+    });
+
+    it('scrubs all finalized non-refusal drafts from refusal raw output and metadata', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/SECRET-CITATION',
+        title: 'SECRET CITATION',
+        start_index: 0,
+        end_index: 6,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.refusal.done', output_index: 2, content_index: 0, refusal: 'Blocked' },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'reasoning',
+              id: 'rs_1',
+              summary: [{ type: 'summary_text', text: 'SECRET REASONING DRAFT' }],
+            },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 1,
+            item: {
+              type: 'code_interpreter_call',
+              id: 'ci_1',
+              status: 'completed',
+              code: 'print("SECRET CODE DRAFT")',
+              outputs: [],
+            },
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 2,
+            content_index: 0,
+            item_id: 'm_1',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'reasoning',
+                  id: 'rs_1',
+                  summary: [{ type: 'summary_text', text: 'SECRET REASONING DRAFT' }],
+                },
+                {
+                  type: 'code_interpreter_call',
+                  id: 'ci_1',
+                  status: 'completed',
+                  code: 'print("SECRET CODE DRAFT")',
+                  outputs: [],
+                },
+                {
+                  type: 'message',
+                  id: 'm_1',
+                  role: 'assistant',
+                  content: [
+                    { type: 'output_text', text: 'SECRET TEXT DRAFT', annotations: [annotation] },
+                  ],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false, {
+        suppressReasoningOutput: true,
+      });
+
+      expect(processed.isRefusal).toBe(true);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.metadata)).not.toContain('SECRET');
+    });
+
+    it('keeps finalized message text and citations aligned after an unfinalized tool is removed', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SAFE FINAL TEXT',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  call_id: 'call_dangerous',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET TEXT DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          id: 'm_safe',
+          content: [
+            expect.objectContaining({
+              type: 'output_text',
+              text: 'SAFE FINAL TEXT',
+              annotations: [annotation],
+            }),
+          ],
+        }),
+      ]);
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
+
+    it('replaces a single shifted message draft after an unfinalized tool is removed', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SAFE FINAL TEXT',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  call_id: 'call_dangerous',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET TEXT DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          id: 'm_safe',
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
+        }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
+
+    it('replaces two shifted message drafts after an unfinalized tool is removed', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            item_id: 'm_first',
+            text: 'SAFE FIRST',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 2,
+            content_index: 0,
+            item_id: 'm_second',
+            text: 'SAFE SECOND',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  call_id: 'call_dangerous',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+                {
+                  type: 'message',
+                  id: 'm_first',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET FIRST DRAFT' }],
+                },
+                {
+                  type: 'message',
+                  id: 'm_second',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET SECOND DRAFT' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FIRST\nSAFE SECOND');
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          id: 'm_first',
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FIRST' })],
+        }),
+        expect.objectContaining({
+          id: 'm_second',
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE SECOND' })],
+        }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
+  });
 });

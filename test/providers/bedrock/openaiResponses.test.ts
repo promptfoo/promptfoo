@@ -1781,7 +1781,7 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
-    it('preserves preceding assistant messages when reconstructing an indexed refusal', async () => {
+    it('scrubs preceding assistant messages when reconstructing an indexed refusal', async () => {
       const body = [
         'event: response.output_item.done',
         'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE CONTEXT"}]}}',
@@ -1797,13 +1797,13 @@ describe('bedrock openaiResponses helper', () => {
       const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
 
       expect(result.output).toEqual([
-        expect.objectContaining({ content: [expect.objectContaining({ text: 'SAFE CONTEXT' })] }),
         expect.objectContaining({
           content: [
             expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
           ],
         }),
       ]);
+      expect(JSON.stringify(result.output)).not.toContain('SAFE CONTEXT');
     });
 
     it('preserves every indexed refusal when a stream ends before its terminal response', async () => {
@@ -1831,7 +1831,7 @@ describe('bedrock openaiResponses helper', () => {
       ]);
     });
 
-    it('preserves finalized assistant text when a refusal shares the same output message', async () => {
+    it('scrubs finalized assistant text when a refusal shares the same output message', async () => {
       const body = [
         'event: response.created',
         'data: {"type":"response.created","response":{"id":"resp_mixed_refusal","status":"in_progress","output":[]}}',
@@ -1856,11 +1856,11 @@ describe('bedrock openaiResponses helper', () => {
         expect.objectContaining({
           type: 'message',
           content: [
-            expect.objectContaining({ type: 'output_text', text: 'Safe context. ' }),
             expect.objectContaining({ type: 'refusal', refusal: 'Cannot provide secrets.' }),
           ],
         }),
       ]);
+      expect(JSON.stringify(result.output)).not.toContain('Safe context. ');
     });
 
     it('does not duplicate finalized refusal parts when the completed output item arrives', async () => {
@@ -2016,7 +2016,6 @@ describe('bedrock openaiResponses helper', () => {
       const processed = await processor.processResponseOutput(result, {}, false);
 
       expect(result.output).toEqual([
-        expect.objectContaining({ content: [] }),
         expect.objectContaining({ content: [expect.objectContaining({ type: 'refusal' })] }),
       ]);
       expect(processed.isRefusal).toBe(true);

@@ -41,6 +41,17 @@ type RetainedStreamOutputItem = FinalizedStreamOutputItem & {
   serializedLength: number;
 };
 
+type RetainedStreamAnnotation = {
+  annotation: any;
+  serializedLength: number;
+};
+
+type StreamedAnnotationItem = {
+  outputIndex?: number;
+  itemId?: string;
+  content: Map<number, Map<number, RetainedStreamAnnotation>>;
+};
+
 const MAX_STREAM_OUTPUT_INDEX = 1024;
 const MAX_STREAM_CONTENT_INDEX = 1024;
 const MAX_STREAM_OUTPUT_KEYS = 1024;
@@ -49,6 +60,7 @@ const MAX_STREAM_FUNCTION_METADATA_CHARS = 4096;
 const MAX_STREAM_INDEX_KEY_CHARS = 128;
 const MAX_STREAM_FRAGMENT_BATCH = 1024;
 const MAX_STREAM_EVENT_COUNT = 1024 * 1024;
+const MAX_STREAM_ANNOTATION_COUNT = 8192;
 const STREAM_READ_YIELD_INTERVAL = 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
@@ -141,7 +153,11 @@ function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEv
 }
 
 function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
-  if (event.type === 'response.refusal.delta' && typeof event.delta === 'string') {
+  if (
+    event.type === 'response.refusal.delta' &&
+    typeof event.delta === 'string' &&
+    event.delta.length > 0
+  ) {
     return {
       type: 'message',
       role: 'assistant',
@@ -288,6 +304,14 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
                   ),
               }
             : item,
+    )
+    .filter(
+      (item: any) =>
+        !stripText ||
+        item?.type !== 'message' ||
+        (typeof item.refusal === 'string' && item.refusal.length > 0) ||
+        (Array.isArray(item.content) &&
+          item.content.some((content: any) => content?.type === 'refusal')),
     );
 }
 
@@ -331,7 +355,8 @@ function filterUnfinalizedTerminalToolCalls(
       item.name.length > 0 &&
       typeof item.arguments === 'string' &&
       typeof item.call_id === 'string' &&
-      item.call_id.length > 0,
+      item.call_id.length > 0 &&
+      (item.status === undefined || item.status === 'completed'),
   );
   return output
     .filter((item, outputIndex) => {
@@ -360,6 +385,25 @@ function filterUnfinalizedTerminalToolCalls(
           }
         : item,
     );
+}
+
+function filterIncompleteFunctionCalls(output: any[]): any[] {
+  return output.filter(
+    (item) =>
+      item?.type !== 'function_call' || item.status === undefined || item.status === 'completed',
+  );
+}
+
+function dedupeAnnotations(annotations: any[]): any[] {
+  const seen = new Set<string>();
+  return annotations.filter((annotation: any) => {
+    const key = JSON.stringify(annotation);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function getSafeUsage(usage: any): Record<string, any> | undefined {
@@ -575,17 +619,9 @@ function mergeCompletedOutputAnnotations(
           return content;
         }
         const existingAnnotations = Array.isArray(content.annotations) ? content.annotations : [];
-        const seen = new Set<string>();
         return {
           ...content,
-          annotations: [...existingAnnotations, ...annotations].filter((annotation: any) => {
-            const key = JSON.stringify(annotation);
-            if (seen.has(key)) {
-              return false;
-            }
-            seen.add(key);
-            return true;
-          }),
+          annotations: dedupeAnnotations([...existingAnnotations, ...annotations]),
         };
       }),
     };
@@ -795,12 +831,15 @@ export async function readResponsesStream(
   const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
   const refusalDeltaChunks = new Map<string, string[]>();
   const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
+  const streamedAnnotations = new Map<string, StreamedAnnotationItem>();
   let sawFinalizedRefusal = false;
   let finalizedOutputChars = 0;
   let streamEventCount = 0;
+  let streamedAnnotationCount = 0;
+  let streamedAnnotationChars = 0;
 
   const appendOutputText = (text: string): void => {
-    if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length - finalizedOutputChars) {
+    if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
       );
@@ -834,7 +873,7 @@ export async function readResponsesStream(
     const serializedLength = knownSerializedLength ?? JSON.stringify(item).length;
     const previousLength = target.get(key)?.serializedLength ?? 0;
     const growth = serializedLength - previousLength;
-    if (growth > MAX_STREAM_OUTPUT_CHARS - outputText.length - finalizedOutputChars) {
+    if (growth > MAX_STREAM_OUTPUT_CHARS - finalizedOutputChars) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output`,
       );
@@ -1163,43 +1202,59 @@ export async function readResponsesStream(
       event.annotation &&
       typeof event.annotation === 'object'
     ) {
+      if (++streamedAnnotationCount > MAX_STREAM_ANNOTATION_COUNT) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_ANNOTATION_COUNT} annotations`,
+        );
+      }
+
       const outputIndex = getValidOutputIndex(event);
-      const key = `${compactStreamIndex(event.output_index, 'missing')}:message:${event.item_id ?? ''}`;
-      const existingItem = finalizedNonMessageItems.get(key)?.item;
-      const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
+      const itemId =
+        typeof event.item_id === 'string' &&
+        event.item_id.length <= MAX_STREAM_FUNCTION_METADATA_CHARS
+          ? event.item_id
+          : undefined;
+      const key = `${compactStreamIndex(event.output_index, 'missing')}:message:${itemId ?? ''}`;
       const contentIndex =
         typeof event.content_index === 'number' &&
         Number.isInteger(event.content_index) &&
         event.content_index >= 0 &&
         event.content_index <= MAX_STREAM_CONTENT_INDEX
           ? event.content_index
-          : content.length;
-      while (content.length <= contentIndex) {
-        content.push({ type: 'output_text', text: '' });
+          : 0;
+      let streamedItem = streamedAnnotations.get(key);
+      if (!streamedItem) {
+        streamedItem = {
+          outputIndex,
+          ...(itemId ? { itemId } : {}),
+          content: new Map(),
+        };
+        streamedAnnotations.set(key, streamedItem);
       }
-      const existingContent = content[contentIndex];
-      const annotations = Array.isArray(existingContent?.annotations)
-        ? [...existingContent.annotations]
-        : [];
+      let annotations = streamedItem.content.get(contentIndex);
+      if (!annotations) {
+        annotations = new Map();
+        streamedItem.content.set(contentIndex, annotations);
+      }
       const annotationIndex =
         typeof event.annotation_index === 'number' &&
         Number.isInteger(event.annotation_index) &&
         event.annotation_index >= 0 &&
-        event.annotation_index <= annotations.length
+        event.annotation_index <= MAX_STREAM_ANNOTATION_COUNT
           ? event.annotation_index
-          : annotations.length;
-      annotations[annotationIndex] = event.annotation;
-      content[contentIndex] = {
-        ...existingContent,
-        type: 'output_text',
-        annotations,
-      };
-      setFinalizedOutputItem(finalizedNonMessageItems, key, outputIndex, {
-        ...existingItem,
-        type: 'message',
-        role: 'assistant',
-        ...(event.item_id ? { id: event.item_id } : {}),
-        content,
+          : annotations.size;
+      const serializedLength = JSON.stringify(event.annotation).length;
+      const previousLength = annotations.get(annotationIndex)?.serializedLength ?? 0;
+      const growth = serializedLength - previousLength;
+      if (growth > MAX_STREAM_OUTPUT_CHARS - streamedAnnotationChars) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of annotations`,
+        );
+      }
+      streamedAnnotationChars += growth;
+      annotations.set(annotationIndex, {
+        annotation: event.annotation,
+        serializedLength,
       });
     }
     if (
@@ -1401,6 +1456,35 @@ export async function readResponsesStream(
     }
   }
 
+  for (const [key, streamedItem] of streamedAnnotations) {
+    const existingItem = finalizedNonMessageItems.get(key)?.item;
+    const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
+    for (const [contentIndex, annotations] of streamedItem.content) {
+      while (content.length <= contentIndex) {
+        content.push({ type: 'output_text', text: '' });
+      }
+      const existingContent = content[contentIndex];
+      const existingAnnotations = Array.isArray(existingContent?.annotations)
+        ? existingContent.annotations
+        : [];
+      const indexedAnnotations = Array.from(annotations)
+        .sort(([left], [right]) => left - right)
+        .map(([, retained]) => retained.annotation);
+      content[contentIndex] = {
+        ...existingContent,
+        type: 'output_text',
+        annotations: dedupeAnnotations([...existingAnnotations, ...indexedAnnotations]),
+      };
+    }
+    setFinalizedOutputItem(finalizedNonMessageItems, key, streamedItem.outputIndex, {
+      ...existingItem,
+      type: 'message',
+      role: 'assistant',
+      ...(streamedItem.itemId ? { id: streamedItem.itemId } : {}),
+      content,
+    });
+  }
+
   const isCompletedResponse =
     latestResponseEventType === 'response.completed' || latestResponse?.status === 'completed';
   const isPartialTerminalResponse =
@@ -1448,12 +1532,14 @@ export async function readResponsesStream(
       )
     : mergedStreamOutput;
   const requiresFinalizedToolCalls = Boolean(latestResponse) && !isCompletedResponse;
-  const finalizedStreamOutput = requiresFinalizedToolCalls
-    ? filterUnfinalizedTerminalToolCalls(
-        outputWithCompletedAnnotations,
-        Array.from(finalizedNonMessageItems.values()),
-      )
-    : outputWithCompletedAnnotations;
+  const finalizedStreamOutput = filterIncompleteFunctionCalls(
+    requiresFinalizedToolCalls
+      ? filterUnfinalizedTerminalToolCalls(
+          outputWithCompletedAnnotations,
+          Array.from(finalizedNonMessageItems.values()),
+        )
+      : outputWithCompletedAnnotations,
+  );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
@@ -1476,6 +1562,7 @@ export async function readResponsesStream(
     const terminalHadExecutableCalls = hasExecutableToolCalls(latestResponse?.output);
     const safeOutput = filterExecutableToolCalls(
       useFinalizedItems ? finalizedStreamOutput : latestResponse?.output,
+      true,
     );
     return boundedResponse(
       getSafeRefusalResponse(
@@ -1486,6 +1573,7 @@ export async function readResponsesStream(
               ...safeOutput,
               ...filterExecutableToolCalls(
                 Array.from(finalizedRefusalItems.values(), ({ item }) => item),
+                true,
               ),
             ],
         true,
@@ -1539,10 +1627,9 @@ export async function readResponsesStream(
     for (const [key, text] of outputTextByContent) {
       const itemId = outputTextItemIds.get(key);
       const contentIndex = key.slice(key.indexOf(':') + 1);
-      const terminalIndex =
-        isCompletedResponse && itemId
-          ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
-          : -1;
+      const terminalIndex = itemId
+        ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
+        : -1;
       const alignedKey = terminalIndex >= 0 ? `${terminalIndex}:${contentIndex}` : key;
       alignedOutputTextByContent.set(alignedKey, text);
       if (finalizedOutputTextKeys.has(key)) {
@@ -1677,7 +1764,7 @@ export async function readResponsesStream(
     });
   }
 
-  if (finalizedStreamOutput.length > 0) {
+  if (finalizedStreamOutput.length > 0 || finalizedNonMessageItems.size > 0) {
     return boundedResponse({
       output: finalizedStreamOutput.filter((item) => item !== undefined),
     });
