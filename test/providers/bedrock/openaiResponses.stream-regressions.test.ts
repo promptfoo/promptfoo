@@ -2605,6 +2605,66 @@ describe('Responses stream regressions', () => {
     });
 
     it.each([
+      {
+        name: 'content-part refusal finalizer',
+        events: [
+          {
+            type: 'response.content_part.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm',
+            part: {
+              type: 'refusal',
+              refusal: { unsafe: 'SECRET REFUSAL', nested: { credential: 'leaked' } },
+            },
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm',
+            text: 'SECRET DRAFT',
+          },
+        ],
+      },
+      {
+        name: 'output-item refusal finalizer',
+        events: [
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm',
+              role: 'assistant',
+              content: [
+                { type: 'output_text', text: 'SECRET DRAFT' },
+                {
+                  type: 'refusal',
+                  refusal: { unsafe: 'SECRET REFUSAL', nested: { credential: 'leaked' } },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ])('fails closed on a malformed $name at EOF without leaking draft text', async ({
+      events,
+    }) => {
+      const parsed = await readResponsesStream(createSseResponse(events), 'test', {
+        debug: vi.fn(),
+      });
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(processed.isRefusal).toBe(true);
+      expect(processed.output).toBe('');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('leaked');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('leaked');
+    });
+
+    it.each([
       { name: 'truncated function_call', nestedType: 'function_call', terminalType: undefined },
       { name: 'truncated tool_use', nestedType: 'tool_use', terminalType: undefined },
       {

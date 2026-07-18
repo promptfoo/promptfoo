@@ -172,6 +172,23 @@ function getOutputTextDoneEvents(event: ResponsesStreamEvent): ResponsesStreamEv
   return [];
 }
 
+function getSafeOutputRefusalItem(refusals: unknown[], item?: any): any {
+  return {
+    type: 'message',
+    role: typeof item?.role === 'string' ? item.role : 'assistant',
+    ...(typeof item?.id === 'string' ? { id: item.id } : {}),
+    ...(typeof item?.status === 'string' ? { status: item.status } : {}),
+    ...(typeof item?.phase === 'string' ? { phase: item.phase } : {}),
+    ...(typeof item?.refusal === 'string' && item.refusal.length > 0
+      ? { refusal: item.refusal }
+      : {}),
+    content: refusals.map((refusal) => ({
+      type: 'refusal',
+      refusal: typeof refusal === 'string' ? refusal : '',
+    })),
+  };
+}
+
 function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
   if (
     event.type === 'response.refusal.delta' &&
@@ -184,48 +201,37 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
       content: [{ type: 'refusal', refusal: event.delta }],
     };
   }
-  if (
-    event.type === 'response.refusal.done' &&
-    typeof event.refusal === 'string' &&
-    event.refusal.length > 0
-  ) {
-    return {
-      type: 'message',
-      role: 'assistant',
-      content: [{ type: 'refusal', refusal: event.refusal }],
-    };
+  if (event.type === 'response.refusal.done' && event.refusal !== '') {
+    return getSafeOutputRefusalItem([event.refusal]);
   }
   if (
     event.type === 'response.content_part.done' &&
     event.part?.type === 'refusal' &&
-    typeof event.part.refusal === 'string' &&
-    event.part.refusal.length > 0
+    event.part.refusal !== ''
   ) {
-    return { type: 'message', role: 'assistant', content: [event.part] };
+    return getSafeOutputRefusalItem([event.part.refusal]);
   }
-  if (
-    event.type === 'response.output_item.done' &&
-    ((event.item?.type === 'refusal' &&
-      typeof event.item.refusal === 'string' &&
-      event.item.refusal.length > 0) ||
-      (event.item?.type === 'message' &&
-        typeof event.item.refusal === 'string' &&
-        event.item.refusal.length > 0) ||
-      (Array.isArray(event.item?.content) &&
-        event.item.content.some(
-          (part) =>
-            part?.type === 'refusal' && typeof part.refusal === 'string' && part.refusal.length > 0,
-        )))
-  ) {
-    return event.item?.type === 'refusal'
-      ? {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'refusal', refusal: event.item.refusal }],
-        }
-      : event.item;
+  if (event.type !== 'response.output_item.done') {
+    return undefined;
   }
-  return undefined;
+
+  if (event.item?.type === 'refusal' && event.item.refusal !== '') {
+    return getSafeOutputRefusalItem([event.item.refusal]);
+  }
+
+  const refusals = [
+    ...(event.item?.type === 'message' &&
+    event.item.refusal !== undefined &&
+    event.item.refusal !== ''
+      ? [event.item.refusal]
+      : []),
+    ...(Array.isArray(event.item?.content)
+      ? event.item.content
+          .filter((part) => part?.type === 'refusal' && part.refusal !== '')
+          .map((part) => part.refusal)
+      : []),
+  ];
+  return refusals.length > 0 ? getSafeOutputRefusalItem(refusals, event.item) : undefined;
 }
 
 function getRetainedStreamPayloadBytes(
