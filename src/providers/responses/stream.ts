@@ -38,6 +38,7 @@ type ResponsesStreamLogger = {
 type FinalizedStreamOutputItem = {
   outputIndex?: number;
   item: any;
+  finalizedEventCount?: number;
 };
 
 type RetainedStreamOutputItem = FinalizedStreamOutputItem & {
@@ -516,12 +517,16 @@ function filterUnfinalizedTerminalToolCalls(
   output: any[],
   finalizedItems: FinalizedStreamOutputItem[],
   terminalOutput: any[] | undefined,
-  requireTerminalIdentity: boolean,
+  terminalEventCount: number | undefined,
+  alwaysRequireTerminalIdentity: boolean,
 ): any[] {
   const finalizedToolCalls = finalizedItems.filter(
-    ({ item }) =>
+    ({ item, finalizedEventCount }) =>
       isExecutableFunctionCall(item) &&
-      (!requireTerminalIdentity ||
+      ((!alwaysRequireTerminalIdentity &&
+        terminalEventCount !== undefined &&
+        finalizedEventCount !== undefined &&
+        finalizedEventCount > terminalEventCount) ||
         terminalOutput?.some((terminalItem) => {
           if (terminalItem?.type !== 'function_call') {
             return false;
@@ -1039,6 +1044,7 @@ export async function readResponsesStream(
   let eventsSinceYield = 0;
   let latestResponse: any;
   let latestResponseEventType: string | undefined;
+  let latestResponseEventCount: number | undefined;
   let outputText = '';
   const outputTextByContent = new Map<string, string>();
   const outputTextItemIds = new Map<string, string>();
@@ -1113,7 +1119,7 @@ export async function readResponsesStream(
     }
 
     finalizedOutputChars += growth;
-    target.set(key, { outputIndex, item, serializedLength });
+    target.set(key, { outputIndex, item, serializedLength, finalizedEventCount: streamEventCount });
   };
 
   const hasStreamOutputCapacity = (existing: boolean, reserveForRefusal = true): boolean =>
@@ -1402,10 +1408,12 @@ export async function readResponsesStream(
     if (event.response && typeof event.response === 'object') {
       latestResponse = boundedResponse(event.response);
       latestResponseEventType = event.type;
+      latestResponseEventCount = streamEventCount;
       onResponse?.(latestResponse);
     } else if (Array.isArray(event.output)) {
       latestResponse = boundedResponse(event);
       latestResponseEventType = event.type;
+      latestResponseEventCount = streamEventCount;
     }
 
     let finalizedRefusalItem = getOutputRefusalItem(event);
@@ -1974,6 +1982,7 @@ export async function readResponsesStream(
           outputWithCompletedAnnotations,
           Array.from(finalizedNonMessageItems.values()),
           latestResponse?.output,
+          latestResponseEventCount,
           isPartialTerminalResponse,
         )
       : outputWithCompletedAnnotations,

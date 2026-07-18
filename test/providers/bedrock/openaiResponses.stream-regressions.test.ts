@@ -2488,6 +2488,299 @@ describe('Responses stream regressions', () => {
       expect(processed.output).toBe('CALLED');
     });
 
+    it.each([
+      { name: 'discarded output', output: [] },
+      {
+        name: 'replacement message',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Action was not approved.' }],
+          },
+        ],
+      },
+      {
+        name: 'different in-progress tool',
+        output: [
+          {
+            type: 'function_call',
+            id: 'other_item',
+            call_id: 'other_call',
+            name: 'lookup',
+            arguments: '{"q":',
+            status: 'in_progress',
+          },
+        ],
+      },
+    ])('never resurrects a finalized tool after an in-progress EOF snapshot $name', async ({
+      output,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
+            },
+          },
+          { type: 'response.in_progress', response: { status: 'in_progress', output } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(processed)).not.toContain('CALLED');
+    });
+
+    it('executes a finalized tool explicitly retained by an in-progress EOF identity', async () => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'lookup_item',
+              call_id: 'lookup_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+              status: 'completed',
+            },
+          },
+          {
+            type: 'response.in_progress',
+            response: {
+              status: 'in_progress',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'lookup_item',
+                  call_id: 'lookup_call',
+                  name: 'lookup',
+                  arguments: '{"q":',
+                  status: 'in_progress',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ call_id: 'lookup_call', arguments: '{"q":"final"}' }),
+        undefined,
+      );
+      expect(processed.output).toBe('CALLED');
+    });
+
+    it('executes a finalized tool when a stream reaches EOF without a response snapshot', async () => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'lookup_item',
+              call_id: 'lookup_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+              status: 'completed',
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ call_id: 'lookup_call', arguments: '{"q":"final"}' }),
+        undefined,
+      );
+      expect(processed.output).toBe('CALLED');
+    });
+
+    it.each([
+      {
+        name: 'created',
+        event: { type: 'response.created', response: { status: 'queued', output: [] } },
+      },
+      {
+        name: 'queued',
+        event: { type: 'response.queued', response: { status: 'queued', output: [] } },
+      },
+      {
+        name: 'unknown response status',
+        event: { type: 'response.unknown', response: { status: 'unknown', output: [] } },
+      },
+      { name: 'unknown top-level output', event: { type: 'response.unknown', output: [] } },
+    ])('never resurrects a finalized tool after a $name EOF snapshot discards output', async ({
+      event,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
+            },
+          },
+          event,
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(processed)).not.toContain('CALLED');
+    });
+
+    it.each([
+      {
+        name: 'created',
+        event: { type: 'response.created', response: { status: 'queued', output: [] } },
+      },
+      {
+        name: 'queued',
+        event: { type: 'response.queued', response: { status: 'queued', output: [] } },
+      },
+      {
+        name: 'in-progress',
+        event: { type: 'response.in_progress', response: { status: 'in_progress', output: [] } },
+      },
+    ])('executes a tool finalized after an earlier $name snapshot', async ({ event }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'lookup_item',
+              call_id: 'lookup_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+              status: 'completed',
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ call_id: 'lookup_call', arguments: '{"q":"final"}' }),
+        undefined,
+      );
+      expect(processed.output).toBe('CALLED');
+    });
+
+    it('keeps only the tool finalized after a noncompleted snapshot discards an earlier tool', async () => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
+            },
+          },
+          {
+            type: 'response.in_progress',
+            response: { status: 'in_progress', output: [] },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 1,
+            item: {
+              type: 'function_call',
+              id: 'lookup_item',
+              call_id: 'lookup_call',
+              name: 'lookup',
+              arguments: '{"q":"final"}',
+              status: 'completed',
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenCalledWith(
+        expect.objectContaining({ call_id: 'lookup_call', arguments: '{"q":"final"}' }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(processed.output).toBe('CALLED');
+    });
+
     it('stays abort-responsive while processing a single legal SSE body chunk', async () => {
       const event =
         'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"x"}\n\n';
