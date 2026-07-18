@@ -1519,7 +1519,27 @@ export async function readResponsesStream(
     }
   }
 
+  const finalizedMessageIndexById = new Map<string, number>();
+  const finalizedMessageIdByIndex = new Map<number, string>();
+  for (const { item, outputIndex } of finalizedNonMessageItems.values()) {
+    if (item?.type !== 'message' || typeof item.id !== 'string' || outputIndex === undefined) {
+      continue;
+    }
+    finalizedMessageIndexById.set(item.id, outputIndex);
+    finalizedMessageIdByIndex.set(outputIndex, item.id);
+  }
+
   for (const [key, streamedItem] of streamedAnnotations) {
+    if (streamedItem.itemId && streamedItem.outputIndex !== undefined) {
+      const finalizedIndex = finalizedMessageIndexById.get(streamedItem.itemId);
+      const finalizedId = finalizedMessageIdByIndex.get(streamedItem.outputIndex);
+      if (
+        (finalizedIndex !== undefined && finalizedIndex !== streamedItem.outputIndex) ||
+        (finalizedId !== undefined && finalizedId !== streamedItem.itemId)
+      ) {
+        continue;
+      }
+    }
     const existingItem = finalizedNonMessageItems.get(key)?.item;
     const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
     for (const [contentIndex, annotations] of streamedItem.content) {
@@ -1707,6 +1727,14 @@ export async function readResponsesStream(
       const terminalIndex = itemId
         ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
         : -1;
+      const outputIndex = Number(key.slice(0, key.indexOf(':')));
+      if (
+        itemId &&
+        terminalIndex < 0 &&
+        typeof finalizedStreamOutput[outputIndex]?.id === 'string'
+      ) {
+        continue;
+      }
       const alignedKey = terminalIndex >= 0 ? `${terminalIndex}:${contentIndex}` : key;
       alignedOutputTextByContent.set(alignedKey, text);
       if (finalizedOutputTextKeys.has(key)) {
