@@ -3153,6 +3153,181 @@ describe('Responses stream regressions', () => {
 
     it.each([
       {
+        name: 'incomplete with a different item ID',
+        terminalType: 'response.incomplete',
+        annotationOutputIndex: 0,
+        annotationItemId: 'm_secret',
+      },
+      {
+        name: 'in-progress with a different item ID',
+        terminalType: 'response.in_progress',
+        annotationOutputIndex: 0,
+        annotationItemId: 'm_secret',
+      },
+      {
+        name: 'failed with a different item ID',
+        terminalType: 'response.failed',
+        annotationOutputIndex: 0,
+        annotationItemId: 'm_secret',
+      },
+      {
+        name: 'cancelled with a different item ID',
+        terminalType: 'response.cancelled',
+        annotationOutputIndex: 0,
+        annotationItemId: 'm_secret',
+      },
+      {
+        name: 'completed with a different item ID',
+        terminalType: 'response.completed',
+        annotationOutputIndex: 0,
+        annotationItemId: 'm_secret',
+      },
+      {
+        name: 'incomplete with a different output index',
+        terminalType: 'response.incomplete',
+        annotationOutputIndex: 1,
+        annotationItemId: 'm_safe',
+      },
+      {
+        name: 'in-progress with a different output index',
+        terminalType: 'response.in_progress',
+        annotationOutputIndex: 1,
+        annotationItemId: 'm_safe',
+      },
+      {
+        name: 'failed with a different output index',
+        terminalType: 'response.failed',
+        annotationOutputIndex: 1,
+        annotationItemId: 'm_safe',
+      },
+      {
+        name: 'cancelled with a different output index',
+        terminalType: 'response.cancelled',
+        annotationOutputIndex: 1,
+        annotationItemId: 'm_safe',
+      },
+      {
+        name: 'completed with a different output index',
+        terminalType: 'response.completed',
+        annotationOutputIndex: 1,
+        annotationItemId: 'm_safe',
+      },
+    ])('never attaches a conflicting citation to a terminal-only message after $name', async ({
+      terminalType,
+      annotationOutputIndex,
+      annotationItemId,
+    }) => {
+      const item = {
+        type: 'message',
+        id: 'm_safe',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: annotationOutputIndex,
+            content_index: 0,
+            item_id: annotationItemId,
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
+            },
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [item],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([item]);
+      expect(processed.output).toBe('SAFE TERMINAL TEXT');
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    });
+
+    it.each([
+      'response.incomplete',
+      'response.in_progress',
+      'response.failed',
+      'response.cancelled',
+      'response.completed',
+    ])('preserves a matching citation and terminal-only text after %s', async (terminalType) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_safe',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation,
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [item],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([
+        {
+          ...item,
+          content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT', annotations: [annotation] }],
+        },
+      ]);
+      expect(processed.output).toBe('SAFE TERMINAL TEXT');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
         name: 'statusless incomplete after output_text.done',
         eventType: 'response.incomplete',
         finalizer: 'text',

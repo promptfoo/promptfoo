@@ -1521,12 +1521,29 @@ export async function readResponsesStream(
 
   const finalizedMessageIndexById = new Map<string, number>();
   const finalizedMessageIdByIndex = new Map<number, string>();
+  const terminalMessageByIndex = new Map<number, any>();
   for (const { item, outputIndex } of finalizedNonMessageItems.values()) {
     if (item?.type !== 'message' || typeof item.id !== 'string' || outputIndex === undefined) {
       continue;
     }
     finalizedMessageIndexById.set(item.id, outputIndex);
     finalizedMessageIdByIndex.set(outputIndex, item.id);
+  }
+  if (Array.isArray(latestResponse?.output)) {
+    for (const [outputIndex, item] of latestResponse.output.entries()) {
+      if (
+        outputIndex > MAX_STREAM_OUTPUT_INDEX ||
+        terminalMessageByIndex.size >= MAX_STREAM_OUTPUT_KEYS
+      ) {
+        break;
+      }
+      if (item?.type !== 'message' || typeof item.id !== 'string') {
+        continue;
+      }
+      terminalMessageByIndex.set(outputIndex, item);
+      finalizedMessageIndexById.set(item.id, outputIndex);
+      finalizedMessageIdByIndex.set(outputIndex, item.id);
+    }
   }
 
   for (const [key, streamedItem] of streamedAnnotations) {
@@ -1540,7 +1557,11 @@ export async function readResponsesStream(
         continue;
       }
     }
-    const existingItem = finalizedNonMessageItems.get(key)?.item;
+    const existingItem =
+      finalizedNonMessageItems.get(key)?.item ??
+      (streamedItem.outputIndex === undefined
+        ? undefined
+        : terminalMessageByIndex.get(streamedItem.outputIndex));
     const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
     for (const [contentIndex, annotations] of streamedItem.content) {
       while (content.length <= contentIndex) {
