@@ -100,7 +100,7 @@ providers:
 
 ```yaml
 providers:
-  - id: litellm:gpt-5.1-mini # Uses OPENAI_API_KEY env var
+  - id: litellm:gpt-4.1-mini # Uses OPENAI_API_KEY env var
     config:
       # apiKey: "{{ env.OPENAI_API_KEY }}"  # optional, auto-detected
       temperature: 0.7

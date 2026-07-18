@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
+import { looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
@@ -9,7 +10,51 @@ import type { ProviderConfig } from '../shared';
 const ajv = getAjv();
 
 const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+const OPAQUE_CREDENTIAL_PATH_SEGMENT =
+  /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
 
+function hasInlineSecret(value: string): boolean {
+  return (
+    looksLikeSecret(value) ||
+    /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
+    /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(value) ||
+    /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
+      value,
+    )
+  );
+}
+
+export function hasSensitiveOpenAiCacheString(value: string): boolean {
+  const urls = value.match(/\b(?:https?|s3|gs|az):\/\/[^\s<>"']+/gi) ?? [];
+  return (
+    urls.some((url) => {
+      if (sanitizeUrl(url) !== url) {
+        return true;
+      }
+      try {
+        return hasSensitiveOpenAiCachePath(decodeURIComponent(new URL(url).pathname));
+      } catch {
+        return true;
+      }
+    }) || hasInlineSecret(value)
+  );
+}
+
+export function hasSensitiveOpenAiCachePath(value: string): boolean {
+  return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
+}
+
+export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
+  const fragmentIndex = apiUrl.indexOf('#');
+  const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
+  const urlWithoutFragment = fragmentIndex === -1 ? apiUrl : apiUrl.slice(0, fragmentIndex);
+  const queryIndex = urlWithoutFragment.indexOf('?');
+  const base = queryIndex === -1 ? urlWithoutFragment : urlWithoutFragment.slice(0, queryIndex);
+  const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
+  const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
+
+  return `${base.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
+}
 type OpenAIModelCost = {
   input: number;
   output: number;
@@ -28,17 +73,25 @@ type OpenAIModelInfo = {
   cost?: OpenAIModelCost;
 };
 
+// Models served by /v1/audio/speech, not Chat Completions.
+export const OPENAI_TTS_MODELS: OpenAIModelInfo[] = [
+  ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'].map(
+    (model) => ({
+      id: model,
+      cost: {
+        input: 0.6 / 1e6,
+        output: 0,
+        audioOutput: 12 / 1e6,
+      },
+    }),
+  ),
+  ...['tts-1', 'tts-1-1106', 'tts-1-hd', 'tts-1-hd-1106'].map((model) => ({
+    id: model,
+  })),
+];
+
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
-  // TTS model (text input + audio output costs)
-  ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0 / 1e6,
-      audioOutput: 12 / 1e6,
-    },
-  })),
   // Search preview models
   ...['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'].map((model) => ({
     id: model,
@@ -54,12 +107,11 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 0.6 / 1e6,
     },
   })),
-  // Computer use models
-  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
+  ...['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'].map((model) => ({
     id: model,
     cost: {
-      input: 3 / 1e6,
-      output: 12 / 1e6,
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
     },
   })),
   ...['chatgpt-4o-latest'].map((model) => ({
@@ -99,14 +151,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 0.4 / 1e6,
     },
   })),
-  // GPT-4.5 models deprecated as of 2025-07-14, removed from API
-  ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
-    id: model,
-    cost: {
-      input: 150 / 1e6,
-      output: 600 / 1e6,
-    },
-  })),
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
@@ -127,13 +171,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
     cost: {
       input: 2 / 1e6,
       output: 8 / 1e6,
-    },
-  })),
-  ...['o3-pro', 'o3-pro-2025-06-10'].map((model) => ({
-    id: model,
-    cost: {
-      input: 20 / 1e6,
-      output: 80 / 1e6,
     },
   })),
   ...['o3-mini', 'o3-mini-2025-01-31'].map((model) => ({
@@ -228,13 +265,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 4 / 1e6,
     },
   })),
-  ...['gpt-3.5-turbo-instruct'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
   ...['o4-mini', 'o4-mini-2025-04-16'].map((model) => ({
     id: model,
     cost: {
@@ -271,27 +301,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 6.0 / 1e6,
     },
   })),
-  ...['gpt-5-codex'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5-codex-mini'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
-    id: model,
-    cost: {
-      input: 15 / 1e6,
-      output: 120 / 1e6,
-    },
-  })),
   // GPT-5.1 models
   ...['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'].map((model) => ({
     id: model,
@@ -300,55 +309,20 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 10 / 1e6,
     },
   })),
-  ...['gpt-5.1-nano'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.05 / 1e6,
-      output: 0.4 / 1e6,
-    },
-  })),
-  ...['gpt-5.1-mini', 'gpt-5.1-codex-mini'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.25 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
   // GPT-5.2 models
-  ...['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'].map((model) => ({
+  ...['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
       output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 21 / 1e6,
-      output: 168 / 1e6,
     },
   })),
   // GPT-5.3 models
-  ...['gpt-5.3-chat-latest', 'gpt-5.3-codex'].map((model) => ({
+  ...['gpt-5.3-chat-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
       output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-5.3-codex-spark'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.5 / 1e6,
-      output: 4 / 1e6,
     },
   })),
   // GPT-5.6 models
@@ -449,7 +423,102 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   })),
 ];
 
+export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex-spark' }];
+
+export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
+  if (typeof model !== 'string') {
+    return;
+  }
+
+  if (apiUrl) {
+    try {
+      if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+
+  const normalizedModel = model.split('/').pop() ?? model;
+  if (OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === normalizedModel)) {
+    throw new Error(
+      `OpenAI model ${model} is only available through openai:codex-sdk with eligible Codex authentication.`,
+    );
+  }
+}
+
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
+  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 12 / 1e6,
+    },
+  })),
+  ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
+    id: model,
+    cost: {
+      input: 150 / 1e6,
+      output: 600 / 1e6,
+    },
+  })),
+  ...['o3-pro', 'o3-pro-2025-06-10'].map((model) => ({
+    id: model,
+    cost: {
+      input: 20 / 1e6,
+      output: 80 / 1e6,
+    },
+  })),
+  ...['gpt-5-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-codex-mini'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.5 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
+  ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 120 / 1e6,
+    },
+  })),
+  ...['gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5.1-codex-mini'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.25 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
+  ...['gpt-5.2-codex', 'gpt-5.3-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.75 / 1e6,
+      output: 14 / 1e6,
+    },
+  })),
+  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 21 / 1e6,
+      output: 168 / 1e6,
+    },
+  })),
   ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
     id: model,
     cost: {
@@ -531,10 +600,25 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
     },
   },
   {
-    id: 'text-davinci-002',
+    id: 'gpt-3.5-turbo-instruct-0914',
+    cost: {
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
+    },
   },
   {
-    id: 'text-babbage-002',
+    id: 'babbage-002',
+    cost: {
+      input: 0.4 / 1e6,
+      output: 0.4 / 1e6,
+    },
+  },
+  {
+    id: 'davinci-002',
+    cost: {
+      input: 2 / 1e6,
+      output: 2 / 1e6,
+    },
   },
 ];
 
@@ -576,6 +660,26 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       output: 24 / 1e6,
       audioInput: 32 / 1e6,
       audioOutput: 64 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-realtime-2.1',
+    type: 'chat',
+    cost: {
+      input: 4 / 1e6,
+      output: 24 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-realtime-2.1-mini',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
     },
   },
   // Deprecated preview snapshot that remains available until July 23, 2026.
@@ -649,44 +753,72 @@ const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
 
 export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...OPENAI_CHAT_MODELS,
+  ...OPENAI_TTS_MODELS,
   ...RETIRED_OPENAI_AUDIO_MODELS,
   ...OPENAI_COMPLETION_MODELS,
   ...OPENAI_REALTIME_MODELS,
   ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_MODELS,
+  ...OPENAI_CODEX_ONLY_MODELS,
   ...OPENAI_DEEP_RESEARCH_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
-export const OPENAI_TRANSCRIPTION_MODELS = [
+export const OPENAI_TRANSCRIPTION_MODELS: Array<{
+  id: string;
+  cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
+}> = [
   {
     id: 'gpt-4o-transcribe',
     cost: {
-      // Per minute costs - OpenAI charges for audio duration, not tokens
+      input: 2.5 / 1e6, // text tokens
+      audioInput: 6 / 1e6, // audio tokens (~1000 audio tokens/min * $6/M = $0.006/min)
+      output: 10 / 1e6,
       perMinute: 0.006, // $0.006 per minute
     },
   },
   {
     id: 'gpt-4o-mini-transcribe',
     cost: {
+      input: 1.25 / 1e6, // text tokens
+      audioInput: 3 / 1e6, // audio tokens (~1000 audio tokens/min * $3/M = $0.003/min)
+      output: 5 / 1e6,
       perMinute: 0.003, // $0.003 per minute
     },
   },
   {
     id: 'gpt-4o-mini-transcribe-2025-12-15',
     cost: {
+      input: 1.25 / 1e6,
+      audioInput: 3 / 1e6,
+      output: 5 / 1e6,
+      perMinute: 0.003,
+    },
+  },
+  {
+    id: 'gpt-4o-mini-transcribe-2025-03-20',
+    cost: {
+      input: 1.25 / 1e6,
+      audioInput: 3 / 1e6,
+      output: 5 / 1e6,
       perMinute: 0.003,
     },
   },
   {
     id: 'gpt-4o-transcribe-diarize',
     cost: {
+      input: 2.5 / 1e6,
+      audioInput: 6 / 1e6,
+      output: 10 / 1e6,
       perMinute: 0.006, // $0.006 per minute (same as base gpt-4o-transcribe)
     },
   },
   {
     id: 'gpt-4o-transcribe-diarize-2025-10-15',
     cost: {
+      input: 2.5 / 1e6,
+      audioInput: 6 / 1e6,
+      output: 10 / 1e6,
       perMinute: 0.006,
     },
   },
@@ -783,8 +915,13 @@ export function getOpenAICacheWriteInputTokens(usage: any): number | undefined {
 export function getOpenAICompletionTokenDetails(
   usage: any,
 ): TokenUsage['completionDetails'] | undefined {
+  // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens at
+  // the top level of usage instead of inside prompt_tokens_details.
   const cachedInputTokens =
-    usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
+    usage.prompt_tokens_details?.cached_tokens ??
+    usage.input_tokens_details?.cached_tokens ??
+    usage.cached_tokens ??
+    0;
   const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
   const completionDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
 
