@@ -2808,6 +2808,118 @@ describe('Responses stream regressions', () => {
       expect(processed.metadata?.annotations).toEqual([annotation]);
     });
 
+    it('does not retype a finalized non-text content slot when a truncated stream annotates it', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://wrong.example',
+        title: 'Wrong',
+        start_index: 0,
+        end_index: 6,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm_audio',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_audio',
+                  text: 'SHOULD_NOT_BE_OUTPUT',
+                  audio: 'opaque',
+                },
+                { type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] },
+              ],
+            },
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_audio',
+            annotation_index: 0,
+            annotation,
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output?.[0]?.content?.[0]).toEqual({
+        type: 'output_audio',
+        text: 'SHOULD_NOT_BE_OUTPUT',
+        audio: 'opaque',
+      });
+      expect(parsed.output?.[0]?.content?.[1]).toEqual({
+        type: 'output_text',
+        text: 'SAFE FINAL TEXT',
+        annotations: [],
+      });
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(processed.output)).not.toContain('SHOULD_NOT_BE_OUTPUT');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+    });
+
+    it('preserves a streamed citation on the real text slot of a truncated mixed-content message', async () => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm_audio',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_audio',
+                  text: 'SHOULD_NOT_BE_OUTPUT',
+                  audio: 'opaque',
+                },
+                { type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] },
+              ],
+            },
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 1,
+            item_id: 'm_audio',
+            annotation_index: 0,
+            annotation,
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+      expect(parsed.output?.[0]?.content?.[0]).toEqual({
+        type: 'output_audio',
+        text: 'SHOULD_NOT_BE_OUTPUT',
+        audio: 'opaque',
+      });
+      expect(parsed.output?.[0]?.content?.[1]).toEqual({
+        type: 'output_text',
+        text: 'SAFE FINAL TEXT',
+        annotations: [annotation],
+      });
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+    });
+
     it.each([
       {
         name: 'statusless incomplete after output_text.done',

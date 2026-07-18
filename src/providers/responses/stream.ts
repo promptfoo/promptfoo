@@ -1527,6 +1527,9 @@ export async function readResponsesStream(
         content.push({ type: 'output_text' });
       }
       const existingContent = content[contentIndex];
+      if (existingContent?.type !== 'output_text') {
+        continue;
+      }
       const existingAnnotations = Array.isArray(existingContent?.annotations)
         ? existingContent.annotations
         : [];
