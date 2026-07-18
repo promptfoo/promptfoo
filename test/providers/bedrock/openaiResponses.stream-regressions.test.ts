@@ -768,6 +768,44 @@ describe('Responses stream regressions', () => {
     });
 
     it.each([
+      'completed',
+      'failed',
+      'incomplete',
+      'cancelled',
+    ])('ignores a late stream error after a %s terminal snapshot', async (status) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL' }],
+                },
+              ],
+            },
+          },
+          {
+            type: 'error',
+            error: { code: 'late_error', message: 'SECRET_LATE_ERROR' },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL' })],
+        }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET_LATE_ERROR');
+    });
+
+    it.each([
       {
         name: 'indexed delta',
         event: {

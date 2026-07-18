@@ -972,16 +972,16 @@ export async function readResponsesStream(
       return;
     }
 
+    if (isTerminalStreamResponse(latestResponseEventType, latestResponse?.status)) {
+      return;
+    }
+
     if (event.type === 'error') {
       const code = event.error?.code ?? event.code;
       const message = event.error?.message ?? event.message ?? 'unknown stream error';
       throw new Error(
         `${providerName} streaming response error${code ? ` (${code})` : ''}: ${message}`,
       );
-    }
-
-    if (isTerminalStreamResponse(latestResponseEventType, latestResponse?.status)) {
-      return;
     }
 
     if (
