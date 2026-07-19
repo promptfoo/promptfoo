@@ -120,6 +120,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains a string or number as text, case insensitive       |
 | [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                               |
 | [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                          |
+| [ends-with](/docs/configuration/expected-outputs/deterministic/#ends-with)                                         | output ends with string                                            |
 | [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                   | output contains all list of substrings                             |
 | [icontains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
@@ -413,6 +414,7 @@ The general format is `type:value` or `type(threshold):value`. Values without a 
 | `contains-any:value1,value2` | `contains-any`  | `contains-any:Paris,London`                 |
 | `contains-all:value1,value2` | `contains-all`  | `contains-all:Paris,France`                 |
 | `starts-with:value`          | `starts-with`   | `starts-with:The answer`                    |
+| `ends-with:value`            | `ends-with`     | `ends-with:END`                             |
 | `regex:pattern`              | `regex`         | `regex:^Hello.*world$`                      |
 | `is-json`                    | `is-json`       | `is-json`                                   |
 | `contains-json`              | `contains-json` | `contains-json`                             |
