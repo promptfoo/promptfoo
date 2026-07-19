@@ -216,6 +216,27 @@
         background: var(--surface);
       }
 
+      @media print {
+        .table-shell {
+          max-height: none;
+          overflow: visible;
+        }
+
+        table {
+          min-width: 0;
+        }
+
+        thead {
+          position: static;
+        }
+
+        th,
+        td {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+      }
+
       table,
       th,
       td {
