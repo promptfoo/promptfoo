@@ -13,8 +13,9 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import { loadYaml } from '../../util/yamlLoad';
 import {
-  applyClaude5RegionalPremium,
+  applyClaudeRegionalPremium,
   calculateAnthropicCost,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -26,7 +27,7 @@ import {
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
-  calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -35,6 +36,7 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
   removeGoogleFunctionDeclarations,
@@ -69,6 +71,47 @@ import type {
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
 
+// Vertex retains the Sonnet 4.5 1M preview and its >200K pricing tier. Native Anthropic and
+// Bedrock Sonnet 4.5 requests are capped at 200K, so only this provider opts into these rates.
+const VERTEX_CLAUDE_SONNET_4_5_MODELS = new Set([
+  'claude-sonnet-4-5',
+  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-5-latest',
+]);
+const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
+  threshold: 200_000,
+  input: 6 / 1e6,
+  output: 22.5 / 1e6,
+};
+
+function applyVertexClaudeLongContextPricing(
+  modelName: string,
+  config: GoogleProviderConfig,
+  inputTokens?: number,
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
+): GoogleProviderConfig {
+  const effectiveInputTokens =
+    (inputTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
+  if (
+    !VERTEX_CLAUDE_SONNET_4_5_MODELS.has(modelName) ||
+    effectiveInputTokens <= VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.threshold
+  ) {
+    return config;
+  }
+
+  // `cost` already supplies both rates and intentionally overrides tier-specific pricing.
+  if (config.cost != null) {
+    return config;
+  }
+
+  return {
+    ...config,
+    inputCost: config.inputCost ?? VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.input,
+    outputCost: config.outputCost ?? VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.output,
+  };
+}
+
 type VertexEmbeddingPredictResponse = {
   predictions?: Array<{
     embeddings?: {
@@ -102,7 +145,7 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
   return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
     .update(apiHost)
     .update('\0')
-    .update(serialized ?? String(body))
+    .update(serialized)
     .digest('hex')}`;
 }
 
@@ -266,8 +309,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
       try {
-        const yaml = await import('js-yaml');
-        const parsed = yaml.default.load(prompt);
+        const parsed = loadYaml(prompt);
         normalizedPrompt = JSON.stringify(parsed);
       } catch (err) {
         return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
@@ -420,21 +462,30 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
-      // Regional and multi-region Vertex endpoints bill Claude 5 at a premium
-      // over the global endpoint.
+      // Regional and multi-region Vertex endpoints bill Claude 4.5+ models at a premium
+      // over the global endpoint (see isClaudeRegionalPremiumModel).
       const pricingConfig =
         this.getRegion() === 'global'
           ? this.config
-          : applyClaude5RegionalPremium(normalizedModelName, this.config);
+          : applyClaudeRegionalPremium(normalizedModelName, this.config);
+      const effectivePricingConfig = applyVertexClaudeLongContextPricing(
+        normalizedModelName,
+        pricingConfig,
+        data.usage?.input_tokens,
+        data.usage?.cache_read_input_tokens,
+        data.usage?.cache_creation_input_tokens,
+      );
       const response = {
         cached: false,
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
           normalizedModelName,
-          pricingConfig,
+          effectivePricingConfig,
           data.usage?.input_tokens,
           data.usage?.output_tokens,
+          data.usage?.cache_read_input_tokens,
+          data.usage?.cache_creation_input_tokens,
         ),
       };
 
@@ -504,6 +555,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const {
+      service_tier: passthroughServiceTier,
+      tools: passthroughTools,
+      ...passthrough
+    } = config.passthrough || {};
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -516,6 +576,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
         topP: config.topP,
         topK: config.topK,
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       ...(config.safetySettings
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
@@ -523,6 +593,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      // Normalize a single-object passthrough `tools` value to a one-element array and
+      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
+      // stays the array shape the Gemini API requires.
+      ...(requestPassthroughTools === undefined
+        ? {}
+        : {
+            tools: [
+              ...requestTools,
+              ...(Array.isArray(requestPassthroughTools)
+                ? requestPassthroughTools
+                : [requestPassthroughTools]),
+            ],
+          }),
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
       ...(config.modelArmor &&
@@ -772,8 +858,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: promptTokenCount || 0,
+          prompt: (promptTokenCount || 0) + (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
           completion: completionTokenCount || 0,
+          ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+            cached: lastData.usageMetadata.cachedContentTokenCount,
+          }),
           ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
               reasoning: thoughtsTokenCount,
@@ -787,17 +876,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionTokenCount == null
             ? undefined
             : completionTokenCount + (thoughtsTokenCount ?? 0);
-        const cost = calculateGoogleCost(
+        const cost = calculateGoogleCostFromUsage(
           this.modelName,
           config,
           promptTokenCount,
           completionForCost,
           true,
+          lastData.usageMetadata,
         );
+        const audio = normalizeGeminiAudio(output);
 
         response = {
           cached: false,
           output,
+          ...(audio && { audio }),
           tokenUsage,
           cost,
           metadata: {},
@@ -1243,6 +1335,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
+// Gemini 3.1 Pro preview is available through Vertex AI's global endpoint.
 const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
 const DEFAULT_VERTEX_REGION = 'global';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';

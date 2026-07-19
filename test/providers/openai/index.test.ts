@@ -49,6 +49,15 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiUrl()).toBe('https://custom.api.com/v1');
     });
 
+    it('should prefer an explicit API base URL over an environment API host', () => {
+      mockProcessEnv({ OPENAI_API_HOST: 'wrong.example' });
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'http://127.0.0.1:15500/proxy/openai/v1' },
+      });
+
+      expect(customProvider.getApiUrl()).toBe('http://127.0.0.1:15500/proxy/openai/v1');
+    });
+
     it('should get organization', () => {
       expect(provider.getOrganization()).toBe('test-org');
     });

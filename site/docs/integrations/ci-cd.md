@@ -314,7 +314,7 @@ Test multiple models or configurations in parallel:
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-4, gpt-3.5-turbo, claude-3-opus]
+    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
 steps:
   - name: Test ${{ matrix.model }}
     run: |
@@ -341,7 +341,7 @@ jobs:
         run: |
           npx promptfoo@latest redteam generate \
             --plugins harmful,pii,contracts \
-            --strategies jailbreak,prompt-injection
+            --strategies jailbreak,jailbreak-templates
           npx promptfoo@latest redteam run
 ```
 
@@ -460,7 +460,8 @@ gh pr comment --body "
 
 ## Caching Strategies
 
-Optimize CI/CD performance with proper caching [[memory:3455374]]:
+<!-- prettier-ignore -->
+Optimize CI/CD performance with proper caching:
 
 ```yaml
 # Set cache location
