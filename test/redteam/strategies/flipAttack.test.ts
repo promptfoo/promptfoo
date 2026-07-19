@@ -50,6 +50,12 @@ describe('flipAttack strategy', () => {
       );
       expect(flipText(flipText(multilingual, 'char_in_word'), 'char_in_word')).toBe(multilingual);
     });
+
+    it('reverses segmented words for unspaced languages', () => {
+      expect(flipText('如何开锁', 'word_order')).toBe('开锁如何');
+      expect(flipText('วิธีเปิดล็อค', 'word_order')).toBe('ล็อคเปิดวิธี');
+      expect(flipText(flipText('如何开锁', 'word_order'), 'word_order')).toBe('如何开锁');
+    });
   });
 
   describe('buildFlipAttackPrompt', () => {
