@@ -4,7 +4,13 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_COMPLETION_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -67,13 +73,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+    assertOpenAiApiModel(body.model, this.getApiUrl());
 
     let data,
       cached = false,
       latencyMs: number | undefined;
     try {
       ({ data, cached, latencyMs } = (await fetchWithCache(
-        `${this.getApiUrl()}/completions`,
+        appendOpenAiApiPath(this.getApiUrl(), 'completions'),
         {
           method: 'POST',
           headers: {
