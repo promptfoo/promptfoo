@@ -218,7 +218,13 @@ describe('handleSearchRubric', () => {
 
     // A grader transport failure is not evidence about the criterion; it must
     // not flip into a spurious pass (or a full inverted score) under `not-`.
-    expect(result).toEqual(graderFailure);
+    // Assert literals rather than comparing to `graderFailure`: the handler
+    // mutates and returns the same object, so an identity comparison would
+    // pass even if the inversion branch had rewritten it.
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata?.graderError).toBe(true);
+    expect(result.reason).toBe('Search rubric evaluation failed: search unavailable');
   });
 
   it('should handle inverse assertion when original fails', async () => {
