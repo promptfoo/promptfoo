@@ -546,6 +546,37 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.queryByTestId('mock-configure-env-button')).not.toBeInTheDocument();
   });
 
+  it('does not show the catalog failure toast after the component unmounts', async () => {
+    let rejectCatalog: (reason: Error) => void = () => {};
+    vi.mocked(callApi).mockReturnValue(
+      new Promise<Response>((_resolve, reject) => {
+        rejectCatalog = reject;
+      }),
+    );
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { unmount } = render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith('/providers');
+    });
+
+    unmount();
+    rejectCatalog(new Error('Network request failed'));
+    // Let the rejected catalog promise settle and run the catch block.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The catch block ran (proving the rejection was actually handled post-unmount)...
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to fetch provider catalog:',
+      expect.any(Error),
+    );
+    // ...but no toast was emitted for a component the user has already navigated away from.
+    expect(showToastMock).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('shows the ConfigureEnvButton when no custom provider catalog exists', async () => {
     render(<EvaluateTestSuiteCreator />);
 

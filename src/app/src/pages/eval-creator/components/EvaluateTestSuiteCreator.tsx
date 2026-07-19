@@ -130,7 +130,9 @@ const EvaluateTestSuiteCreator = () => {
       } catch (err) {
         console.error('Failed to fetch provider catalog:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        showToast(`Failed to load provider configuration: ${errorMessage}`, 'error');
+        if (isMounted) {
+          showToast(`Failed to load provider configuration: ${errorMessage}`, 'error');
+        }
       }
     };
 
