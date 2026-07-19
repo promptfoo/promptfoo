@@ -56,17 +56,17 @@ ingress:
   enabled: true
   className: ''
   annotations: {}
-  # hosts:
+  # Replace [] below with a list of hosts, e.g.:
+  hosts: []
   #   - host: promptfoo.example.com
   #     paths:
   #       - path: /
   #         pathType: Prefix
-  hosts: []
-  # tls:
+  # Replace [] below with a list of TLS entries, e.g.:
+  tls: []
   #   - secretName: promptfoo-tls
   #     hosts:
   #       - promptfoo.example.com
-  tls: []
 
 resources:
   limits:
