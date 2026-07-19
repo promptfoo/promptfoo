@@ -31,10 +31,6 @@ function buildCsvPrompts(
   basePrompt: Partial<Prompt>,
 ): Prompt[] {
   const hasMultipleRows = rows.length > 1;
-  const baseProperties = { ...basePrompt };
-  if (hasMultipleRows) {
-    delete baseProperties.id;
-  }
 
   const usedLabels = new Set(rows.flatMap((row) => (row.label ? [row.label] : [])));
 
@@ -51,7 +47,9 @@ function buildCsvPrompts(
       usedLabels.add(label);
     }
 
-    return { ...baseProperties, raw: row.raw, label };
+    const id = hasMultipleRows && basePrompt.id ? `${basePrompt.id}:${index + 1}` : basePrompt.id;
+
+    return { ...basePrompt, raw: row.raw, label, ...(id && { id }) };
   });
 }
 

@@ -3,6 +3,7 @@ import fs from 'fs';
 import dedent from 'ts-dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
+import { doesPromptRefMatch } from '../../../src/util/promptMatching';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { Prompt } from '../../../src/types/index';
@@ -169,7 +170,8 @@ describe('processCsvPrompts', () => {
       'My Labeled Prompts: Tell me about {{topic}}',
       'My Labeled Prompts: Explain {{topic}} in simple terms',
     ]);
-    expect(result.every((prompt) => prompt.id === undefined)).toBe(true);
+    expect(result.map((prompt) => prompt.id)).toEqual(['base-id:1', 'base-id:2']);
+    expect(result.every((prompt) => doesPromptRefMatch('base-id', prompt))).toBe(true);
   });
 
   it('should disambiguate base prompt label in the parsed-CSV branch while row labels win', async () => {
@@ -204,7 +206,8 @@ describe('processCsvPrompts', () => {
       'Group: First prompt (row 1)',
       'Group: First prompt',
     ]);
-    expect(result.every((prompt) => prompt.id === undefined)).toBe(true);
+    expect(result.map((prompt) => prompt.id)).toEqual(['shared-id:1', 'shared-id:2']);
+    expect(result.every((prompt) => doesPromptRefMatch('shared-id', prompt))).toBe(true);
   });
 
   it('should keep duplicate synthesized labels distinct', async () => {
