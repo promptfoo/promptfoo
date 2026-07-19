@@ -185,6 +185,22 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiKey()).toBe('provider-key');
     });
 
+    it('should fall through to the env var when apiKey is an empty string', () => {
+      mockProcessEnv({ CUSTOM_API_KEY: 'custom-key' });
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiKey: '', apiKeyEnvar: 'CUSTOM_API_KEY' },
+      });
+      expect(customProvider.getApiKey()).toBe('custom-key');
+    });
+
+    it('should fall through to the env var when apiKey is null', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'env-key' });
+      const nullKeyProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiKey: null as unknown as string },
+      });
+      expect(nullKeyProvider.getApiKey()).toBe('env-key');
+    });
+
     it('should generate correct ID', () => {
       expect(provider.id()).toBe('openai:test-model');
     });

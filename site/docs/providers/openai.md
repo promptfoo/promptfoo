@@ -101,7 +101,7 @@ Supported parameters include:
 | `apiBaseUrl`             | The base URL of the OpenAI API or an OpenAI-compatible gateway. Optional path and query parameters are preserved when endpoint paths are appended; see `OPENAI_BASE_URL` below.                                                                                                                                                                             |
 | `apiHost`                | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                                                                                                                                                                                                                   |
 | `apiKey`                 | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                                                                                                                                                                                                                    |
-| `apiKeyEnvar`            | An environment variable that contains the API key                                                                                                                                                                                                                                                                                                           |
+| `apiKeyEnvar`            | An environment variable that contains the API key. When set, it is used exclusively and does not fall back to `OPENAI_API_KEY`; the resolution order is `apiKey` (when a non-empty string), then `apiKeyEnvar`, then `OPENAI_API_KEY`.                                                                                                                      |
 | `best_of`                | Controls the number of alternative outputs to generate and select from.                                                                                                                                                                                                                                                                                     |
 | `frequency_penalty`      | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                                                                                                                                                                                                                      |
 | `function_call`          | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                                                                                                                                                                                                                |
@@ -1618,18 +1618,18 @@ Each schema file contains the complete `response_format` object. See the [per-te
 
 These OpenAI-related environment variables are supported:
 
-| Variable                       | Description                                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by reasoning-capable models.                                   |
-| `OPENAI_MAX_TOKENS`            | `max_tokens` parameter, defaults to 1024. Used for non-reasoning requests.                                               |
-| `OPENAI_MAX_COMPLETION_TOKENS` | `max_completion_tokens` parameter, defaults to 1024. Used by reasoning-capable chat/responses requests where applicable. |
-| `OPENAI_API_HOST`              | Hostname to use (proxy-compatible). Takes precedence over both `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL`.              |
-| `OPENAI_API_BASE_URL`          | Full base URL (protocol + host + optional port/path/query). Takes precedence over `OPENAI_BASE_URL`.                     |
-| `OPENAI_BASE_URL`              | Alternate full base URL, including any gateway path/query. Used if `OPENAI_API_BASE_URL` is not set.                     |
-| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                          |
-| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                                      |
-| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).         |
-| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                  |
+| Variable                       | Description                                                                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by reasoning-capable models.                                                                                        |
+| `OPENAI_MAX_TOKENS`            | `max_tokens` parameter, defaults to 1024. Used for non-reasoning requests.                                                                                                    |
+| `OPENAI_MAX_COMPLETION_TOKENS` | `max_completion_tokens` parameter, defaults to 1024. Used by reasoning-capable chat/responses requests where applicable.                                                      |
+| `OPENAI_API_HOST`              | Hostname to use (proxy-compatible). Takes precedence over both `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL`.                                                                   |
+| `OPENAI_API_BASE_URL`          | Full base URL (protocol + host + optional port/path/query). Takes precedence over `OPENAI_BASE_URL`.                                                                          |
+| `OPENAI_BASE_URL`              | Alternate full base URL, including any gateway path/query. Used if `OPENAI_API_BASE_URL` is not set.                                                                          |
+| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                                                                               |
+| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use. Sent only when the request targets `api.openai.com`; on a custom `apiBaseUrl`/`apiHost`, set the `organization` config option to send it. |
+| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).                                                              |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                                                                       |
 
 ## Evaluating assistants
 

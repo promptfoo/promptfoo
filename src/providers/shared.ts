@@ -93,9 +93,8 @@ export function calculateCost(
     return undefined;
   }
 
-  const inputTotal = promptTokens === 0 ? 0 : inputCost! * promptTokens;
-  const outputTotal = completionTokens === 0 ? 0 : outputCost! * completionTokens;
-  const total = inputTotal + outputTotal;
+  // Guard above proves a cost is only undefined when its token count is 0, so `?? 0` is safe.
+  const total = (inputCost ?? 0) * promptTokens + (outputCost ?? 0) * completionTokens;
   return Number.isFinite(total) ? total : undefined;
 }
 

@@ -782,11 +782,9 @@ function getUnknownModelTextUsage(
     usage.audio_output_tokens,
   ];
   if (
-    nonTextTokenCounts.some(
-      (value) =>
-        value !== undefined &&
-        (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 0),
-    )
+    // Reject any present non-text token count that is not exactly 0: `!== 0` subsumes
+    // negatives/positives/NaN/Infinity/non-numbers, while -0 === 0 keeps the accept-zero case.
+    nonTextTokenCounts.some((value) => value !== undefined && value !== 0)
   ) {
     return undefined;
   }

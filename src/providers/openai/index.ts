@@ -122,7 +122,7 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    if (this.config.apiKey !== undefined) {
+    if (typeof this.config.apiKey === 'string' && this.config.apiKey !== '') {
       return this.config.apiKey;
     }
     if (this.config.apiKeyEnvar) {
