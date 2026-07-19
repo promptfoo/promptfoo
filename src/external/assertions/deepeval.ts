@@ -16,6 +16,7 @@ const DEFAULT_WINDOW_SIZE = 5;
 
 export const handleConversationRelevance = async ({
   assertion,
+  inverse,
   outputString,
   prompt,
   providerCallContext,
@@ -74,7 +75,7 @@ export const handleConversationRelevance = async ({
   }
 
   const score = totalWindows > 0 ? relevantCount / totalWindows : 0;
-  const pass = score >= threshold - Number.EPSILON;
+  const pass = score >= threshold - Number.EPSILON !== inverse;
 
   // Generate a comprehensive reason if there are irrelevancies
   let reason: string;
@@ -125,7 +126,7 @@ export const handleConversationRelevance = async ({
   return {
     assertion,
     pass,
-    score,
+    score: inverse ? 1 - score : score,
     reason,
     tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
   };

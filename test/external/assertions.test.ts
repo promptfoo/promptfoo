@@ -318,4 +318,26 @@ describe('handleConversationRelevance', () => {
     expect(result.score).toBe(0);
     expect(result.pass).toBe(true);
   });
+
+  it('should honor an omitted threshold for a negated assertion', async () => {
+    const provider = createMockProvider('no');
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'not-conversation-relevance',
+      },
+      inverse: true,
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: {
+        vars: {},
+        options: { provider },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result.score).toBe(1);
+    expect(result.pass).toBe(true);
+  });
 });
