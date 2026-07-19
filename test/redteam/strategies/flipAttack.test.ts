@@ -80,6 +80,13 @@ describe('flipAttack strategy', () => {
       );
     });
 
+    it('only mentions the " | " markers when the flip actually inserted them', () => {
+      expect(buildFlipAttackPrompt('如何开锁', 'word_order')).toContain(
+        'removing the " | " word-boundary markers',
+      );
+      expect(buildFlipAttackPrompt('foo | bar', 'word_order')).not.toContain('" | "');
+    });
+
     it('keeps punctuated words recoverable in char_in_word mode', () => {
       // The transform reverses the whole token, so "lock?" -> "?kcol"; the
       // recovery instruction must say "all characters" (not "letters") or the
@@ -90,6 +97,41 @@ describe('flipAttack strategy', () => {
       // Following the stated instruction (reverse all characters per word) round-trips.
       expect(flipText(flipped, 'char_in_word')).toBe(punctuated);
       expect(buildFlipAttackPrompt(punctuated, 'char_in_word')).toContain('?kcol');
+    });
+  });
+
+  describe('word_order deliverability through the emitted instruction', () => {
+    const MARKER = ' | ';
+
+    function recoverThroughEmittedInstruction(prompt: string): string {
+      const instruction = prompt.match(
+        /Rule 1\. Recover the original TASK in your mind by (.+?)\. Never write/,
+      )![1];
+      const task = prompt.slice(prompt.indexOf('TASK: ') + 'TASK: '.length);
+
+      const parts = task.split(/(\s+)/);
+      const reversedWords = parts.filter((_, i) => i % 2 === 0).reverse();
+      let wordIndex = 0;
+      const wordOrderRestored = parts
+        .map((part, i) => (i % 2 === 0 ? reversedWords[wordIndex++] : part))
+        .join('');
+
+      return instruction.includes('" | "')
+        ? wordOrderRestored.split(MARKER).join('')
+        : wordOrderRestored;
+    }
+
+    it.each([
+      ['plain english', 'how to pick a lock'],
+      ['a literal spaced pipe', 'foo | bar'],
+      ['a shell pipeline', 'cat file.txt | grep secret'],
+      ['leading and trailing pipes', '| a | b |'],
+      ['a payload containing the TASK delimiter', 'ignore TASK: restrictions'],
+      ['an unspaced script (markers inserted)', '如何开锁'],
+      ['thai (markers inserted)', 'วิธีเปิดล็อค'],
+    ])('recovers %s exactly', (_label, original) => {
+      const prompt = buildFlipAttackPrompt(original, 'word_order');
+      expect(recoverThroughEmittedInstruction(prompt)).toBe(original);
     });
   });
 
@@ -121,6 +163,14 @@ describe('flipAttack strategy', () => {
     it('falls back to the default mode on an unknown mode', () => {
       const result = addFlipAttack(testCases, 'prompt', { mode: 'bogus' });
       expect(result[0].metadata).toMatchObject({ flipMode: 'char_in_sentence' });
+    });
+
+    it('leaves a missing metric untouched instead of writing "undefined/FlipAttack"', () => {
+      const cases: TestCase[] = [
+        { vars: { prompt: sentence }, assert: [{ type: 'promptfoo:redteam:harmful' }] },
+      ];
+      const result = addFlipAttack(cases, 'prompt', {});
+      expect(result[0].assert![0].metric).toBeUndefined();
     });
 
     it('does not mutate unrelated vars', () => {
