@@ -39,6 +39,17 @@ describe('flipAttack strategy', () => {
         expect(flipText(flipText(multiline, mode), mode)).toBe(multiline);
       }
     });
+
+    it('preserves multilingual grapheme clusters in character modes', () => {
+      const multilingual = 'cafe\u0301 👩‍💻';
+
+      expect(flipText(multilingual, 'char_in_sentence')).toBe('👩‍💻 e\u0301fac');
+      expect(flipText(multilingual, 'char_in_word')).toBe('e\u0301fac 👩‍💻');
+      expect(flipText(flipText(multilingual, 'char_in_sentence'), 'char_in_sentence')).toBe(
+        multilingual,
+      );
+      expect(flipText(flipText(multilingual, 'char_in_word'), 'char_in_word')).toBe(multilingual);
+    });
   });
 
   describe('buildFlipAttackPrompt', () => {
