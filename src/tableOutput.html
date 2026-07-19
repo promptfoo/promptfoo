@@ -259,27 +259,10 @@
         border-right: 0;
       }
 
-      /* Must come after the base .table-shell/table/th,td rules: the print overrides rely
-         on source order to win at equal specificity. */
-      @media print {
-        .table-shell {
-          max-height: none;
-          overflow: visible;
-        }
-
-        table {
-          min-width: 0;
-        }
-
-        thead {
-          position: static;
-        }
-
-        th,
-        td {
-          min-width: 0;
-          overflow-wrap: anywhere;
-        }
+      /* Error payloads live in the interactive detail drawer; this duplicate copy in the
+         cell is print/PDF-only so exported reports keep the information. */
+      .output-error-print {
+        display: none;
       }
 
       tbody tr:nth-child(even) {
@@ -663,6 +646,38 @@
           grid-template-columns: 1fr;
         }
       }
+
+      /* Keep this print block last in the stylesheet: the overrides rely on source order
+         to win over the base rules at equal specificity. */
+      @media print {
+        .table-shell {
+          max-height: none;
+          overflow: visible;
+        }
+
+        .toolbar,
+        .detail-button {
+          display: none;
+        }
+
+        .output-error-print {
+          display: block;
+        }
+
+        table {
+          min-width: 0;
+        }
+
+        thead {
+          position: static;
+        }
+
+        th,
+        td {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+      }
     </style>
   </head>
   <body>
@@ -790,6 +805,11 @@
                     <div class="output-section">
                       <span class="output-section-label">Reason</span>
                       <p class="output-reason">{{ cell.reason | escape }}</p>
+                    </div>
+                    {% endif %} {% if cell.error %}
+                    <div class="output-section output-error-print">
+                      <span class="output-section-label">Error</span>
+                      <p class="output-reason">{{ cell.error | escape }}</p>
                     </div>
                     {% endif %}
                     <div>

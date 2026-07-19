@@ -1521,6 +1521,31 @@ describe('writeOutput', () => {
     expect(templateContent).not.toContain('{% for variable in cell.variables %}');
   });
 
+  it('keeps the print overrides after every base rule they override', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+
+    // Print overrides win on source order at equal specificity, so the @media print
+    // block must come after the base rules it overrides (scrollbox, table min-widths,
+    // detail button, toolbar). Otherwise PDF exports silently clip rows or columns.
+    const printBlockIndex = templateContent.indexOf('@media print');
+    expect(printBlockIndex).toBeGreaterThan(-1);
+    for (const baseRule of [
+      '.table-shell {',
+      'min-width: 920px;',
+      '.detail-button {',
+      '.toolbar {',
+      '.output-error-print {',
+    ]) {
+      expect(templateContent.indexOf(baseRule)).toBeGreaterThan(-1);
+      expect(templateContent.indexOf(baseRule)).toBeLessThan(printBlockIndex);
+    }
+
+    // The print-only error copy must exist in the cell markup and be escaped.
+    expect(templateContent).toContain('output-error-print');
+  });
+
   it('writeOutput with HTML includes report summary values', async () => {
     const realFs = await vi.importActual<typeof import('fs')>('fs');
     const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
@@ -1643,6 +1668,45 @@ describe('writeOutput', () => {
       expect.objectContaining({ path: 'output.pdf', format: 'A4', printBackground: true }),
     );
     expect(playwrightMocks.browser.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('writeOutput with PDF explains how to install Chromium when launch fails', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    playwrightMocks.chromium.launch.mockRejectedValue(
+      new Error("Executable doesn't exist at /path/to/chromium"),
+    );
+
+    const eval_ = new Eval({ description: 'PDF report' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Passing output' },
+      vars: { input: 'one' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'one' } },
+      promptId: 'prompt',
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'Passing reason',
+      },
+    });
+
+    await expect(writeOutput('output.pdf', eval_, null)).rejects.toThrow(
+      'npx playwright install chromium',
+    );
   });
 
   it('writeOutput with PDF closes the browser when PDF generation fails', async () => {

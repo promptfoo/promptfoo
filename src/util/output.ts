@@ -622,7 +622,14 @@ async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<voi
     );
   }
   const htmlOutput = await renderEvalHtmlReport(evalRecord);
-  const browser = await chromium.launch({ headless: true });
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    throw new Error(
+      `Failed to launch Chromium for PDF output: ${error instanceof Error ? error.message : String(error)}\nIf the browser is not installed, run: npx playwright install chromium`,
+    );
+  }
   try {
     const page = await browser.newPage();
     await page.setContent(htmlOutput, { waitUntil: 'networkidle' });
