@@ -718,6 +718,29 @@ describe('ZhipuProvider max_completion_tokens mapping', () => {
     const { body } = await provider.getOpenAiBody('hello');
     expect(body.max_tokens).toBeUndefined();
   });
+
+  it('honors a prompt-level max_completion_tokens over a provider-level max_tokens', async () => {
+    const provider = asChat(
+      createZhipuProvider('zhipu:glm-5.2', { config: { max_tokens: 256 } as any }),
+    );
+    const { body } = await provider.getOpenAiBody('hello', {
+      prompt: { raw: 'hello', label: 'hello', config: { max_completion_tokens: 8192 } },
+      vars: {},
+    });
+    expect(body.max_tokens).toBe(8192);
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
+  it('honors a prompt-level max_tokens over a provider-level max_completion_tokens', async () => {
+    const provider = asChat(
+      createZhipuProvider('zhipu:glm-5.2', { config: { max_completion_tokens: 256 } as any }),
+    );
+    const { body } = await provider.getOpenAiBody('hello', {
+      prompt: { raw: 'hello', label: 'hello', config: { max_tokens: 8192 } },
+      vars: {},
+    });
+    expect(body.max_tokens).toBe(8192);
+  });
 });
 
 describe('ZhipuProvider user_id mapping', () => {
